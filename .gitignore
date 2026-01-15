@@ -54,6 +54,7 @@ data/raw/
 storage/
 logs/
 .cache/
+*.db
 
 # Generated indexes or models
 indexes/

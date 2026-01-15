@@ -40,12 +40,12 @@ def build_query_engine(
         BaseQueryEngine: The configured query engine
         
     Example:
-        >>> from src.rag.indexing import load_index
+        >>> from src.engine import load_pgvector_index_sync
         >>> from src.llm.zhipu import build_llm
-        >>> from src.rag.embeddings.zhipu import build_embedding
+        >>> from src.rag.embeddings import build_embedding
         >>> 
         >>> embed_model = build_embedding()
-        >>> index = load_index("data/indexes/zhipu", embed_model)
+        >>> index = load_pgvector_index_sync(embed_model)
         >>> llm = build_llm()
         >>> query_engine = build_query_engine(
         ...     index, 
@@ -96,11 +96,11 @@ def build_simple_query_engine(
         BaseQueryEngine: The configured query engine
         
     Example:
-        >>> from src.rag.indexing import load_index
-        >>> from src.rag.embeddings.zhipu import build_embedding
+        >>> from src.engine import load_pgvector_index_sync
+        >>> from src.rag.embeddings import build_embedding
         >>> 
         >>> embed_model = build_embedding()
-        >>> index = load_index("data/indexes/zhipu", embed_model)
+        >>> index = load_pgvector_index_sync(embed_model)
         >>> query_engine = build_simple_query_engine(index, top_k=5)
     """
     return index.as_query_engine(

@@ -6,10 +6,11 @@ llm:
   zhipu:
     model: glm-4-plus                 # Available models: glm-4, glm-4-plus, glm-4-0520, glm-4-long, 
                                       # glm-4-airx, glm-4-air, glm-4-flashx, glm-4-flash, glm-4v, glm-4-alltools
-    temperature: 0.2                # Sampling temperature (0.0-1.0, higher = more random)
-    max_tokens: 4096                # Maximum tokens to generate (glm-4-plus limit: 4096)
+    temperature: 0.7                # Sampling temperature (0.0-1.0, higher = more random)
+    max_tokens: 8192                # Maximum tokens to generate (glm-4-plus limit: 4096)
     top_p: 0.8                      # Nucleus sampling parameter (0.0-1.0, higher = more diverse)
-    
+    api_base: https://open.bigmodel.cn/api/paas/v4  # OpenAI-compatible endpoint for Zhipu
+
     # Optional parameters
     request_timeout: 60.0           # Request timeout in seconds
     max_retries: 3                  # Maximum number of retries on failure

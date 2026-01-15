@@ -50,13 +50,13 @@ def build_chat_engine(
         ValueError: If similarity_top_k < 1 or similarity_cutoff not in [0, 1]
 
     Example:
-        >>> from src.rag.indexing import load_index
+        >>> from src.engine import load_pgvector_index_sync
         >>> from src.llm.zhipu import build_llm
-        >>> from src.rag.embeddings.zhipu import build_embedding
+        >>> from src.rag.embeddings import build_embedding
         >>> from src.memory import build_chat_memory
         >>>
         >>> embed_model = build_embedding()
-        >>> index = load_index("data/indexes/zhipu", embed_model)
+        >>> index = load_pgvector_index_sync(embed_model)
         >>> llm = build_llm()
         >>> memory = build_chat_memory(llm=llm, token_limit=64000)
         >>>

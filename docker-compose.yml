@@ -1,0 +1,84 @@
+# Docker Compose configuration for MediMind Agent infrastructure
+# 
+# This file provides PostgreSQL with pgvector, Elasticsearch, and Kibana services
+# for local development and testing.
+#
+# Usage:
+#   docker-compose up -d              # Start all services in background
+#   docker-compose up -d postgres es  # Start only databases (without Kibana)
+#   docker-compose down               # Stop and remove services
+#   docker-compose logs -f            # View logs
+#
+# Web UIs:
+#   Kibana: http://localhost:5601 (Elasticsearch visualization)
+
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: medimind-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: medimind_password
+      POSTGRES_DB: medimind
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Mount init script - runs automatically on first container start
+      - ./scripts/db/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medimind_network
+
+  elasticsearch:
+    image: elasticsearch:8.19.0
+    container_name: medimind-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - medimind_network
+
+  # Kibana for Elasticsearch visualization and debugging
+  kibana:
+    image: kibana:8.19.0
+    container_name: medimind-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - medimind_network
+    # Optional: comment out this service if you don't need Kibana
+    profiles:
+      - debug
+
+volumes:
+  postgres_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  medimind_network:
+    driver: bridge

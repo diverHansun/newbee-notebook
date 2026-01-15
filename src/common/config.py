@@ -424,6 +424,92 @@ def get_documents_directory():
     return os.getenv("DOCUMENTS_DIR", "data/documents")
 
 
+def _resolve_env_var(value: str) -> str:
+    """Resolve environment variable placeholder in format ${VAR:default}.
+    
+    Args:
+        value: String that may contain ${VAR:default} format
+        
+    Returns:
+        str: Resolved value (env var if exists, else default, else original)
+    """
+    import re
+    
+    # Pattern: ${VAR_NAME:default_value}
+    pattern = r'\$\{([^:]+):([^}]+)\}'
+    
+    def replace_env(match):
+        var_name = match.group(1)
+        default_value = match.group(2)
+        return os.getenv(var_name, default_value)
+    
+    # Replace all ${VAR:default} patterns
+    resolved = re.sub(pattern, replace_env, value)
+    
+    # Also handle ${VAR} without default
+    pattern_no_default = r'\$\{([^}]+)\}'
+    resolved = re.sub(pattern_no_default, lambda m: os.getenv(m.group(1), ""), resolved)
+    
+    return resolved
+
+
+def get_storage_config():
+    """Get storage configuration from YAML file or defaults.
+    
+    Returns:
+        dict: Storage configuration
+    """
+    storage_config_path = os.path.join("configs", "storage.yaml")
+    config = load_yaml_config(storage_config_path)
+    
+    # Apply environment variable overrides and resolve placeholders
+    if config:
+        if "postgresql" in config:
+            pg_config = config["postgresql"]
+            
+            # Resolve placeholders first
+            host = _resolve_env_var(str(pg_config.get("host", "localhost")))
+            port_str = _resolve_env_var(str(pg_config.get("port", "5432")))
+            database = _resolve_env_var(str(pg_config.get("database", "medimind")))
+            user = _resolve_env_var(str(pg_config.get("user", "postgres")))
+            password = _resolve_env_var(str(pg_config.get("password", "")))
+            
+            # Apply environment variable overrides (highest priority)
+            pg_config["host"] = os.getenv("POSTGRES_HOST", host)
+            try:
+                pg_config["port"] = int(os.getenv("POSTGRES_PORT", port_str))
+            except ValueError:
+                pg_config["port"] = 5432  # Fallback to default
+            pg_config["database"] = os.getenv("POSTGRES_DB", database)
+            pg_config["user"] = os.getenv("POSTGRES_USER", user)
+            pg_config["password"] = os.getenv("POSTGRES_PASSWORD", password)
+        
+        if "elasticsearch" in config:
+            es_config = config["elasticsearch"]
+            
+            # Resolve placeholders
+            url = _resolve_env_var(str(es_config.get("url", "http://localhost:9200")))
+            api_key = _resolve_env_var(str(es_config.get("api_key", "")))
+            cloud_id = _resolve_env_var(str(es_config.get("cloud_id", "")))
+            
+            # Apply environment variable overrides
+            es_config["url"] = os.getenv("ELASTICSEARCH_URL", url)
+            es_config["api_key"] = os.getenv("ELASTICSEARCH_API_KEY", api_key)
+            es_config["cloud_id"] = os.getenv("ELASTICSEARCH_CLOUD_ID", cloud_id)
+    
+    return config
+
+
+def get_modes_config():
+    """Get modes configuration from YAML file or defaults.
+    
+    Returns:
+        dict: Modes configuration
+    """
+    modes_config_path = os.path.join("configs", "modes.yaml")
+    return load_yaml_config(modes_config_path)
+
+
 def get_config():
     """Get all configuration as a dictionary.
     
@@ -445,4 +531,6 @@ def get_config():
         "rag": get_rag_config(),
         "llm": get_llm_config(),
         "memory": get_memory_config(),
+        "storage": get_storage_config(),
+        "modes": get_modes_config(),
     }

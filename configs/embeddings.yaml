@@ -4,7 +4,7 @@
 embeddings:
   # Provider selection: 'zhipu' or 'biobert'
   # 可通过环境变量 EMBEDDING_PROVIDER 覆盖
-  provider: zhipu                   # Default: zhipu (保持向后兼容)
+  provider: biobert                   # Default: zhipu (保持向后兼容)
 
   # ZhipuAI embedding model configuration
   zhipu:

@@ -1,106 +1,57 @@
-# MediMind-Agent 🏥
+# 🧠 MediMind Agent
 
-一个智能医疗健康问答助手，支持多轮对话和上下文记忆，能够基于您的医疗文档库提供准确的健康咨询。
+多模式智能助手，支持 Chat / Ask / Conclude / Explain，带会话记忆与持久化，可调用 Tavily 搜索、Elasticsearch BM25，以及 RAG（pgvector+ES）。
 
-## ✨ 功能特性
+## ✨ 功能概览
 
-- **💬 智能对话**：支持多轮连续对话，理解上下文，像真人一样交流
-- **🧠 记忆系统**：自动记住对话历史，超出限制时智能总结关键信息
-- **📚 知识检索**：从您的文档库中快速找到相关信息，提供可靠回答
-- **⚡ 开箱即用**：首次运行自动处理文档，之后快速启动
-- **📁 支持多种文档**：TXT、PDF、CSV、Markdown、Excel、Word 等格式
-- **⚙️ 灵活配置**：简单的配置文件，轻松调整参数
+- 💬 **Chat**：自由对话，可用 Tavily（搜索/新闻/抓取）和 ES 工具
+- ❓ **Ask**：RAG 深度问答，混合检索（pgvector+ES），ReAct agent
+- 📝 **Conclude**：文档总结，支持独立记忆
+- 📚 **Explain**：概念讲解，基于向量检索
+- 🔄 **会话管理**：`/history`、`/session list`、`/resume`、`/delete`、`/status`、`/reset`
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
-
-**推荐使用 uv**
-
+### 1️⃣ 安装依赖（推荐 uv）
 ```bash
 pip install uv
 uv sync
-.venv\Scripts\activate  # Windows
+.venv\Scripts\activate
 ```
-
-**或使用 pip**
-
+或使用传统方式：
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置 API 密钥
-
-复制 `.env.example` 为 `.env`，然后填入您的 ZhipuAI API 密钥：
-
+### 2️⃣ 配置环境
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入: ZHIPU_API_KEY=your_key_here
 ```
+设置至少：
+- `OPENAI_API_KEY` 或 `ZHIPU_API_KEY`（Zhipu OpenAI 兼容接口）
+- `ELASTICSEARCH_URL`（如 `http://localhost:9200`）
+- PG 连接（用于 pgvector / 会话持久化）
 
-### 3. 准备文档
-
-将医疗相关文档放入 `data/documents/` 目录，按类型分类即可：
-
-```
-data/documents/
-├── txt/       # 文本文件
-├── pdf/       # PDF 文档
-├── md/        # Markdown 文件
-└── excel/     # Excel 表格
-...
-```
-
-### 4. 启动应用
-
+### 3️⃣ 启动
 ```bash
 python main.py
 ```
 
-启动后，开始和助手对话吧！输入 `quit` 或 `exit` 退出。
+**常用命令**：`/mode <chat|ask|conclude|explain>`、`/history [n]`、`/session list`、`/resume <id>`、`/delete <id>`、`/reset`、`/status`
 
-## 💡 使用体验
+## 📊 数据与索引
 
-启动后，您可以像这样与助手对话：
+- 📁 文档放在 `data/documents/`（按类型分目录）
+- 🔨 向量/ES 建索引：使用 `scripts/rebuild_pgvector.py` 和 `scripts/rebuild_es.py`（需运行 PG+ES）
 
-```
-User: 什么是糖尿病？
-Assistant: [基于文档库回答糖尿病的定义和特点]
+💡 **提示**：使用 `docker-compose up -d` 可快速启动 PostgreSQL 和 Elasticsearch 服务
 
-User: 它有哪些常见症状？
-Assistant: [理解"它"指糖尿病，回答症状]
+## ⚙️ 配置
 
-User: 如何预防？
-Assistant: [继续讨论糖尿病的预防方法]
-```
-
-助手会记住对话内容，自动理解您的问题背景。
-
-## ⚙️ 配置说明
-
-所有配置文件在 `configs/` 目录中，您可以根据需要调整：
-
-- **`llm.yaml`** - 语言模型参数（温度、最大长度等）
-- **`embeddings.yaml`** - 文本向量化配置
-- **`rag.yaml`** - 检索参数（检索数量、相似度阈值等）
-- **`memory.yaml`** - 对话记忆配置（历史长度限制等）
-
-大多数情况下使用默认配置即可，如需调整请参考配置文件中的注释。
-
-**配置优先级**：函数参数 > 环境变量 > 配置文件 > 默认值
-
-## 📚 进一步了解
-
-想深入了解技术细节？查看以下文档：
-
-- [对话引擎架构](docs/chatEngine/architecture.md) - 了解对话系统设计
-- [记忆系统详解](docs/chatEngine/memory.md) - 了解对话记忆机制
-- [技术开发指南](medimind-guide.md) - 开发和扩展指南
-
-## 系统要求
-
-- Python 3.10 或更高版本
-- ZhipuAI API 密钥（[申请地址](https://open.bigmodel.cn/)）
-
----
+- `configs/llm.yaml` - LLM 模型参数（Zhipu OpenAI 兼容接口）
+- `configs/embeddings.yaml` - 嵌入模型配置（Zhipu/BioBERT）
+- `configs/memory.yaml` - 会话记忆配置（Token 限制、摘要提示词）
+- `configs/modes.yaml` - 模式参数（Chat/Ask/Conclude/Explain）
+- `configs/rag.yaml` - RAG 检索配置（Top-K、相关性阈值、重排序等）
+- `configs/storage.yaml` - 存储配置（PostgreSQL/pgvector/Elasticsearch/会话存储）
 

@@ -1,0 +1,23 @@
+# Storage configuration for vector stores and databases
+
+postgresql:
+  host: ${POSTGRES_HOST:localhost}
+  port: ${POSTGRES_PORT:5432}
+  database: ${POSTGRES_DB:medimind}
+  user: ${POSTGRES_USER:postgres}
+  password: ${POSTGRES_PASSWORD:}
+  
+pgvector:
+  table_name: documents
+  embedding_dimension: 768  # Must match embedding model dimension
+  distance_metric: cosine    # Options: cosine, l2, inner_product
+  
+elasticsearch:
+  url: ${ELASTICSEARCH_URL:http://localhost:9200}
+  index_name: medimind_docs
+  # api_key: ${ELASTICSEARCH_API_KEY:}  # Optional for secured clusters
+  # cloud_id: ${ELASTICSEARCH_CLOUD_ID:}  # Optional for Elastic Cloud
+  
+chat_sessions:
+  table_sessions: chat_sessions
+  table_messages: chat_messages
