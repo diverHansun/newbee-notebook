@@ -557,6 +557,16 @@ def get_modes_config():
     return load_yaml_config(modes_config_path)
 
 
+def get_zhipu_tools_config() -> dict:
+    """Get Zhipu tools configuration from YAML file.
+
+    Returns:
+        dict: Zhipu tools configuration
+    """
+    config_path = os.path.join("configs", "zhipu_tools.yaml")
+    return load_yaml_config(config_path)
+
+
 def get_config():
     """Get all configuration as a dictionary.
     
@@ -580,4 +590,5 @@ def get_config():
         "memory": get_memory_config(),
         "storage": get_storage_config(),
         "modes": get_modes_config(),
+        "zhipu_tools": get_zhipu_tools_config(),
     }

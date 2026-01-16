@@ -9,6 +9,11 @@ from src.tools.tavily import (
     build_tavily_crawl_tool,
 )
 from src.tools.es_search_tool import build_es_search_tool
+from src.tools.zhipu_tools import (
+    build_zhipu_web_search_tool,
+    build_zhipu_web_crawl_tool,
+)
+from src.common.config import get_zhipu_tools_config
 
 
 def get_search_tools(es_index_name: Optional[str] = None) -> List[BaseTool]:
@@ -41,5 +46,26 @@ def get_search_tools(es_index_name: Optional[str] = None) -> List[BaseTool]:
             print("[Tools] Elasticsearch knowledge_base_search enabled for Chat")
         except Exception as e:
             print(f"[Tools] Warning: Failed to initialize Elasticsearch tool: {e}")
+
+    # Enable Zhipu tools when API key and config allow
+    if os.getenv("ZHIPU_API_KEY"):
+        zhipu_cfg = get_zhipu_tools_config() or {}
+        zhipu_tools = zhipu_cfg.get("zhipu_tools", {}) or {}
+        web_search_cfg = zhipu_tools.get("web_search", {}) or {}
+        web_crawl_cfg = zhipu_tools.get("web_crawl", {}) or {}
+
+        if web_search_cfg.get("enabled", False):
+            try:
+                tools.append(build_zhipu_web_search_tool())
+                print("[Tools] Zhipu web_search enabled")
+            except Exception as e:
+                print(f"[Tools] Warning: Failed to initialize Zhipu web_search: {e}")
+
+        if web_crawl_cfg.get("enabled", False):
+            try:
+                tools.append(build_zhipu_web_crawl_tool())
+                print("[Tools] Zhipu web_crawl enabled")
+            except Exception as e:
+                print(f"[Tools] Warning: Failed to initialize Zhipu web_crawl: {e}")
 
     return tools

@@ -1,0 +1,24 @@
+# Configuration for Zhipu Web Search and Web Reader tools
+
+zhipu_tools:
+  web_search:
+    enabled: true
+    base_url: https://open.bigmodel.cn/api
+    timeout: 30
+    search_engine: search_pro        # search_std | search_pro | search_pro_sogou | search_pro_quark
+    count: 10
+    content_size: medium             # medium | high
+    search_recency_filter: noLimit   # oneDay | oneWeek | oneMonth | oneYear | noLimit
+    search_intent: false
+
+  web_crawl:
+    enabled: true
+    base_url: https://open.bigmodel.cn/api
+    timeout: 30
+    return_format: markdown          # markdown | text
+    retain_images: true
+    no_cache: false
+    no_gfm: false
+    keep_img_data_url: false
+    with_images_summary: false
+    with_links_summary: false

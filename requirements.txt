@@ -15,6 +15,9 @@ asyncpg==0.31.0
 # Agent tools
 tavily-python==0.7.17
 
+# HTTP client
+requests==2.32.5
+
 # Hugging Face transformers (for BioBERT and other transformer models)
 transformers==4.57.1
 torch==2.9.0
