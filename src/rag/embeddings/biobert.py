@@ -5,11 +5,13 @@ BioBERT Embedding 模块
 专为生物医学领域文本优化
 """
 
-from typing import List, Any
+from typing import List, Any, Optional, Dict
 import torch
 from transformers import AutoTokenizer, AutoModel
 
 from .base import BaseEmbeddingModel
+from .registry import register_embedding
+from src.common.config import get_embeddings_config
 
 
 class BioBERTEmbedding(BaseEmbeddingModel):
@@ -182,25 +184,68 @@ class BioBERTEmbedding(BaseEmbeddingModel):
         return embeddings_np.tolist()
 
 
-def build_biobert_embedding(
-    model_path: str = "models/biobert-v1.1",
-    normalize: bool = True,
-    device: str = "cpu"
-) -> BioBERTEmbedding:
-    """构建 BioBERT Embedding 实例
+def _get_biobert_config() -> Dict[str, Any]:
+    """Get BioBERT-specific configuration from embeddings.yaml.
 
-    工厂函数，遵循依赖倒置原则 (DIP)
-
-    Args:
-        model_path: 模型路径
-        normalize: 是否归一化
-        device: 运行设备
+    Follows SRP: This function has a single responsibility - read BioBERT config.
+    Follows DRY: Centralizes BioBERT config reading logic in one place.
 
     Returns:
-        BioBERTEmbedding 实例
+        Dictionary containing BioBERT configuration:
+        - model_path: Path to model (default: 'models/biobert-v1.1')
+        - normalize: Whether to L2 normalize (default: True)
+        - device: Device to use (default: 'cpu')
+        - dim: Expected embedding dimension (default: 768)
+
+    Example:
+        >>> config = _get_biobert_config()
+        >>> model_path = config.get('model_path', 'models/biobert-v1.1')
     """
+    embeddings_config = get_embeddings_config()
+    return embeddings_config.get('embeddings', {}).get('biobert', {})
+
+
+@register_embedding("biobert")
+def build_biobert_embedding(
+    model_path: Optional[str] = None,
+    normalize: Optional[bool] = None,
+    device: Optional[str] = None
+) -> BioBERTEmbedding:
+    """Build BioBERT Embedding instance.
+
+    Factory function following Dependency Inversion Principle (DIP).
+    Automatically registered as 'biobert' provider via decorator.
+
+    Configuration priority:
+    1. Function parameters (if provided)
+    2. configs/embeddings.yaml (biobert section)
+    3. Defaults (models/biobert-v1.1, normalize=True, device='cpu')
+
+    Args:
+        model_path: Model path (overrides config if provided)
+        normalize: Whether to normalize (overrides config if provided)
+        device: Device to use (overrides config if provided)
+
+    Returns:
+        BioBERTEmbedding instance
+
+    Example:
+        >>> # Use config from embeddings.yaml
+        >>> embed_model = build_biobert_embedding()
+        >>>
+        >>> # Override with custom parameters
+        >>> embed_model = build_biobert_embedding(device='cuda')
+    """
+    # Get configuration from embeddings.yaml
+    config = _get_biobert_config()
+
+    # Resolve parameters: arg > config > default
+    resolved_model_path = model_path if model_path is not None else config.get('model_path', 'models/biobert-v1.1')
+    resolved_normalize = normalize if normalize is not None else config.get('normalize', True)
+    resolved_device = device if device is not None else config.get('device', 'cpu')
+
     return BioBERTEmbedding(
-        model_name_or_path=model_path,
-        normalize=normalize,
-        device=device
+        model_name_or_path=resolved_model_path,
+        normalize=resolved_normalize,
+        device=resolved_device
     )

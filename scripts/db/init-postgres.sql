@@ -33,10 +33,53 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_mode ON chat_messages(mode);
 -- Create index on created_at for time-based queries
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
 
+-- ============================================================================
+-- Multi-Provider Vector Store Tables
+-- ============================================================================
+-- Note: These tables are created by LlamaIndex automatically when building indexes.
+-- The definitions below are for reference only and match the expected schema.
+--
+-- LlamaIndex automatically prefixes table names with 'data_', so:
+-- - 'documents_biobert' becomes 'data_documents_biobert'
+-- - 'documents_zhipu' becomes 'data_documents_zhipu'
+
+-- BioBERT vector store table (768 dimensions)
+-- This table is auto-created by LlamaIndex during index building
+-- Uncomment if you want to pre-create it manually:
+/*
+CREATE TABLE IF NOT EXISTS data_documents_biobert (
+    id BIGSERIAL PRIMARY KEY,
+    text VARCHAR NOT NULL,
+    metadata_ JSON,
+    node_id VARCHAR,
+    embedding vector(768)
+);
+CREATE INDEX IF NOT EXISTS documents_biobert_idx_1
+    ON data_documents_biobert ((metadata_->>'ref_doc_id'));
+*/
+
+-- ZhipuAI vector store table (1024 dimensions)
+-- This table is auto-created by LlamaIndex during index building
+-- Uncomment if you want to pre-create it manually:
+/*
+CREATE TABLE IF NOT EXISTS data_documents_zhipu (
+    id BIGSERIAL PRIMARY KEY,
+    text VARCHAR NOT NULL,
+    metadata_ JSON,
+    node_id VARCHAR,
+    embedding vector(1024)
+);
+CREATE INDEX IF NOT EXISTS documents_zhipu_idx_1
+    ON data_documents_zhipu ((metadata_->>'ref_doc_id'));
+*/
+
 -- Log successful initialization
 DO $$
 BEGIN
     RAISE NOTICE 'MediMind database initialized successfully';
     RAISE NOTICE 'Extensions enabled: vector, uuid-ossp';
     RAISE NOTICE 'Tables created: chat_sessions, chat_messages';
+    RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
+    RAISE NOTICE '  - data_documents_biobert (768 dims)';
+    RAISE NOTICE '  - data_documents_zhipu (1024 dims)';
 END $$;

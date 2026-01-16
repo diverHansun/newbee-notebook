@@ -6,11 +6,27 @@ postgresql:
   database: ${POSTGRES_DB:medimind}
   user: ${POSTGRES_USER:postgres}
   password: ${POSTGRES_PASSWORD:}
-  
+
+# Multi-provider pgvector configuration
+# Each provider has its own table with matching embedding dimensions
 pgvector:
+  # Provider-specific tables (recommended for multi-provider support)
+  # Note: LlamaIndex automatically prefixes table names with 'data_'
+  tables:
+    biobert:
+      table_name: documents_biobert    # Actual table: data_documents_biobert
+      embedding_dimension: 768         # BioBERT fixed dimension
+      distance_metric: cosine
+    zhipu:
+      table_name: documents_zhipu      # Actual table: data_documents_zhipu
+      embedding_dimension: 1024        # ZhipuAI embedding-3 dimension
+      distance_metric: cosine
+
+  # Legacy single-table config (deprecated, kept for backward compatibility)
+  # These values are used only if provider-specific config is not found
   table_name: documents
-  embedding_dimension: 768  # Must match embedding model dimension
-  distance_metric: cosine    # Options: cosine, l2, inner_product
+  embedding_dimension: 768
+  distance_metric: cosine
   
 elasticsearch:
   url: ${ELASTICSEARCH_URL:http://localhost:9200}

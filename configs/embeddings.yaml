@@ -10,15 +10,13 @@ embeddings:
   zhipu:
     enabled: true                    # Enable ZhipuAI embedding model
     model: embedding-3              # ZhipuAI embedding model version
-    dim: 1024                       # Embedding vector dimension (must match FAISS index)
-    index_dir: data/indexes/zhipu   # FAISS index storage directory
+    dim: 1024                       # Embedding vector dimension (stored in pgvector)
 
   # BioBERT local embedding model configuration
   biobert:
     enabled: true                    # Enable BioBERT embedding model
     model_path: models/biobert-v1.1 # Local model path or HuggingFace model ID
     normalize: true                 # L2 normalization (recommended for cosine similarity)
-    dim: 768                        # BioBERT fixed dimension
-    index_dir: data/indexes/biobert # FAISS index storage directory
+    dim: 768                        # BioBERT fixed dimension (stored in pgvector)
     device: cpu                     # Device: 'cpu' or 'cuda'
 

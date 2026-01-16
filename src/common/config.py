@@ -500,9 +500,56 @@ def get_storage_config():
     return config
 
 
+def get_pgvector_config_for_provider(provider: str = None) -> dict:
+    """Get pgvector table configuration for a specific embedding provider.
+
+    This function supports multi-provider vector storage by returning
+    provider-specific table names and embedding dimensions.
+
+    Args:
+        provider: Embedding provider name ('biobert' or 'zhipu').
+                  If None, uses the current configured provider.
+
+    Returns:
+        dict: Configuration with keys:
+            - table_name: Provider-specific table name (e.g., 'documents_biobert')
+            - embedding_dimension: Vector dimension for this provider
+            - distance_metric: Distance metric for similarity search
+
+    Example:
+        >>> config = get_pgvector_config_for_provider('biobert')
+        >>> print(config)
+        {'table_name': 'documents_biobert', 'embedding_dimension': 768, 'distance_metric': 'cosine'}
+    """
+    if provider is None:
+        provider = get_embedding_provider()
+
+    storage_config = get_storage_config()
+    pgvector_config = storage_config.get("pgvector", {})
+
+    # Try to get provider-specific config from tables
+    tables_config = pgvector_config.get("tables", {})
+    provider_config = tables_config.get(provider, {})
+
+    if provider_config:
+        return {
+            "table_name": provider_config.get("table_name", f"documents_{provider}"),
+            "embedding_dimension": provider_config.get("embedding_dimension", 768 if provider == "biobert" else 1024),
+            "distance_metric": provider_config.get("distance_metric", "cosine"),
+        }
+
+    # Fallback to legacy single-table config with provider-based defaults
+    default_dim = 768 if provider == "biobert" else 1024
+    return {
+        "table_name": pgvector_config.get("table_name", "documents"),
+        "embedding_dimension": pgvector_config.get("embedding_dimension", default_dim),
+        "distance_metric": pgvector_config.get("distance_metric", "cosine"),
+    }
+
+
 def get_modes_config():
     """Get modes configuration from YAML file or defaults.
-    
+
     Returns:
         dict: Modes configuration
     """

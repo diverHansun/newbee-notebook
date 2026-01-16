@@ -33,7 +33,12 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from src.llm.zhipu import build_llm
 from src.rag.embeddings import build_embedding
-from src.common.config import get_documents_directory, get_storage_config
+from src.common.config import (
+    get_documents_directory,
+    get_storage_config,
+    get_embedding_provider,
+    get_pgvector_config_for_provider,
+)
 from src.engine import (
     ModeType,
     SessionManager,
@@ -97,18 +102,23 @@ async def initialize_services(args):
     if not args.no_pgvector:
         print("\n[3/5] Connecting to pgvector...")
         try:
+            # Get provider-specific pgvector configuration
+            provider = get_embedding_provider()
+            pgvector_provider_cfg = get_pgvector_config_for_provider(provider)
+
             config = PGVectorConfig(
                 host=pg_config.get("host", "localhost"),
                 port=pg_config.get("port", 5432),
                 database=pg_config.get("database", "medimind"),
                 user=pg_config.get("user", "postgres"),
                 password=pg_config.get("password", ""),
-                table_name=pgvector_cfg.get("table_name", "documents"),
-                embedding_dimension=pgvector_cfg.get("embedding_dimension", 1024),
+                # Use provider-specific table and dimension
+                table_name=pgvector_provider_cfg["table_name"],
+                embedding_dimension=pgvector_provider_cfg["embedding_dimension"],
             )
-            
+
             pgvector_index = await load_pgvector_index(embed_model, config)
-            print("pgvector connected")
+            print(f"pgvector connected (provider: {provider}, table: {config.table_name}, dim: {config.embedding_dimension})")
         except Exception as e:
             print(f"Warning: Could not connect to pgvector: {e}")
             print("RAG modes (ask, conclude, explain) may not work")
