@@ -4,11 +4,13 @@ This mode provides deep Q&A with:
 - ReActAgent for reasoning and acting
 - Hybrid retrieval (pgvector + Elasticsearch BM25)
 - RAG for grounded responses
+- Optional external web tools (Zhipu search/reader) when enabled
 
 The agent uses a think-act-observe loop to answer complex questions.
 """
 
 from typing import Optional, List
+import os
 from llama_index.core.llms import LLM, ChatMessage, MessageRole
 from llama_index.core.memory import BaseMemory
 from llama_index.core.tools import BaseTool, QueryEngineTool, ToolMetadata
@@ -18,6 +20,12 @@ from src.engine.modes.base import BaseMode, ModeConfig, ModeType
 from src.agent import ReActAgentRunner
 from src.rag.retrieval import HybridRetriever, RRFFusion, build_hybrid_retriever
 from src.prompts import load_prompt
+from src.tools.zhipu_tools import (
+    build_zhipu_web_search_tool,
+    build_zhipu_web_crawl_tool,
+)
+from src.tools.time import build_current_time_tool
+from src.common.config import get_zhipu_tools_config
 
 
 class AskMode(BaseMode):
@@ -74,18 +82,44 @@ class AskMode(BaseMode):
         Returns:
             List containing the knowledge base search tool
         """
-        if self._query_engine is None:
-            return []
-            
-        return [
-            QueryEngineTool(
-                query_engine=self._query_engine,
-                metadata=ToolMetadata(
-                    name="knowledge_base",
-                    description="Search the medical knowledge base for information. Usage: input the question or topic.",
-                ),
+        tools: List[BaseTool] = []
+
+        # Current time tool (always available; no external deps)
+        tools.append(build_current_time_tool())
+
+        # Knowledge base query tool (always available when retriever is ready)
+        if self._query_engine is not None:
+            tools.append(
+                QueryEngineTool(
+                    query_engine=self._query_engine,
+                    metadata=ToolMetadata(
+                        name="knowledge_base",
+                        description="Search the medical knowledge base for information. Usage: input the question or topic.",
+                    ),
+                )
             )
-        ]
+
+        # Optional Zhipu web tools (require API key + enabled config)
+        api_key = os.getenv("ZHIPU_API_KEY")
+        if api_key:
+            zhipu_cfg = get_zhipu_tools_config() or {}
+            zhipu_tools_cfg = zhipu_cfg.get("zhipu_tools", {}) or {}
+
+            web_search_cfg = zhipu_tools_cfg.get("web_search", {}) or {}
+            if web_search_cfg.get("enabled", False):
+                try:
+                    tools.append(build_zhipu_web_search_tool())
+                except Exception as exc:
+                    print(f"[AskMode] Warning: failed to init zhipu_web_search: {exc}")
+
+            web_crawl_cfg = zhipu_tools_cfg.get("web_crawl", {}) or {}
+            if web_crawl_cfg.get("enabled", False):
+                try:
+                    tools.append(build_zhipu_web_crawl_tool())
+                except Exception as exc:
+                    print(f"[AskMode] Warning: failed to init zhipu_web_crawl: {exc}")
+
+        return tools
     
     async def _initialize(self) -> None:
         """Initialize retriever and agent."""
@@ -122,10 +156,16 @@ class AskMode(BaseMode):
         
         # 3. Create Tools
         tools = self._build_tools()
-        
+        tool_names = []
+        for tool in tools:
+            name = getattr(getattr(tool, "metadata", None), "name", None)
+            if not name:
+                name = getattr(tool, "name", tool.__class__.__name__)
+            tool_names.append(name)
+
         # 4. Get system prompt
         system_prompt = self._config.system_prompt or load_prompt("ask.md")
-        
+
         # 5. Create ReActAgentRunner
         self._runner = ReActAgentRunner(
             llm=self._llm,
@@ -135,7 +175,8 @@ class AskMode(BaseMode):
         )
         tool_count = len(tools)
         retriever_type = type(self._retriever).__name__ if self._retriever else "None"
-        print(f"[AskMode] Initialized ReActAgentRunner with {tool_count} tool(s), retriever={retriever_type}.")
+        tool_names_str = ", ".join(tool_names) if tool_names else "none"
+        print(f"[AskMode] Initialized ReActAgentRunner with {tool_count} tool(s), retriever={retriever_type}. Tools: {tool_names_str}")
         
         self._initialized = True
     

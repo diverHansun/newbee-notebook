@@ -12,6 +12,11 @@ from src.tools.zhipu_tools import (
     zhipu_web_search,
     zhipu_web_crawl,
 )
+from src.tools.time import (
+    build_current_time_tool,
+    get_current_datetime,
+)
+from src.tools.tool_registry import build_tool_registry
 
 __all__ = [
     "build_tavily_search_tool",
@@ -23,4 +28,7 @@ __all__ = [
     "build_zhipu_web_crawl_tool",
     "zhipu_web_search",
     "zhipu_web_crawl",
+    "build_current_time_tool",
+    "get_current_datetime",
+    "build_tool_registry",
 ]

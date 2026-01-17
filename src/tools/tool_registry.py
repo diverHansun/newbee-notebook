@@ -1,4 +1,4 @@
-"""Search tool utilities (factory)."""
+"""Tool registry builder for chat/agent modes."""
 
 from typing import List, Optional
 import os
@@ -14,15 +14,23 @@ from src.tools.zhipu_tools import (
     build_zhipu_web_crawl_tool,
 )
 from src.common.config import get_zhipu_tools_config
+from src.tools.time import build_current_time_tool
 
 
-def get_search_tools(es_index_name: Optional[str] = None) -> List[BaseTool]:
-    """Get enabled search tools based on env configuration.
+def build_tool_registry(es_index_name: Optional[str] = None) -> List[BaseTool]:
+    """Build the list of enabled tools based on env/config.
 
     Args:
         es_index_name: Optional ES index name for knowledge-base search tool.
     """
     tools: List[BaseTool] = []
+
+    # Always provide current time tool
+    try:
+        tools.append(build_current_time_tool())
+        print("[Tools] current_time tool enabled")
+    except Exception as e:
+        print(f"[Tools] Warning: Failed to initialize current_time tool: {e}")
 
     if os.getenv("TAVILY_API_KEY"):
         try:

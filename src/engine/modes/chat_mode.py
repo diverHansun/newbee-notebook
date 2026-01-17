@@ -11,7 +11,7 @@ from llama_index.core.memory import BaseMemory
 from llama_index.core.llms import LLM, ChatMessage, MessageRole
 
 from src.engine.modes.base import BaseMode, ModeConfig, ModeType
-from src.tools.search import get_search_tools
+from src.tools.tool_registry import build_tool_registry
 from src.agent import FunctionAgentRunner
 from src.prompts import load_prompt
 
@@ -56,7 +56,7 @@ class ChatMode(BaseMode):
             List of tools (web search, etc.)
         """
         # Get search tools
-        return get_search_tools(es_index_name=self._es_index_name)
+        return build_tool_registry(es_index_name=self._es_index_name)
     
     async def _initialize(self) -> None:
         """Initialize the agent."""
