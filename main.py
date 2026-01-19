@@ -31,15 +31,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-from src.llm.zhipu import build_llm
-from src.rag.embeddings import build_embedding
-from src.common.config import (
+from medimind_agent.core.llm.zhipu import build_llm
+from medimind_agent.core.rag.embeddings import build_embedding
+from medimind_agent.core.common.config import (
     get_documents_directory,
     get_storage_config,
     get_embedding_provider,
     get_pgvector_config_for_provider,
 )
-from src.engine import (
+from medimind_agent.core.engine import (
     ModeType,
     SessionManager,
     parse_mode_from_input,
@@ -47,9 +47,9 @@ from src.engine import (
     load_pgvector_index,
     load_es_index,
 )
-from src.infrastructure.session import ChatSessionStore
-from src.infrastructure.pgvector import PGVectorConfig
-from src.infrastructure.elasticsearch import ElasticsearchConfig
+from medimind_agent.infrastructure.session import ChatSessionStore
+from medimind_agent.infrastructure.pgvector import PGVectorConfig
+from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
 
 
 def print_banner():
@@ -331,7 +331,7 @@ async def main_async(args):
                     user_input = message
                 
                 # Get response
-                response = await session_manager.chat(user_input)
+                response, sources = await session_manager.chat(user_input)
                 print(f"\nAssistant: {response}")
                 
             except KeyboardInterrupt:

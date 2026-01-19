@@ -1,0 +1,32 @@
+version: 1
+formatters:
+  json:
+    format: "%(message)s"
+    class: pythonjsonlogger.jsonlogger.JsonFormatter
+    datefmt: "%Y-%m-%dT%H:%M:%S%z"
+    rename_fields:
+      levelname: level
+      message: message
+      name: logger
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: json
+    level: ${LOG_LEVEL:INFO}
+    stream: ext://sys.stdout
+loggers:
+  uvicorn.error:
+    level: INFO
+    handlers: [console]
+    propagate: false
+  uvicorn.access:
+    level: INFO
+    handlers: [console]
+    propagate: false
+  medimind:
+    level: ${LOG_LEVEL:INFO}
+    handlers: [console]
+    propagate: false
+root:
+  level: ${LOG_LEVEL:INFO}
+  handlers: [console]

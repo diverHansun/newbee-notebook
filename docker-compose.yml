@@ -15,6 +15,17 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7.2
+    container_name: medimind-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - medimind_network
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: medimind-postgres
@@ -29,7 +40,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Mount init script - runs automatically on first container start
-      - ./scripts/db/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+      - ./medimind_agent/scripts/db/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -58,6 +69,54 @@ services:
     networks:
       - medimind_network
 
+  # Celery worker for async document processing (uses local code)
+  celery-worker:
+    image: python:3.11-slim
+    container_name: medimind-celery-worker
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "pip install -q -r requirements.txt && \
+               celery -A medimind_agent.infrastructure.tasks.celery_app worker --loglevel=info"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - medimind_network
+    restart: unless-stopped
+
+  # Optional: Flower monitoring UI for Celery (enable with --profile monitor)
+  flower:
+    image: python:3.11-slim
+    container_name: medimind-flower
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "pip install -q -r requirements.txt && \
+               celery -A medimind_agent.infrastructure.tasks.celery_app flower --port=${FLOWER_PORT:-5555}"
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - medimind_network
+    ports:
+      - "${FLOWER_PORT:-5555}:${FLOWER_PORT:-5555}"
+    restart: unless-stopped
+    profiles:
+      - monitor
+
   # Kibana for Elasticsearch visualization and debugging
   kibana:
     image: kibana:8.19.0
@@ -79,6 +138,8 @@ volumes:
   postgres_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

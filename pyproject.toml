@@ -8,6 +8,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "docx2txt==0.9",
     "faiss-cpu==1.12.0",
+    "fastapi>=0.128.0",
     "llama-index==0.14.0",
     "llama-index-embeddings-zhipuai==0.3.1",
     "llama-index-llms-openai>=0.5.6",
@@ -23,13 +24,20 @@ dependencies = [
     "pydantic==2.12.3",
     "pytest>=9.0.1",
     "python-dotenv==1.1.1",
+    "python-json-logger>=4.0.0",
     "pyyaml==6.0.3",
     "requests==2.32.5",
     "rich==14.2.0",
     "sentence-transformers==5.1.1",
+    "sqlalchemy>=2.0.44",
     "tavily-python>=0.7.17",
     "tiktoken==0.12.0",
     "torch==2.9.0",
     "transformers==4.57.1",
+    "uvicorn>=0.40.0",
     "xlrd>=2.0.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["medimind_agent*"]
