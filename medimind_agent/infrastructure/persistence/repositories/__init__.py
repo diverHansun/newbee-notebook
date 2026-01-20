@@ -7,6 +7,7 @@ from medimind_agent.infrastructure.persistence.repositories.notebook_repo_impl i
 from medimind_agent.infrastructure.persistence.repositories.session_repo_impl import SessionRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.document_repo_impl import DocumentRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
+from medimind_agent.infrastructure.persistence.repositories.message_repo_impl import MessageRepositoryImpl
 
 __all__ = [
     "LibraryRepositoryImpl",
@@ -14,6 +15,7 @@ __all__ = [
     "SessionRepositoryImpl",
     "DocumentRepositoryImpl",
     "NotebookDocumentRefRepositoryImpl",
+    "MessageRepositoryImpl",
 ]
 
 

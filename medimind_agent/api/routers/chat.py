@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from medimind_agent.api.dependencies import get_session_service, get_chat_service
+from medimind_agent.api.models.requests import ChatContext
 from medimind_agent.application.services.session_service import SessionService, SessionNotFoundError
 from medimind_agent.application.services.chat_service import ChatService
 from medimind_agent.domain.value_objects.mode_type import ModeType
@@ -32,6 +33,7 @@ class ChatRequest(BaseModel):
         "chat", description="Chat mode"
     )
     session_id: Optional[str] = Field(None, description="Session ID (optional)")
+    context: Optional[ChatContext] = Field(None, description="Selected text context")
 
 
 class ChatResponse(BaseModel):
@@ -188,6 +190,7 @@ async def chat(
         session_id=request.session_id,
         message=request.message,
         mode=request.mode,
+        context=request.context.dict() if request.context else None,
     )
 
     return ChatResponse(
@@ -231,6 +234,7 @@ async def chat_stream(
         session_id=request.session_id,
         message=request.message,
         mode=request.mode,
+        context=request.context.dict() if request.context else None,
     )
     stream = sse_adapter(business_stream)
     

@@ -1,4 +1,4 @@
-﻿"""Mode selector for managing interaction modes.
+"""Mode selector for managing interaction modes.
 
 This module provides the ModeSelector class that handles:
 - Mode creation and caching
@@ -6,7 +6,7 @@ This module provides the ModeSelector class that handles:
 - Integration with session storage
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, AsyncGenerator
 from enum import Enum
 from llama_index.core.llms import LLM
 from llama_index.core.memory import BaseMemory, ChatMemoryBuffer
@@ -119,6 +119,7 @@ class ModeSelector:
                 llm=self._llm,
                 memory=self._memory,
                 es_index_name=self._es_index_name,
+                vector_index=self._pgvector_index,
             )
         
         elif mode_type == ModeType.ASK:
@@ -149,7 +150,13 @@ class ModeSelector:
         else:
             raise ValueError(f"Unknown mode type: {mode_type}")
     
-    async def run(self, message: str, mode_type: ModeType) -> str:
+    async def run(
+        self,
+        message: str,
+        mode_type: ModeType,
+        allowed_document_ids: Optional[list] = None,
+        context: Optional[dict] = None,
+    ) -> str:
         """Run a message through a specific mode.
         
         Args:
@@ -160,9 +167,40 @@ class ModeSelector:
             Response from the mode
         """
         mode = self.get_mode(mode_type)
+        mode.set_allowed_documents(allowed_document_ids)
+        mode.set_context(context)
         return await mode.run(message)
-    
-    def run_sync(self, message: str, mode_type: ModeType) -> str:
+
+    async def run_stream(
+        self,
+        message: str,
+        mode_type: ModeType,
+        allowed_document_ids: Optional[list] = None,
+        context: Optional[dict] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream a response through a specific mode.
+
+        Args:
+            message: User message
+            mode_type: Mode to use
+            allowed_document_ids: Optional document scope filter
+            context: Optional context (e.g., selected text)
+
+        Yields:
+            Response text chunks from the mode
+        """
+        mode = self.get_mode(mode_type)
+        mode.set_allowed_documents(allowed_document_ids)
+        mode.set_context(context)
+        async for chunk in mode.stream(message):
+            yield chunk
+
+    def run_sync(
+        self,
+        message: str,
+        mode_type: ModeType,
+        allowed_document_ids: Optional[list] = None,
+    ) -> str:
         """Synchronous version of run().
         
         Args:
@@ -173,7 +211,7 @@ class ModeSelector:
             Response from the mode
         """
         import asyncio
-        return asyncio.run(self.run(message, mode_type))
+        return asyncio.run(self.run(message, mode_type, allowed_document_ids))
     
     async def reset_memory(self) -> None:
         """Reset the shared conversation memory."""

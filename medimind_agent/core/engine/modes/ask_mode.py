@@ -16,6 +16,7 @@ from llama_index.core.memory import BaseMemory
 from llama_index.core.tools import BaseTool, QueryEngineTool, ToolMetadata
 from llama_index.core import VectorStoreIndex
 from llama_index.core.schema import QueryBundle
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.agent import ReActAgentRunner
@@ -126,11 +127,24 @@ class AskMode(BaseMode):
     
     async def _initialize(self) -> None:
         """Initialize retriever and agent."""
-        # 1. Setup Retrieval Strategy (Hybrid)
         if not (self._pgvector_index and self._es_index):
             raise ValueError("AskMode requires both pgvector_index and es_index")
+        await self._refresh_retriever()
 
-        # Full hybrid retrieval
+    async def _refresh_retriever(self) -> None:
+        """(Re)build retriever and query_engine with current filters."""
+        filters = None
+        if self.allowed_doc_ids:
+            filters = MetadataFilters(
+                filters=[
+                    MetadataFilter(
+                        key="document_id",
+                        value=self.allowed_doc_ids,
+                        operator=FilterOperator.IN,
+                    )
+                ]
+            )
+        # build hybrid retriever with filters
         self._retriever = build_hybrid_retriever(
             pgvector_index=self._pgvector_index,
             es_index=self._es_index,
@@ -138,17 +152,13 @@ class AskMode(BaseMode):
             es_top_k=self._es_top_k,
             final_top_k=self._final_top_k,
             fusion_strategy=RRFFusion(),
+            metadata_filters=filters,
         )
-        print("AskMode: Initialized with Hybrid Retrieval (pgvector + Elasticsearch)")
-        
-        # 2. Create Query Engine
         from llama_index.core.query_engine import RetrieverQueryEngine
-        
         self._query_engine = RetrieverQueryEngine.from_args(
             retriever=self._retriever,
             llm=self._llm,
         )
-        
         # 3. Create Tools
         tools = self._build_tools()
         tool_names = []
@@ -184,6 +194,9 @@ class AskMode(BaseMode):
         Returns:
             Agent response with RAG-grounded information
         """
+        # Refresh retriever if document scope changed
+        if self.scope_changed():
+            await self._refresh_retriever()
         # Get chat history for context
         chat_history = []
         if self._memory is not None:
@@ -220,6 +233,23 @@ class AskMode(BaseMode):
             self._memory.put(ChatMessage(role=MessageRole.ASSISTANT, content=response))
         
         return response
+
+    async def _stream(self, message: str):
+        """Stream response using LLM directly with retrieved context."""
+        # ensure retriever up to date
+        if self.scope_changed():
+            await self._refresh_retriever()
+        # simple: run non-stream process (for sources) then stream llm
+        base_response = await self._process(message)
+        # stream from llm best-effort
+        try:
+            stream = await self._llm.astream_chat(message)
+            async for chunk in stream:
+                delta = getattr(chunk, "delta", "") or getattr(chunk, "text", "")
+                if delta:
+                    yield delta
+        except Exception:
+            yield base_response
     
     @property
     def retriever(self) -> Optional[HybridRetriever]:

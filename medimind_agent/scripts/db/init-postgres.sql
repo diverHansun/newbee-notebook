@@ -125,6 +125,18 @@ CREATE INDEX IF NOT EXISTS idx_references_session_id ON "references"(session_id)
 CREATE INDEX IF NOT EXISTS idx_references_document_id ON "references"(document_id);
 CREATE INDEX IF NOT EXISTS idx_references_created_at ON "references"(created_at);
 
+-- Messages stored alongside sessions (business tables)
+CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    mode VARCHAR(20) NOT NULL CHECK (mode IN ('chat','ask','conclude','explain')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user','assistant','system')),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+
 -- ============================================================================
 -- Multi-Provider Vector Store Tables
 -- ============================================================================

@@ -47,9 +47,68 @@ from medimind_agent.core.engine import (
     load_pgvector_index,
     load_es_index,
 )
-from medimind_agent.infrastructure.session import ChatSessionStore
 from medimind_agent.infrastructure.pgvector import PGVectorConfig
 from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
+from medimind_agent.domain.repositories.session_repository import SessionRepository
+from medimind_agent.domain.repositories.message_repository import MessageRepository
+from medimind_agent.domain.entities.session import Session
+from medimind_agent.domain.entities.message import Message
+from medimind_agent.domain.value_objects.mode_type import MessageRole
+
+
+class InMemorySessionRepo(SessionRepository):
+    def __init__(self):
+        self._sessions = {}
+
+    async def get(self, session_id: str):
+        return self._sessions.get(session_id)
+
+    async def list_by_notebook(self, notebook_id: str, limit: int = 20, offset: int = 0):
+        return []
+
+    async def get_latest_by_notebook(self, notebook_id: str):
+        return None
+
+    async def count_by_notebook(self, notebook_id: str) -> int:
+        return 0
+
+    async def create(self, session: Session) -> Session:
+        self._sessions[session.session_id] = session
+        return session
+
+    async def update(self, session: Session) -> Session:
+        self._sessions[session.session_id] = session
+        return session
+
+    async def delete(self, session_id: str) -> bool:
+        return self._sessions.pop(session_id, None) is not None
+
+    async def delete_by_notebook(self, notebook_id: str) -> int:
+        return 0
+
+    async def increment_message_count(self, session_id: str, delta: int = 1) -> None:
+        if session_id in self._sessions:
+            self._sessions[session_id].message_count += delta
+
+    async def update_context_summary(self, session_id: str, summary: str) -> None:
+        if session_id in self._sessions:
+            self._sessions[session_id].context_summary = summary
+
+
+class InMemoryMessageRepo(MessageRepository):
+    def __init__(self):
+        self._messages = []
+
+    async def create(self, message: Message) -> Message:
+        message.message_id = len(self._messages) + 1
+        self._messages.append(message)
+        return message
+
+    async def create_batch(self, messages):
+        return [await self.create(m) for m in messages]
+
+    async def list_by_session(self, session_id: str, limit: int = 100):
+        return [m for m in self._messages if m.session_id == session_id][:limit]
 
 
 def print_banner():
@@ -81,7 +140,7 @@ async def initialize_services(args):
         args: Command line arguments
         
     Returns:
-        Tuple of (llm, pgvector_index, es_index, session_store)
+        Tuple of (llm, pgvector_index, es_index, session_repo, message_repo)
     """
     print("\n[1/5] Initializing LLM...")
     llm = build_llm()
@@ -145,31 +204,13 @@ async def initialize_services(args):
     else:
         print("\n[4/5] Skipping Elasticsearch (--no-elasticsearch)")
     
-    # Initialize session store
-    session_store = None
-    if not args.no_persistence:
-        print("\n[5/5] Connecting to session store...")
-        try:
-            session_store_config = PGVectorConfig(
-                host=pg_config.get("host", "localhost"),
-                port=pg_config.get("port", 5432),
-                database=pg_config.get("database", "medimind"),
-                user=pg_config.get("user", "postgres"),
-                password=pg_config.get("password", ""),
-                table_name=session_cfg.get("table_sessions", "chat_sessions"),
-                embedding_dimension=pgvector_cfg.get("embedding_dimension", 1024),
-            )
-            session_store = ChatSessionStore(session_store_config)
-            await session_store.initialize()
-            print("Session store connected")
-        except Exception as e:
-            print(f"Warning: Could not connect to session store: {e}")
-            print("Chat history will not be persisted")
-            session_store = None
-    else:
-        print("\n[5/5] Skipping persistence (--no-persistence)")
+    # In CLI mode we use in-memory repositories
+    session_repo = InMemorySessionRepo()
+    message_repo = InMemoryMessageRepo()
     
-    return llm, pgvector_index, es_index, session_store
+    print("\n[5/5] Using in-memory session/message repositories for CLI mode")
+    
+    return llm, pgvector_index, es_index, session_repo, message_repo
 
 
 async def main_async(args):
@@ -178,7 +219,7 @@ async def main_async(args):
     
     try:
         # Initialize services
-        llm, pgvector_index, es_index, session_store = await initialize_services(args)
+        llm, pgvector_index, es_index, session_repo, message_repo = await initialize_services(args)
         
         # Get ES index name from config
         storage_config = get_storage_config()
@@ -187,29 +228,15 @@ async def main_async(args):
         # Create session manager
         session_manager = SessionManager(
             llm=llm,
-            session_store=session_store,
+            session_repo=session_repo,
+            message_repo=message_repo,
             pgvector_index=pgvector_index,
             es_index=es_index,
             es_index_name=es_index_name,
         )
         
-        # Start session - try to resume the most recent session if available
-        last_session_id = None
-        if session_store:
-            try:
-                recent_sessions = await session_store.list_sessions(limit=1)
-                if recent_sessions:
-                    last_session_id = recent_sessions[0].session_id
-                    print(f"\n[Session] Found previous session: {last_session_id}")
-            except Exception as e:
-                print(f"Warning: Could not fetch previous sessions: {e}")
-        
-        if last_session_id:
-            await session_manager.start_session(session_id=last_session_id)
-            print(f"[Session] Resumed previous session")
-        else:
-            await session_manager.start_session()
-            print(f"[Session] Created new session: {session_manager.session_id}")
+        await session_manager.start_session(notebook_id="cli-notebook")
+        print(f"[Session] Created new session: {session_manager.session_id}")
         
         # Set initial mode
         initial_mode = ModeType(args.mode) if args.mode else ModeType.CHAT

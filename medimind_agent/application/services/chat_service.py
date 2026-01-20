@@ -1,19 +1,26 @@
-﻿"""
+"""
 MediMind Agent - Chat Service
 
 Application service for chat operations.
 """
 
 from typing import Optional, List, AsyncGenerator, Dict, Any
+import asyncio
 import logging
 from dataclasses import dataclass
 
 from medimind_agent.domain.entities.session import Session
-from medimind_agent.domain.value_objects.mode_type import ModeType
+from medimind_agent.domain.value_objects.mode_type import ModeType, MessageRole
 from medimind_agent.domain.repositories.session_repository import SessionRepository
 from medimind_agent.domain.repositories.notebook_repository import NotebookRepository
-from medimind_agent.domain.repositories.reference_repository import ReferenceRepository
+from medimind_agent.domain.repositories.reference_repository import (
+    ReferenceRepository,
+    NotebookDocumentRefRepository,
+)
+from medimind_agent.domain.repositories.document_repository import DocumentRepository
+from medimind_agent.domain.repositories.message_repository import MessageRepository
 from medimind_agent.domain.entities.reference import Reference
+from medimind_agent.domain.entities.message import Message
 from medimind_agent.core.engine import SessionManager
 
 
@@ -56,18 +63,26 @@ class ChatService:
         session_repo: SessionRepository,
         notebook_repo: NotebookRepository,
         reference_repo: ReferenceRepository,
+        document_repo: DocumentRepository,
+        ref_repo: NotebookDocumentRefRepository,
+        message_repo: MessageRepository,
         session_manager: SessionManager,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
         self._reference_repo = reference_repo
+        self._document_repo = document_repo
+        self._ref_repo = ref_repo
+        self._message_repo = message_repo
         self._session_manager = session_manager
+        self._vector_index = session_manager.vector_index
     
     async def chat(
         self,
         session_id: str,
         message: str,
         mode: str = "chat",
+        context: Optional[dict] = None,
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -87,30 +102,83 @@ class ChatService:
         
         mode_enum = ModeType(mode)
 
+        # Ensure session manager is aligned with this session (loads history)
+        await self._session_manager.start_session(session_id=session_id)
+
+        # Notebook scope documents
+        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+
+        # Fetch context-based chunks and prepend to message if provided
+        context_chunks = await self._get_context_chunks(context) if context else []
+        if context_chunks:
+            preface = "\n\n".join([c["text"] for c in context_chunks if c.get("text")])
+            if preface:
+                message = f"{preface}\n\nQuestion: {message}"
+
         # Generate response via SessionManager + ModeSelector
         response_content, sources = await self._session_manager.chat(
             message=message,
             mode_type=mode_enum,
+            allowed_document_ids=allowed_doc_ids,
+            context=context,
         )
         message_id = session.message_count + 1
-        
-        # Update session message count
-        await self._session_repo.increment_message_count(session_id, 2)  # +2 for user and assistant
 
-        # Persist references if any
+        # Persist messages
+        user_msg = Message(
+            session_id=session_id,
+            mode=mode_enum,
+            role=MessageRole.USER,
+            content=message,
+        )
+        assistant_msg = Message(
+            session_id=session_id,
+            mode=mode_enum,
+            role=MessageRole.ASSISTANT,
+            content=response_content,
+        )
+        await self._message_repo.create_batch([user_msg, assistant_msg])
+        await self._session_repo.increment_message_count(session_id, 2)
+
+        # Persist references if any or from selected context
+        refs = []
         if sources:
-            refs = [
+            refs.extend(
+                [
+                    Reference(
+                        session_id=session_id,
+                        message_id=message_id,
+                        document_id=src.get("document_id"),
+                        chunk_id=src.get("chunk_id", ""),
+                        quoted_text=src.get("text", "")[:2000],
+                        context=None,
+                    )
+                    for src in sources
+                    if src.get("document_id")
+                ]
+            )
+        if context and context.get("document_id") and context.get("selected_text"):
+            refs.append(
                 Reference(
                     session_id=session_id,
                     message_id=message_id,
-                    document_id=src.get("document_id"),
-                    chunk_id=src.get("chunk_id", ""),
-                    quoted_text=src.get("text", "")[:2000],
+                    document_id=context.get("document_id"),
+                    chunk_id=context.get("chunk_id", ""),
+                    quoted_text=context.get("selected_text")[:2000],
                     context=None,
                 )
-                for src in sources
-                if src.get("document_id")
-            ]
+            )
+            # Ensure sources include the selection for frontend display
+            sources.append(
+                {
+                    "document_id": context.get("document_id"),
+                    "chunk_id": context.get("chunk_id", ""),
+                    "text": context.get("selected_text"),
+                    "title": "",
+                    "score": 1.0,
+                }
+            )
+        if refs:
             await self._reference_repo.create_batch(refs)
 
         return ChatResult(
@@ -135,54 +203,180 @@ class ChatService:
         session_id: str,
         message: str,
         mode: str = "chat",
+        context: Optional[dict] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
-        
+
+        This method uses true LLM streaming to provide real-time token-by-token
+        response generation.
+
         Args:
             session_id: Session ID.
             message: User message.
             mode: Chat mode.
-            
+            context: Optional context (e.g., selected text).
+
         Yields:
-            Event dictionaries with type and data.
+            Event dictionaries with type and data:
+            - {"type": "start", "message_id": int}
+            - {"type": "content", "delta": str}
+            - {"type": "sources", "sources": list}
+            - {"type": "done"}
+            - {"type": "error", "error_code": str, "message": str}
         """
-        # Get session
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        
-        mode_enum = ModeType(mode)
-        message_id = session.message_count + 1
-        
-        # Yield start event
-        yield {
-            "type": "start",
-            "message_id": message_id,
-        }
-        
-        # TODO: Integrate with actual streaming LLM
-        # For now, simulate streaming
-        response_content = f"Placeholder streaming response to: {message}"
-        
-        for word in response_content.split():
-            yield {
-                "type": "content",
-                "delta": word + " ",
-            }
-        
-        # Yield sources
-        yield {
-            "type": "sources",
-            "sources": [],
-        }
-        
-        # Yield done
-        yield {
-            "type": "done",
-        }
 
-        # Update session message count
-        await self._session_repo.increment_message_count(session_id, 2)
+        mode_enum = ModeType(mode)
+        await self._session_manager.start_session(session_id=session_id)
+        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+        message_id = session.message_count + 1
+
+        yield {"type": "start", "message_id": message_id}
+
+        full_response = ""
+        sources: List[dict] = []
+
+        try:
+            stream = self._session_manager.chat_stream(
+                message=message,
+                mode_type=mode_enum,
+                allowed_document_ids=allowed_doc_ids,
+                context=context,
+            )
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(stream.__anext__(), timeout=60)
+                except StopAsyncIteration:
+                    break
+                full_response += chunk
+                yield {"type": "content", "delta": chunk}
+
+            sources = self._session_manager.get_last_sources()
+
+            # Add context-based source if provided
+            if context and context.get("document_id") and context.get("selected_text"):
+                sources.append(
+                    {
+                        "document_id": context.get("document_id"),
+                        "chunk_id": context.get("chunk_id", ""),
+                        "text": context.get("selected_text"),
+                        "title": "",
+                        "score": 1.0,
+                    }
+                )
+
+            yield {"type": "sources", "sources": sources or []}
+            yield {"type": "done"}
+
+            # Persist messages after successful streaming
+            user_msg = Message(
+                session_id=session_id,
+                mode=mode_enum,
+                role=MessageRole.USER,
+                content=message,
+            )
+            assistant_msg = Message(
+                session_id=session_id,
+                mode=mode_enum,
+                role=MessageRole.ASSISTANT,
+                content=full_response,
+            )
+            await self._message_repo.create_batch([user_msg, assistant_msg])
+            await self._session_repo.increment_message_count(session_id, 2)
+
+            # Persist references
+            refs = []
+            if sources:
+                refs.extend(
+                    [
+                        Reference(
+                            session_id=session_id,
+                            message_id=message_id,
+                            document_id=s.get("document_id"),
+                            chunk_id=s.get("chunk_id", ""),
+                            quoted_text=s.get("text", "")[:2000],
+                            context=None,
+                        )
+                        for s in sources
+                        if s.get("document_id")
+                    ]
+                )
+            if refs:
+                await self._reference_repo.create_batch(refs)
+
+        except asyncio.TimeoutError:
+            yield {"type": "error", "error_code": "timeout", "message": "Stream timeout"}
+        except asyncio.CancelledError:
+            logger.info(f"Stream cancelled for session {session_id}")
+            return
+        except Exception as exc:
+            logger.error(f"Stream error for session {session_id}: {exc}")
+            yield {"type": "error", "error_code": "internal_error", "message": str(exc)}
+
+    async def _get_notebook_document_ids(self, notebook_id: str) -> List[str]:
+        """Collect document IDs (owned + referenced) for scope filtering."""
+        owned_docs = await self._document_repo.list_by_notebook(notebook_id)
+        owned_ids = [doc.document_id for doc in owned_docs if doc.status.value == "completed" or doc.status == "completed"]
+        refs = await self._ref_repo.list_by_notebook(notebook_id)
+        ref_ids = [ref.document_id for ref in refs]
+        return list(set(owned_ids + ref_ids))
+
+    async def _get_context_chunks(self, context: dict) -> List[dict]:
+        """Fetch chunk and neighbors by chunk_id for richer context."""
+        if not context or not context.get("chunk_id") or not self._vector_index:
+            return []
+        chunk_id = context.get("chunk_id")
+        doc_id = context.get("document_id")
+        chunk_idx = context.get("chunk_index")
+        filters = []
+        from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
+        metadata_filters = None
+        if doc_id:
+            filters.append(
+                MetadataFilter(
+                    key="document_id",
+                    value=doc_id,
+                    operator=FilterOperator.EQ,
+                )
+            )
+        if chunk_idx is not None:
+            try:
+                idx = int(chunk_idx)
+                filters.append(
+                    MetadataFilter(
+                        key="chunk_index",
+                        value=[idx - 1, idx, idx + 1],
+                        operator=FilterOperator.IN,
+                    )
+                )
+            except Exception:
+                pass
+        if filters:
+            metadata_filters = MetadataFilters(filters=filters)
+
+        retriever = self._vector_index.as_retriever(
+            similarity_top_k=5,
+            filters=metadata_filters,
+        )
+        try:
+            results = retriever.retrieve(context.get("selected_text", ""))
+        except Exception:
+            return []
+        chunks = []
+        for node in results:
+            meta = getattr(node.node, "metadata", {}) if hasattr(node, "node") else {}
+            chunks.append(
+                {
+                    "document_id": meta.get("document_id"),
+                    "chunk_id": getattr(node.node, "node_id", ""),
+                    "text": node.node.get_content() if hasattr(node, "node") else "",
+                    "title": meta.get("title", ""),
+                    "score": getattr(node, "score", 0.0),
+                }
+            )
+        return chunks
 
 

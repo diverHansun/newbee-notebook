@@ -14,6 +14,8 @@ from llama_index.core.memory import BaseMemory
 from llama_index.core.base.base_query_engine import BaseQueryEngine
 from llama_index.core import VectorStoreIndex
 from llama_index.core.prompts import PromptTemplate
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
@@ -81,6 +83,7 @@ class ExplainMode(BaseMode):
         self._response_mode = response_mode
         
         self._query_engine: Optional[BaseQueryEngine] = None
+        self._retriever = None
     
     def _default_config(self) -> ModeConfig:
         """Return default Explain mode configuration."""
@@ -95,11 +98,28 @@ class ExplainMode(BaseMode):
         """Initialize the QueryEngine for explanations."""
         if self._index is None:
             raise ValueError("ExplainMode requires an index for RAG")
-        
-        # Create query engine optimized for explanations
-        self._query_engine = self._index.as_query_engine(
-            llm=self._llm,
+        await self._refresh_engine()
+
+    async def _refresh_engine(self) -> None:
+        """Rebuild retriever/query engine when allowed scope changes."""
+        filters = None
+        if self.allowed_doc_ids:
+            filters = MetadataFilters(
+                filters=[
+                    MetadataFilter(
+                        key="document_id",
+                        value=self.allowed_doc_ids,
+                        operator=FilterOperator.IN,
+                    )
+                ]
+            )
+        self._retriever = self._index.as_retriever(
             similarity_top_k=self._similarity_top_k,
+            filters=filters,
+        )
+        self._query_engine = RetrieverQueryEngine.from_args(
+            retriever=self._retriever,
+            llm=self._llm,
             response_mode=self._response_mode,
             text_qa_template=EXPLAIN_QA_TEMPLATE,
             verbose=self._config.verbose,
@@ -114,6 +134,8 @@ class ExplainMode(BaseMode):
         Returns:
             Generated explanation
         """
+        if self.scope_changed():
+            await self._refresh_engine()
         # Use query method (async if available)
         try:
             response = await self._query_engine.aquery(message)
@@ -136,6 +158,33 @@ class ExplainMode(BaseMode):
                 )
         self._last_sources = sources
         return str(response)
+
+    async def _stream(self, message: str):
+        """Stream explanation if engine supports it."""
+        if self.scope_changed():
+            await self._refresh_engine()
+        try:
+            if hasattr(self._query_engine, "astream_query"):
+                async for chunk in self._query_engine.astream_query(message):
+                    text = getattr(chunk, "response", None) or getattr(chunk, "text", None)
+                    if text:
+                        yield str(text)
+                # refresh sources after stream
+                response = await self._query_engine.aquery(message)
+                self._last_sources = [
+                    {
+                        "document_id": getattr(sn.node, "metadata", {}).get("document_id"),
+                        "chunk_id": getattr(sn.node, "node_id", ""),
+                        "text": sn.node.get_content(),
+                        "score": getattr(sn, "score", 0.0),
+                    }
+                    for sn in getattr(response, "source_nodes", []) or []
+                ]
+                return
+        except Exception:
+            pass
+        # fallback non-stream
+        yield await self._process(message)
     
     @property
     def query_engine(self) -> Optional[BaseQueryEngine]:

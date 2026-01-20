@@ -13,6 +13,8 @@ from llama_index.core.llms import LLM
 from llama_index.core.memory import BaseMemory
 from llama_index.core.chat_engine.types import BaseChatEngine
 from llama_index.core import VectorStoreIndex
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
@@ -72,6 +74,7 @@ class ConcludeMode(BaseMode):
         self._memory = None
         
         self._chat_engine: Optional[BaseChatEngine] = None
+        self._retriever = None
     
     def _default_config(self) -> ModeConfig:
         """Return default Conclude mode configuration."""
@@ -86,19 +89,32 @@ class ConcludeMode(BaseMode):
         """Initialize the ChatEngine for summarization."""
         if self._index is None:
             raise ValueError("ConcludeMode requires an index for RAG")
-        
-        system_prompt = self._config.system_prompt or load_prompt("conclude.md")
-        
-        # Create chat engine optimized for summarization
-        self._chat_engine = self._index.as_chat_engine(
-            chat_mode="condense_plus_context",
-            llm=self._llm,
+        await self._refresh_engine()
+
+    async def _refresh_engine(self) -> None:
+        """Rebuild retriever/chat engine when allowed scope changes."""
+        filters = None
+        if self.allowed_doc_ids:
+            filters = MetadataFilters(
+                filters=[
+                    MetadataFilter(
+                        key="document_id",
+                        value=self.allowed_doc_ids,
+                        operator=FilterOperator.IN,
+                    )
+                ]
+            )
+        self._retriever = self._index.as_retriever(
             similarity_top_k=self._similarity_top_k,
+            filters=filters,
+        )
+        self._chat_engine = RetrieverQueryEngine.from_args(
+            retriever=self._retriever,
+            llm=self._llm,
             response_mode=self._response_mode,
-            system_prompt=system_prompt,
-            context_prompt=DEFAULT_CONTEXT_PROMPT,
+            system_prompt=self._config.system_prompt or load_prompt("conclude.md"),
+            text_qa_template=None,
             verbose=self._config.verbose,
-            memory=self._memory,
         )
     
     async def _process(self, message: str) -> str:
@@ -110,12 +126,16 @@ class ConcludeMode(BaseMode):
         Returns:
             Generated summary or conclusion
         """
-        # Use chat method (async if available)
+        current_scope = tuple(sorted(self.allowed_doc_ids)) if self.allowed_doc_ids else None
+        if current_scope != self._filters_cache:
+            await self._refresh_engine()
+            self._filters_cache = current_scope
+        if self.scope_changed():
+            await self._refresh_engine()
         try:
-            response = await self._chat_engine.achat(message)
+            response = await self._chat_engine.aquery(message)
         except AttributeError:
-            # Fallback to sync if async not available
-            response = self._chat_engine.chat(message)
+            response = self._chat_engine.query(message)
         
         # Collect sources if present
         sources = []
@@ -133,6 +153,32 @@ class ConcludeMode(BaseMode):
                 )
         self._last_sources = sources
         return str(response)
+
+    async def _stream(self, message: str):
+        """Stream summarization if chat engine supports streaming."""
+        if self.scope_changed():
+            await self._refresh_engine()
+        try:
+            if hasattr(self._chat_engine, "astream_query"):
+                async for chunk in self._chat_engine.astream_query(message):
+                    text = getattr(chunk, "response", None) or getattr(chunk, "text", None)
+                    if text:
+                        yield str(text)
+                # refresh sources after stream
+                response = await self._chat_engine.aquery(message)
+                self._last_sources = [
+                    {
+                        "document_id": getattr(sn.node, "metadata", {}).get("document_id"),
+                        "chunk_id": getattr(sn.node, "node_id", ""),
+                        "text": sn.node.get_content(),
+                        "score": getattr(sn, "score", 0.0),
+                    }
+                    for sn in getattr(response, "source_nodes", []) or []
+                ]
+                return
+        except Exception:
+            pass
+        yield await self._process(message)
     
     @property
     def chat_engine(self) -> Optional[BaseChatEngine]:

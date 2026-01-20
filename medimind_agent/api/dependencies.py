@@ -14,6 +14,7 @@ from medimind_agent.infrastructure.persistence.repositories.session_repo_impl im
 from medimind_agent.infrastructure.persistence.repositories.document_repo_impl import DocumentRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.reference_repo_impl import ReferenceRepositoryImpl
+from medimind_agent.infrastructure.persistence.repositories.message_repo_impl import MessageRepositoryImpl
 from medimind_agent.application.services.library_service import LibraryService
 from medimind_agent.application.services.notebook_service import NotebookService
 from medimind_agent.application.services.session_service import SessionService
@@ -21,7 +22,7 @@ from medimind_agent.application.services.chat_service import ChatService
 from medimind_agent.application.services.document_service import DocumentService
 from medimind_agent.core.llm.zhipu import build_llm
 from medimind_agent.core.rag.embeddings import build_embedding
-from medimind_agent.core.engine import load_pgvector_index, load_es_index, SessionManager, ModeSelector, ModeType
+from medimind_agent.core.engine import load_pgvector_index, load_es_index, SessionManager
 from medimind_agent.core.common.config import (
     get_storage_config,
     get_embedding_provider,
@@ -29,7 +30,6 @@ from medimind_agent.core.common.config import (
 )
 from medimind_agent.infrastructure.pgvector import PGVectorConfig
 from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
-from medimind_agent.infrastructure.session import ChatSessionStore
 
 
 async def get_db_session():
@@ -70,6 +70,11 @@ async def get_ref_repo(session=Depends(get_db_session)) -> NotebookDocumentRefRe
 async def get_reference_repo(session=Depends(get_db_session)) -> ReferenceRepositoryImpl:
     """Get ReferenceRepository instance."""
     return ReferenceRepositoryImpl(session)
+
+
+async def get_message_repo(session=Depends(get_db_session)) -> MessageRepositoryImpl:
+    """Get MessageRepository instance."""
+    return MessageRepositoryImpl(session)
 
 
 # =============================================================================
@@ -127,6 +132,9 @@ async def get_chat_service(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
     reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     session_manager: SessionManager = Depends(get_session_manager_dep),
 ) -> ChatService:
     """Get ChatService instance."""
@@ -134,6 +142,9 @@ async def get_chat_service(
         session_repo=session_repo,
         notebook_repo=notebook_repo,
         reference_repo=reference_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
         session_manager=session_manager,
     )
 
@@ -161,7 +172,6 @@ _llm = None
 _embed_model = None
 _pgvector_index = None
 _es_index = None
-_session_store = None
 _session_manager = None
 
 
@@ -214,60 +224,28 @@ async def get_es_index_singleton():
     return _es_index
 
 
-async def get_session_store_singleton():
-    global _session_store
-    if _session_store is None:
-        storage_cfg = get_storage_config()
-        pg_cfg = storage_cfg.get("postgresql", {})
-        pgvector_cfg = storage_cfg.get("pgvector", {})
-        session_cfg = storage_cfg.get("chat_sessions", {})
-        session_store_config = PGVectorConfig(
-            host=pg_cfg.get("host", "localhost"),
-            port=pg_cfg.get("port", 5432),
-            database=pg_cfg.get("database", "medimind"),
-            user=pg_cfg.get("user", "postgres"),
-            password=pg_cfg.get("password", ""),
-            table_name=session_cfg.get("table_sessions", "chat_sessions"),
-            embedding_dimension=pgvector_cfg.get("embedding_dimension", 1024),
-        )
-        store = ChatSessionStore(session_store_config)
-        await store.initialize()
-        _session_store = store
-    return _session_store
+async def get_session_manager_singleton(
+    session_repo: SessionRepositoryImpl,
+    message_repo: MessageRepositoryImpl,
+):
+    llm = get_llm_singleton()
+    pg_index = await get_pg_index_singleton()
+    es_index = await get_es_index_singleton()
+    return SessionManager(
+        llm=llm,
+        session_repo=session_repo,
+        message_repo=message_repo,
+        pgvector_index=pg_index,
+        es_index=es_index,
+        es_index_name="medimind_docs",
+    )
 
 
-async def get_session_manager_singleton():
-    global _session_manager
-    if _session_manager is None:
-        llm = get_llm_singleton()
-        pg_index = await get_pg_index_singleton()
-        es_index = await get_es_index_singleton()
-        session_store = await get_session_store_singleton()
-
-        selector = ModeSelector(
-            llm=llm,
-            pgvector_index=pg_index,
-            es_index=es_index,
-            memory=None,
-            es_index_name="medimind_docs",
-        )
-        _session_manager = SessionManager(
-            llm=llm,
-            session_store=session_store,
-            pgvector_index=pg_index,
-            es_index=es_index,
-            es_index_name="medimind_docs",
-        )
-    return _session_manager
-
-
-def get_session_manager():
-    # thin wrapper to allow sync dependency use; resolve async singleton
-    import asyncio
-    return asyncio.get_event_loop().run_until_complete(get_session_manager_singleton())
-
-
-async def get_session_manager_dep() -> SessionManager:
-    return await get_session_manager_singleton()
+async def get_session_manager_dep(
+    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+) -> SessionManager:
+    # Note: SessionManager keeps heavy singletons (llm/index) but receives per-request repos.
+    return await get_session_manager_singleton(session_repo, message_repo)
 
 

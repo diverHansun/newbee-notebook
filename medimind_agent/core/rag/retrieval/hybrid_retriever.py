@@ -119,6 +119,7 @@ def build_hybrid_retriever(
     final_top_k: int = 10,
     fusion_strategy: Optional[FusionStrategy] = None,
     similarity_cutoff: Optional[float] = None,
+    metadata_filters=None,
 ) -> HybridRetriever:
     """Build a hybrid retriever from pgvector and Elasticsearch indexes.
     
@@ -149,11 +150,13 @@ def build_hybrid_retriever(
     # Create pgvector retriever
     pgvector_retriever = pgvector_index.as_retriever(
         similarity_top_k=pgvector_top_k,
+        filters=metadata_filters,
     )
     
     # Create ES retriever
     es_retriever = es_index.as_retriever(
         similarity_top_k=es_top_k,
+        filters=metadata_filters,
     )
     
     # Build hybrid retriever

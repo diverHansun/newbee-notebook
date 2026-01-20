@@ -5,6 +5,7 @@ MediMind Agent - API Request Models
 from pydantic import BaseModel, Field
 from typing import Optional
 from medimind_agent.domain.value_objects.document_type import DocumentType
+from pydantic import BaseModel, Field
 
 
 class CreateNotebookRequest(BaseModel):
@@ -36,5 +37,13 @@ class UploadDocumentRequest(BaseModel):
     url: Optional[str] = Field(None, description="Optional source URL")
     file_path: Optional[str] = Field(None, description="Server-side file path if already saved")
     file_size: Optional[int] = Field(0, ge=0, description="File size in bytes")
+
+
+class ChatContext(BaseModel):
+    """Selected-text context sent from frontend."""
+    selected_text: Optional[str] = Field(None, description="User selected text snippet")
+    chunk_id: Optional[str] = Field(None, description="Chunk identifier in vector store")
+    document_id: Optional[str] = Field(None, description="Document id owning the selection")
+    page_number: Optional[int] = Field(None, description="Page number if available")
 
 

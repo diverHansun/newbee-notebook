@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
+from medimind_agent.domain.value_objects.mode_type import ModeType, MessageRole
 
 
 class Base(DeclarativeBase):
@@ -223,5 +224,21 @@ class ReferenceModel(Base):
     # Relationships
     session = relationship("SessionModel", back_populates="references")
     document = relationship("DocumentModel")
+
+
+class MessageModel(Base):
+    """Message table storing conversation history."""
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 

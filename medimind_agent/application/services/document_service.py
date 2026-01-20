@@ -20,6 +20,15 @@ from medimind_agent.domain.value_objects.document_type import DocumentType
 from medimind_agent.infrastructure.tasks.document_tasks import process_document_task
 from medimind_agent.infrastructure.storage.local_storage import save_upload_file
 from fastapi import UploadFile
+from medimind_agent.core.rag.embeddings import build_embedding
+from medimind_agent.core.engine import load_pgvector_index, load_es_index
+from medimind_agent.core.common.config import (
+    get_storage_config,
+    get_embedding_provider,
+    get_pgvector_config_for_provider,
+)
+from medimind_agent.infrastructure.pgvector import PGVectorConfig
+from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
 
 
 logger = logging.getLogger(__name__)
@@ -204,4 +213,7 @@ class DocumentService:
             await self._notebook_repo.increment_document_count(doc.notebook_id, -1)
 
         result = await self._document_repo.delete(document_id)
+        # async cleanup of vector/ES nodes
+        from medimind_agent.infrastructure.tasks.document_tasks import delete_document_nodes_task
+        delete_document_nodes_task.delay(document_id)
         return result

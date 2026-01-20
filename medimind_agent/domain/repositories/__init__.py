@@ -1,4 +1,4 @@
-﻿"""
+"""
 MediMind Agent - Repository Interfaces Package
 """
 
@@ -10,6 +10,7 @@ from medimind_agent.domain.repositories.reference_repository import (
     NotebookDocumentRefRepository,
     ReferenceRepository,
 )
+from medimind_agent.domain.repositories.message_repository import MessageRepository
 
 __all__ = [
     "LibraryRepository",
@@ -18,6 +19,7 @@ __all__ = [
     "SessionRepository",
     "NotebookDocumentRefRepository",
     "ReferenceRepository",
+    "MessageRepository",
 ]
 
 

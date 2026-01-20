@@ -1,4 +1,4 @@
-﻿"""Base mode class and configuration.
+"""Base mode class and configuration.
 
 This module defines the abstract base class for all interaction modes,
 following the Template Method Pattern and Dependency Inversion Principle.
@@ -6,7 +6,7 @@ following the Template Method Pattern and Dependency Inversion Principle.
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional, List, Any
+from typing import Optional, List, Any, AsyncGenerator
 from pydantic import BaseModel, Field
 from llama_index.core.llms import LLM
 from llama_index.core.memory import BaseMemory
@@ -72,6 +72,9 @@ class BaseMode(ABC):
         self._config = config or self._default_config()
         self._initialized = False
         self._last_sources: List[Any] = []
+        self._allowed_doc_ids: Optional[List[str]] = None
+        self._scope_cache: Optional[tuple] = None
+        self._context: Optional[Any] = None
     
     @property
     def llm(self) -> LLM:
@@ -82,6 +85,32 @@ class BaseMode(ABC):
     def memory(self) -> Optional[BaseMemory]:
         """Get the memory instance."""
         return self._memory
+
+    def set_allowed_documents(self, document_ids: Optional[List[str]]) -> None:
+        """Limit retrieval scope to the provided document IDs."""
+        self._allowed_doc_ids = document_ids if document_ids else None
+        # invalidate cache marker
+        self._scope_cache = None
+
+    def set_context(self, context: Optional[Any]) -> None:
+        """Attach per-request context (e.g., selected text/chunk)."""
+        self._context = context
+
+    @property
+    def context(self) -> Optional[Any]:
+        return self._context
+
+    @property
+    def allowed_doc_ids(self) -> Optional[List[str]]:
+        """Document IDs the mode should limit retrieval to."""
+        return self._allowed_doc_ids
+
+    def scope_changed(self) -> bool:
+        """Return True if allowed_doc_ids differs from cached signature."""
+        current = tuple(sorted(self.allowed_doc_ids)) if self.allowed_doc_ids else None
+        changed = current != self._scope_cache
+        self._scope_cache = current
+        return changed
     
     @property
     def config(self) -> ModeConfig:
@@ -184,7 +213,47 @@ class BaseMode(ABC):
         """
         import asyncio
         return asyncio.run(self.run(message))
-    
+
+    async def _stream(self, message: str) -> AsyncGenerator[str, None]:
+        """Stream response generation.
+
+        Default implementation falls back to non-streaming run() and yields
+        the complete response as a single chunk. Subclasses can override to
+        provide true token-by-token streaming.
+
+        Args:
+            message: User message to process
+
+        Yields:
+            Response text chunks
+        """
+        response = await self._process(message)
+        yield response
+
+    async def stream(self, message: str) -> AsyncGenerator[str, None]:
+        """Stream a response for the given message.
+
+        This is the main entry point for streaming responses from a mode.
+        It ensures initialization and then delegates to _stream().
+
+        Args:
+            message: User message to process
+
+        Yields:
+            Response text chunks
+
+        Raises:
+            ValueError: If message is empty
+        """
+        if not message or not message.strip():
+            raise ValueError("Message cannot be empty")
+
+        await self.initialize()
+        self._last_sources = []
+
+        async for chunk in self._stream(message.strip()):
+            yield chunk
+
     async def reset(self) -> None:
         """Reset conversation memory if available."""
         if self._memory is not None:
