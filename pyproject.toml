@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "asyncpg>=0.31.0",
+    "celery>=5.6.2",
     "docx2txt==0.9",
     "faiss-cpu==1.12.0",
     "fastapi>=0.128.0",
@@ -25,7 +26,9 @@ dependencies = [
     "pytest>=9.0.1",
     "python-dotenv==1.1.1",
     "python-json-logger>=4.0.0",
+    "python-multipart>=0.0.21",
     "pyyaml==6.0.3",
+    "redis>=7.1.0",
     "requests==2.32.5",
     "rich==14.2.0",
     "sentence-transformers==5.1.1",

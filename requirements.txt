@@ -47,6 +47,11 @@ sentence-transformers==5.1.1
 # API server
 fastapi==0.128.0
 uvicorn==0.40.0
+python-multipart==0.0.21
+
+# Task queue and caching
+celery==5.6.2
+redis==7.1.0
 
 # Testing
 pytest==9.0.1

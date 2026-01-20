@@ -1,4 +1,4 @@
-﻿"""
+"""
 MediMind Agent - API Dependencies
 
 FastAPI dependency injection configuration.
@@ -128,42 +128,6 @@ async def get_session_service(
     )
 
 
-async def get_chat_service(
-    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
-    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
-    reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
-    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
-    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
-    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
-    session_manager: SessionManager = Depends(get_session_manager_dep),
-) -> ChatService:
-    """Get ChatService instance."""
-    return ChatService(
-        session_repo=session_repo,
-        notebook_repo=notebook_repo,
-        reference_repo=reference_repo,
-        document_repo=document_repo,
-        ref_repo=ref_repo,
-        message_repo=message_repo,
-        session_manager=session_manager,
-    )
-
-
-async def get_document_service(
-    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
-    library_repo: LibraryRepositoryImpl = Depends(get_library_repo),
-    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
-    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
-) -> DocumentService:
-    """Get DocumentService instance."""
-    return DocumentService(
-        document_repo=document_repo,
-        library_repo=library_repo,
-        notebook_repo=notebook_repo,
-        ref_repo=ref_repo,
-    )
-
-
 # =============================================================================
 # Core singletons (LLM, Embedding, Indexes, SessionManager)
 # =============================================================================
@@ -245,7 +209,47 @@ async def get_session_manager_dep(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
 ) -> SessionManager:
-    # Note: SessionManager keeps heavy singletons (llm/index) but receives per-request repos.
+    """Get SessionManager instance for dependency injection."""
     return await get_session_manager_singleton(session_repo, message_repo)
+
+
+# =============================================================================
+# Service Dependencies (continued)
+# =============================================================================
+
+async def get_chat_service(
+    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
+    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
+    reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    session_manager: SessionManager = Depends(get_session_manager_dep),
+) -> ChatService:
+    """Get ChatService instance."""
+    return ChatService(
+        session_repo=session_repo,
+        notebook_repo=notebook_repo,
+        reference_repo=reference_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=session_manager,
+    )
+
+
+async def get_document_service(
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    library_repo: LibraryRepositoryImpl = Depends(get_library_repo),
+    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+) -> DocumentService:
+    """Get DocumentService instance."""
+    return DocumentService(
+        document_repo=document_repo,
+        library_repo=library_repo,
+        notebook_repo=notebook_repo,
+        ref_repo=ref_repo,
+    )
 
 

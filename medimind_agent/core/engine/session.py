@@ -14,6 +14,7 @@ from llama_index.core import VectorStoreIndex
 from medimind_agent.core.engine.modes.base import ModeType
 from medimind_agent.core.engine.selector import ModeSelector
 from medimind_agent.domain.entities.session import Session
+from medimind_agent.domain.entities.message import Message
 from medimind_agent.domain.repositories.session_repository import SessionRepository
 from medimind_agent.domain.repositories.message_repository import MessageRepository
 from medimind_agent.domain.value_objects.mode_type import MessageRole
