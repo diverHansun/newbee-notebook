@@ -107,13 +107,10 @@ class ChatService:
 
         # Notebook scope documents
         allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
 
-        # Fetch context-based chunks and prepend to message if provided
+        # Fetch context-based chunks (used for sources/references)
         context_chunks = await self._get_context_chunks(context) if context else []
-        if context_chunks:
-            preface = "\n\n".join([c["text"] for c in context_chunks if c.get("text")])
-            if preface:
-                message = f"{preface}\n\nQuestion: {message}"
 
         # Generate response via SessionManager + ModeSelector
         response_content, sources = await self._session_manager.chat(
@@ -140,44 +137,21 @@ class ChatService:
         await self._message_repo.create_batch([user_msg, assistant_msg])
         await self._session_repo.increment_message_count(session_id, 2)
 
-        # Persist references if any or from selected context
-        refs = []
-        if sources:
-            refs.extend(
-                [
-                    Reference(
-                        session_id=session_id,
-                        message_id=message_id,
-                        document_id=src.get("document_id"),
-                        chunk_id=src.get("chunk_id", ""),
-                        quoted_text=src.get("text", "")[:2000],
-                        context=None,
-                    )
-                    for src in sources
-                    if src.get("document_id")
-                ]
+        # Merge sources with user selection/context chunks for consistency
+        sources = self._merge_sources_with_context(sources or [], context, context_chunks)
+
+        refs = [
+            Reference(
+                session_id=session_id,
+                message_id=message_id,
+                document_id=src.get("document_id"),
+                chunk_id=src.get("chunk_id", ""),
+                quoted_text=src.get("text", "")[:2000],
+                context=None,
             )
-        if context and context.get("document_id") and context.get("selected_text"):
-            refs.append(
-                Reference(
-                    session_id=session_id,
-                    message_id=message_id,
-                    document_id=context.get("document_id"),
-                    chunk_id=context.get("chunk_id", ""),
-                    quoted_text=context.get("selected_text")[:2000],
-                    context=None,
-                )
-            )
-            # Ensure sources include the selection for frontend display
-            sources.append(
-                {
-                    "document_id": context.get("document_id"),
-                    "chunk_id": context.get("chunk_id", ""),
-                    "text": context.get("selected_text"),
-                    "title": "",
-                    "score": 1.0,
-                }
-            )
+            for src in sources
+            if src.get("document_id")
+        ]
         if refs:
             await self._reference_repo.create_batch(refs)
 
@@ -232,12 +206,15 @@ class ChatService:
         mode_enum = ModeType(mode)
         await self._session_manager.start_session(session_id=session_id)
         allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
+
         message_id = session.message_count + 1
 
         yield {"type": "start", "message_id": message_id}
 
         full_response = ""
         sources: List[dict] = []
+        context_chunks = await self._get_context_chunks(context) if context else []
 
         try:
             stream = self._session_manager.chat_stream(
@@ -254,19 +231,9 @@ class ChatService:
                 full_response += chunk
                 yield {"type": "content", "delta": chunk}
 
-            sources = self._session_manager.get_last_sources()
-
-            # Add context-based source if provided
-            if context and context.get("document_id") and context.get("selected_text"):
-                sources.append(
-                    {
-                        "document_id": context.get("document_id"),
-                        "chunk_id": context.get("chunk_id", ""),
-                        "text": context.get("selected_text"),
-                        "title": "",
-                        "score": 1.0,
-                    }
-                )
+            sources = self._merge_sources_with_context(
+                self._session_manager.get_last_sources(), context, context_chunks
+            )
 
             yield {"type": "sources", "sources": sources or []}
             yield {"type": "done"}
@@ -288,22 +255,18 @@ class ChatService:
             await self._session_repo.increment_message_count(session_id, 2)
 
             # Persist references
-            refs = []
-            if sources:
-                refs.extend(
-                    [
-                        Reference(
-                            session_id=session_id,
-                            message_id=message_id,
-                            document_id=s.get("document_id"),
-                            chunk_id=s.get("chunk_id", ""),
-                            quoted_text=s.get("text", "")[:2000],
-                            context=None,
-                        )
-                        for s in sources
-                        if s.get("document_id")
-                    ]
+            refs = [
+                Reference(
+                    session_id=session_id,
+                    message_id=message_id,
+                    document_id=s.get("document_id"),
+                    chunk_id=s.get("chunk_id", ""),
+                    quoted_text=s.get("text", "")[:2000],
+                    context=None,
                 )
+                for s in sources
+                if s.get("document_id")
+            ]
             if refs:
                 await self._reference_repo.create_batch(refs)
 
@@ -316,6 +279,38 @@ class ChatService:
             logger.error(f"Stream error for session {session_id}: {exc}")
             yield {"type": "error", "error_code": "internal_error", "message": str(exc)}
 
+    async def prevalidate_mode_requirements(
+        self,
+        session_id: str,
+        mode: str,
+        context: Optional[dict] = None,
+    ) -> None:
+        """Validate requirements for conclude/explain before streaming responses."""
+        session = await self._session_repo.get(session_id)
+        if not session:
+            raise ValueError(f"Session not found: {session_id}")
+        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+        mode_enum = ModeType(mode)
+        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
+
+    async def _validate_mode_guard(
+        self,
+        mode_enum: ModeType,
+        allowed_doc_ids: List[str],
+        context: Optional[dict],
+    ) -> None:
+        """Common guard for conclude/explain modes."""
+        if mode_enum in (ModeType.CONCLUDE, ModeType.EXPLAIN):
+            if not allowed_doc_ids and not (context and context.get("selected_text")):
+                raise ValueError(
+                    "Conclude/Explain mode requires at least one processed document "
+                    "or a selected_text context."
+                )
+            if context and context.get("selected_text") and not context.get("document_id"):
+                raise ValueError("selected_text requires a document_id to ensure traceable sources")
+            if self._session_manager.vector_index is None:
+                raise RuntimeError("Vector index is not available")
+
     async def _get_notebook_document_ids(self, notebook_id: str) -> List[str]:
         """Collect document IDs (owned + referenced) for scope filtering."""
         owned_docs = await self._document_repo.list_by_notebook(notebook_id)
@@ -325,10 +320,28 @@ class ChatService:
         return list(set(owned_ids + ref_ids))
 
     async def _get_context_chunks(self, context: dict) -> List[dict]:
-        """Fetch chunk and neighbors by chunk_id for richer context."""
-        if not context or not context.get("chunk_id") or not self._vector_index:
+        """Fetch chunk and neighbors by chunk_id for richer context.
+
+        If only selected_text is provided, return it as a pseudo chunk to ensure
+        it appears in sources even when not yet indexed.
+        """
+        if not context:
             return []
-        chunk_id = context.get("chunk_id")
+
+        if context.get("selected_text") and not context.get("chunk_id"):
+            return [
+                {
+                    "document_id": context.get("document_id"),
+                    "chunk_id": "user_selection",
+                    "text": context.get("selected_text"),
+                    "title": "",
+                    "score": 1.0,
+                }
+            ]
+
+        if not context.get("chunk_id") or not self._vector_index:
+            return []
+
         doc_id = context.get("document_id")
         chunk_idx = context.get("chunk_index")
         filters = []
@@ -379,4 +392,36 @@ class ChatService:
             )
         return chunks
 
+    @staticmethod
+    def _merge_sources_with_context(
+        sources: List[dict], context: Optional[dict], context_chunks: List[dict]
+    ) -> List[dict]:
+        """Ensure user selection appears first, followed by context chunks and retriever sources."""
 
+        merged: List[dict] = []
+
+        def _add(src: dict):
+            key = (src.get("document_id"), src.get("chunk_id"), src.get("text"))
+            if key not in {
+                (m.get("document_id"), m.get("chunk_id"), m.get("text")) for m in merged
+            }:
+                merged.append(src)
+
+        if context and context.get("document_id") and context.get("selected_text"):
+            _add(
+                {
+                    "document_id": context.get("document_id"),
+                    "chunk_id": context.get("chunk_id", "user_selection"),
+                    "text": context.get("selected_text"),
+                    "title": "",
+                    "score": 1.0,
+                }
+            )
+
+        for c in context_chunks or []:
+            _add(c)
+
+        for s in sources or []:
+            _add(s)
+
+        return merged

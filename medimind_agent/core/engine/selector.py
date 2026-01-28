@@ -140,11 +140,12 @@ class ModeSelector:
             )
         
         elif mode_type == ModeType.EXPLAIN:
-            if self._pgvector_index is None:
-                raise ValueError("Explain mode requires pgvector index")
+            if self._pgvector_index is None or self._es_index is None:
+                raise ValueError("Explain mode requires both pgvector and ES indexes")
             return ExplainMode(
                 llm=self._llm,
                 index=self._pgvector_index,
+                es_index=self._es_index,
             )
         
         else:
@@ -325,5 +326,4 @@ Current session commands:
   /help                - Show this help
   /quit                - Exit the application
 """
-
 

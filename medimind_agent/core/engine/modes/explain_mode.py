@@ -19,6 +19,7 @@ from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, Filt
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
+from medimind_agent.core.rag.retrieval import build_hybrid_retriever
 
 DEFAULT_EXPLAIN_SYSTEM_PROMPT = load_prompt("explain.md")
 
@@ -60,6 +61,7 @@ class ExplainMode(BaseMode):
         self,
         llm: LLM,
         index: Optional[VectorStoreIndex] = None,
+        es_index: Optional[VectorStoreIndex] = None,
         memory: Optional[BaseMemory] = None,
         config: Optional[ModeConfig] = None,
         similarity_top_k: int = 5,
@@ -79,9 +81,10 @@ class ExplainMode(BaseMode):
         super().__init__(llm=llm, memory=None, config=config)
         
         self._index = index
+        self._es_index = es_index
         self._similarity_top_k = similarity_top_k
         self._response_mode = response_mode
-        
+
         self._query_engine: Optional[BaseQueryEngine] = None
         self._retriever = None
     
@@ -96,8 +99,8 @@ class ExplainMode(BaseMode):
     
     async def _initialize(self) -> None:
         """Initialize the QueryEngine for explanations."""
-        if self._index is None:
-            raise ValueError("ExplainMode requires an index for RAG")
+        if self._index is None or self._es_index is None:
+            raise ValueError("ExplainMode requires both pgvector and ES indexes")
         await self._refresh_engine()
 
     async def _refresh_engine(self) -> None:
@@ -113,9 +116,14 @@ class ExplainMode(BaseMode):
                     )
                 ]
             )
-        self._retriever = self._index.as_retriever(
-            similarity_top_k=self._similarity_top_k,
-            filters=filters,
+        # Hybrid retriever: pgvector + ES
+        self._retriever = build_hybrid_retriever(
+            pgvector_index=self._index,
+            es_index=self._es_index,
+            pgvector_top_k=self._similarity_top_k,
+            es_top_k=self._similarity_top_k,
+            final_top_k=self._similarity_top_k,
+            metadata_filters=filters,
         )
         self._query_engine = RetrieverQueryEngine.from_args(
             retriever=self._retriever,
@@ -136,13 +144,14 @@ class ExplainMode(BaseMode):
         """
         if self.scope_changed():
             await self._refresh_engine()
-        # Use query method (async if available)
+
+        query = self._build_enhanced_query(message)
+
         try:
-            response = await self._query_engine.aquery(message)
+            response = await self._query_engine.aquery(query)
         except AttributeError:
-            # Fallback to sync if async not available
-            response = self._query_engine.query(message)
-        
+            response = self._query_engine.query(query)
+
         sources = []
         source_nodes = getattr(response, "source_nodes", None)
         if source_nodes:
@@ -156,6 +165,20 @@ class ExplainMode(BaseMode):
                         "score": getattr(n, "score", 0.0),
                     }
                 )
+        # Always include user selection as first source when present
+        selection = self.get_selected_text()
+        doc_id = self.get_context_document_id()
+        if selection and doc_id:
+            sources.insert(
+                0,
+                {
+                    "document_id": doc_id,
+                    "chunk_id": getattr(self._context, "chunk_id", None) or "user_selection",
+                    "text": selection,
+                    "score": 1.0,
+                },
+            )
+
         self._last_sources = sources
         return str(response)
 
@@ -163,15 +186,16 @@ class ExplainMode(BaseMode):
         """Stream explanation if engine supports it."""
         if self.scope_changed():
             await self._refresh_engine()
+        query = self._build_enhanced_query(message)
         try:
             if hasattr(self._query_engine, "astream_query"):
-                async for chunk in self._query_engine.astream_query(message):
+                async for chunk in self._query_engine.astream_query(query):
                     text = getattr(chunk, "response", None) or getattr(chunk, "text", None)
                     if text:
                         yield str(text)
                 # refresh sources after stream
-                response = await self._query_engine.aquery(message)
-                self._last_sources = [
+                response = await self._query_engine.aquery(query)
+                sources = [
                     {
                         "document_id": getattr(sn.node, "metadata", {}).get("document_id"),
                         "chunk_id": getattr(sn.node, "node_id", ""),
@@ -180,6 +204,19 @@ class ExplainMode(BaseMode):
                     }
                     for sn in getattr(response, "source_nodes", []) or []
                 ]
+                selection = self.get_selected_text()
+                doc_id = self.get_context_document_id()
+                if selection and doc_id:
+                    sources.insert(
+                        0,
+                        {
+                            "document_id": doc_id,
+                            "chunk_id": getattr(self._context, "chunk_id", None) or "user_selection",
+                            "text": selection,
+                            "score": 1.0,
+                        },
+                    )
+                self._last_sources = sources
                 return
         except Exception:
             pass
@@ -195,10 +232,27 @@ class ExplainMode(BaseMode):
         """Reset is a no-op for ExplainMode (no memory)."""
         pass
 
+    def _build_enhanced_query(self, message: str) -> str:
+        """Combine selected_text with user question to focus retrieval and answer."""
+        selection = self.get_selected_text()
+        if not selection:
+            return message
+
+        return (
+            "请基于以下选中的文本内容进行解释:\n\n"
+            f"选中内容:\n---\n{selection}\n---\n\n"
+            f"用户问题: {message}\n\n"
+            "要求:\n1. 先解释选中文本的核心概念\n"
+            "2. 结合知识库相关信息补充说明\n"
+            "3. 专业术语给出通俗解释\n"
+            "4. 保持回答简洁清晰"
+        )
+
 
 def build_explain_mode(
     llm: LLM,
     index: VectorStoreIndex,
+    es_index: VectorStoreIndex,
     similarity_top_k: int = 5,
     response_mode: str = "compact",
 ) -> ExplainMode:
@@ -209,6 +263,7 @@ def build_explain_mode(
     Args:
         llm: LLM instance
         index: VectorStoreIndex for retrieval
+        es_index: Elasticsearch-backed index for keyword retrieval
         similarity_top_k: Number of documents to retrieve
         response_mode: Response synthesis mode
         
@@ -218,6 +273,7 @@ def build_explain_mode(
     return ExplainMode(
         llm=llm,
         index=index,
+        es_index=es_index,
         similarity_top_k=similarity_top_k,
         response_mode=response_mode,
     )

@@ -8,7 +8,7 @@ Processing / chunking / embedding will be added later.
 from typing import Optional, Tuple, List
 import logging
 import os
-from uuid import uuid4
+import asyncio
 
 from medimind_agent.domain.entities.document import Document
 from medimind_agent.domain.repositories.document_repository import DocumentRepository
@@ -127,12 +127,12 @@ class DocumentService:
         upload: UploadFile,
         to_library: bool = True,
         notebook_id: Optional[str] = None,
-        base_dir: str = "data/documents/uploaded",
+        base_root: Optional[str] = None,
     ) -> Document:
         """Save uploaded file, register document, and enqueue processing."""
-        file_path, size = save_upload_file(upload, base_dir)
+        file_path, size, ext = save_upload_file(upload, base_root)
         title = upload.filename or "uploaded"
-        content_type = DocumentType.from_extension(os.path.splitext(file_path)[1])
+        content_type = DocumentType.from_extension(ext)
         if to_library:
             return await self.create_library_document(
                 title=title,
@@ -152,8 +152,18 @@ class DocumentService:
             )
 
     def enqueue_processing(self, document_id: str) -> None:
-        """Dispatch async processing via Celery."""
-        process_document_task.delay(document_id)
+        """Dispatch async processing via Celery or sync fallback."""
+        # Optional synchronous fallback for dev environments without Celery
+        if os.getenv("PROCESS_UPLOAD_SYNC", "").lower() in {"1", "true", "yes", "on"}:
+            from medimind_agent.infrastructure.tasks.document_tasks import _process_document_async
+            asyncio.create_task(_process_document_async(document_id))
+            return
+        try:
+            process_document_task.delay(document_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Celery enqueue failed; running inline. error=%s", exc)
+            from medimind_agent.infrastructure.tasks.document_tasks import _process_document_async
+            asyncio.create_task(_process_document_async(document_id))
 
     # ------------------------------------------------------------------ #
     # Queries

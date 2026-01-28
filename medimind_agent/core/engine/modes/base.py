@@ -96,6 +96,19 @@ class BaseMode(ABC):
         """Attach per-request context (e.g., selected text/chunk)."""
         self._context = context
 
+    # Context helpers -------------------------------------------------
+    def get_selected_text(self) -> Optional[str]:
+        """Return selected_text from context if provided."""
+        if isinstance(self._context, dict):
+            return self._context.get("selected_text")
+        return None
+
+    def get_context_document_id(self) -> Optional[str]:
+        """Return document_id from context if provided."""
+        if isinstance(self._context, dict):
+            return self._context.get("document_id")
+        return None
+
     @property
     def context(self) -> Optional[Any]:
         return self._context
@@ -268,5 +281,4 @@ class BaseMode(ABC):
         if self._memory is not None:
             return self._memory.get_all()
         return []
-
 

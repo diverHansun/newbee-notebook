@@ -186,12 +186,17 @@ async def chat(
         session = await session_service.create(notebook_id)
         request.session_id = session.session_id
     
-    result = await chat_service.chat(
-        session_id=request.session_id,
-        message=request.message,
-        mode=request.mode,
-        context=request.context.dict() if request.context else None,
-    )
+    try:
+        result = await chat_service.chat(
+            session_id=request.session_id,
+            message=request.message,
+            mode=request.mode,
+            context=request.context.dict() if request.context else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
     return ChatResponse(
         session_id=result.session_id,
@@ -228,7 +233,19 @@ async def chat_stream(
     else:
         session = await session_service.create(notebook_id)
         request.session_id = session.session_id
-    
+
+    try:
+        # Pre-validate to fail fast for conclude/explain
+        await chat_service.prevalidate_mode_requirements(
+            session_id=request.session_id,
+            mode=request.mode,
+            context=request.context.dict() if request.context else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     # Create streaming response
     business_stream = chat_service.chat_stream(
         session_id=request.session_id,

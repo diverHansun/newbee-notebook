@@ -87,11 +87,14 @@ async def upload_file_to_library(
     file: UploadFile = File(...),
     service: DocumentService = Depends(get_document_service),
 ):
-    doc = await service.save_upload_and_register(
-        upload=file,
-        to_library=True,
-    )
-    return _to_response(doc)
+    try:
+        doc = await service.save_upload_and_register(
+            upload=file,
+            to_library=True,
+        )
+        return _to_response(doc)
+    except ValueError as e:
+        raise HTTPException(status_code=415, detail=str(e))
 
 
 @router.post("/notebooks/{notebook_id}/upload", response_model=DocumentResponse, status_code=201)
@@ -109,6 +112,8 @@ async def upload_file_to_notebook(
         return _to_response(doc)
     except DocumentOwnershipError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=415, detail=str(e))
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)

@@ -41,6 +41,12 @@ def process_document_task(document_id: str):
     asyncio.run(_process_document_async(document_id))
 
 
+@app.task(name="medimind_agent.infrastructure.tasks.document_tasks.process_pending_documents_task")
+def process_pending_documents_task():
+    """Process all pending documents (utility for resync)."""
+    asyncio.run(_process_all_pending_async())
+
+
 async def _process_document_async(document_id: str):
     db = await get_database()
     async with db.session() as session:
@@ -190,3 +196,31 @@ async def _delete_document_nodes_async(document_id: str):
             logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
     except Exception as exc:  # noqa: BLE001
         logger.warning("delete_document_nodes_task failed for %s: %s", document_id, exc)
+
+
+async def _process_all_pending_async():
+    """Helper to process all pending documents sequentially."""
+    db = await get_database()
+    async with db.session() as session:
+        doc_repo = DocumentRepositoryImpl(session)
+        # Fetch pending documents
+        pending_docs = await doc_repo.list_by_library(limit=1000, offset=0, status=DocumentStatus.PENDING)
+        # Include notebook docs
+        notebooks = await NotebookRepositoryImpl(session).list(limit=1000, offset=0)
+        for nb in notebooks:
+            pending_docs.extend(
+                await doc_repo.list_by_notebook(nb.notebook_id, limit=1000, offset=0)
+            )
+        # Unique by id and pending
+        seen = set()
+        for doc in pending_docs:
+            if doc.document_id in seen:
+                continue
+            seen.add(doc.document_id)
+            if doc.status != DocumentStatus.PENDING:
+                continue
+            try:
+                await _process_document_async(doc.document_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Reprocess pending failed for %s: %s", doc.document_id, exc)
+    await close_database()

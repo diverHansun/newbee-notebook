@@ -75,6 +75,7 @@ class ConcludeMode(BaseMode):
         
         self._chat_engine: Optional[BaseChatEngine] = None
         self._retriever = None
+        self._filters_cache = None
     
     def _default_config(self) -> ModeConfig:
         """Return default Conclude mode configuration."""
@@ -116,28 +117,36 @@ class ConcludeMode(BaseMode):
             text_qa_template=None,
             verbose=self._config.verbose,
         )
+
+    def _build_enhanced_query(self, message: str) -> str:
+        """Compose query using selected_text when available."""
+        selection = self.get_selected_text()
+        if not selection:
+            return message
+
+        return (
+            "请对以下选中的文本内容进行总结:\n\n"
+            f"选中内容:\n---\n{selection}\n---\n\n"
+            f"用户要求: {message}\n\n"
+            "要求:\n1. 提取核心观点\n2. 按逻辑顺序组织总结\n3. 内容较长则分点列出关键信息\n4. 如有上下文缺失可标注假设"
+        )
     
     async def _process(self, message: str) -> str:
-        """Process summarization request using ChatEngine.
-        
-        Args:
-            message: User's summarization request
-            
-        Returns:
-            Generated summary or conclusion
-        """
+        """Process summarization request using ChatEngine."""
         current_scope = tuple(sorted(self.allowed_doc_ids)) if self.allowed_doc_ids else None
         if current_scope != self._filters_cache:
             await self._refresh_engine()
             self._filters_cache = current_scope
         if self.scope_changed():
             await self._refresh_engine()
+
+        query = self._build_enhanced_query(message)
+
         try:
-            response = await self._chat_engine.aquery(message)
+            response = await self._chat_engine.aquery(query)
         except AttributeError:
-            response = self._chat_engine.query(message)
+            response = self._chat_engine.query(query)
         
-        # Collect sources if present
         sources = []
         source_nodes = getattr(response, "source_nodes", None)
         if source_nodes:
@@ -151,6 +160,20 @@ class ConcludeMode(BaseMode):
                         "score": getattr(n, "score", 0.0),
                     }
                 )
+
+        selection = self.get_selected_text()
+        doc_id = self.get_context_document_id()
+        if selection and doc_id:
+            sources.insert(
+                0,
+                {
+                    "document_id": doc_id,
+                    "chunk_id": getattr(self._context, "chunk_id", None) or "user_selection",
+                    "text": selection,
+                    "score": 1.0,
+                },
+            )
+
         self._last_sources = sources
         return str(response)
 
@@ -158,15 +181,16 @@ class ConcludeMode(BaseMode):
         """Stream summarization if chat engine supports streaming."""
         if self.scope_changed():
             await self._refresh_engine()
+        query = self._build_enhanced_query(message)
         try:
             if hasattr(self._chat_engine, "astream_query"):
-                async for chunk in self._chat_engine.astream_query(message):
+                async for chunk in self._chat_engine.astream_query(query):
                     text = getattr(chunk, "response", None) or getattr(chunk, "text", None)
                     if text:
                         yield str(text)
                 # refresh sources after stream
-                response = await self._chat_engine.aquery(message)
-                self._last_sources = [
+                response = await self._chat_engine.aquery(query)
+                sources = [
                     {
                         "document_id": getattr(sn.node, "metadata", {}).get("document_id"),
                         "chunk_id": getattr(sn.node, "node_id", ""),
@@ -175,6 +199,19 @@ class ConcludeMode(BaseMode):
                     }
                     for sn in getattr(response, "source_nodes", []) or []
                 ]
+                selection = self.get_selected_text()
+                doc_id = self.get_context_document_id()
+                if selection and doc_id:
+                    sources.insert(
+                        0,
+                        {
+                            "document_id": doc_id,
+                            "chunk_id": getattr(self._context, "chunk_id", None) or "user_selection",
+                            "text": selection,
+                            "score": 1.0,
+                        },
+                    )
+                self._last_sources = sources
                 return
         except Exception:
             pass

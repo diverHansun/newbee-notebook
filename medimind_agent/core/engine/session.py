@@ -128,14 +128,8 @@ class SessionManager:
             raise ValueError("Session not started")
 
         effective_mode = mode_type or self._current_mode
-        message_with_context = (
-            f"{context.get('selected_text')}\n\nQuestion: {message}"
-            if context and context.get("selected_text")
-            else message
-        )
-
         response = await self._mode_selector.run(
-            message_with_context,
+            message,
             effective_mode,
             allowed_document_ids=allowed_document_ids,
             context=context,
@@ -166,14 +160,8 @@ class SessionManager:
             raise ValueError("Session not started")
 
         effective_mode = mode_type or self._current_mode
-        message_with_context = (
-            f"{context.get('selected_text')}\n\nQuestion: {message}"
-            if context and context.get("selected_text")
-            else message
-        )
-
         async for chunk in self._mode_selector.run_stream(
-            message_with_context,
+            message,
             effective_mode,
             allowed_document_ids=allowed_document_ids,
             context=context,
