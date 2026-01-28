@@ -81,6 +81,11 @@ services:
                celery -A medimind_agent.infrastructure.tasks.celery_app worker --loglevel=info"
     env_file:
       - .env
+    environment:
+      # Override Redis URLs for Docker internal network
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_HOST: redis
     depends_on:
       postgres:
         condition: service_healthy

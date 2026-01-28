@@ -24,6 +24,7 @@ ENV/
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 
 # Builds
 build/
