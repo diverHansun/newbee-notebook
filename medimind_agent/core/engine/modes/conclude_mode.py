@@ -15,6 +15,7 @@ from llama_index.core.chat_engine.types import BaseChatEngine
 from llama_index.core import VectorStoreIndex
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
+from medimind_agent.core.rag.retrieval.filters import build_document_filters
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
@@ -94,20 +95,11 @@ class ConcludeMode(BaseMode):
 
     async def _refresh_engine(self) -> None:
         """Rebuild retriever/chat engine when allowed scope changes."""
-        filters = None
-        if self.allowed_doc_ids:
-            filters = MetadataFilters(
-                filters=[
-                    MetadataFilter(
-                        key="document_id",
-                        value=self.allowed_doc_ids,
-                        operator=FilterOperator.IN,
-                    )
-                ]
-            )
+        pg_filters, es_filters, _ = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
+        # ConcludeMode 只用 pgvector 检索
         self._retriever = self._index.as_retriever(
             similarity_top_k=self._similarity_top_k,
-            filters=filters,
+            filters=pg_filters,
         )
         self._chat_engine = RetrieverQueryEngine.from_args(
             retriever=self._retriever,

@@ -15,6 +15,7 @@ from medimind_agent.core.tools.tool_registry import build_tool_registry
 from medimind_agent.core.agent import FunctionAgentRunner
 from medimind_agent.core.prompts import load_prompt
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
+from medimind_agent.core.rag.retrieval.filters import build_document_filters
 
 # Backward-compatible exported prompt constant for tests
 DEFAULT_CHAT_SYSTEM_PROMPT = load_prompt("chat.md")
@@ -205,18 +206,10 @@ class ChatMode(BaseMode):
         if not self._vector_index or not self.allowed_doc_ids:
             return []
         try:
-            filters = MetadataFilters(
-                filters=[
-                    MetadataFilter(
-                        key="document_id",
-                        value=self.allowed_doc_ids,
-                        operator=FilterOperator.IN,
-                    )
-                ]
-            )
+            pg_filters, _, _ = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
             retriever = self._vector_index.as_retriever(
                 similarity_top_k=3,
-                filters=filters,
+                filters=pg_filters,
             )
             results = retriever.retrieve(message)
         except Exception:
@@ -234,5 +227,3 @@ class ChatMode(BaseMode):
                 }
             )
         return sources
-
-

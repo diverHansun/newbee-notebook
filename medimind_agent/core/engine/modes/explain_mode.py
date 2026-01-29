@@ -20,6 +20,7 @@ from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, Filt
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
 from medimind_agent.core.rag.retrieval import build_hybrid_retriever
+from medimind_agent.core.rag.retrieval.filters import build_document_filters
 
 DEFAULT_EXPLAIN_SYSTEM_PROMPT = load_prompt("explain.md")
 
@@ -105,17 +106,7 @@ class ExplainMode(BaseMode):
 
     async def _refresh_engine(self) -> None:
         """Rebuild retriever/query engine when allowed scope changes."""
-        filters = None
-        if self.allowed_doc_ids:
-            filters = MetadataFilters(
-                filters=[
-                    MetadataFilter(
-                        key="document_id",
-                        value=self.allowed_doc_ids,
-                        operator=FilterOperator.IN,
-                    )
-                ]
-            )
+        pg_filters, es_filters, allowed_ids = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
         # Hybrid retriever: pgvector + ES
         self._retriever = build_hybrid_retriever(
             pgvector_index=self._index,
@@ -123,7 +114,9 @@ class ExplainMode(BaseMode):
             pgvector_top_k=self._similarity_top_k,
             es_top_k=self._similarity_top_k,
             final_top_k=self._similarity_top_k,
-            metadata_filters=filters,
+            pg_filters=pg_filters,
+            es_filters=es_filters,
+            allowed_doc_ids=allowed_ids,
         )
         self._query_engine = RetrieverQueryEngine.from_args(
             retriever=self._retriever,

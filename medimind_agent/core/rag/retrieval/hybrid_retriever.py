@@ -9,7 +9,7 @@ The hybrid approach leverages:
 """
 
 import asyncio
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Iterable
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from llama_index.core.callbacks import CallbackManager
@@ -41,6 +41,7 @@ class HybridRetriever(BaseRetriever):
         es_retriever: BaseRetriever,
         fusion_strategy: Optional[FusionStrategy] = None,
         top_k: int = 10,
+        allowed_doc_ids: Optional[Iterable[str]] = None,
         callback_manager: Optional[CallbackManager] = None,
     ):
         """Initialize HybridRetriever.
@@ -58,6 +59,7 @@ class HybridRetriever(BaseRetriever):
         self._es_retriever = es_retriever
         self._fusion_strategy = fusion_strategy or RRFFusion()
         self._top_k = top_k
+        self._allowed_doc_ids = set(allowed_doc_ids) if allowed_doc_ids else None
     
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         """Retrieve and fuse results from both sources.
@@ -77,10 +79,19 @@ class HybridRetriever(BaseRetriever):
         # Fuse results
         fused_results = self._fusion_strategy.fuse(
             results_list=[pgvector_results, es_results],
-            top_k=self._top_k,
+            top_k=max(self._top_k, len(self._allowed_doc_ids) if self._allowed_doc_ids else self._top_k),
         )
-        
-        return fused_results
+
+        if self._allowed_doc_ids:
+            fused_results = [
+                r
+                for r in fused_results
+                if getattr(r.node, "metadata", {}).get("ref_doc_id") in self._allowed_doc_ids
+                or getattr(r.node, "metadata", {}).get("document_id") in self._allowed_doc_ids
+                or getattr(r.node, "metadata", {}).get("doc_id") in self._allowed_doc_ids
+            ]
+
+        return fused_results[: self._top_k]
     
     async def _aretrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         """Asynchronously retrieve and fuse results from both sources.
@@ -105,10 +116,19 @@ class HybridRetriever(BaseRetriever):
         # Fuse results
         fused_results = self._fusion_strategy.fuse(
             results_list=[pgvector_results, es_results],
-            top_k=self._top_k,
+            top_k=max(self._top_k, len(self._allowed_doc_ids) if self._allowed_doc_ids else self._top_k),
         )
-        
-        return fused_results
+
+        if self._allowed_doc_ids:
+            fused_results = [
+                r
+                for r in fused_results
+                if getattr(r.node, "metadata", {}).get("ref_doc_id") in self._allowed_doc_ids
+                or getattr(r.node, "metadata", {}).get("document_id") in self._allowed_doc_ids
+                or getattr(r.node, "metadata", {}).get("doc_id") in self._allowed_doc_ids
+            ]
+
+        return fused_results[: self._top_k]
 
 
 def build_hybrid_retriever(
@@ -119,6 +139,9 @@ def build_hybrid_retriever(
     final_top_k: int = 10,
     fusion_strategy: Optional[FusionStrategy] = None,
     similarity_cutoff: Optional[float] = None,
+    pg_filters=None,
+    es_filters=None,
+    allowed_doc_ids=None,
     metadata_filters=None,
 ) -> HybridRetriever:
     """Build a hybrid retriever from pgvector and Elasticsearch indexes.
@@ -150,13 +173,13 @@ def build_hybrid_retriever(
     # Create pgvector retriever
     pgvector_retriever = pgvector_index.as_retriever(
         similarity_top_k=pgvector_top_k,
-        filters=metadata_filters,
+        filters=pg_filters or metadata_filters,
     )
     
     # Create ES retriever
     es_retriever = es_index.as_retriever(
         similarity_top_k=es_top_k,
-        filters=metadata_filters,
+        filters=es_filters or metadata_filters,
     )
     
     # Build hybrid retriever
@@ -165,6 +188,7 @@ def build_hybrid_retriever(
         es_retriever=es_retriever,
         fusion_strategy=fusion_strategy or RRFFusion(),
         top_k=final_top_k,
+        allowed_doc_ids=allowed_doc_ids,
     )
 
 

@@ -32,8 +32,6 @@ from llama_index.core import Document as LlamaDocument
 
 logger = logging.getLogger(__name__)
 _EMBED_MODEL = None
-_PG_INDEX = None
-_ES_INDEX = None
 
 
 @app.task(name="medimind_agent.infrastructure.tasks.document_tasks.process_document_task")
@@ -69,6 +67,10 @@ async def _process_document_async(document_id: str):
             llama_doc = LlamaDocument(
                 text=text,
                 metadata={
+                    # Align with LlamaIndex defaults
+                    "ref_doc_id": document.document_id,
+                    "doc_id": document.document_id,
+                    # Keep document_id for backward compatibility (will be filtered on ref_doc_id)
                     "document_id": document.document_id,
                     "library_id": document.library_id,
                     "notebook_id": document.notebook_id,
@@ -82,7 +84,18 @@ async def _process_document_async(document_id: str):
                 meta = getattr(node, "metadata", {}) or {}
                 meta["chunk_index"] = idx
                 meta["chunk_id"] = getattr(node, "node_id", "")
+                # propagate doc id aliases for downstream filters
+                meta["ref_doc_id"] = document.document_id
+                meta["doc_id"] = document.document_id
+                meta["document_id"] = document.document_id
                 node.metadata = meta
+                # LlamaIndex uses node.ref_doc_id to populate metadata.ref_doc_id; set explicitly
+                try:
+                    node.ref_doc_id = document.document_id
+                    node.doc_id = document.document_id
+                except Exception:
+                    # fallback: best effort, do not block indexing
+                    pass
             chunk_count = len(nodes)
 
             # Index into pgvector and elasticsearch
@@ -112,7 +125,13 @@ def _extract_text(path: str):
 
 
 async def _index_nodes(nodes):
-    global _EMBED_MODEL, _PG_INDEX, _ES_INDEX
+    """Index nodes into pgvector and Elasticsearch.
+
+    Note: indices are re-initialized per call to avoid event-loop coupling
+    between tasks (aiohttp clients are bound to the loop that created them).
+    """
+
+    global _EMBED_MODEL
     if _EMBED_MODEL is None:
         _EMBED_MODEL = build_embedding()
     embed_model = _EMBED_MODEL
@@ -131,9 +150,8 @@ async def _index_nodes(nodes):
         table_name=pgvector_provider_cfg["table_name"],
         embedding_dimension=pgvector_provider_cfg["embedding_dimension"],
     )
-    if _PG_INDEX is None:
-        _PG_INDEX = await load_pgvector_index(embed_model, pg_config)
-    _PG_INDEX.insert_nodes(nodes)  # sync method
+    pg_index = await load_pgvector_index(embed_model, pg_config)
+    pg_index.insert_nodes(nodes)  # sync method
 
     # elasticsearch config
     es_cfg = storage_cfg.get("elasticsearch", {})
@@ -143,9 +161,8 @@ async def _index_nodes(nodes):
         api_key=es_cfg.get("api_key", None),
         cloud_id=es_cfg.get("cloud_id", None),
     )
-    if _ES_INDEX is None:
-        _ES_INDEX = await load_es_index(embed_model, es_config)
-    _ES_INDEX.insert_nodes(nodes)  # sync method
+    es_index = await load_es_index(embed_model, es_config)
+    es_index.insert_nodes(nodes)  # sync method
 
 
 @app.task(name="medimind_agent.infrastructure.tasks.document_tasks.delete_document_nodes_task")
@@ -156,7 +173,7 @@ def delete_document_nodes_task(document_id: str):
 async def _delete_document_nodes_async(document_id: str):
     """Delete vector/ES nodes belonging to a document (best effort)."""
     try:
-        global _EMBED_MODEL, _PG_INDEX, _ES_INDEX
+        global _EMBED_MODEL
         if _EMBED_MODEL is None:
             _EMBED_MODEL = build_embedding()
         embed_model = _EMBED_MODEL
@@ -174,10 +191,9 @@ async def _delete_document_nodes_async(document_id: str):
             table_name=pgvector_provider_cfg["table_name"],
             embedding_dimension=pgvector_provider_cfg["embedding_dimension"],
         )
-        if _PG_INDEX is None:
-            _PG_INDEX = await load_pgvector_index(embed_model, pg_config)
         try:
-            await _PG_INDEX.delete_ref_doc(document_id)
+            pg_index = await load_pgvector_index(embed_model, pg_config)
+            await pg_index.delete_ref_doc(document_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete pgvector nodes failed for %s: %s", document_id, exc)
 
@@ -188,10 +204,9 @@ async def _delete_document_nodes_async(document_id: str):
             api_key=es_cfg.get("api_key", None),
             cloud_id=es_cfg.get("cloud_id", None),
         )
-        if _ES_INDEX is None:
-            _ES_INDEX = await load_es_index(embed_model, es_config)
         try:
-            await _ES_INDEX.delete_ref_doc(document_id)
+            es_index = await load_es_index(embed_model, es_config)
+            await es_index.delete_ref_doc(document_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
     except Exception as exc:  # noqa: BLE001

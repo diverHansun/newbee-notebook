@@ -21,6 +21,7 @@ from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, Filt
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.agent import ReActAgentRunner
 from medimind_agent.core.rag.retrieval import HybridRetriever, RRFFusion, build_hybrid_retriever
+from medimind_agent.core.rag.retrieval.filters import build_document_filters
 from medimind_agent.core.prompts import load_prompt
 from medimind_agent.core.tools.zhipu_tools import (
     build_zhipu_web_search_tool,
@@ -133,17 +134,7 @@ class AskMode(BaseMode):
 
     async def _refresh_retriever(self) -> None:
         """(Re)build retriever and query_engine with current filters."""
-        filters = None
-        if self.allowed_doc_ids:
-            filters = MetadataFilters(
-                filters=[
-                    MetadataFilter(
-                        key="document_id",
-                        value=self.allowed_doc_ids,
-                        operator=FilterOperator.IN,
-                    )
-                ]
-            )
+        pg_filters, es_filters, allowed_ids = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
         # build hybrid retriever with filters
         self._retriever = build_hybrid_retriever(
             pgvector_index=self._pgvector_index,
@@ -152,7 +143,9 @@ class AskMode(BaseMode):
             es_top_k=self._es_top_k,
             final_top_k=self._final_top_k,
             fusion_strategy=RRFFusion(),
-            metadata_filters=filters,
+            pg_filters=pg_filters,
+            es_filters=es_filters,
+            allowed_doc_ids=allowed_ids,
         )
         from llama_index.core.query_engine import RetrieverQueryEngine
         self._query_engine = RetrieverQueryEngine.from_args(
