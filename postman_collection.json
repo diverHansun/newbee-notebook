@@ -973,6 +973,115 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin utilities: reprocess pending docs, reindex single doc, index stats.",
+      "item": [
+        {
+          "name": "Reprocess Pending",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dry_run\": false\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{api_base}}/admin/reprocess-pending",
+              "host": ["{{api_base}}"],
+              "path": ["admin", "reprocess-pending"]
+            },
+            "description": "Trigger processing of all pending documents."
+          },
+          "response": []
+        },
+        {
+          "name": "Reindex Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Document matches variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.document_id).to.eql(pm.collectionVariables.get('document_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": true\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "{{api_base}}/admin/documents/{{document_id}}/reindex",
+              "host": ["{{api_base}}"],
+              "path": ["admin", "documents", "{{document_id}}", "reindex"]
+            },
+            "description": "Rebuild indexes (pgvector + ES) for a single document."
+          },
+          "response": []
+        },
+        {
+          "name": "Index Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Has documents stats\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('documents');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/admin/index-stats",
+              "host": ["{{api_base}}"],
+              "path": ["admin", "index-stats"]
+            },
+            "description": "View document counts by status and basic index stats."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

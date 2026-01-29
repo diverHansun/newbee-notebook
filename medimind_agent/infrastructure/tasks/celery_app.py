@@ -16,9 +16,5 @@ app = Celery(
     include=["medimind_agent.infrastructure.tasks.document_tasks"],
 )
 
-app.conf.task_routes = {
-    "medimind_agent.infrastructure.tasks.document_tasks.process_document_task": {"queue": "documents"},
-}
-
 app.conf.task_default_queue = "default"
 app.conf.result_expires = 3600

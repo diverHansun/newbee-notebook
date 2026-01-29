@@ -48,9 +48,11 @@ class Reference(Entity):
     reference_id: str = field(default_factory=generate_uuid)
     session_id: str = ""
     message_id: int = 0
-    document_id: str = ""
+    document_id: Optional[str] = None
     chunk_id: str = ""  # LlamaIndex node_id
     quoted_text: Optional[str] = None
     context: Optional[str] = None
+    document_title: Optional[str] = None
+    is_source_deleted: bool = False
 
 

@@ -133,7 +133,7 @@ async def _index_nodes(nodes):
     )
     if _PG_INDEX is None:
         _PG_INDEX = await load_pgvector_index(embed_model, pg_config)
-    await _PG_INDEX.insert_nodes(nodes)
+    _PG_INDEX.insert_nodes(nodes)  # sync method
 
     # elasticsearch config
     es_cfg = storage_cfg.get("elasticsearch", {})
@@ -145,7 +145,7 @@ async def _index_nodes(nodes):
     )
     if _ES_INDEX is None:
         _ES_INDEX = await load_es_index(embed_model, es_config)
-    await _ES_INDEX.insert_nodes(nodes)
+    _ES_INDEX.insert_nodes(nodes)  # sync method
 
 
 @app.task(name="medimind_agent.infrastructure.tasks.document_tasks.delete_document_nodes_task")

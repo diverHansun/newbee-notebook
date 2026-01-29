@@ -116,9 +116,11 @@ CREATE TABLE IF NOT EXISTS "references" (
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     message_id INTEGER,
     chunk_id VARCHAR(100),
-    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
     quoted_text TEXT,
     context TEXT,
+    document_title VARCHAR(500),
+    is_source_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_references_session_id ON "references"(session_id);

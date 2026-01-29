@@ -215,4 +215,10 @@ class DocumentRepositoryImpl(DocumentRepository):
         await self._session.flush()
         return result.rowcount
 
+    async def count_all(self, status: Optional[DocumentStatus] = None) -> int:
+        query = select(func.count(DocumentModel.id))
+        query = self._status_filter(query, status)
+        result = await self._session.execute(query)
+        return result.scalar() or 0
+
 

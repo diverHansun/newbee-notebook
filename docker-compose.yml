@@ -82,10 +82,12 @@ services:
     env_file:
       - .env
     environment:
-      # Override Redis URLs for Docker internal network
+      # Override URLs for Docker internal network
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       REDIS_HOST: redis
+      POSTGRES_HOST: postgres
+      ELASTICSEARCH_URL: http://elasticsearch:9200
     depends_on:
       postgres:
         condition: service_healthy

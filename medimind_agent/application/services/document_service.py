@@ -14,7 +14,10 @@ from medimind_agent.domain.entities.document import Document
 from medimind_agent.domain.repositories.document_repository import DocumentRepository
 from medimind_agent.domain.repositories.library_repository import LibraryRepository
 from medimind_agent.domain.repositories.notebook_repository import NotebookRepository
-from medimind_agent.domain.repositories.reference_repository import NotebookDocumentRefRepository
+from medimind_agent.domain.repositories.reference_repository import (
+    NotebookDocumentRefRepository,
+    ReferenceRepository,
+)
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.domain.value_objects.document_type import DocumentType
 from medimind_agent.infrastructure.tasks.document_tasks import process_document_task
@@ -55,11 +58,13 @@ class DocumentService:
         library_repo: LibraryRepository,
         notebook_repo: NotebookRepository,
         ref_repo: NotebookDocumentRefRepository,
+        reference_repo: ReferenceRepository,
     ):
         self._document_repo = document_repo
         self._library_repo = library_repo
         self._notebook_repo = notebook_repo
         self._ref_repo = ref_repo
+        self._reference_repo = reference_repo
 
     # ------------------------------------------------------------------ #
     # Registration
@@ -206,6 +211,14 @@ class DocumentService:
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError(f"Document not found: {document_id}")
+
+        # Preserve references before deletion
+        try:
+            await self._reference_repo.mark_source_deleted(
+                document_id=document_id, document_title=doc.title
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mark_source_deleted failed for %s: %s", document_id, exc)
 
         # Check notebook references (Library document can be referenced by notebooks)
         if doc.is_library_document:

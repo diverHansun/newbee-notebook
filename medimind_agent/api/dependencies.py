@@ -243,6 +243,7 @@ async def get_document_service(
     library_repo: LibraryRepositoryImpl = Depends(get_library_repo),
     notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
 ) -> DocumentService:
     """Get DocumentService instance."""
     return DocumentService(
@@ -250,6 +251,7 @@ async def get_document_service(
         library_repo=library_repo,
         notebook_repo=notebook_repo,
         ref_repo=ref_repo,
+        reference_repo=reference_repo,
     )
 
 

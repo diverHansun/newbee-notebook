@@ -176,4 +176,17 @@ class DocumentRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def count_all(self, status: Optional[DocumentStatus] = None) -> int:
+        """
+        Count all Documents with optional status filter (library + notebook).
+
+        Args:
+            status: Optional status filter.
+
+        Returns:
+            Total count.
+        """
+        pass
+
 

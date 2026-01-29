@@ -232,4 +232,22 @@ class ReferenceRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def mark_source_deleted(
+        self,
+        document_id: str,
+        document_title: Optional[str] = None,
+    ) -> int:
+        """
+        Mark references pointing to a document as deleted, preserving quoted text.
+
+        Args:
+            document_id: Source document ID.
+            document_title: Optional title snapshot to store for display.
+
+        Returns:
+            Number of references updated.
+        """
+        pass
+
 

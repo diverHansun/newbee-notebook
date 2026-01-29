@@ -212,13 +212,15 @@ class ReferenceModel(Base):
     )
     message_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     chunk_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    document_id: Mapped[uuid.UUID] = mapped_column(
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True
     )
     quoted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_source_deleted: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     
     # Relationships
