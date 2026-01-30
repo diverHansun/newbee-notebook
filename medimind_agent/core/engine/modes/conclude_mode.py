@@ -16,6 +16,7 @@ from llama_index.core import VectorStoreIndex
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 from medimind_agent.core.rag.retrieval.filters import build_document_filters
+from medimind_agent.core.common.node_utils import extract_document_id
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.prompts import load_prompt
@@ -143,10 +144,11 @@ class ConcludeMode(BaseMode):
         source_nodes = getattr(response, "source_nodes", None)
         if source_nodes:
             for n in source_nodes:
+                doc_id = extract_document_id(n)
                 meta = getattr(n.node, "metadata", {})
                 sources.append(
                     {
-                        "document_id": meta.get("document_id"),
+                        "document_id": doc_id,
                         "chunk_id": getattr(n.node, "node_id", ""),
                         "text": n.node.get_content(),
                         "score": getattr(n, "score", 0.0),
@@ -182,15 +184,17 @@ class ConcludeMode(BaseMode):
                         yield str(text)
                 # refresh sources after stream
                 response = await self._chat_engine.aquery(query)
-                sources = [
-                    {
-                        "document_id": getattr(sn.node, "metadata", {}).get("document_id"),
-                        "chunk_id": getattr(sn.node, "node_id", ""),
-                        "text": sn.node.get_content(),
-                        "score": getattr(sn, "score", 0.0),
-                    }
-                    for sn in getattr(response, "source_nodes", []) or []
-                ]
+                sources = []
+                for sn in getattr(response, "source_nodes", []) or []:
+                    doc_id = extract_document_id(sn)
+                    sources.append(
+                        {
+                            "document_id": doc_id,
+                            "chunk_id": getattr(sn.node, "node_id", ""),
+                            "text": sn.node.get_content(),
+                            "score": getattr(sn, "score", 0.0),
+                        }
+                    )
                 selection = self.get_selected_text()
                 doc_id = self.get_context_document_id()
                 if selection and doc_id:

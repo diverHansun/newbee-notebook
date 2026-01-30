@@ -16,6 +16,7 @@ from medimind_agent.core.agent import FunctionAgentRunner
 from medimind_agent.core.prompts import load_prompt
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 from medimind_agent.core.rag.retrieval.filters import build_document_filters
+from medimind_agent.core.common.node_utils import extract_document_id
 
 # Backward-compatible exported prompt constant for tests
 DEFAULT_CHAT_SYSTEM_PROMPT = load_prompt("chat.md")
@@ -217,9 +218,10 @@ class ChatMode(BaseMode):
         sources = []
         for node in results:
             meta = getattr(node.node, "metadata", {}) if hasattr(node, "node") else {}
+            doc_id = extract_document_id(node)
             sources.append(
                 {
-                    "document_id": meta.get("document_id"),
+                    "document_id": doc_id,
                     "chunk_id": getattr(node.node, "node_id", ""),
                     "text": node.node.get_content() if hasattr(node, "node") else "",
                     "score": getattr(node, "score", 0.0),

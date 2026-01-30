@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "MediMind Agent API (Enhanced)",
+    "name": "MediMind Agent API v2.0",
     "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-    "description": "Enhanced Postman collection for MediMind Agent API with automated tests and variable extraction.\n\n## Features\n- Automatic variable extraction (IDs are saved automatically)\n- Built-in test scripts for response validation\n- Comprehensive error checking\n- Example responses\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order (Health -> Notebooks -> Sessions -> Chat)\n3. Check the Tests tab to verify all assertions pass\n4. Variables are automatically populated for subsequent requests\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed testing instructions.",
+    "description": "MediMind Agent API Postman Collection v2.0\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Built-in test scripts for response validation\n- Document upload and processing workflow\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. For document upload: select a file in the request body\n4. Poll document status until 'completed' before chat\n5. Variables are automatically populated\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -443,6 +443,270 @@
               "path": ["notebooks", "{{notebook_id}}"]
             },
             "description": "Delete a notebook. This will cascade delete all sessions and references."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Document upload and management. Documents are processed asynchronously via Celery.",
+      "item": [
+        {
+          "name": "Upload Document (to Notebook)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Document created successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('document_id');",
+                  "    pm.expect(jsonData).to.have.property('title');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test(\"Save document_id to variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"document_id\", jsonData.document_id);",
+                  "    console.log(\"Saved document_id: \" + jsonData.document_id);",
+                  "});",
+                  "",
+                  "pm.test(\"Initial status is pending or processing\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(['pending', 'processing']).to.include(jsonData.status);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a file (txt, pdf, docx, md supported)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{api_base}}/documents/notebooks/{{notebook_id}}/upload",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "notebooks", "{{notebook_id}}", "upload"]
+            },
+            "description": "Upload a document to a notebook. Document is processed asynchronously (Celery). The document_id is automatically saved to collection variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Document (to Library)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Document has library_id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('library_id');",
+                  "    pm.expect(jsonData.library_id).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{api_base}}/documents/library/upload",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "library", "upload"]
+            },
+            "description": "Upload a document to the shared library."
+          },
+          "response": []
+        },
+        {
+          "name": "List Documents (Notebook)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has data and pagination\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData).to.have.property('pagination');",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test(\"Documents have required fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data.length > 0) {",
+                  "        var doc = jsonData.data[0];",
+                  "        pm.expect(doc).to.have.property('document_id');",
+                  "        pm.expect(doc).to.have.property('title');",
+                  "        pm.expect(doc).to.have.property('status');",
+                  "        pm.expect(doc).to.have.property('content_type');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/notebooks/{{notebook_id}}?limit=20&offset=0",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "notebooks", "{{notebook_id}}"],
+              "query": [
+                {"key": "limit", "value": "20"},
+                {"key": "offset", "value": "0"}
+              ]
+            },
+            "description": "List all documents in a notebook with pagination."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Document details are complete\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('document_id');",
+                  "    pm.expect(jsonData).to.have.property('title');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('page_count');",
+                  "    pm.expect(jsonData).to.have.property('chunk_count');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Get details of a specific document including processing status."
+          },
+          "response": []
+        },
+        {
+          "name": "Poll Document Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log(\"Document status: \" + jsonData.status);",
+                  "",
+                  "if (jsonData.status === 'completed') {",
+                  "    console.log(\"Document processing completed!\");",
+                  "    console.log(\"Chunks: \" + jsonData.chunk_count);",
+                  "} else if (jsonData.status === 'failed') {",
+                  "    console.log(\"Document processing failed: \" + jsonData.error_message);",
+                  "} else {",
+                  "    console.log(\"Document still processing... Run this request again.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Poll document status until processing completes. Run repeatedly until status is 'completed' or 'failed'."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Document deleted\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.eql('Document deleted');",
+                  "});",
+                  "",
+                  "console.log(\"Document deleted successfully\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Delete a document. This also removes chunks from pgvector and ES indexes."
           },
           "response": []
         }

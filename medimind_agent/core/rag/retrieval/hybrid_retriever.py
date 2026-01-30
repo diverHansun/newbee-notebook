@@ -19,6 +19,7 @@ from llama_index.core.vector_stores.types import (
 )
 
 from medimind_agent.core.rag.retrieval.fusion import FusionStrategy, RRFFusion
+from medimind_agent.core.common.node_utils import extract_document_id
 
 
 class HybridRetriever(BaseRetriever):
@@ -86,9 +87,7 @@ class HybridRetriever(BaseRetriever):
             fused_results = [
                 r
                 for r in fused_results
-                if getattr(r.node, "metadata", {}).get("ref_doc_id") in self._allowed_doc_ids
-                or getattr(r.node, "metadata", {}).get("document_id") in self._allowed_doc_ids
-                or getattr(r.node, "metadata", {}).get("doc_id") in self._allowed_doc_ids
+                if extract_document_id(r) in self._allowed_doc_ids
             ]
 
         return fused_results[: self._top_k]
@@ -123,9 +122,7 @@ class HybridRetriever(BaseRetriever):
             fused_results = [
                 r
                 for r in fused_results
-                if getattr(r.node, "metadata", {}).get("ref_doc_id") in self._allowed_doc_ids
-                or getattr(r.node, "metadata", {}).get("document_id") in self._allowed_doc_ids
-                or getattr(r.node, "metadata", {}).get("doc_id") in self._allowed_doc_ids
+                if extract_document_id(r) in self._allowed_doc_ids
             ]
 
         return fused_results[: self._top_k]

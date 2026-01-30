@@ -23,6 +23,7 @@ from medimind_agent.core.agent import ReActAgentRunner
 from medimind_agent.core.rag.retrieval import HybridRetriever, RRFFusion, build_hybrid_retriever
 from medimind_agent.core.rag.retrieval.filters import build_document_filters
 from medimind_agent.core.prompts import load_prompt
+from medimind_agent.core.common.node_utils import extract_document_id
 from medimind_agent.core.tools.zhipu_tools import (
     build_zhipu_web_search_tool,
     build_zhipu_web_crawl_tool,
@@ -209,13 +210,15 @@ class AskMode(BaseMode):
             except AttributeError:
                 results = self._retriever.retrieve(QueryBundle(message))
             for node in results:
-                doc_id = node.node.metadata.get("document_id") if hasattr(node, "node") else None
+                doc_id = extract_document_id(node)
+                meta = getattr(node.node, "metadata", {}) if hasattr(node, "node") else {}
                 sources.append(
                     {
                         "document_id": doc_id,
                         "chunk_id": getattr(node.node, "node_id", ""),
                         "text": node.node.get_content() if hasattr(node, "node") else "",
                         "score": getattr(node, "score", 0.0),
+                        "title": meta.get("title", meta.get("file_name", "")),
                     }
                 )
         self._last_sources = sources

@@ -22,6 +22,7 @@ from medimind_agent.domain.repositories.message_repository import MessageReposit
 from medimind_agent.domain.entities.reference import Reference
 from medimind_agent.domain.entities.message import Message
 from medimind_agent.core.engine import SessionManager
+from medimind_agent.core.common.node_utils import extract_document_id
 
 
 logger = logging.getLogger(__name__)
@@ -139,21 +140,23 @@ class ChatService:
 
         # Merge sources with user selection/context chunks for consistency
         sources = self._merge_sources_with_context(sources or [], context, context_chunks)
+        sources = await self._filter_valid_sources(sources)
 
-        refs = [
-            Reference(
-                session_id=session_id,
-                message_id=message_id,
-                document_id=src.get("document_id"),
-                chunk_id=src.get("chunk_id", ""),
-                quoted_text=src.get("text", "")[:2000],
-                context=None,
-            )
-            for src in sources
-            if src.get("document_id")
-        ]
-        if refs:
-            await self._reference_repo.create_batch(refs)
+        if sources:
+            refs = [
+                Reference(
+                    session_id=session_id,
+                    message_id=message_id,
+                    document_id=src.get("document_id"),
+                    chunk_id=src.get("chunk_id", ""),
+                    quoted_text=src.get("text", "")[:2000],
+                    context=None,
+                )
+                for src in sources
+                if src.get("document_id")
+            ]
+            if refs:
+                await self._reference_repo.create_batch(refs)
 
         return ChatResult(
             session_id=session_id,
@@ -234,6 +237,7 @@ class ChatService:
             sources = self._merge_sources_with_context(
                 self._session_manager.get_last_sources(), context, context_chunks
             )
+            sources = await self._filter_valid_sources(sources)
 
             yield {"type": "sources", "sources": sources or []}
             yield {"type": "done"}
@@ -255,20 +259,21 @@ class ChatService:
             await self._session_repo.increment_message_count(session_id, 2)
 
             # Persist references
-            refs = [
-                Reference(
-                    session_id=session_id,
-                    message_id=message_id,
-                    document_id=s.get("document_id"),
-                    chunk_id=s.get("chunk_id", ""),
-                    quoted_text=s.get("text", "")[:2000],
-                    context=None,
-                )
-                for s in sources
-                if s.get("document_id")
-            ]
-            if refs:
-                await self._reference_repo.create_batch(refs)
+            if sources:
+                refs = [
+                    Reference(
+                        session_id=session_id,
+                        message_id=message_id,
+                        document_id=s.get("document_id"),
+                        chunk_id=s.get("chunk_id", ""),
+                        quoted_text=s.get("text", "")[:2000],
+                        context=None,
+                    )
+                    for s in sources
+                    if s.get("document_id")
+                ]
+                if refs:
+                    await self._reference_repo.create_batch(refs)
 
         except asyncio.TimeoutError:
             yield {"type": "error", "error_code": "timeout", "message": "Stream timeout"}
@@ -381,9 +386,10 @@ class ChatService:
         chunks = []
         for node in results:
             meta = getattr(node.node, "metadata", {}) if hasattr(node, "node") else {}
+            doc_id = extract_document_id(node)
             chunks.append(
                 {
-                    "document_id": meta.get("document_id"),
+                    "document_id": doc_id,
                     "chunk_id": getattr(node.node, "node_id", ""),
                     "text": node.node.get_content() if hasattr(node, "node") else "",
                     "title": meta.get("title", ""),
@@ -425,3 +431,22 @@ class ChatService:
             _add(s)
 
         return merged
+
+    async def _filter_valid_sources(self, sources: List[dict]) -> List[dict]:
+        """Ensure document_id exists before persisting references."""
+        if not sources:
+            return []
+
+        cache = {}
+        valid = []
+        for src in sources:
+            doc_id = src.get("document_id")
+            if not doc_id:
+                continue
+            if doc_id not in cache:
+                cache[doc_id] = bool(await self._document_repo.get(doc_id))
+            if not cache[doc_id]:
+                logger.warning("Skipping source with missing document_id: %s", doc_id)
+                continue
+            valid.append(src)
+        return valid
