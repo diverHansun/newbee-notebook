@@ -13,6 +13,7 @@ from medimind_agent.api.models.responses import (
     DocumentResponse,
     DocumentListResponse,
     PaginationInfo,
+    DocumentContentResponse,
 )
 from medimind_agent.api.dependencies import get_document_service
 from medimind_agent.application.services.document_service import DocumentService, DocumentOwnershipError
@@ -34,6 +35,9 @@ def _to_response(doc) -> DocumentResponse:
         page_count=doc.page_count,
         chunk_count=doc.chunk_count,
         file_size=doc.file_size,
+        content_path=doc.content_path,
+        content_format=doc.content_format,
+        content_size=doc.content_size,
         error_message=doc.error_message,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
@@ -125,6 +129,31 @@ async def get_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return _to_response(doc)
+
+
+@router.get("/{document_id}/content", response_model=DocumentContentResponse)
+async def get_document_content(
+    document_id: str,
+    format: str = Query("markdown", pattern="^(markdown|text)$"),
+    service: DocumentService = Depends(get_document_service),
+):
+    try:
+        doc, content = await service.get_document_content(document_id, format=format)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return DocumentContentResponse(
+        document_id=doc.document_id,
+        title=doc.title,
+        format=format,
+        content=content,
+        page_count=doc.page_count,
+        content_size=doc.content_size or len(content.encode("utf-8")),
+    )
 
 
 @router.get("/library", response_model=DocumentListResponse)

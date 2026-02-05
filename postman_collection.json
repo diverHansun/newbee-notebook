@@ -677,6 +677,54 @@
           "response": []
         },
         {
+          "name": "Get Document Content",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Has content and metadata\", function () {",
+                  "    pm.expect(jsonData).to.have.property('content');",
+                  "    pm.expect(jsonData.content).to.not.be.empty;",
+                  "    pm.expect(jsonData).to.have.property('format');",
+                  "    pm.expect(jsonData).to.have.property('page_count');",
+                  "    pm.expect(jsonData).to.have.property('content_size');",
+                  "});",
+                  "",
+                  "pm.test(\"Format matches request\", function () {",
+                  "    pm.expect(jsonData.format).to.eql('markdown');",
+                  "});",
+                  "",
+                  "// Save content for downstream checks",
+                  "pm.collectionVariables.set('document_content', jsonData.content);",
+                  "console.log('Saved document_content, length=' + jsonData.content.length);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}/content?format=markdown",
+              "host": ["{{api_base}}"],
+              "path": ["documents", "{{document_id}}", "content"],
+              "query": [
+                {"key": "format", "value": "markdown", "description": "markdown | text"}
+              ]
+            },
+            "description": "Fetch converted document content in markdown or plain text."
+          },
+          "response": []
+        },
+        {
           "name": "Delete Document",
           "event": [
             {

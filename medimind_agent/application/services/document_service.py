@@ -9,6 +9,7 @@ from typing import Optional, Tuple, List
 import logging
 import os
 import asyncio
+from pathlib import Path
 
 from medimind_agent.domain.entities.document import Document
 from medimind_agent.domain.repositories.document_repository import DocumentRepository
@@ -29,6 +30,7 @@ from medimind_agent.core.common.config import (
     get_storage_config,
     get_embedding_provider,
     get_pgvector_config_for_provider,
+    get_documents_directory,
 )
 from medimind_agent.infrastructure.pgvector import PGVectorConfig
 from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
@@ -240,3 +242,42 @@ class DocumentService:
         from medimind_agent.infrastructure.tasks.document_tasks import delete_document_nodes_task
         delete_document_nodes_task.delay(document_id)
         return result
+
+    # ------------------------------------------------------------------ #
+    # Content retrieval
+    # ------------------------------------------------------------------ #
+    async def get_document_content(self, document_id: str, format: str = "markdown") -> tuple[Document, str]:
+        doc = await self._document_repo.get(document_id)
+        if not doc:
+            raise ValueError("Document not found")
+        if doc.status != DocumentStatus.COMPLETED:
+            raise RuntimeError("Document not processed yet")
+        if not doc.content_path:
+            raise RuntimeError("Content not available for this document")
+
+        content_path = Path(get_documents_directory()) / doc.content_path
+        if not content_path.exists():
+            raise FileNotFoundError("Content file not found on disk")
+
+        content = content_path.read_text(encoding="utf-8")
+        if format == "markdown":
+            return doc, content
+        if format == "text":
+            return doc, _markdown_to_text(content)
+        raise ValueError("Unsupported format")
+
+
+def _markdown_to_text(markdown: str) -> str:
+    """Lightweight markdown -> plain text conversion for API use."""
+    import re
+
+    lines = []
+    for line in markdown.splitlines():
+        line = re.sub(r"^#{1,6}\s*", "", line)  # strip headings
+        line = re.sub(r"^[-*+]\s+", "", line)   # strip bullet markers
+        lines.append(line)
+    text = "\n".join(lines)
+    # remove residual link/image syntax
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    return text

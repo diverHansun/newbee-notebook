@@ -113,6 +113,9 @@ class DocumentModel(Base):
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     file_size: Mapped[int] = mapped_column(Integer, default=0)
+    content_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    content_format: Mapped[str] = mapped_column(String(50), default="markdown")
+    content_size: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(

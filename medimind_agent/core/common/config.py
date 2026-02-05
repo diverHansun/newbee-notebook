@@ -564,6 +564,18 @@ def get_zhipu_tools_config() -> dict:
     return load_yaml_config(CONFIG_DIR / "zhipu_tools.yaml")
 
 
+def get_document_processing_config() -> dict:
+    """Get document processing configuration."""
+    cfg = load_yaml_config(CONFIG_DIR / "document_processing.yaml")
+    if cfg and "document_processing" in cfg:
+        dp_cfg = cfg["document_processing"]
+        for key in list(dp_cfg.keys()):
+            value = dp_cfg.get(key)
+            if isinstance(value, str):
+                dp_cfg[key] = _resolve_env_var(value)
+    return cfg
+
+
 def get_config():
     """Get all configuration as a dictionary.
     
@@ -588,6 +600,7 @@ def get_config():
         "storage": get_storage_config(),
         "modes": get_modes_config(),
         "zhipu_tools": get_zhipu_tools_config(),
+        "document_processing": get_document_processing_config(),
     }
 
 

@@ -91,6 +91,9 @@ class DocumentResponse(BaseModel):
     page_count: int
     chunk_count: int
     file_size: int
+    content_path: Optional[str] = None
+    content_format: Optional[str] = None
+    content_size: Optional[int] = None
     error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -100,6 +103,16 @@ class DocumentListResponse(BaseModel):
     """Response model for document list."""
     data: List[DocumentResponse]
     pagination: PaginationInfo
+
+
+class DocumentContentResponse(BaseModel):
+    """Response model for document content."""
+    document_id: str
+    title: str
+    format: str
+    content: str
+    page_count: int
+    content_size: int
 
 
 # =============================================================================

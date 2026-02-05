@@ -141,6 +141,20 @@ services:
     profiles:
       - debug
 
+  # MinerU PDF -> Markdown service
+  mineru-api:
+    image: mineru:latest
+    container_name: medimind-mineru-api
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: local
+    command: >
+      mineru-api --host 0.0.0.0 --port 8000 --backend hybrid-auto-engine
+    ports:
+      - "8001:8000"
+    networks:
+      - medimind_network
+
 volumes:
   postgres_data:
     driver: local

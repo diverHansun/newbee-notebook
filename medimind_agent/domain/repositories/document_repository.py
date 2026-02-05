@@ -149,6 +149,9 @@ class DocumentRepository(ABC):
         status: DocumentStatus,
         chunk_count: Optional[int] = None,
         page_count: Optional[int] = None,
+        content_path: Optional[str] = None,
+        content_size: Optional[int] = None,
+        content_format: Optional[str] = None,
         error_message: Optional[str] = None,
     ) -> None:
         """
@@ -159,6 +162,9 @@ class DocumentRepository(ABC):
             status: New status.
             chunk_count: Optional chunk count update.
             page_count: Optional page count update.
+            content_path: Optional converted content path.
+            content_size: Optional converted content size in bytes.
+            content_format: Optional converted content format label.
             error_message: Optional error message when failed.
         """
         pass

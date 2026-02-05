@@ -52,6 +52,9 @@ class DocumentRepositoryImpl(DocumentRepository):
             page_count=model.page_count,
             chunk_count=model.chunk_count,
             file_size=model.file_size,
+            content_path=model.content_path,
+            content_format=model.content_format or "markdown",
+            content_size=model.content_size,
             error_message=model.error_message,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -146,6 +149,9 @@ class DocumentRepositoryImpl(DocumentRepository):
             page_count=document.page_count,
             chunk_count=document.chunk_count,
             file_size=document.file_size,
+            content_path=document.content_path,
+            content_format=document.content_format,
+            content_size=document.content_size,
             created_at=document.created_at,
             updated_at=document.updated_at,
         )
@@ -166,6 +172,9 @@ class DocumentRepositoryImpl(DocumentRepository):
                 page_count=document.page_count,
                 chunk_count=document.chunk_count,
                 file_size=document.file_size,
+                content_path=document.content_path,
+                content_format=document.content_format,
+                content_size=document.content_size,
                 updated_at=datetime.now(),
             )
         )
@@ -185,6 +194,9 @@ class DocumentRepositoryImpl(DocumentRepository):
         status: DocumentStatus,
         chunk_count: Optional[int] = None,
         page_count: Optional[int] = None,
+        content_path: Optional[str] = None,
+        content_size: Optional[int] = None,
+        content_format: Optional[str] = None,
         error_message: Optional[str] = None,
     ) -> None:
         values = {
@@ -195,6 +207,12 @@ class DocumentRepositoryImpl(DocumentRepository):
             values["chunk_count"] = chunk_count
         if page_count is not None:
             values["page_count"] = page_count
+        if content_path is not None:
+            values["content_path"] = content_path
+        if content_size is not None:
+            values["content_size"] = content_size
+        if content_format is not None:
+            values["content_format"] = content_format
         if error_message is not None:
             values["error_message"] = error_message
 

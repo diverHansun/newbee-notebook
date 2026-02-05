@@ -46,6 +46,9 @@ class Document(Entity):
     page_count: int = 0
     chunk_count: int = 0
     file_size: int = 0
+    content_path: Optional[str] = None
+    content_format: str = "markdown"
+    content_size: int = 0
     error_message: Optional[str] = None
     
     @property
@@ -79,11 +82,24 @@ class Document(Entity):
         self.error_message = None
         self.touch()
     
-    def mark_completed(self, chunk_count: int, page_count: int = 0) -> None:
-        """Mark document as completed."""
+    def mark_completed(
+        self,
+        chunk_count: int,
+        page_count: int = 0,
+        content_path: Optional[str] = None,
+        content_size: Optional[int] = None,
+        content_format: Optional[str] = None,
+    ) -> None:
+        """Mark document as completed and update content metadata."""
         self.status = DocumentStatus.COMPLETED
         self.chunk_count = chunk_count
         self.page_count = page_count
+        if content_path is not None:
+            self.content_path = content_path
+        if content_size is not None:
+            self.content_size = content_size
+        if content_format is not None:
+            self.content_format = content_format
         self.error_message = None
         self.touch()
     

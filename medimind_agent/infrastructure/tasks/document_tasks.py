@@ -4,7 +4,6 @@ Celery tasks for document processing.
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 from medimind_agent.infrastructure.tasks.celery_app import app
@@ -14,24 +13,25 @@ from medimind_agent.infrastructure.persistence.repositories.notebook_repo_impl i
 from medimind_agent.infrastructure.persistence.repositories.library_repo_impl import LibraryRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
 from medimind_agent.infrastructure.persistence.repositories.reference_repo_impl import ReferenceRepositoryImpl
-from medimind_agent.infrastructure.content_extraction.base import get_extractor
 from medimind_agent.core.rag.text_splitter.splitter import split_documents
 from medimind_agent.core.common.config import (
     get_storage_config,
     get_embedding_provider,
     get_pgvector_config_for_provider,
+    get_documents_directory,
 )
 from medimind_agent.core.rag.embeddings import build_embedding
 from medimind_agent.core.engine.index_builder import load_pgvector_index, load_es_index
-from medimind_agent.core.rag.document_loader.loader import load_documents as loader_load_documents
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.domain.entities.document import Document
 from medimind_agent.infrastructure.pgvector import PGVectorConfig
 from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
-from llama_index.core import Document as LlamaDocument
+from llama_index.readers.file import MarkdownReader
+from medimind_agent.infrastructure.document_processing import DocumentProcessor
 
 logger = logging.getLogger(__name__)
 _EMBED_MODEL = None
+_PROCESSOR = DocumentProcessor()
 
 
 @app.task(name="medimind_agent.infrastructure.tasks.document_tasks.process_document_task")
@@ -62,40 +62,12 @@ async def _process_document_async(document_id: str):
         try:
             await doc_repo.update_status(document_id, DocumentStatus.PROCESSING, error_message=None)
 
-            text, page_count = _extract_text(document.file_path)
-
-            llama_doc = LlamaDocument(
-                text=text,
-                metadata={
-                    # Align with LlamaIndex defaults
-                    "ref_doc_id": document.document_id,
-                    "doc_id": document.document_id,
-                    # Keep document_id for backward compatibility (will be filtered on ref_doc_id)
-                    "document_id": document.document_id,
-                    "library_id": document.library_id,
-                    "notebook_id": document.notebook_id,
-                    "title": document.title,
-                },
+            conversion_result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+                document.document_id, document.file_path
             )
 
-            nodes = split_documents([llama_doc], chunk_size=512, chunk_overlap=50)
-            # annotate chunk_id and chunk_index
-            for idx, node in enumerate(nodes):
-                meta = getattr(node, "metadata", {}) or {}
-                meta["chunk_index"] = idx
-                meta["chunk_id"] = getattr(node, "node_id", "")
-                # propagate doc id aliases for downstream filters
-                meta["ref_doc_id"] = document.document_id
-                meta["doc_id"] = document.document_id
-                meta["document_id"] = document.document_id
-                node.metadata = meta
-                # LlamaIndex uses node.ref_doc_id to populate metadata.ref_doc_id; set explicitly
-                try:
-                    node.ref_doc_id = document.document_id
-                    node.doc_id = document.document_id
-                except Exception:
-                    # fallback: best effort, do not block indexing
-                    pass
+            content_abs_path = Path(get_documents_directory()) / rel_content_path
+            nodes = _load_markdown_nodes(content_abs_path, document)
             chunk_count = len(nodes)
 
             # Index into pgvector and elasticsearch
@@ -105,7 +77,10 @@ async def _process_document_async(document_id: str):
                 document_id,
                 status=DocumentStatus.COMPLETED,
                 chunk_count=chunk_count,
-                page_count=page_count,
+                page_count=conversion_result.page_count or 0,
+                content_path=rel_content_path,
+                content_size=content_size,
+                content_format="markdown",
                 error_message=None,
             )
         except Exception as exc:
@@ -116,12 +91,6 @@ async def _process_document_async(document_id: str):
                 error_message=str(exc),
             )
     await close_database()
-
-
-def _extract_text(path: str):
-    extractor = get_extractor(path)
-    result = extractor.extract(path)
-    return result.text, result.page_count
 
 
 async def _index_nodes(nodes):
@@ -239,3 +208,35 @@ async def _process_all_pending_async():
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Reprocess pending failed for %s: %s", doc.document_id, exc)
     await close_database()
+
+
+def _load_markdown_nodes(content_path: Path, document: Document):
+    """Load markdown file and split into nodes with metadata."""
+    reader = MarkdownReader(remove_hyperlinks=False, remove_images=False)
+    docs = reader.load_data(
+        file=str(content_path),
+        extra_info={
+            "ref_doc_id": document.document_id,
+            "doc_id": document.document_id,
+            "document_id": document.document_id,
+            "library_id": document.library_id,
+            "notebook_id": document.notebook_id,
+            "title": document.title,
+        },
+    )
+
+    nodes = split_documents(docs, chunk_size=512, chunk_overlap=50)
+    for idx, node in enumerate(nodes):
+        meta = getattr(node, "metadata", {}) or {}
+        meta["chunk_index"] = idx
+        meta["chunk_id"] = getattr(node, "node_id", "")
+        meta["ref_doc_id"] = document.document_id
+        meta["doc_id"] = document.document_id
+        meta["document_id"] = document.document_id
+        node.metadata = meta
+        try:
+            node.ref_doc_id = document.document_id
+            node.doc_id = document.document_id
+        except Exception:
+            pass
+    return nodes
