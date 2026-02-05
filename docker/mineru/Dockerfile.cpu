@@ -1,0 +1,42 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# System deps:
+# - libgl1/libglib2.0-0: OpenCV runtime
+# - fonts-noto-*: Chinese/Japanese/Korean rendering in some PDF/image paths
+# - curl: optional healthcheck/debug
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        fontconfig \
+        fonts-noto-core \
+        fonts-noto-cjk \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 && \
+    fc-cache -fv && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install CPU-only PyTorch first so pip won't pull in CUDA/cuDNN (saves ~700MB+ and avoids long "stuck" downloads)
+RUN python -m pip install -U --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# CPU pipeline + FastAPI server (no GPU required)
+RUN python -m pip install -U --no-cache-dir "mineru[api,pipeline]>=2.7.0"
+
+# Pre-download models during build to avoid first-request delay (~3min download + ~2min init)
+# Models are downloaded to /root/.cache/modelscope which should be mounted as a volume for persistence
+ENV MINERU_MODEL_SOURCE=modelscope
+RUN python -c "\
+from mineru.backend.pipeline.model_init import DocAnalysis; \
+print('Pre-downloading MinerU models...'); \
+_ = DocAnalysis(device_mode='cpu'); \
+print('Model download complete!')" || echo "Model pre-download skipped (will download on first use)"
+
+EXPOSE 8000
+
+# Note: Do NOT pass --backend here - it causes "multiple values" error when combined with API default.
+# Backend should be specified per-request via form data instead.
+CMD ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+

@@ -1675,7 +1675,7 @@ requires-dist = [
     { name = "llama-index-vector-stores-elasticsearch", specifier = "==0.5.1" },
     { name = "llama-index-vector-stores-faiss", specifier = "==0.5.1" },
     { name = "llama-index-vector-stores-postgres", specifier = ">=0.7.2" },
-    { name = "markitdown", specifier = ">=0.1.4" },
+    { name = "markitdown", specifier = "==0.1.4" },
     { name = "numpy", specifier = "==2.2.6" },
     { name = "openpyxl", specifier = "==3.1.5" },
     { name = "pandas", specifier = "<2.3.0" },

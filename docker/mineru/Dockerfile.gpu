@@ -1,0 +1,21 @@
+FROM vllm/vllm-openai:v0.11.0
+
+# Install libgl for opencv support & Noto fonts for Chinese characters
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        fonts-noto-core \
+        fonts-noto-cjk \
+        fontconfig \
+        libgl1 && \
+    fc-cache -fv && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# MinerU server (GPU runtime is provided by the base image + host)
+RUN python3 -m pip install -U --no-cache-dir "mineru[core]>=2.7.0" --break-system-packages
+
+EXPOSE 8000
+
+CMD ["mineru-api", "--host", "0.0.0.0", "--port", "8000", "--backend", "hybrid-auto-engine"]
+

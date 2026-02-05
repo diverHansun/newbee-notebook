@@ -1,8 +1,15 @@
 document_processing:
+  # Enable MinerU PDF -> Markdown via HTTP API. Set to false to use PyPDF only.
+  mineru_enabled: ${MINERU_ENABLED:true}
   # Base URL for MinerU API; override with MINERU_API_URL env if set
   mineru_api_url: ${MINERU_API_URL:http://mineru-api:8000}
-  mineru_timeout_seconds: 300
-  mineru_backend: hybrid-auto-engine
-  mineru_lang_list: en,zh
+  # Timeout for MinerU API calls. Set higher (600s) to allow for first-time model initialization.
+  mineru_timeout_seconds: 600
+  # If MinerU is unreachable, back off for this many seconds before retrying.
+  mineru_unavailable_cooldown_seconds: 300
+  # CPU-only environments: set MINERU_BACKEND=pipeline
+  mineru_backend: ${MINERU_BACKEND:hybrid-auto-engine}
+  # OCR language hint (pipeline/hybrid). Common values: ch, en, japan, korean, etc.
+  mineru_lang_list: ${MINERU_LANG_LIST:ch}
   # Root directory for stored markdown; falls back to DOCUMENTS_DIR env or data/documents
   documents_dir: ${DOCUMENTS_DIR:data/documents}

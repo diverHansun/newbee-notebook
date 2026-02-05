@@ -1,0 +1,32 @@
+services:
+  # GPU override for MinerU API service.
+  # Use together with the base compose file:
+  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build mineru-api
+  mineru-api:
+    build:
+      context: ./docker/mineru
+      dockerfile: Dockerfile.gpu
+    image: medimind/mineru-api:gpu
+    environment:
+      MINERU_MODEL_SOURCE: modelscope
+      MINERU_DEVICE_MODE: cuda
+      MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
+      MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-2}
+    # Request an NVIDIA GPU (Docker Desktop / Linux with nvidia-container-toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ipc: host
+    shm_size: "32gb"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+
+  celery-worker:
+    environment:
+      MINERU_BACKEND: hybrid-auto-engine
+

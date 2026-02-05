@@ -12,8 +12,6 @@
 # Web UIs:
 #   Kibana: http://localhost:5601 (Elasticsearch visualization)
 
-version: '3.8'
-
 services:
   redis:
     image: redis:7.2
@@ -88,12 +86,19 @@ services:
       REDIS_HOST: redis
       POSTGRES_HOST: postgres
       ELASTICSEARCH_URL: http://elasticsearch:9200
+      # MinerU integration (PDF -> Markdown, CPU-friendly pipeline backend by default)
+      MINERU_ENABLED: ${MINERU_ENABLED:-true}
+      MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}
+      MINERU_LANG_LIST: ${MINERU_LANG_LIST:-ch}
+      MINERU_API_URL: ${MINERU_API_URL:-http://mineru-api:8000}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
       elasticsearch:
+        condition: service_healthy
+      mineru-api:
         condition: service_healthy
     networks:
       - medimind_network
@@ -143,17 +148,31 @@ services:
 
   # MinerU PDF -> Markdown service
   mineru-api:
-    image: mineru:latest
+    build:
+      context: ./docker/mineru
+      dockerfile: Dockerfile.cpu
+    image: medimind/mineru-api:cpu
     container_name: medimind-mineru-api
     restart: unless-stopped
     environment:
-      MINERU_MODEL_SOURCE: local
-    command: >
-      mineru-api --host 0.0.0.0 --port 8000 --backend hybrid-auto-engine
+      # Use ModelScope for model downloads; models are persisted via `mineru_cache` volume.
+      MINERU_MODEL_SOURCE: modelscope
+      MINERU_DEVICE_MODE: cpu
+      # FastAPI docs are also used as a simple readiness probe.
+      MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
+      # Limit concurrent requests to avoid CPU overload by default.
+      MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}
+    volumes:
+      - mineru_cache:/root/.cache
     ports:
       - "8001:8000"
     networks:
       - medimind_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
 
 volumes:
   postgres_data:
@@ -161,6 +180,8 @@ volumes:
   elasticsearch_data:
     driver: local
   redis_data:
+    driver: local
+  mineru_cache:
     driver: local
 
 networks:
