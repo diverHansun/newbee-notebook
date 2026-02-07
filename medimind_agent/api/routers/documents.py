@@ -1,24 +1,25 @@
 """
 MediMind Agent - Documents Router
 
-Handles document registration, listing, retrieval, and deletion.
-File upload/processing is intentionally minimal; will be extended.
+Library-first document APIs.
 """
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
+from typing import Optional, List
 
-from medimind_agent.api.models.requests import UploadDocumentRequest
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
+from fastapi.responses import FileResponse
+
 from medimind_agent.api.models.responses import (
     DocumentResponse,
     DocumentListResponse,
     PaginationInfo,
     DocumentContentResponse,
+    UploadDocumentsResponse,
+    UploadFailureResponse,
 )
 from medimind_agent.api.dependencies import get_document_service
-from medimind_agent.application.services.document_service import DocumentService, DocumentOwnershipError
+from medimind_agent.application.services.document_service import DocumentService
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
-from medimind_agent.domain.value_objects.document_type import DocumentType
 
 
 router = APIRouter(prefix="/documents")
@@ -44,85 +45,65 @@ def _to_response(doc) -> DocumentResponse:
     )
 
 
-@router.post("/library", response_model=DocumentResponse, status_code=201)
-async def upload_to_library(
-    request: UploadDocumentRequest,
-    service: DocumentService = Depends(get_document_service),
-):
-    """
-    Register a document to the Library.
-
-    This endpoint currently accepts metadata only. File handling/processing
-    will be added later; file_path/url can be prefilled.
-    """
-    doc = await service.create_library_document(
-        title=request.title,
-        content_type=request.content_type,
-        file_path=request.file_path or "",
-        url=request.url,
-        file_size=request.file_size or 0,
+@router.post("/library", deprecated=True)
+async def upload_to_library_metadata_deprecated():
+    """Deprecated metadata-only endpoint."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This endpoint is deprecated. Use POST /api/v1/documents/library/upload "
+            "with files and then POST /api/v1/notebooks/{notebook_id}/documents."
+        ),
     )
-    return _to_response(doc)
 
 
-@router.post("/notebooks/{notebook_id}", response_model=DocumentResponse, status_code=201)
-async def upload_to_notebook(
-    notebook_id: str = Path(..., description="Notebook ID"),
-    request: UploadDocumentRequest = None,
+@router.post("/notebooks/{notebook_id}", deprecated=True)
+async def upload_to_notebook_metadata_deprecated():
+    """Deprecated notebook-owned document endpoint."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Notebook direct upload is deprecated. Upload to Library first via "
+            "POST /api/v1/documents/library/upload, then associate via "
+            "POST /api/v1/notebooks/{notebook_id}/documents."
+        ),
+    )
+
+
+@router.post("/library/upload", response_model=UploadDocumentsResponse, status_code=201)
+async def upload_files_to_library(
+    files: List[UploadFile] = File(...),
     service: DocumentService = Depends(get_document_service),
 ):
-    """Register a document owned by a Notebook."""
-    try:
-        doc = await service.create_notebook_document(
-            notebook_id=notebook_id,
-            title=request.title,
-            content_type=request.content_type,
-            file_path=request.file_path or "",
-            url=request.url,
-            file_size=request.file_size or 0,
-        )
-        return _to_response(doc)
-    except DocumentOwnershipError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    """Batch upload files to Library. Upload does not trigger processing."""
+    documents, failed = await service.upload_to_library(files)
+    return UploadDocumentsResponse(
+        documents=[_to_response(doc) for doc in documents],
+        total=len(documents),
+        failed=[
+            UploadFailureResponse(filename=item["filename"], reason=item["reason"])
+            for item in failed
+        ],
+    )
 
 
-@router.post("/library/upload", response_model=DocumentResponse, status_code=201)
-async def upload_file_to_library(
-    file: UploadFile = File(...),
-    service: DocumentService = Depends(get_document_service),
-):
-    try:
-        doc = await service.save_upload_and_register(
-            upload=file,
-            to_library=True,
-        )
-        return _to_response(doc)
-    except ValueError as e:
-        raise HTTPException(status_code=415, detail=str(e))
-
-
-@router.post("/notebooks/{notebook_id}/upload", response_model=DocumentResponse, status_code=201)
-async def upload_file_to_notebook(
+@router.post("/notebooks/{notebook_id}/upload", deprecated=True)
+async def upload_file_to_notebook_deprecated(
     notebook_id: str,
-    file: UploadFile = File(...),
-    service: DocumentService = Depends(get_document_service),
 ):
-    try:
-        doc = await service.save_upload_and_register(
-            upload=file,
-            to_library=False,
-            notebook_id=notebook_id,
-        )
-        return _to_response(doc)
-    except DocumentOwnershipError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=415, detail=str(e))
+    """Deprecated notebook direct upload endpoint."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This endpoint is deprecated. Use POST /api/v1/documents/library/upload "
+            "and POST /api/v1/notebooks/{notebook_id}/documents instead."
+        ),
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
-    document_id: str,
+    document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
     service: DocumentService = Depends(get_document_service),
 ):
     doc = await service.get(document_id)
@@ -133,18 +114,18 @@ async def get_document(
 
 @router.get("/{document_id}/content", response_model=DocumentContentResponse)
 async def get_document_content(
-    document_id: str,
+    document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
     format: str = Query("markdown", pattern="^(markdown|text)$"),
     service: DocumentService = Depends(get_document_service),
 ):
     try:
         doc, content = await service.get_document_content(document_id, format=format)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return DocumentContentResponse(
         document_id=doc.document_id,
@@ -156,6 +137,22 @@ async def get_document_content(
     )
 
 
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
+    service: DocumentService = Depends(get_document_service),
+):
+    """Download original uploaded file."""
+    try:
+        file_path, filename = await service.get_download_path(document_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return FileResponse(path=file_path, filename=filename, media_type="application/octet-stream")
+
+
 @router.get("/library", response_model=DocumentListResponse)
 async def list_library_documents(
     limit: int = Query(20, ge=1, le=100),
@@ -163,13 +160,13 @@ async def list_library_documents(
     status: Optional[str] = Query(None, description="Filter by status"),
     service: DocumentService = Depends(get_document_service),
 ):
+    status_enum = None
     if status:
         try:
             status_enum = DocumentStatus(status)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid status filter")
-    else:
-        status_enum = None
+
     docs, total = await service.list_library_documents(limit=limit, offset=offset, status=status_enum)
     return DocumentListResponse(
         data=[_to_response(d) for d in docs],
@@ -183,40 +180,27 @@ async def list_library_documents(
     )
 
 
-@router.get("/notebooks/{notebook_id}", response_model=DocumentListResponse)
-async def list_notebook_documents(
+@router.get("/notebooks/{notebook_id}", deprecated=True)
+async def list_notebook_documents_deprecated(
     notebook_id: str,
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    service: DocumentService = Depends(get_document_service),
 ):
-    try:
-        docs, total = await service.list_notebook_documents(notebook_id, limit=limit, offset=offset)
-    except DocumentOwnershipError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    return DocumentListResponse(
-        data=[_to_response(d) for d in docs],
-        pagination=PaginationInfo(
-            total=total,
-            limit=limit,
-            offset=offset,
-            has_next=offset + limit < total,
-            has_prev=offset > 0,
-        ),
+    """Deprecated endpoint replaced by /notebooks/{notebook_id}/documents."""
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use GET /api/v1/notebooks/{notebook_id}/documents.",
     )
 
 
 @router.delete("/{document_id}")
 async def delete_document(
-    document_id: str,
-    confirm: bool = Query(False, description="Force delete if referenced"),
+    document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
+    force: bool = Query(False, description="Force delete when referenced by notebooks"),
     service: DocumentService = Depends(get_document_service),
 ):
     try:
-        await service.delete_document(document_id, force=confirm)
+        await service.delete_document(document_id, force=force)
     except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     return {"message": "Document deleted", "document_id": document_id}

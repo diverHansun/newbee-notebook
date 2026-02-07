@@ -20,6 +20,7 @@ from medimind_agent.application.services.notebook_service import NotebookService
 from medimind_agent.application.services.session_service import SessionService
 from medimind_agent.application.services.chat_service import ChatService
 from medimind_agent.application.services.document_service import DocumentService
+from medimind_agent.application.services.notebook_document_service import NotebookDocumentService
 from medimind_agent.core.llm.zhipu import build_llm
 from medimind_agent.core.rag.embeddings import build_embedding
 from medimind_agent.core.engine import load_pgvector_index, load_es_index, SessionManager
@@ -252,6 +253,19 @@ async def get_document_service(
         notebook_repo=notebook_repo,
         ref_repo=ref_repo,
         reference_repo=reference_repo,
+    )
+
+
+async def get_notebook_document_service(
+    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+) -> NotebookDocumentService:
+    """Get NotebookDocumentService instance."""
+    return NotebookDocumentService(
+        notebook_repo=notebook_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
     )
 
 

@@ -115,6 +115,66 @@ class DocumentContentResponse(BaseModel):
     content_size: int
 
 
+class UploadFailureResponse(BaseModel):
+    """A failed file upload item."""
+
+    filename: str
+    reason: str
+
+
+class UploadDocumentsResponse(BaseModel):
+    """Response model for batch library upload."""
+
+    documents: List[DocumentResponse]
+    total: int
+    failed: List[UploadFailureResponse]
+
+
+class NotebookDocumentsAddItem(BaseModel):
+    """Added document info for notebook association."""
+
+    document_id: str
+    title: str
+    status: str
+
+
+class NotebookDocumentsProblemItem(BaseModel):
+    """Skipped/failed document info for notebook association."""
+
+    document_id: str
+    reason: str
+
+
+class NotebookDocumentsAddResponse(BaseModel):
+    """Response model for adding documents to notebook."""
+
+    notebook_id: str
+    added: List[NotebookDocumentsAddItem]
+    skipped: List[NotebookDocumentsProblemItem]
+    failed: List[NotebookDocumentsProblemItem]
+
+
+class NotebookDocumentListItemResponse(BaseModel):
+    """Document item in notebook listing."""
+
+    document_id: str
+    title: str
+    status: str
+    content_type: str
+    file_size: int
+    page_count: int
+    chunk_count: int
+    created_at: datetime
+    added_at: Optional[datetime] = None
+
+
+class NotebookDocumentListResponse(BaseModel):
+    """Response model for notebook associated document list."""
+
+    data: List[NotebookDocumentListItemResponse]
+    pagination: PaginationInfo
+
+
 # =============================================================================
 # Reference Responses
 # =============================================================================

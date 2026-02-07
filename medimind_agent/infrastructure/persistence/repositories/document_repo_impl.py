@@ -213,7 +213,7 @@ class DocumentRepositoryImpl(DocumentRepository):
             values["content_size"] = content_size
         if content_format is not None:
             values["content_format"] = content_format
-        if error_message is not None:
+        if error_message is not None or status != DocumentStatus.FAILED:
             values["error_message"] = error_message
 
         await self._session.execute(

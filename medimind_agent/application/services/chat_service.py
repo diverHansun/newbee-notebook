@@ -21,6 +21,7 @@ from medimind_agent.domain.repositories.document_repository import DocumentRepos
 from medimind_agent.domain.repositories.message_repository import MessageRepository
 from medimind_agent.domain.entities.reference import Reference
 from medimind_agent.domain.entities.message import Message
+from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.core.engine import SessionManager
 from medimind_agent.core.common.node_utils import extract_document_id
 
@@ -317,12 +318,19 @@ class ChatService:
                 raise RuntimeError("Vector index is not available")
 
     async def _get_notebook_document_ids(self, notebook_id: str) -> List[str]:
-        """Collect document IDs (owned + referenced) for scope filtering."""
-        owned_docs = await self._document_repo.list_by_notebook(notebook_id)
-        owned_ids = [doc.document_id for doc in owned_docs if doc.status.value == "completed" or doc.status == "completed"]
+        """Collect completed referenced document IDs for scope filtering."""
         refs = await self._ref_repo.list_by_notebook(notebook_id)
-        ref_ids = [ref.document_id for ref in refs]
-        return list(set(owned_ids + ref_ids))
+        if not refs:
+            return []
+
+        docs = await self._document_repo.get_batch([ref.document_id for ref in refs])
+        return list(
+            {
+                doc.document_id
+                for doc in docs
+                if doc.status == DocumentStatus.COMPLETED
+            }
+        )
 
     async def _get_context_chunks(self, context: dict) -> List[dict]:
         """Fetch chunk and neighbors by chunk_id for richer context.

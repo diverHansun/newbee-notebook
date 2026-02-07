@@ -300,10 +300,8 @@ class NotebookService:
     async def get_all_document_ids(self, notebook_id: str) -> List[str]:
         """
         Get all document IDs accessible by a Notebook.
-        
-        This includes:
-        - Documents owned by the Notebook
-        - Documents referenced from Library
+
+        Library-first mode only uses notebook-document associations.
         
         Args:
             notebook_id: Notebook unique identifier.
@@ -311,15 +309,9 @@ class NotebookService:
         Returns:
             List of document IDs.
         """
-        # Get owned documents
-        owned_docs = await self.document_repo.list_by_notebook(notebook_id)
-        owned_ids = [doc.document_id for doc in owned_docs]
-        
-        # Get referenced documents
         refs = await self.ref_repo.list_by_notebook(notebook_id)
         ref_ids = [ref.document_id for ref in refs]
-        
-        # Combine and deduplicate
-        return list(set(owned_ids + ref_ids))
+
+        return list(set(ref_ids))
 
 

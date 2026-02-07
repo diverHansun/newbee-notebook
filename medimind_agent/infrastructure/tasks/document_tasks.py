@@ -9,10 +9,6 @@ from pathlib import Path
 from medimind_agent.infrastructure.tasks.celery_app import app
 from medimind_agent.infrastructure.persistence.database import get_database, close_database
 from medimind_agent.infrastructure.persistence.repositories.document_repo_impl import DocumentRepositoryImpl
-from medimind_agent.infrastructure.persistence.repositories.notebook_repo_impl import NotebookRepositoryImpl
-from medimind_agent.infrastructure.persistence.repositories.library_repo_impl import LibraryRepositoryImpl
-from medimind_agent.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
-from medimind_agent.infrastructure.persistence.repositories.reference_repo_impl import ReferenceRepositoryImpl
 from medimind_agent.core.rag.text_splitter.splitter import split_documents
 from medimind_agent.core.common.config import (
     get_storage_config,
@@ -49,21 +45,30 @@ async def _process_document_async(document_id: str):
     db = await get_database()
     async with db.session() as session:
         doc_repo = DocumentRepositoryImpl(session)
-        notebook_repo = NotebookRepositoryImpl(session)
-        library_repo = LibraryRepositoryImpl(session)
-        ref_repo = NotebookDocumentRefRepositoryImpl(session)
-        reference_repo = ReferenceRepositoryImpl(session)
 
         document = await doc_repo.get(document_id)
         if not document:
             logger.error("Document %s not found", document_id)
             return
 
+        if document.status == DocumentStatus.COMPLETED:
+            logger.info("Document %s already completed, skip processing", document_id)
+            return
+        if document.status == DocumentStatus.PROCESSING:
+            logger.info("Document %s is already processing, skip duplicate run", document_id)
+            return
+
         try:
-            await doc_repo.update_status(document_id, DocumentStatus.PROCESSING, error_message=None)
+            await doc_repo.update_status(document_id, DocumentStatus.PROCESSING, error_message="")
+
+            source_path = Path(document.file_path)
+            if not source_path.is_absolute():
+                source_path = Path(get_documents_directory()) / source_path
+            if not source_path.exists():
+                raise FileNotFoundError(f"Original file not found: {source_path}")
 
             conversion_result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
-                document.document_id, document.file_path
+                document.document_id, str(source_path)
             )
 
             content_abs_path = Path(get_documents_directory()) / rel_content_path
@@ -183,17 +188,14 @@ async def _delete_document_nodes_async(document_id: str):
 
 
 async def _process_all_pending_async():
-    """Helper to process all pending documents sequentially."""
+    """Helper to process all uploaded/failed/pending documents sequentially."""
     db = await get_database()
     async with db.session() as session:
         doc_repo = DocumentRepositoryImpl(session)
-        # Fetch pending documents
-        pending_docs = await doc_repo.list_by_library(limit=1000, offset=0, status=DocumentStatus.PENDING)
-        # Include notebook docs
-        notebooks = await NotebookRepositoryImpl(session).list(limit=1000, offset=0)
-        for nb in notebooks:
+        pending_docs = []
+        for status in (DocumentStatus.UPLOADED, DocumentStatus.FAILED, DocumentStatus.PENDING):
             pending_docs.extend(
-                await doc_repo.list_by_notebook(nb.notebook_id, limit=1000, offset=0)
+                await doc_repo.list_by_library(limit=1000, offset=0, status=status)
             )
         # Unique by id and pending
         seen = set()
@@ -201,7 +203,7 @@ async def _process_all_pending_async():
             if doc.document_id in seen:
                 continue
             seen.add(doc.document_id)
-            if doc.status != DocumentStatus.PENDING:
+            if doc.status not in {DocumentStatus.UPLOADED, DocumentStatus.FAILED, DocumentStatus.PENDING}:
                 continue
             try:
                 await _process_document_async(doc.document_id)

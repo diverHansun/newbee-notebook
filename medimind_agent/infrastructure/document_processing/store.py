@@ -22,15 +22,15 @@ def save_markdown(
         (relative_content_path, content_size_bytes)
     """
     root = Path(base_root or get_documents_directory())
-    doc_dir = root / document_id
-    _ensure_dir(doc_dir)
+    markdown_dir = root / document_id / "markdown"
+    _ensure_dir(markdown_dir)
 
-    content_path = doc_dir / "content.md"
+    content_path = markdown_dir / "content.md"
     content_bytes = markdown.encode("utf-8")
     content_path.write_bytes(content_bytes)
 
     if images:
-        images_dir = doc_dir / "images"
+        images_dir = root / document_id / "images"
         _ensure_dir(images_dir)
         for idx, image_bytes in enumerate(images):
             data = None

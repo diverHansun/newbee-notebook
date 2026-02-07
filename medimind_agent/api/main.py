@@ -8,7 +8,16 @@ from contextlib import asynccontextmanager
 
 
 # Import routers
-from medimind_agent.api.routers import library, notebooks, sessions, health, chat, documents, admin
+from medimind_agent.api.routers import (
+    library,
+    notebooks,
+    notebook_documents,
+    sessions,
+    health,
+    chat,
+    documents,
+    admin,
+)
 
 
 @asynccontextmanager
@@ -43,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api/v1", tags=["Health"])
     app.include_router(library.router, prefix="/api/v1", tags=["Library"])
     app.include_router(notebooks.router, prefix="/api/v1", tags=["Notebooks"])
+    app.include_router(notebook_documents.router, prefix="/api/v1", tags=["Notebook Documents"])
     app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])

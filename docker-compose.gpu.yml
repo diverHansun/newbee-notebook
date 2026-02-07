@@ -28,5 +28,5 @@ services:
 
   celery-worker:
     environment:
+      DOCUMENTS_DIR: ${DOCUMENTS_DIR:-data/documents}
       MINERU_BACKEND: hybrid-auto-engine
-

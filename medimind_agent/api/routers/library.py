@@ -14,7 +14,9 @@ from medimind_agent.api.models.responses import (
     PaginationInfo,
 )
 from medimind_agent.api.dependencies import get_library_service
+from medimind_agent.api.dependencies import get_document_service
 from medimind_agent.application.services.library_service import LibraryService
+from medimind_agent.application.services.document_service import DocumentService
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 
 
@@ -100,27 +102,27 @@ async def list_library_documents(
 @router.delete("/documents/{document_id}")
 async def delete_library_document(
     document_id: str,
-    confirm: bool = Query(False),
-    service: LibraryService = Depends(get_library_service),
+    force: bool = Query(False),
+    service: DocumentService = Depends(get_document_service),
 ):
     """
     Delete a document from the Library.
     
-    If the document is referenced by Notebooks, requires confirm=true.
+    If the document is referenced by Notebooks, requires force=true.
     
     Args:
         document_id: Document unique identifier.
-        confirm: Set to true to confirm deletion even if referenced.
+        force: Set to true to force deletion even if referenced.
         
     Returns:
         Deletion confirmation.
         
     Raises:
         404: Document not found.
-        409: Document is referenced (without confirm=true).
+        409: Document is referenced (without force=true).
     """
     try:
-        await service.delete_document(document_id, force=confirm)
+        await service.delete_document(document_id, force=force)
     except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
     except RuntimeError as e:

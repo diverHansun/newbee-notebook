@@ -19,8 +19,7 @@ class Document(Entity):
     
     Ownership rules:
     - library_id is set: belongs to Library
-    - notebook_id is set: belongs to Notebook (exclusive document)
-    - Only one of library_id or notebook_id can be set (enforced by DB constraint)
+    - notebook_id is legacy and should not be set by new code paths
     
     Attributes:
         document_id: Unique identifier
@@ -65,6 +64,11 @@ class Document(Entity):
     def is_completed(self) -> bool:
         """Check if document processing is completed."""
         return self.status == DocumentStatus.COMPLETED
+
+    @property
+    def is_uploaded(self) -> bool:
+        """Check if document is uploaded and waiting for processing."""
+        return self.status == DocumentStatus.UPLOADED
     
     @property
     def is_processing(self) -> bool:
@@ -79,6 +83,12 @@ class Document(Entity):
     def mark_processing(self) -> None:
         """Mark document as processing."""
         self.status = DocumentStatus.PROCESSING
+        self.error_message = None
+        self.touch()
+
+    def mark_uploaded(self) -> None:
+        """Mark document as uploaded and ready for notebook association."""
+        self.status = DocumentStatus.UPLOADED
         self.error_message = None
         self.touch()
     

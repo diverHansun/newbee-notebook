@@ -60,16 +60,19 @@ CREATE TABLE IF NOT EXISTS notebooks (
 CREATE INDEX IF NOT EXISTS idx_notebooks_created_at ON notebooks(created_at);
 CREATE INDEX IF NOT EXISTS idx_notebooks_updated_at ON notebooks(updated_at);
 
--- Documents (either belong to library or a notebook, not both)
+-- Documents (library-first model)
+-- All documents belong to Library. Notebook association is managed via notebook_document_refs.
+-- notebook_id column is retained for backward compatibility but should not be used in new code.
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    library_id UUID REFERENCES library(id),
+    library_id UUID NOT NULL REFERENCES library(id),
     notebook_id UUID REFERENCES notebooks(id),
     title VARCHAR(500) NOT NULL,
     content_type VARCHAR(50) NOT NULL,
     file_path VARCHAR(1000),
     url VARCHAR(2000),
-    status VARCHAR(20) DEFAULT 'pending',
+    status VARCHAR(20) DEFAULT 'uploaded'
+        CHECK (status IN ('uploaded', 'pending', 'processing', 'completed', 'failed')),
     page_count INTEGER DEFAULT 0,
     chunk_count INTEGER DEFAULT 0,
     file_size INTEGER DEFAULT 0,
@@ -78,10 +81,7 @@ CREATE TABLE IF NOT EXISTS documents (
     content_size INTEGER DEFAULT 0,
     error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT check_document_owner CHECK (
-        (library_id IS NULL) <> (notebook_id IS NULL)
-    )
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_documents_library_id ON documents(library_id);
 CREATE INDEX IF NOT EXISTS idx_documents_notebook_id ON documents(notebook_id);
@@ -186,8 +186,11 @@ CREATE INDEX IF NOT EXISTS documents_zhipu_idx_1
 DO $$
 BEGIN
     RAISE NOTICE 'MediMind database initialized successfully';
-    RAISE NOTICE 'Extensions enabled: vector, uuid-ossp';
-    RAISE NOTICE 'Tables created: chat_sessions, chat_messages';
+    RAISE NOTICE 'Extensions enabled: vector, uuid-ossp, pgcrypto';
+    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references';
+    RAISE NOTICE 'Legacy tables: chat_sessions, chat_messages';
+    RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
+    RAISE NOTICE 'Document statuses: uploaded -> processing -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
     RAISE NOTICE '  - data_documents_biobert (768 dims)';
     RAISE NOTICE '  - data_documents_zhipu (1024 dims)';

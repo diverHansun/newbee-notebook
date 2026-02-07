@@ -7,10 +7,11 @@ from enum import Enum
 
 class DocumentStatus(str, Enum):
     """Document processing status."""
-    PENDING = "pending"      # Uploaded, waiting for processing
+    PENDING = "pending"       # Legacy state (kept for compatibility)
+    UPLOADED = "uploaded"     # File saved, waiting to be added to notebook
     PROCESSING = "processing"  # Being processed
-    COMPLETED = "completed"   # Processing completed successfully
-    FAILED = "failed"        # Processing failed
+    COMPLETED = "completed"    # Processing completed successfully
+    FAILED = "failed"          # Processing failed
     
     @property
     def is_terminal(self) -> bool:
@@ -20,6 +21,6 @@ class DocumentStatus(str, Enum):
     @property
     def is_active(self) -> bool:
         """Check if document is being actively processed."""
-        return self in (DocumentStatus.PENDING, DocumentStatus.PROCESSING)
+        return self in (DocumentStatus.PENDING, DocumentStatus.UPLOADED, DocumentStatus.PROCESSING)
 
 

@@ -10,20 +10,16 @@ from typing import Optional
 from medimind_agent.api.models.requests import (
     CreateNotebookRequest,
     UpdateNotebookRequest,
-    CreateReferenceRequest,
 )
 from medimind_agent.api.models.responses import (
     NotebookResponse,
     NotebookListResponse,
     PaginationInfo,
-    NotebookDocumentRefResponse,
 )
 from medimind_agent.api.dependencies import get_notebook_service
 from medimind_agent.application.services.notebook_service import (
     NotebookService,
     NotebookNotFoundError,
-    DocumentNotFoundError,
-    DuplicateReferenceError,
 )
 
 
@@ -170,11 +166,9 @@ async def delete_notebook(
 # Document References
 # =============================================================================
 
-@router.post("/{notebook_id}/references", response_model=NotebookDocumentRefResponse, status_code=201)
+@router.post("/{notebook_id}/references", deprecated=True)
 async def create_reference(
     notebook_id: str = Path(..., description="Notebook ID"),
-    request: CreateReferenceRequest = None,
-    service: NotebookService = Depends(get_notebook_service),
 ):
     """
     Create a reference from a Library document to this Notebook.
@@ -190,26 +184,15 @@ async def create_reference(
         404: Notebook or document not found.
         400: Document already referenced or not in Library.
     """
-    try:
-        ref = await service.create_reference(notebook_id, request.document_id)
-        return NotebookDocumentRefResponse(
-            reference_id=ref.reference_id,
-            notebook_id=ref.notebook_id,
-            document_id=ref.document_id,
-            created_at=ref.created_at,
-        )
-    except NotebookNotFoundError:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-    except DocumentNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except DuplicateReferenceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use POST /api/v1/notebooks/{notebook_id}/documents.",
+    )
 
 
-@router.get("/{notebook_id}/references")
+@router.get("/{notebook_id}/references", deprecated=True)
 async def list_references(
     notebook_id: str = Path(..., description="Notebook ID"),
-    service: NotebookService = Depends(get_notebook_service),
 ):
     """
     List all document references for a Notebook.
@@ -223,28 +206,16 @@ async def list_references(
     Raises:
         404: Notebook not found.
     """
-    try:
-        refs = await service.list_references(notebook_id)
-        return {
-            "data": [
-                {
-                    "reference_id": ref.reference_id,
-                    "notebook_id": ref.notebook_id,
-                    "document_id": ref.document_id,
-                    "created_at": ref.created_at,
-                }
-                for ref in refs
-            ]
-        }
-    except NotebookNotFoundError:
-        raise HTTPException(status_code=404, detail="Notebook not found")
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use GET /api/v1/notebooks/{notebook_id}/documents.",
+    )
 
 
-@router.delete("/{notebook_id}/references/{reference_id}", status_code=204)
+@router.delete("/{notebook_id}/references/{reference_id}", status_code=410, deprecated=True)
 async def delete_reference(
     notebook_id: str = Path(..., description="Notebook ID"),
     reference_id: str = Path(..., description="Reference ID"),
-    service: NotebookService = Depends(get_notebook_service),
 ):
     """
     Remove a document reference from a Notebook.
@@ -258,11 +229,9 @@ async def delete_reference(
     Raises:
         404: Notebook or reference not found.
     """
-    try:
-        await service.delete_reference(notebook_id, reference_id)
-    except NotebookNotFoundError:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Reference not found")
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use DELETE /api/v1/notebooks/{notebook_id}/documents/{document_id}.",
+    )
 
 

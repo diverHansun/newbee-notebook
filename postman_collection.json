@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "MediMind Agent API v2.0",
+    "name": "MediMind Agent API v2.1",
     "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-    "description": "MediMind Agent API Postman Collection v2.0\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Built-in test scripts for response validation\n- Document upload and processing workflow\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. For document upload: select a file in the request body\n4. Poll document status until 'completed' before chat\n5. Variables are automatically populated\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+    "description": "MediMind Agent API Postman Collection v2.1\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -40,8 +40,12 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/health",
-              "host": ["{{api_base}}"],
-              "path": ["health"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "health"
+              ]
             },
             "description": "Basic health check endpoint. Returns 200 if service is running."
           },
@@ -71,8 +75,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/health/ready",
-              "host": ["{{api_base}}"],
-              "path": ["health", "ready"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ]
             },
             "description": "Readiness check. Verifies database and other dependencies are ready."
           },
@@ -98,8 +107,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/health/live",
-              "host": ["{{api_base}}"],
-              "path": ["health", "live"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
             },
             "description": "Liveness check. Verifies the process is alive and responding."
           },
@@ -145,8 +159,12 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/info",
-              "host": ["{{api_base}}"],
-              "path": ["info"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "info"
+              ]
             },
             "description": "Get system information including version and supported features."
           },
@@ -191,8 +209,12 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/library",
-              "host": ["{{api_base}}"],
-              "path": ["library"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "library"
+              ]
             },
             "description": "Get library information. Library is automatically created on first access."
           },
@@ -231,12 +253,29 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/library/documents?limit=20&offset=0&status=completed",
-              "host": ["{{api_base}}"],
-              "path": ["library", "documents"],
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "library",
+                "documents"
+              ],
               "query": [
-                {"key": "limit", "value": "20", "description": "Maximum number of results"},
-                {"key": "offset", "value": "0", "description": "Number of records to skip"},
-                {"key": "status", "value": "completed", "description": "Filter by status: pending|processing|completed|failed"}
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Maximum number of results"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Number of records to skip"
+                },
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "description": "Filter by status: uploaded|pending|processing|completed|failed"
+                }
               ]
             },
             "description": "List all documents in the library with optional status filtering."
@@ -286,16 +325,29 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Test Notebook\",\n  \"description\": \"Automated test notebook created by Postman\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/notebooks",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks"
+              ]
             },
             "description": "Create a new notebook. The notebook_id is automatically saved to collection variables."
           },
@@ -333,11 +385,21 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/notebooks?limit=20&offset=0",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks"],
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks"
+              ],
               "query": [
-                {"key": "limit", "value": "20"},
-                {"key": "offset", "value": "0"}
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
               ]
             },
             "description": "List all notebooks with pagination support."
@@ -372,8 +434,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}"
+              ]
             },
             "description": "Get details of a specific notebook by ID."
           },
@@ -402,16 +469,30 @@
           ],
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Updated Notebook Title\",\n  \"description\": \"Updated description\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}"
+              ]
             },
             "description": "Update notebook title and/or description."
           },
@@ -439,8 +520,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}"
+              ]
             },
             "description": "Delete a notebook. This will cascade delete all sessions and references."
           },
@@ -450,110 +536,111 @@
     },
     {
       "name": "Documents",
-      "description": "Document upload and management. Documents are processed asynchronously via Celery.",
+      "description": "Library-first document workflow: upload to Library, add to Notebook, poll processing, then chat.",
       "item": [
         {
-          "name": "Upload Document (to Notebook)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test(\"Document created successfully\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('document_id');",
-                  "    pm.expect(jsonData).to.have.property('title');",
-                  "    pm.expect(jsonData).to.have.property('status');",
-                  "});",
-                  "",
-                  "pm.test(\"Save document_id to variable\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set(\"document_id\", jsonData.document_id);",
-                  "    console.log(\"Saved document_id: \" + jsonData.document_id);",
-                  "});",
-                  "",
-                  "pm.test(\"Initial status is pending or processing\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(['pending', 'processing']).to.include(jsonData.status);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Upload Documents (Library)",
           "request": {
             "method": "POST",
             "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select a file (txt, pdf, docx, md supported)"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{api_base}}/documents/notebooks/{{notebook_id}}/upload",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "notebooks", "{{notebook_id}}", "upload"]
-            },
-            "description": "Upload a document to a notebook. Document is processed asynchronously (Celery). The document_id is automatically saved to collection variables."
-          },
-          "response": []
-        },
-        {
-          "name": "Upload Document (to Library)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test(\"Document has library_id\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('library_id');",
-                  "    pm.expect(jsonData.library_id).to.not.be.null;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select a file"
-                }
-              ]
-            },
             "url": {
               "raw": "{{api_base}}/documents/library/upload",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "library", "upload"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "library",
+                "upload"
+              ]
             },
-            "description": "Upload a document to the shared library."
+            "description": "Upload one or more files to Library. This only stores files and metadata (status=uploaded).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a file (repeat key files for batch upload)"
+                }
+              ]
+            }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has batch fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"documents\");",
+                  "    pm.expect(jsonData).to.have.property(\"total\");",
+                  "    pm.expect(jsonData).to.have.property(\"failed\");",
+                  "    pm.expect(jsonData.documents).to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"Total matches documents length\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.total).to.eql(jsonData.documents.length);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.documents.length > 0) {",
+                  "    var first = jsonData.documents[0];",
+                  "    pm.collectionVariables.set(\"document_id\", first.document_id);",
+                  "    pm.collectionVariables.set(\"document_ids\", JSON.stringify(jsonData.documents.map(function(d){ return d.document_id; })));",
+                  "    console.log(\"Saved document_id: \" + first.document_id);",
+                  "    pm.test(\"Uploaded document status is uploaded\", function () {",
+                  "        pm.expect(first.status).to.eql(\"uploaded\");",
+                  "    });",
+                  "} else {",
+                  "    console.log(\"No successful uploads. Check failed[] for reasons.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
-          "name": "List Documents (Notebook)",
+          "name": "Add Documents To Notebook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{api_base}}/notebooks/{{notebook_id}}/documents",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "documents"
+              ]
+            },
+            "description": "Associate existing Library documents to Notebook. Uploaded/failed docs will be enqueued for processing automatically.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_ids\": [\"{{document_id}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -563,46 +650,108 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test(\"Response has data and pagination\", function () {",
+                  "pm.test(\"Response has association result\", function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('data');",
-                  "    pm.expect(jsonData).to.have.property('pagination');",
-                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "    pm.expect(jsonData).to.have.property(\"notebook_id\");",
+                  "    pm.expect(jsonData).to.have.property(\"added\");",
+                  "    pm.expect(jsonData).to.have.property(\"skipped\");",
+                  "    pm.expect(jsonData).to.have.property(\"failed\");",
                   "});",
                   "",
-                  "pm.test(\"Documents have required fields\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.data.length > 0) {",
-                  "        var doc = jsonData.data[0];",
-                  "        pm.expect(doc).to.have.property('document_id');",
-                  "        pm.expect(doc).to.have.property('title');",
-                  "        pm.expect(doc).to.have.property('status');",
-                  "        pm.expect(doc).to.have.property('content_type');",
-                  "    }",
-                  "});"
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.added.length > 0) {",
+                  "    pm.collectionVariables.set(\"document_id\", jsonData.added[0].document_id);",
+                  "    console.log(\"Added document_id: \" + jsonData.added[0].document_id);",
+                  "} else if (jsonData.skipped.length > 0) {",
+                  "    pm.collectionVariables.set(\"document_id\", jsonData.skipped[0].document_id);",
+                  "    console.log(\"Skipped existing document_id: \" + jsonData.skipped[0].document_id);",
+                  "} else if (jsonData.failed.length > 0) {",
+                  "    console.log(\"Failed to add documents: \" + JSON.stringify(jsonData.failed));",
+                  "}"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "List Notebook Documents",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{api_base}}/documents/notebooks/{{notebook_id}}?limit=20&offset=0",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "notebooks", "{{notebook_id}}"],
+              "raw": "{{api_base}}/notebooks/{{notebook_id}}/documents?limit=20&offset=0",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "documents"
+              ],
               "query": [
-                {"key": "limit", "value": "20"},
-                {"key": "offset", "value": "0"}
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
               ]
             },
-            "description": "List all documents in a notebook with pagination."
+            "description": "List all documents associated with the notebook."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has pagination\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"data\");",
+                  "    pm.expect(jsonData).to.have.property(\"pagination\");",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data.length > 0) {",
+                  "    var first = jsonData.data[0];",
+                  "    pm.collectionVariables.set(\"document_id\", first.document_id);",
+                  "    pm.test(\"Notebook document item has required fields\", function () {",
+                  "        pm.expect(first).to.have.property(\"document_id\");",
+                  "        pm.expect(first).to.have.property(\"status\");",
+                  "        pm.expect(first).to.have.property(\"added_at\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get Document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}"
+              ]
+            },
+            "description": "Get details of a specific Library document including processing status."
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -614,31 +763,36 @@
                   "",
                   "pm.test(\"Document details are complete\", function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('document_id');",
-                  "    pm.expect(jsonData).to.have.property('title');",
-                  "    pm.expect(jsonData).to.have.property('status');",
-                  "    pm.expect(jsonData).to.have.property('page_count');",
-                  "    pm.expect(jsonData).to.have.property('chunk_count');",
+                  "    pm.expect(jsonData).to.have.property(\"document_id\");",
+                  "    pm.expect(jsonData).to.have.property(\"title\");",
+                  "    pm.expect(jsonData).to.have.property(\"status\");",
+                  "    pm.expect(jsonData).to.have.property(\"page_count\");",
+                  "    pm.expect(jsonData).to.have.property(\"chunk_count\");",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Poll Document Status",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{api_base}}/documents/{{document_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "{{document_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}"
+              ]
             },
-            "description": "Get details of a specific document including processing status."
+            "description": "Poll document status until it becomes completed or failed after notebook association."
           },
-          "response": []
-        },
-        {
-          "name": "Poll Document Status",
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -651,33 +805,47 @@
                   "var jsonData = pm.response.json();",
                   "console.log(\"Document status: \" + jsonData.status);",
                   "",
-                  "if (jsonData.status === 'completed') {",
-                  "    console.log(\"Document processing completed!\");",
-                  "    console.log(\"Chunks: \" + jsonData.chunk_count);",
-                  "} else if (jsonData.status === 'failed') {",
+                  "if (jsonData.status === \"completed\") {",
+                  "    console.log(\"Document processing completed. chunks=\" + jsonData.chunk_count);",
+                  "} else if (jsonData.status === \"failed\") {",
                   "    console.log(\"Document processing failed: \" + jsonData.error_message);",
+                  "} else if (jsonData.status === \"uploaded\" || jsonData.status === \"pending\" || jsonData.status === \"processing\") {",
+                  "    console.log(\"Document not completed yet. Run this request again.\");",
                   "} else {",
-                  "    console.log(\"Document still processing... Run this request again.\");",
+                  "    console.log(\"Unexpected status: \" + jsonData.status);",
                   "}"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Get Document Content",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{api_base}}/documents/{{document_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "{{document_id}}"]
+              "raw": "{{api_base}}/documents/{{document_id}}/content?format=markdown",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "content"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "markdown",
+                  "description": "markdown | text"
+                }
+              ]
             },
-            "description": "Poll document status until processing completes. Run repeatedly until status is 'completed' or 'failed'."
+            "description": "Fetch converted content after the document status becomes completed."
           },
-          "response": []
-        },
-        {
-          "name": "Get Document Content",
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -688,44 +856,122 @@
                   "});",
                   "",
                   "var jsonData = pm.response.json();",
-                  "",
                   "pm.test(\"Has content and metadata\", function () {",
-                  "    pm.expect(jsonData).to.have.property('content');",
-                  "    pm.expect(jsonData.content).to.not.be.empty;",
-                  "    pm.expect(jsonData).to.have.property('format');",
-                  "    pm.expect(jsonData).to.have.property('page_count');",
-                  "    pm.expect(jsonData).to.have.property('content_size');",
+                  "    pm.expect(jsonData).to.have.property(\"content\");",
+                  "    pm.expect(jsonData).to.have.property(\"format\");",
+                  "    pm.expect(jsonData).to.have.property(\"page_count\");",
+                  "    pm.expect(jsonData).to.have.property(\"content_size\");",
                   "});",
                   "",
                   "pm.test(\"Format matches request\", function () {",
-                  "    pm.expect(jsonData.format).to.eql('markdown');",
+                  "    pm.expect(jsonData.format).to.eql(\"markdown\");",
                   "});",
                   "",
-                  "// Save content for downstream checks",
-                  "pm.collectionVariables.set('document_content', jsonData.content);",
-                  "console.log('Saved document_content, length=' + jsonData.content.length);"
+                  "pm.collectionVariables.set(\"document_content\", jsonData.content || \"\");",
+                  "console.log(\"Saved document_content, length=\" + (jsonData.content || \"\").length);"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Download Original Document",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{api_base}}/documents/{{document_id}}/content?format=markdown",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "{{document_id}}", "content"],
-              "query": [
-                {"key": "format", "value": "markdown", "description": "markdown | text"}
+              "raw": "{{api_base}}/documents/{{document_id}}/download",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}",
+                "download"
               ]
             },
-            "description": "Fetch converted document content in markdown or plain text."
+            "description": "Download the original uploaded file."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has attachment header\", function () {",
+                  "    pm.response.to.have.header(\"Content-Disposition\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove Document From Notebook",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/notebooks/{{notebook_id}}/documents/{{document_id}}",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "documents",
+                "{{document_id}}"
+              ]
+            },
+            "description": "Remove notebook-document association without deleting the source Library document."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "console.log(\"Document removed from notebook successfully\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/documents/{{document_id}}?force=true",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "documents",
+                "{{document_id}}"
+              ],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "true",
+                  "description": "Force delete when referenced by notebooks"
+                }
+              ]
+            },
+            "description": "Delete Library document and clean vector/ES index data. force=true bypasses notebook reference check."
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
@@ -737,26 +983,13 @@
                   "",
                   "pm.test(\"Document deleted\", function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.message).to.eql('Document deleted');",
-                  "});",
-                  "",
-                  "console.log(\"Document deleted successfully\");"
+                  "    pm.expect(jsonData.message).to.eql(\"Document deleted\");",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{api_base}}/documents/{{document_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["documents", "{{document_id}}"]
-            },
-            "description": "Delete a document. This also removes chunks from pgvector and ES indexes."
-          },
-          "response": []
+          ]
         }
       ]
     },
@@ -800,16 +1033,31 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Test Session\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}/sessions",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}", "sessions"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "sessions"
+              ]
             },
             "description": "Create a new session in a notebook. The session_id is automatically saved."
           },
@@ -841,11 +1089,23 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}/sessions?limit=20&offset=0",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}", "sessions"],
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "sessions"
+              ],
               "query": [
-                {"key": "limit", "value": "20"},
-                {"key": "offset", "value": "0"}
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
               ]
             },
             "description": "List all sessions in a notebook."
@@ -879,8 +1139,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/sessions/{{session_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["sessions", "{{session_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "sessions",
+                "{{session_id}}"
+              ]
             },
             "description": "Get details of a specific session."
           },
@@ -906,8 +1171,15 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/notebooks/{{notebook_id}}/sessions/latest",
-              "host": ["{{api_base}}"],
-              "path": ["notebooks", "{{notebook_id}}", "sessions", "latest"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "notebooks",
+                "{{notebook_id}}",
+                "sessions",
+                "latest"
+              ]
             },
             "description": "Get the most recently created session in a notebook."
           },
@@ -935,8 +1207,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/sessions/{{session_id}}",
-              "host": ["{{api_base}}"],
-              "path": ["sessions", "{{session_id}}"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "sessions",
+                "{{session_id}}"
+              ]
             },
             "description": "Delete a session. This will cascade delete all messages and references."
           },
@@ -989,16 +1266,32 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"Hello! Can you help me with a question?\",\n  \"mode\": \"chat\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": null\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat"
+              ]
             },
             "description": "Send a chat message in non-streaming mode. Supports modes: chat, ask, explain, conclude."
           },
@@ -1040,16 +1333,32 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"What is differential diagnosis?\",\n  \"mode\": \"ask\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": null\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat"
+              ]
             },
             "description": "Ask mode (ReAct + hybrid RAG)."
           },
@@ -1081,16 +1390,32 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"请解释这段内容\",\n  \"mode\": \"explain\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": {\n    \"document_id\": \"{{document_id}}\",\n    \"selected_text\": \"机器学习是人工智能的一个子集，它使计算机能够从数据中学习而无需明确编程。\"\n  }\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat"
+              ]
             },
             "description": "Explain mode with selected_text + document_id (uses hybrid RAG)."
           },
@@ -1122,16 +1447,32 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"请总结这段内容的要点\",\n  \"mode\": \"conclude\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": {\n    \"document_id\": \"{{document_id}}\",\n    \"selected_text\": \"深度学习是机器学习的一个分支，使用多层神经网络从大量数据中自动学习特征并进行预测。\"\n  }\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat"
+              ]
             },
             "description": "Conclude mode with selected_text + document_id."
           },
@@ -1162,18 +1503,36 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Accept", "value": "text/event-stream"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"What is machine learning?\",\n  \"mode\": \"ask\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": null\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat/stream",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat", "stream"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat",
+                "stream"
+              ]
             },
             "description": "Send a chat message in streaming mode (Server-Sent Events). Response is delivered incrementally."
           },
@@ -1201,18 +1560,36 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Accept", "value": "text/event-stream"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"请解释这段内容\",\n  \"mode\": \"explain\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": {\n    \"document_id\": \"{{document_id}}\",\n    \"selected_text\": \"人工智能正在变革医疗，提升诊断效率。\"\n  }\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat/stream",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat", "stream"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat",
+                "stream"
+              ]
             },
             "description": "Explain mode streaming with selected_text + document_id."
           },
@@ -1240,18 +1617,36 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Accept", "value": "text/event-stream"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"请总结这段内容的要点\",\n  \"mode\": \"conclude\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": {\n    \"document_id\": \"{{document_id}}\",\n    \"selected_text\": \"人工智能在医疗影像中可以通过模式识别加速医生的诊断决策。\"\n  }\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/chat/notebooks/{{notebook_id}}/chat/stream",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "notebooks", "{{notebook_id}}", "chat", "stream"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "notebooks",
+                "{{notebook_id}}",
+                "chat",
+                "stream"
+              ]
             },
             "description": "Conclude mode streaming with selected_text + document_id."
           },
@@ -1277,8 +1672,15 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/chat/stream/{{message_id}}/cancel",
-              "host": ["{{api_base}}"],
-              "path": ["chat", "stream", "{{message_id}}", "cancel"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "chat",
+                "stream",
+                "{{message_id}}",
+                "cancel"
+              ]
             },
             "description": "Cancel an ongoing streaming response."
           },
@@ -1308,19 +1710,31 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"dry_run\": false\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/admin/reprocess-pending",
-              "host": ["{{api_base}}"],
-              "path": ["admin", "reprocess-pending"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "admin",
+                "reprocess-pending"
+              ]
             },
-            "description": "Trigger processing of all pending documents."
+            "description": "Trigger processing of all uploaded/failed/pending documents."
           },
           "response": []
         },
@@ -1346,17 +1760,31 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"force\": true\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{api_base}}/admin/documents/{{document_id}}/reindex",
-              "host": ["{{api_base}}"],
-              "path": ["admin", "documents", "{{document_id}}", "reindex"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "admin",
+                "documents",
+                "{{document_id}}",
+                "reindex"
+              ]
             },
             "description": "Rebuild indexes (pgvector + ES) for a single document."
           },
@@ -1386,8 +1814,13 @@
             "header": [],
             "url": {
               "raw": "{{api_base}}/admin/index-stats",
-              "host": ["{{api_base}}"],
-              "path": ["admin", "index-stats"]
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "admin",
+                "index-stats"
+              ]
             },
             "description": "View document counts by status and basic index stats."
           },
@@ -1397,13 +1830,50 @@
     }
   ],
   "variable": [
-    {"key": "base_url", "value": "http://localhost:8000", "type": "string"},
-    {"key": "api_prefix", "value": "/api/v1", "type": "string"},
-    {"key": "api_base", "value": "{{base_url}}{{api_prefix}}", "type": "string"},
-    {"key": "notebook_id", "value": "", "type": "string"},
-    {"key": "session_id", "value": "", "type": "string"},
-    {"key": "document_id", "value": "", "type": "string"},
-    {"key": "reference_id", "value": "", "type": "string"},
-    {"key": "message_id", "value": "", "type": "string"}
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "api_prefix",
+      "value": "/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "api_base",
+      "value": "{{base_url}}{{api_prefix}}",
+      "type": "string"
+    },
+    {
+      "key": "notebook_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reference_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "message_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "document_ids",
+      "value": "",
+      "type": "string"
+    }
   ]
 }

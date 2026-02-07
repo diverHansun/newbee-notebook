@@ -86,6 +86,10 @@ services:
       REDIS_HOST: redis
       POSTGRES_HOST: postgres
       ELASTICSEARCH_URL: http://elasticsearch:9200
+      # Library-first workflow storage root
+      DOCUMENTS_DIR: ${DOCUMENTS_DIR:-data/documents}
+      # Worker should process asynchronously by default
+      PROCESS_UPLOAD_SYNC: ${PROCESS_UPLOAD_SYNC:-false}
       # MinerU integration (PDF -> Markdown, CPU-friendly pipeline backend by default)
       MINERU_ENABLED: ${MINERU_ENABLED:-true}
       MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}

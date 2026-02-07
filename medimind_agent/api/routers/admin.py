@@ -45,8 +45,15 @@ async def reprocess_pending(
     dry_run: bool = False,
     document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
 ):
-    """Queue processing of all pending documents (library + notebook)."""
-    pending_count = await document_repo.count_all(status=DocumentStatus.PENDING)
+    """Queue processing of all uploaded/failed/pending documents."""
+    target_statuses = (
+        DocumentStatus.UPLOADED.value,
+        DocumentStatus.FAILED.value,
+        DocumentStatus.PENDING.value,
+    )
+    pending_count = 0
+    for status in (DocumentStatus.UPLOADED, DocumentStatus.FAILED, DocumentStatus.PENDING):
+        pending_count += await document_repo.count_all(status=status)
     # Collect ids if not too many
     pending_ids: list[str] = []
     if pending_count <= 200:
@@ -54,7 +61,7 @@ async def reprocess_pending(
         from medimind_agent.infrastructure.persistence.models import DocumentModel
         from sqlalchemy import select
         result = await document_repo._session.execute(
-            select(DocumentModel.id).where(DocumentModel.status == DocumentStatus.PENDING.value)
+            select(DocumentModel.id).where(DocumentModel.status.in_(target_statuses))
         )
         pending_ids = [str(row[0]) for row in result.all()]
 

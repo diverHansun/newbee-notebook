@@ -7,6 +7,7 @@ from medimind_agent.api.models.requests import (
     UpdateNotebookRequest,
     CreateSessionRequest,
     CreateReferenceRequest,
+    AddNotebookDocumentsRequest,
 )
 from medimind_agent.api.models.responses import (
     NotebookResponse,
@@ -15,6 +16,9 @@ from medimind_agent.api.models.responses import (
     SessionListResponse,
     LibraryResponse,
     DocumentResponse,
+    UploadDocumentsResponse,
+    NotebookDocumentsAddResponse,
+    NotebookDocumentListResponse,
     PaginationInfo,
     ErrorResponse,
 )
@@ -25,6 +29,7 @@ __all__ = [
     "UpdateNotebookRequest",
     "CreateSessionRequest",
     "CreateReferenceRequest",
+    "AddNotebookDocumentsRequest",
     # Responses
     "NotebookResponse",
     "NotebookListResponse",
@@ -32,6 +37,9 @@ __all__ = [
     "SessionListResponse",
     "LibraryResponse",
     "DocumentResponse",
+    "UploadDocumentsResponse",
+    "NotebookDocumentsAddResponse",
+    "NotebookDocumentListResponse",
     "PaginationInfo",
     "ErrorResponse",
 ]
