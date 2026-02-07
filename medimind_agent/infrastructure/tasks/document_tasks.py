@@ -162,7 +162,7 @@ async def _delete_document_nodes_async(document_id: str):
         )
         try:
             pg_index = await load_pgvector_index(embed_model, pg_config)
-            await pg_index.delete_ref_doc(document_id)
+            pg_index.delete_ref_doc(document_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete pgvector nodes failed for %s: %s", document_id, exc)
 
@@ -175,7 +175,7 @@ async def _delete_document_nodes_async(document_id: str):
         )
         try:
             es_index = await load_es_index(embed_model, es_config)
-            await es_index.delete_ref_doc(document_id)
+            es_index.delete_ref_doc(document_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
     except Exception as exc:  # noqa: BLE001

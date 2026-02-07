@@ -69,8 +69,10 @@ class MinerUConverter(Converter):
             # For multiple values with same key, httpx accepts list
             data["lang_list"] = lang_list
 
-        # Keep long read timeout for conversion, but fail fast if the service is unreachable.
-        timeout = httpx.Timeout(self._timeout, connect=min(5.0, float(self._timeout)))
+        # Fail fast if the service is unreachable (5s connect), but wait indefinitely
+        # for conversion (large scanned PDFs can take 60+ minutes on CPU).
+        read_timeout = None if self._timeout <= 0 else float(self._timeout)
+        timeout = httpx.Timeout(read_timeout, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             with path.open("rb") as f:
                 # MinerU FastAPI expects the multipart field name `files` (List[UploadFile]).

@@ -22,7 +22,7 @@ from medimind_agent.domain.repositories.reference_repository import (
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.domain.value_objects.document_type import DocumentType
 from medimind_agent.infrastructure.tasks.document_tasks import process_document_task
-from medimind_agent.infrastructure.storage.local_storage import save_upload_file
+from medimind_agent.infrastructure.storage.local_storage import save_upload_file, _decode_filename
 from fastapi import UploadFile
 from medimind_agent.core.rag.embeddings import build_embedding
 from medimind_agent.core.engine import load_pgvector_index, load_es_index
@@ -138,7 +138,7 @@ class DocumentService:
     ) -> Document:
         """Save uploaded file, register document, and enqueue processing."""
         file_path, size, ext = save_upload_file(upload, base_root)
-        title = upload.filename or "uploaded"
+        title = _decode_filename(upload.filename or "uploaded")
         content_type = DocumentType.from_extension(ext)
         if to_library:
             return await self.create_library_document(

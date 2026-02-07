@@ -3,8 +3,9 @@ document_processing:
   mineru_enabled: ${MINERU_ENABLED:true}
   # Base URL for MinerU API; override with MINERU_API_URL env if set
   mineru_api_url: ${MINERU_API_URL:http://mineru-api:8000}
-  # Timeout for MinerU API calls. Set higher (600s) to allow for first-time model initialization.
-  mineru_timeout_seconds: 600
+  # Timeout for MinerU API calls (seconds). 0 = no read timeout (wait indefinitely).
+  # Connect timeout (5s) is always applied to detect unreachable service quickly.
+  mineru_timeout_seconds: 0
   # If MinerU is unreachable, back off for this many seconds before retrying.
   mineru_unavailable_cooldown_seconds: 300
   # CPU-only environments: set MINERU_BACKEND=pipeline
