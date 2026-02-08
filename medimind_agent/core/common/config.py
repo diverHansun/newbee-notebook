@@ -436,7 +436,8 @@ def _resolve_env_var(value: str) -> str:
     import re
     
     # Pattern: ${VAR_NAME:default_value}
-    pattern = r'\$\{([^:]+):([^}]+)\}'
+    # Note: default value can be empty, e.g. ${MINERU_PIPELINE_ID:}
+    pattern = r'\$\{([^:}]+):([^}]*)\}'
     
     def replace_env(match):
         var_name = match.group(1)
@@ -567,12 +568,18 @@ def get_zhipu_tools_config() -> dict:
 def get_document_processing_config() -> dict:
     """Get document processing configuration."""
     cfg = load_yaml_config(CONFIG_DIR / "document_processing.yaml")
+
+    def _resolve_nested(value):
+        if isinstance(value, str):
+            return _resolve_env_var(value)
+        if isinstance(value, dict):
+            return {k: _resolve_nested(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_resolve_nested(v) for v in value]
+        return value
+
     if cfg and "document_processing" in cfg:
-        dp_cfg = cfg["document_processing"]
-        for key in list(dp_cfg.keys()):
-            value = dp_cfg.get(key)
-            if isinstance(value, str):
-                dp_cfg[key] = _resolve_env_var(value)
+        cfg["document_processing"] = _resolve_nested(cfg["document_processing"])
     return cfg
 
 

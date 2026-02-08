@@ -1,16 +1,26 @@
 document_processing:
-  # Enable MinerU PDF -> Markdown via HTTP API. Set to false to use PyPDF only.
+  # Global switch. Set to false to disable MinerU and only use fallback converters.
   mineru_enabled: ${MINERU_ENABLED:true}
-  # Base URL for MinerU API; override with MINERU_API_URL env if set
-  mineru_api_url: ${MINERU_API_URL:http://mineru-api:8000}
-  # Timeout for MinerU API calls (seconds). 0 = no read timeout (wait indefinitely).
-  # Connect timeout (5s) is always applied to detect unreachable service quickly.
-  mineru_timeout_seconds: 0
+
+  # Mode: cloud | local
+  mineru_mode: ${MINERU_MODE:cloud}
+
+  # MinerU cloud service settings (SDK-based).
+  mineru_cloud:
+    pipeline_id: ${MINERU_PIPELINE_ID:}
+    base_url: ${MINERU_CLOUD_BASE_URL:https://mineru.net/api/kie}
+    timeout_seconds: ${MINERU_CLOUD_TIMEOUT:300}
+    poll_interval: ${MINERU_CLOUD_POLL_INTERVAL:5}
+
+  # MinerU local docker API settings.
+  mineru_local:
+    api_url: ${MINERU_LOCAL_API_URL:http://mineru-api:8000}
+    backend: ${MINERU_BACKEND:pipeline}
+    lang_list: ${MINERU_LANG_LIST:ch,en}
+    timeout_seconds: ${MINERU_LOCAL_TIMEOUT:0}
+
   # If MinerU is unreachable, back off for this many seconds before retrying.
-  mineru_unavailable_cooldown_seconds: 300
-  # CPU-only environments: set MINERU_BACKEND=pipeline
-  mineru_backend: ${MINERU_BACKEND:hybrid-auto-engine}
-  # OCR language hint (pipeline/hybrid). Common values: ch, en, japan, korean, etc.
-  mineru_lang_list: ${MINERU_LANG_LIST:ch}
-  # Root directory for stored markdown; falls back to DOCUMENTS_DIR env or data/documents
+  unavailable_cooldown_seconds: 300
+
+  # Root directory for stored markdown; falls back to DOCUMENTS_DIR env or data/documents.
   documents_dir: ${DOCUMENTS_DIR:data/documents}

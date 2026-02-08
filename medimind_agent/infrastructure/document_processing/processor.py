@@ -1,10 +1,10 @@
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Optional, List
 
 import httpx
+import requests
 
 from medimind_agent.core.common.config import (
     get_documents_directory,
@@ -17,8 +17,11 @@ from medimind_agent.infrastructure.document_processing.converters.base import (
 from medimind_agent.infrastructure.document_processing.converters.markitdown_converter import (
     MarkItDownConverter,
 )
-from medimind_agent.infrastructure.document_processing.converters.mineru_converter import (
-    MinerUConverter,
+from medimind_agent.infrastructure.document_processing.converters.mineru_cloud_converter import (
+    MinerUCloudConverter,
+)
+from medimind_agent.infrastructure.document_processing.converters.mineru_local_converter import (
+    MinerULocalConverter,
 )
 from medimind_agent.infrastructure.document_processing.converters.pypdf_converter import (
     PyPdfConverter,
@@ -44,6 +47,24 @@ def _parse_bool(value: object, default: bool) -> bool:
     return default
 
 
+def _parse_int(value: object, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_float(value: object, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class DocumentProcessor:
     """Route to appropriate converter and persist markdown output."""
 
@@ -53,25 +74,73 @@ class DocumentProcessor:
 
         self.documents_dir = dp_cfg.get("documents_dir") or get_documents_directory()
         mineru_enabled = _parse_bool(dp_cfg.get("mineru_enabled"), True)
-        timeout = int(dp_cfg.get("mineru_timeout_seconds", 300))
-        mineru_unavailable_cooldown = float(dp_cfg.get("mineru_unavailable_cooldown_seconds", 300))
-        backend = dp_cfg.get("mineru_backend", "hybrid-auto-engine")
-        lang_list = dp_cfg.get("mineru_lang_list", "en,zh")
-        base_url = dp_cfg.get("mineru_api_url") or os.getenv("MINERU_API_URL")
+        mode = str(dp_cfg.get("mineru_mode", "cloud")).strip().lower()
+        mineru_unavailable_cooldown = _parse_float(
+            dp_cfg.get("unavailable_cooldown_seconds"),
+            300.0,
+        )
 
         # PDF converters: MinerU (with OCR) -> PyPdf (text PDFs only)
         # Other formats: MarkItDown
         converters: List[Converter] = []
         if mineru_enabled:
-            converters.append(
-                MinerUConverter(base_url=base_url, timeout_seconds=timeout, backend=backend, lang_list=lang_list)
-            )
+            if mode == "cloud":
+                cloud_cfg = dp_cfg.get("mineru_cloud", {}) or {}
+                pipeline_id = str(cloud_cfg.get("pipeline_id", "") or "").strip()
+                if pipeline_id:
+                    try:
+                        converters.append(
+                            MinerUCloudConverter(
+                                pipeline_id=pipeline_id,
+                                base_url=str(cloud_cfg.get("base_url", "https://mineru.net/api/kie")),
+                                timeout_seconds=_parse_int(cloud_cfg.get("timeout_seconds"), 300),
+                                poll_interval=_parse_int(cloud_cfg.get("poll_interval"), 5),
+                            )
+                        )
+                    except ValueError as exc:
+                        logger.warning(
+                            "Failed to initialize MinerU cloud converter: %s",
+                            exc,
+                        )
+                else:
+                    logger.warning(
+                        "MINERU_MODE=cloud but MINERU_PIPELINE_ID is empty. "
+                        "MinerU cloud converter disabled; fallback converters will be used."
+                    )
+            elif mode == "local":
+                local_cfg = dp_cfg.get("mineru_local", {}) or {}
+                converters.append(
+                    MinerULocalConverter(
+                        base_url=str(local_cfg.get("api_url", "http://mineru-api:8000")),
+                        timeout_seconds=_parse_int(local_cfg.get("timeout_seconds"), 0),
+                        backend=str(local_cfg.get("backend", "pipeline")),
+                        lang_list=str(local_cfg.get("lang_list", "ch,en")),
+                    )
+                )
+            else:
+                logger.warning(
+                    "Invalid MINERU_MODE=%s. Expected 'cloud' or 'local'. "
+                    "MinerU converter disabled; fallback converters will be used.",
+                    mode,
+                )
         converters.extend([PyPdfConverter(), MarkItDownConverter()])
         self._converters = converters
 
         # Circuit breaker: if MinerU is unreachable, avoid paying connect timeouts on every PDF.
         self._mineru_unavailable_until: float = 0.0
         self._mineru_unavailable_cooldown = mineru_unavailable_cooldown
+
+    @staticmethod
+    def _is_mineru_converter(converter: Converter) -> bool:
+        return isinstance(converter, (MinerUCloudConverter, MinerULocalConverter))
+
+    @staticmethod
+    def _should_trip_circuit_breaker(converter: Converter, error: Exception) -> bool:
+        if isinstance(converter, MinerUCloudConverter):
+            return isinstance(error, (requests.RequestException, TimeoutError))
+        if isinstance(converter, MinerULocalConverter):
+            return isinstance(error, httpx.RequestError)
+        return False
 
     def _get_converters_for_ext(self, ext: str) -> List[Converter]:
         """Get all converters that can handle the given extension."""
@@ -92,15 +161,23 @@ class DocumentProcessor:
 
         last_error: Optional[Exception] = None
         for converter in converters:
-            if isinstance(converter, MinerUConverter) and time.monotonic() < self._mineru_unavailable_until:
+            if self._is_mineru_converter(converter) and time.monotonic() < self._mineru_unavailable_until:
+                logger.info("MinerU converter is in cooldown window; skipping attempt for %s", file_path)
                 continue
             try:
                 return await converter.convert(file_path)
             except Exception as e:
                 converter_name = type(converter).__name__
 
-                # MinerU is an external HTTP service; if it's unreachable, back off for a while.
-                if isinstance(converter, MinerUConverter) and isinstance(e, httpx.RequestError):
+                if isinstance(converter, MinerUCloudConverter) and isinstance(e, ValueError):
+                    logger.warning(
+                        "MinerU cloud limit check failed for %s: %s. Falling back.",
+                        file_path,
+                        e,
+                    )
+
+                # MinerU is an external service; if unreachable, back off for a while.
+                if self._should_trip_circuit_breaker(converter, e):
                     self._mineru_unavailable_until = time.monotonic() + self._mineru_unavailable_cooldown
                     logger.warning(
                         "MinerU service appears unavailable (%s) for %s. "
@@ -112,10 +189,7 @@ class DocumentProcessor:
                     last_error = e
                     continue
 
-                logger.warning(
-                    f"{converter_name} failed for {file_path}: {e}. "
-                    f"Trying next converter..."
-                )
+                logger.warning("%s failed for %s: %s. Trying next converter...", converter_name, file_path, e)
                 last_error = e
                 continue
 

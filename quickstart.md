@@ -42,15 +42,41 @@ cp .env.example .env
 # 编辑 .env 文件，配置必需项：
 # - ZHIPU_API_KEY: 智谱AI API密钥
 # - POSTGRES_PASSWORD: 数据库密码
-# - 其他配置保持默认即可
+# - MINERU_MODE: cloud 或 local
+# - MINERU_PIPELINE_ID: cloud 模式必填（先留空，后续补）
 ```
+
+MinerU 推荐配置（cloud 模式）：
+
+```bash
+MINERU_ENABLED=true
+MINERU_MODE=cloud
+MINERU_PIPELINE_ID=
+MINERU_CLOUD_BASE_URL=https://mineru.net/api/kie
+MINERU_CLOUD_TIMEOUT=300
+MINERU_CLOUD_POLL_INTERVAL=5
+```
+
+本地模式（可选）：
+
+```bash
+MINERU_MODE=local
+MINERU_LOCAL_API_URL=http://mineru-api:8000
+MINERU_BACKEND=pipeline
+MINERU_LANG_LIST=ch,en
+MINERU_LOCAL_TIMEOUT=0
+```
+
+文件处理策略（当前）：
+- PDF：`MinerU (cloud/local) -> PyPdf fallback`
+- CSV / Word / TXT / MD / HTML 等：`MarkItDown -> Markdown`
 
 ## 🐳 启动后端服务（Docker）
 
-### CPU 模式（无需 GPU）
+### 默认模式（推荐：cloud，不启动 mineru-api）
 
 ```bash
-# 启动所有后端服务
+# 启动基础后端服务
 docker-compose up -d
 
 # 查看服务状态
@@ -60,27 +86,32 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-启动的服务包括：
+默认启动服务包括：
 - ✅ Redis（端口 6379）
 - ✅ PostgreSQL + pgvector（端口 5432）
 - ✅ Elasticsearch（端口 9200）
-- ✅ MinerU API CPU 版（端口 8001）
 - ✅ Celery Worker（异步任务处理）
 
-### GPU 模式（需要 NVIDIA GPU + nvidia-container-toolkit）
+### 本地 CPU 模式（启用 mineru-api）
 
 ```bash
-# 使用 GPU 配置启动
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+docker-compose --profile mineru-local up -d
+```
+
+### 本地 GPU 模式（需要 NVIDIA GPU + nvidia-container-toolkit）
+
+```bash
+# 使用 GPU 配置 + local profile 启动
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local up -d --build
 
 # 或使用便捷脚本（自动检测 GPU）
 .\scripts\up-mineru.ps1
 ```
 
-### 仅启动核心服务（不启动监控工具）
+### 仅启动核心服务（手动指定）
 
 ```bash
-docker-compose up -d redis postgres elasticsearch mineru-api celery-worker
+docker-compose up -d redis postgres elasticsearch celery-worker
 ```
 
 ## 🌐 启动 FastAPI 应用
@@ -103,11 +134,14 @@ python -m uvicorn medimind_agent.api.main:app --reload --port 8000
 # 查看所有容器状态
 docker-compose ps
 
-# 测试 MinerU API
-curl http://localhost:8001/docs
-
 # 测试 Elasticsearch
 curl http://localhost:9200
+```
+
+如果你使用的是本地 MinerU 模式，再额外验证：
+
+```bash
+curl http://localhost:8001/docs
 ```
 
 ### 2. 测试 FastAPI
@@ -119,6 +153,18 @@ curl http://localhost:8000/health
 # 查看 API 文档
 # 浏览器访问：http://localhost:8000/docs
 ```
+
+### 3. 推荐上传方式（避免 Windows `curl` 文件名乱码）
+
+```bash
+# 上传一个或多个文件（支持中文 Windows 路径）
+python scripts/upload_documents.py "D:\docs\中文病例.pdf"
+python scripts/upload_documents.py "D:\docs\中文病例.pdf" "D:\docs\检验结果.docx"
+```
+
+说明：
+- 脚本基于 `requests`，默认对 multipart 文件名做 UTF-8 编码处理。
+- 服务端会自动还原文件名，减少命令行编码导致的乱码问题。
 
 ## 🎯 常用命令
 
@@ -137,6 +183,10 @@ docker-compose logs -f celery-worker
 # 清理并重启（会删除数据！）
 docker-compose down -v && docker-compose up -d
 ```
+
+说明：
+- `mineru-api` 只有在 `--profile mineru-local` 启动后才会存在。
+- cloud 模式通常不需要 `restart mineru-api`。
 
 ### FastAPI 开发
 
@@ -190,7 +240,8 @@ python scripts/rebuild_es.py
 
 - ❓ **端口冲突**：修改 `docker-compose.yml` 中的端口映射
 - ❓ **依赖安装失败**：尝试 `uv sync --reinstall`
-- ❓ **Docker 服务启动慢**：首次启动需要下载镜像和模型，请耐心等待
+- ❓ **Docker 服务启动慢**：本地 MinerU 首次启动需要下载模型，请耐心等待
 - ❓ **GPU 不可用**：确保安装了 nvidia-container-toolkit，或使用 CPU 模式
+- ❓ **cloud 模式无法处理 PDF**：检查 `.env` 中 `MINERU_PIPELINE_ID` 是否已填写
 
 需要帮助？查看 `README.md` 或项目文档。

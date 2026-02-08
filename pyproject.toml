@@ -19,6 +19,7 @@ dependencies = [
     "llama-index-vector-stores-faiss==0.5.1",
     "llama-index-vector-stores-postgres>=0.7.2",
     "markitdown==0.1.4",
+    "mineru-kie-sdk==0.1.1",
     "numpy==2.2.6",
     "openpyxl==3.1.5",
     "pandas<2.3.0",

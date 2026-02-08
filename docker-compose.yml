@@ -90,19 +90,23 @@ services:
       DOCUMENTS_DIR: ${DOCUMENTS_DIR:-data/documents}
       # Worker should process asynchronously by default
       PROCESS_UPLOAD_SYNC: ${PROCESS_UPLOAD_SYNC:-false}
-      # MinerU integration (PDF -> Markdown, CPU-friendly pipeline backend by default)
+      # MinerU document-processing configuration
       MINERU_ENABLED: ${MINERU_ENABLED:-true}
+      MINERU_MODE: ${MINERU_MODE:-cloud}
+      MINERU_PIPELINE_ID: ${MINERU_PIPELINE_ID:-}
+      MINERU_CLOUD_BASE_URL: ${MINERU_CLOUD_BASE_URL:-https://mineru.net/api/kie}
+      MINERU_CLOUD_TIMEOUT: ${MINERU_CLOUD_TIMEOUT:-300}
+      MINERU_CLOUD_POLL_INTERVAL: ${MINERU_CLOUD_POLL_INTERVAL:-5}
+      MINERU_LOCAL_API_URL: ${MINERU_LOCAL_API_URL:-http://mineru-api:8000}
+      MINERU_LOCAL_TIMEOUT: ${MINERU_LOCAL_TIMEOUT:-0}
       MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}
-      MINERU_LANG_LIST: ${MINERU_LANG_LIST:-ch}
-      MINERU_API_URL: ${MINERU_API_URL:-http://mineru-api:8000}
+      MINERU_LANG_LIST: ${MINERU_LANG_LIST:-ch,en}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
       elasticsearch:
-        condition: service_healthy
-      mineru-api:
         condition: service_healthy
     networks:
       - medimind_network
@@ -177,6 +181,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
+    profiles:
+      - mineru-local
 
 volumes:
   postgres_data:

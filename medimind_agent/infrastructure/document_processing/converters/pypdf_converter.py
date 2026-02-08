@@ -1,7 +1,7 @@
 """PDF converter using pypdf for text extraction.
 
 This converter handles PDFs with embedded text layers.
-For scanned/image PDFs, use MinerUConverter (requires OCR capabilities).
+For scanned/image PDFs, use a MinerU converter (requires OCR capabilities).
 """
 
 import asyncio
@@ -17,7 +17,7 @@ class PyPdfConverter(Converter):
 
     Note: This converter can only extract text from PDFs that have
     embedded text layers. Scanned/image PDFs will return empty content.
-    For such PDFs, use MinerUConverter which has OCR capabilities.
+    For such PDFs, use MinerU which has OCR capabilities.
     """
 
     def can_handle(self, ext: str) -> bool:

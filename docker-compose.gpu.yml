@@ -1,7 +1,7 @@
 services:
   # GPU override for MinerU API service.
   # Use together with the base compose file:
-  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build mineru-api
+  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local up -d --build
   mineru-api:
     build:
       context: ./docker/mineru
@@ -25,8 +25,5 @@ services:
     ulimits:
       memlock: -1
       stack: 67108864
-
-  celery-worker:
-    environment:
-      DOCUMENTS_DIR: ${DOCUMENTS_DIR:-data/documents}
-      MINERU_BACKEND: hybrid-auto-engine
+    profiles:
+      - mineru-local
