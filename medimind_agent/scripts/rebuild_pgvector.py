@@ -7,9 +7,9 @@ This script:
 3. Builds new index with embeddings
 
 Usage:
-    python scripts/rebuild_pgvector.py
-    python scripts/rebuild_pgvector.py --documents-dir /path/to/docs
-    python scripts/rebuild_pgvector.py --clear-only
+    python -m medimind_agent.scripts.rebuild_pgvector
+    python -m medimind_agent.scripts.rebuild_pgvector --documents-dir /path/to/docs
+    python -m medimind_agent.scripts.rebuild_pgvector --clear-only
 """
 
 import sys

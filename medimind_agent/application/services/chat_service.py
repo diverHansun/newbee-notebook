@@ -24,6 +24,7 @@ from medimind_agent.domain.entities.message import Message
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.core.engine import SessionManager
 from medimind_agent.core.common.node_utils import extract_document_id
+from medimind_agent.exceptions import DocumentProcessingError
 
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,15 @@ class ChatService:
         await self._session_manager.start_session(session_id=session_id)
 
         # Notebook scope documents
-        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
-        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
+        await self._validate_mode_guard(
+            mode_enum=mode_enum,
+            allowed_doc_ids=allowed_doc_ids,
+            context=context,
+            notebook_id=session.notebook_id,
+            documents_by_status=docs_by_status,
+            blocking_document_ids=blocking_doc_ids,
+        )
 
         # Fetch context-based chunks (used for sources/references)
         context_chunks = await self._get_context_chunks(context) if context else []
@@ -209,8 +217,15 @@ class ChatService:
 
         mode_enum = ModeType(mode)
         await self._session_manager.start_session(session_id=session_id)
-        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
-        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
+        await self._validate_mode_guard(
+            mode_enum=mode_enum,
+            allowed_doc_ids=allowed_doc_ids,
+            context=context,
+            notebook_id=session.notebook_id,
+            documents_by_status=docs_by_status,
+            blocking_document_ids=blocking_doc_ids,
+        )
 
         message_id = session.message_count + 1
 
@@ -281,6 +296,11 @@ class ChatService:
         except asyncio.CancelledError:
             logger.info(f"Stream cancelled for session {session_id}")
             return
+        except DocumentProcessingError as exc:
+            payload = {"type": "error", "error_code": exc.error_code, "message": exc.message}
+            if exc.details:
+                payload["details"] = exc.details
+            yield payload
         except Exception as exc:
             logger.error(f"Stream error for session {session_id}: {exc}")
             yield {"type": "error", "error_code": "internal_error", "message": str(exc)}
@@ -295,17 +315,40 @@ class ChatService:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        allowed_doc_ids = await self._get_notebook_document_ids(session.notebook_id)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
-        await self._validate_mode_guard(mode_enum, allowed_doc_ids, context)
+        await self._validate_mode_guard(
+            mode_enum=mode_enum,
+            allowed_doc_ids=allowed_doc_ids,
+            context=context,
+            notebook_id=session.notebook_id,
+            documents_by_status=docs_by_status,
+            blocking_document_ids=blocking_doc_ids,
+        )
 
     async def _validate_mode_guard(
         self,
         mode_enum: ModeType,
         allowed_doc_ids: List[str],
         context: Optional[dict],
+        notebook_id: Optional[str] = None,
+        documents_by_status: Optional[Dict[str, int]] = None,
+        blocking_document_ids: Optional[List[str]] = None,
     ) -> None:
-        """Common guard for conclude/explain modes."""
+        """Common guard for retrieval-dependent modes."""
+        rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
+        if mode_enum in rag_modes and (blocking_document_ids or []):
+            raise DocumentProcessingError(
+                message="文档正在处理中，请稍后重试",
+                details={
+                    "mode": mode_enum.value,
+                    "notebook_id": notebook_id,
+                    "blocking_document_ids": blocking_document_ids or [],
+                    "documents_by_status": documents_by_status or {},
+                    "retryable": True,
+                },
+            )
+
         if mode_enum in (ModeType.CONCLUDE, ModeType.EXPLAIN):
             if not allowed_doc_ids and not (context and context.get("selected_text")):
                 raise ValueError(
@@ -317,20 +360,24 @@ class ChatService:
             if self._session_manager.vector_index is None:
                 raise RuntimeError("Vector index is not available")
 
-    async def _get_notebook_document_ids(self, notebook_id: str) -> List[str]:
-        """Collect completed referenced document IDs for scope filtering."""
+    async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str]]:
+        """Collect retrieval scope and processing status overview for notebook refs."""
+        zero_counts = {status.value: 0 for status in DocumentStatus}
         refs = await self._ref_repo.list_by_notebook(notebook_id)
         if not refs:
-            return []
+            return [], zero_counts, []
 
         docs = await self._document_repo.get_batch([ref.document_id for ref in refs])
-        return list(
-            {
-                doc.document_id
-                for doc in docs
-                if doc.status == DocumentStatus.COMPLETED
-            }
-        )
+        completed_doc_ids = list({doc.document_id for doc in docs if doc.status == DocumentStatus.COMPLETED})
+        counts = {status.value: 0 for status in DocumentStatus}
+        blocking_ids: List[str] = []
+        blocking_statuses = {DocumentStatus.UPLOADED, DocumentStatus.PENDING, DocumentStatus.PROCESSING}
+        for doc in docs:
+            counts[doc.status.value] = counts.get(doc.status.value, 0) + 1
+            if doc.status in blocking_statuses:
+                blocking_ids.append(doc.document_id)
+
+        return completed_doc_ids, counts, blocking_ids
 
     async def _get_context_chunks(self, context: dict) -> List[dict]:
         """Fetch chunk and neighbors by chunk_id for richer context.

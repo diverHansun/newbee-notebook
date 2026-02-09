@@ -223,6 +223,35 @@ class DocumentRepositoryImpl(DocumentRepository):
         )
         await self._session.flush()
 
+    async def claim_processing(
+        self,
+        document_id: str,
+        from_statuses: Optional[List[DocumentStatus]] = None,
+    ) -> bool:
+        allowed = from_statuses or [
+            DocumentStatus.UPLOADED,
+            DocumentStatus.PENDING,
+            DocumentStatus.FAILED,
+        ]
+        allowed_values = [status.value for status in allowed]
+        result = await self._session.execute(
+            update(DocumentModel)
+            .where(
+                DocumentModel.id == uuid.UUID(document_id),
+                DocumentModel.status.in_(allowed_values),
+            )
+            .values(
+                status=DocumentStatus.PROCESSING.value,
+                updated_at=datetime.now(),
+                error_message=None,
+            )
+        )
+        await self._session.flush()
+        return bool(result.rowcount and result.rowcount > 0)
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
     async def delete_by_notebook(self, notebook_id: str) -> int:
         result = await self._session.execute(
             delete(DocumentModel).where(

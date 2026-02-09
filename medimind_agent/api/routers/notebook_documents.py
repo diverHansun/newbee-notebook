@@ -71,7 +71,7 @@ async def list_notebook_documents(
     notebook_id: str = Path(..., description="Notebook ID"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None, description="uploaded|processing|completed|failed"),
+    status: Optional[str] = Query(None, description="uploaded|pending|processing|completed|failed"),
     service: NotebookDocumentService = Depends(get_notebook_document_service),
 ):
     """List documents associated with notebook."""

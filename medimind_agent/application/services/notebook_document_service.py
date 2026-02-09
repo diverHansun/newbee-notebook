@@ -93,9 +93,15 @@ class NotebookDocumentService:
 
             if document.status in {
                 DocumentStatus.UPLOADED,
-                DocumentStatus.PENDING,
                 DocumentStatus.FAILED,
             }:
+                await self._document_repo.update_status(
+                    document_id,
+                    status=DocumentStatus.PENDING,
+                    error_message=None,
+                )
+                # Commit pending before enqueue to avoid race with worker claim.
+                await self._document_repo.commit()
                 self._enqueue_processing(document_id)
 
             # Return latest status from DB if it changed.

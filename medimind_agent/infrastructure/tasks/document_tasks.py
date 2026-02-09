@@ -43,59 +43,75 @@ def process_pending_documents_task():
 
 async def _process_document_async(document_id: str):
     db = await get_database()
-    async with db.session() as session:
-        doc_repo = DocumentRepositoryImpl(session)
+    try:
+        async with db.session() as session:
+            doc_repo = DocumentRepositoryImpl(session)
 
-        document = await doc_repo.get(document_id)
-        if not document:
-            logger.error("Document %s not found", document_id)
-            return
+            document = await doc_repo.get(document_id)
+            if not document:
+                logger.error("Document %s not found", document_id)
+                return
 
-        if document.status == DocumentStatus.COMPLETED:
-            logger.info("Document %s already completed, skip processing", document_id)
-            return
-        if document.status == DocumentStatus.PROCESSING:
-            logger.info("Document %s is already processing, skip duplicate run", document_id)
-            return
+            if document.status == DocumentStatus.COMPLETED:
+                logger.info("Document %s already completed, skip processing", document_id)
+                return
+            if document.status == DocumentStatus.PROCESSING:
+                logger.info("Document %s is already processing, skip duplicate run", document_id)
+                return
 
-        try:
-            await doc_repo.update_status(document_id, DocumentStatus.PROCESSING, error_message="")
+            claimed = await doc_repo.claim_processing(document_id)
+            if not claimed:
+                current = await doc_repo.get(document_id)
+                current_status = current.status.value if current else "unknown"
+                logger.info(
+                    "Document %s was claimed by another worker or status changed to %s; skip run",
+                    document_id,
+                    current_status,
+                )
+                return
+            # Commit immediately so API polling can observe PROCESSING state.
+            await session.commit()
 
-            source_path = Path(document.file_path)
-            if not source_path.is_absolute():
-                source_path = Path(get_documents_directory()) / source_path
-            if not source_path.exists():
-                raise FileNotFoundError(f"Original file not found: {source_path}")
+            try:
+                source_path = Path(document.file_path)
+                if not source_path.is_absolute():
+                    source_path = Path(get_documents_directory()) / source_path
+                if not source_path.exists():
+                    raise FileNotFoundError(f"Original file not found: {source_path}")
 
-            conversion_result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
-                document.document_id, str(source_path)
-            )
+                conversion_result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+                    document.document_id, str(source_path)
+                )
 
-            content_abs_path = Path(get_documents_directory()) / rel_content_path
-            nodes = _load_markdown_nodes(content_abs_path, document)
-            chunk_count = len(nodes)
+                content_abs_path = Path(get_documents_directory()) / rel_content_path
+                nodes = _load_markdown_nodes(content_abs_path, document)
+                chunk_count = len(nodes)
 
-            # Index into pgvector and elasticsearch
-            await _index_nodes(nodes)
+                # Index into pgvector and elasticsearch
+                await _index_nodes(nodes)
 
-            await doc_repo.update_status(
-                document_id,
-                status=DocumentStatus.COMPLETED,
-                chunk_count=chunk_count,
-                page_count=conversion_result.page_count or 0,
-                content_path=rel_content_path,
-                content_size=content_size,
-                content_format="markdown",
-                error_message=None,
-            )
-        except Exception as exc:
-            logger.exception("Processing failed for %s", document_id)
-            await doc_repo.update_status(
-                document_id,
-                status=DocumentStatus.FAILED,
-                error_message=str(exc),
-            )
-    await close_database()
+                await doc_repo.update_status(
+                    document_id,
+                    status=DocumentStatus.COMPLETED,
+                    chunk_count=chunk_count,
+                    page_count=conversion_result.page_count or 0,
+                    content_path=rel_content_path,
+                    content_size=content_size,
+                    content_format="markdown",
+                    error_message=None,
+                )
+                await session.commit()
+            except Exception as exc:
+                logger.exception("Processing failed for %s", document_id)
+                await session.rollback()
+                await doc_repo.update_status(
+                    document_id,
+                    status=DocumentStatus.FAILED,
+                    error_message=str(exc),
+                )
+                await session.commit()
+    finally:
+        await close_database()
 
 
 async def _index_nodes(nodes):
@@ -190,13 +206,14 @@ async def _delete_document_nodes_async(document_id: str):
 async def _process_all_pending_async():
     """Helper to process all uploaded/failed/pending documents sequentially."""
     db = await get_database()
-    async with db.session() as session:
-        doc_repo = DocumentRepositoryImpl(session)
-        pending_docs = []
-        for status in (DocumentStatus.UPLOADED, DocumentStatus.FAILED, DocumentStatus.PENDING):
-            pending_docs.extend(
-                await doc_repo.list_by_library(limit=1000, offset=0, status=status)
-            )
+    try:
+        async with db.session() as session:
+            doc_repo = DocumentRepositoryImpl(session)
+            pending_docs = []
+            for status in (DocumentStatus.UPLOADED, DocumentStatus.FAILED, DocumentStatus.PENDING):
+                pending_docs.extend(
+                    await doc_repo.list_by_library(limit=1000, offset=0, status=status)
+                )
         # Unique by id and pending
         seen = set()
         for doc in pending_docs:
@@ -209,7 +226,8 @@ async def _process_all_pending_async():
                 await _process_document_async(doc.document_id)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Reprocess pending failed for %s: %s", doc.document_id, exc)
-    await close_database()
+    finally:
+        await close_database()
 
 
 def _load_markdown_nodes(content_path: Path, document: Document):

@@ -88,8 +88,9 @@ async def reindex_document(
     if not force and doc.status in {DocumentStatus.PENDING, DocumentStatus.PROCESSING}:
         raise HTTPException(status_code=400, detail=f"Document status={doc.status.value}, set force=true to reindex")
 
-    # Reset status to processing
-    await document_repo.update_status(document_id, DocumentStatus.PROCESSING, error_message=None)
+    # Reset status to pending so worker can claim it atomically.
+    await document_repo.update_status(document_id, DocumentStatus.PENDING, error_message=None)
+    await document_repo.commit()
 
     # Clear old index nodes best-effort
     delete_document_nodes_task.delay(document_id)

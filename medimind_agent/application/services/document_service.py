@@ -88,6 +88,12 @@ class DocumentService:
         logger.info("Created library document %s", created.document_id)
 
         if auto_process:
+            await self._document_repo.update_status(
+                created.document_id,
+                status=DocumentStatus.PENDING,
+                error_message=None,
+            )
+            await self._document_repo.commit()
             self.enqueue_processing(created.document_id)
         return created
 

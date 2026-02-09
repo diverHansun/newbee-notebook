@@ -7,9 +7,9 @@ This script:
 3. Builds new index with BM25 text search
 
 Usage:
-    python scripts/rebuild_es.py
-    python scripts/rebuild_es.py --documents-dir /path/to/docs
-    python scripts/rebuild_es.py --clear-only
+    python -m medimind_agent.scripts.rebuild_es
+    python -m medimind_agent.scripts.rebuild_es --documents-dir /path/to/docs
+    python -m medimind_agent.scripts.rebuild_es --clear-only
 """
 
 import sys

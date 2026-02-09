@@ -168,6 +168,29 @@ class DocumentRepository(ABC):
             error_message: Optional error message when failed.
         """
         pass
+
+    @abstractmethod
+    async def claim_processing(
+        self,
+        document_id: str,
+        from_statuses: Optional[List[DocumentStatus]] = None,
+    ) -> bool:
+        """
+        Atomically move a document to PROCESSING when current status is allowed.
+
+        Args:
+            document_id: Document unique identifier.
+            from_statuses: Allowed current statuses. Defaults to uploaded/pending/failed.
+
+        Returns:
+            True if transition succeeded, False if status did not match.
+        """
+        pass
+
+    @abstractmethod
+    async def commit(self) -> None:
+        """Commit current transaction for immediate visibility."""
+        pass
     
     @abstractmethod
     async def delete_by_notebook(self, notebook_id: str) -> int:

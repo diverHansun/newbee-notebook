@@ -6,6 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from medimind_agent.exceptions import MediMindException
+from medimind_agent.api.middleware.error_handler import (
+    medimind_exception_handler,
+    generic_exception_handler,
+)
 
 # Import routers
 from medimind_agent.api.routers import (
@@ -47,6 +52,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Register global exception handlers.
+    app.add_exception_handler(MediMindException, medimind_exception_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)
     
     # Include routers
     app.include_router(health.router, prefix="/api/v1", tags=["Health"])

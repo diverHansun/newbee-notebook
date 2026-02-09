@@ -194,6 +194,7 @@ python scripts/upload_documents.py "D:\docs\中文病例.pdf" "D:\docs\检验结
 说明：
 - 脚本基于 `requests`，默认对 multipart 文件名做 UTF-8 编码处理。
 - 服务端会自动还原文件名，减少命令行编码导致的乱码问题。
+- 脚本分层规范见 `scripts/README.md`。
 
 ## 🎯 常用命令
 
@@ -253,6 +254,10 @@ python -m medimind_agent.scripts.rebuild_pgvector
 # 构建 Elasticsearch 索引
 python -m medimind_agent.scripts.rebuild_es
 ```
+
+说明：
+- 后端脚本建议统一通过 `python -m medimind_agent.scripts.<name>` 调用。
+- `scripts/` 目录保留全局入口与用户直接运行脚本。
 
 ## 🎉 完成
 

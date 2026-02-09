@@ -7,9 +7,9 @@ from enum import Enum
 
 class DocumentStatus(str, Enum):
     """Document processing status."""
-    PENDING = "pending"       # Legacy state (kept for compatibility)
-    UPLOADED = "uploaded"     # File saved, waiting to be added to notebook
-    PROCESSING = "processing"  # Being processed
+    PENDING = "pending"        # Queued for worker execution
+    UPLOADED = "uploaded"      # File saved, waiting to be added to notebook
+    PROCESSING = "processing"  # Worker claimed and is processing
     COMPLETED = "completed"    # Processing completed successfully
     FAILED = "failed"          # Processing failed
     
