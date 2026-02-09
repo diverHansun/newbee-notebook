@@ -32,26 +32,17 @@ dist/
 *.egg-info/
 
 # Project data/cache
-# Allow documents directory and its structure
+# Ignore all runtime data by default.
+data/*
+# Keep base placeholders and docs.
+!data/.gitkeep
 !data/documents/
+data/documents/*
 !data/documents/README.md
-
-# Ignore contents of document subdirectories but keep .gitkeep files
-data/documents/csv/*
-!data/documents/csv/.gitkeep
-data/documents/excel/*
-!data/documents/excel/.gitkeep
-data/documents/pdf/*
-!data/documents/pdf/.gitkeep
-data/documents/md/*
-!data/documents/md/.gitkeep
-data/documents/txt/*
-!data/documents/txt/.gitkeep
-
-# Ignore other data directories (but not documents)
+!data/documents/.gitkeep
+# Keep indexes/raw ignored explicitly for readability.
 data/indexes/
 data/raw/
-!data/.gitkeep
 storage/
 logs/
 .cache/

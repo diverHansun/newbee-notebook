@@ -373,8 +373,8 @@ async def main_async(args):
         
         # Cleanup
         await session_manager.end_session()
-        if session_store:
-            await session_store.close()
+        if session_manager.session_store:
+            await session_manager.session_store.close()
     
     except ValueError as e:
         print(f"\nError: {e}")

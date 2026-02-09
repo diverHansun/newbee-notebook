@@ -5,6 +5,7 @@ Library-first document APIs.
 """
 
 from typing import Optional, List
+import mimetypes
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
 from fastapi.responses import FileResponse
@@ -151,6 +152,24 @@ async def download_document(
         raise HTTPException(status_code=404, detail=str(exc))
 
     return FileResponse(path=file_path, filename=filename, media_type="application/octet-stream")
+
+
+@router.get("/{document_id}/assets/{asset_path:path}")
+async def get_document_asset(
+    document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
+    asset_path: str = Path(..., description="Relative asset path under assets/"),
+    service: DocumentService = Depends(get_document_service),
+):
+    """Serve generated document assets (images/json) for frontend rendering."""
+    try:
+        file_path = await service.get_asset_path(document_id, asset_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    media_type, _ = mimetypes.guess_type(str(file_path))
+    return FileResponse(path=file_path, media_type=media_type or "application/octet-stream")
 
 
 @router.get("/library", response_model=DocumentListResponse)

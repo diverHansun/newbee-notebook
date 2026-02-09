@@ -63,12 +63,7 @@ async def rebuild_pgvector_index(
     # Step 1: Initialize embedding model for specified provider
     print("\n[1/4] Initializing embedding model...")
     if effective_provider == "biobert":
-        from medimind_agent.core.common.config import get_biobert_model_path
-        embed_model = build_biobert_embedding(
-            model_path=get_biobert_model_path(),
-            normalize=True,
-            device="cpu",
-        )
+        embed_model = build_biobert_embedding()
     elif effective_provider == "zhipu":
         embed_model = build_zhipu_embedding()
     else:

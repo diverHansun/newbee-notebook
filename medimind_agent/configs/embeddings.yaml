@@ -18,5 +18,5 @@ embeddings:
     model_path: models/biobert-v1.1 # Local model path or HuggingFace model ID
     normalize: true                 # L2 normalization (recommended for cosine similarity)
     dim: 768                        # BioBERT fixed dimension (stored in pgvector)
-    device: cpu                     # Device: 'cpu' or 'cuda'
-
+    device: cpu                     # Device: 'cpu', 'cuda', or 'auto'
+    embed_batch_size: 15            # Optional batch size for llama-index embedding calls

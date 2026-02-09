@@ -13,6 +13,7 @@ import os
 import asyncio
 import shutil
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from fastapi import UploadFile
 
@@ -256,6 +257,21 @@ class DocumentService:
             raise FileNotFoundError("Original file not found on disk")
 
         return file_path, file_path.name
+
+    async def get_asset_path(self, document_id: str, asset_path: str) -> Path:
+        """Get generated asset file path under data/documents/{document_id}/assets/."""
+        doc = await self._document_repo.get(document_id)
+        if not doc:
+            raise ValueError("Document not found")
+
+        normalized = PurePosixPath((asset_path or "").replace("\\", "/"))
+        if normalized.is_absolute() or ".." in normalized.parts:
+            raise ValueError("Invalid asset path")
+
+        candidate = Path(get_documents_directory()) / document_id / "assets" / Path(*normalized.parts)
+        if not candidate.exists() or not candidate.is_file():
+            raise FileNotFoundError("Asset file not found on disk")
+        return candidate
 
 
 def _markdown_to_text(markdown: str) -> str:

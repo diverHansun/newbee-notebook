@@ -2,7 +2,7 @@
 
 ## 📦 安装依赖
 
-### 1. 安装 uv（推荐的依赖管理工具）
+### 1. 安装 uv（推荐）
 
 **Windows (PowerShell):**
 ```powershell
@@ -33,6 +33,18 @@ uv sync
 source .venv/bin/activate
 ```
 
+### 3. 可选：本地 Embedding GPU 加速
+
+- 若你使用本地 embedding 模型且机器有独立 GPU，可按 PyTorch 官方指引安装与本机 CUDA 匹配的 `torch` 版本：
+  https://pytorch.org/get-started/locally/
+- 若主要使用云端 embedding API，则不需要本机 GPU。
+
+可用以下命令检查当前 `torch` 是否启用 CUDA：
+
+```bash
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
 ## ⚙️ 配置环境变量
 
 ```bash
@@ -40,10 +52,10 @@ source .venv/bin/activate
 cp .env.example .env
 
 # 编辑 .env 文件，配置必需项：
-# - ZHIPU_API_KEY: 智谱AI API密钥
+# - ZHIPU_API_KEY: 智谱 AI API 密钥
 # - POSTGRES_PASSWORD: 数据库密码
 # - MINERU_MODE: cloud 或 local
-# - MINERU_PIPELINE_ID: cloud 模式必填（先留空，后续补）
+# - MINERU_API_KEY: cloud 模式必填
 ```
 
 MinerU 推荐配置（cloud 模式）：
@@ -51,13 +63,14 @@ MinerU 推荐配置（cloud 模式）：
 ```bash
 MINERU_ENABLED=true
 MINERU_MODE=cloud
-MINERU_PIPELINE_ID=
-MINERU_CLOUD_BASE_URL=https://mineru.net/api/kie
-MINERU_CLOUD_TIMEOUT=300
-MINERU_CLOUD_POLL_INTERVAL=5
+MINERU_API_KEY=
+MINERU_V4_API_BASE=https://mineru.net
+MINERU_V4_TIMEOUT=60
+MINERU_V4_POLL_INTERVAL=5
+MINERU_V4_MAX_WAIT_SECONDS=1800
 ```
 
-本地模式（可选）：
+本地 CPU 模式（可选）：
 
 ```bash
 MINERU_MODE=local
@@ -67,9 +80,20 @@ MINERU_LANG_LIST=ch,en
 MINERU_LOCAL_TIMEOUT=0
 ```
 
+本地 GPU 模式（可选）：
+
+```bash
+MINERU_MODE=local
+MINERU_LOCAL_API_URL=http://mineru-api:8000
+MINERU_BACKEND=hybrid-auto-engine
+MINERU_LANG_LIST=ch,en
+MINERU_LOCAL_TIMEOUT=0
+```
+
 文件处理策略（当前）：
 - PDF：`MinerU (cloud/local) -> PyPdf fallback`
 - CSV / Word / TXT / MD / HTML 等：`MarkItDown -> Markdown`
+- 存储目录：`data/documents/{document_id}/...`（不再使用 `data/documents/pdf|txt|word...` 分类目录）
 
 ## 🐳 启动后端服务（Docker）
 
@@ -95,7 +119,7 @@ docker-compose logs -f
 ### 本地 CPU 模式（启用 mineru-api）
 
 ```bash
-docker-compose --profile mineru-local up -d
+docker-compose --profile mineru-local up -d --build
 ```
 
 ### 本地 GPU 模式（需要 NVIDIA GPU + nvidia-container-toolkit）
@@ -107,6 +131,11 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-
 # 或使用便捷脚本（自动检测 GPU）
 .\scripts\up-mineru.ps1
 ```
+
+说明：
+- 当使用 `docker-compose.gpu.yml` 时，worker 默认使用 `MINERU_BACKEND=hybrid-auto-engine`（可在 `.env` 覆盖）。
+- 建议同时配置 `MINERU_MODE=local`，确保 PDF 走本地 MinerU 服务。
+- 如果 `.env` 中已明确写了 `MINERU_MODE=cloud`，请改回 `local` 再启动本地模式。
 
 ### 仅启动核心服务（手动指定）
 
@@ -219,15 +248,13 @@ docker-compose --profile debug up -d kibana
 
 ```bash
 # 构建 pgvector 索引
-python scripts/rebuild_pgvector.py
+python -m medimind_agent.scripts.rebuild_pgvector
 
 # 构建 Elasticsearch 索引
-python scripts/rebuild_es.py
+python -m medimind_agent.scripts.rebuild_es
 ```
 
-将文档放在 `data/documents/` 目录下（按类型分类：pdf/、md/、txt/ 等）。
-
-## 🎉 完成！
+## 🎉 完成
 
 现在你可以：
 1. 访问 API 文档：http://localhost:8000/docs
@@ -242,6 +269,7 @@ python scripts/rebuild_es.py
 - ❓ **依赖安装失败**：尝试 `uv sync --reinstall`
 - ❓ **Docker 服务启动慢**：本地 MinerU 首次启动需要下载模型，请耐心等待
 - ❓ **GPU 不可用**：确保安装了 nvidia-container-toolkit，或使用 CPU 模式
-- ❓ **cloud 模式无法处理 PDF**：检查 `.env` 中 `MINERU_PIPELINE_ID` 是否已填写
+- ❓ **本地模式仍走云端**：检查 `.env` 中 `MINERU_MODE` 是否为 `local`
+- ❓ **cloud 模式无法处理 PDF**：检查 `.env` 中 `MINERU_API_KEY` 是否已填写
 
 需要帮助？查看 `README.md` 或项目文档。

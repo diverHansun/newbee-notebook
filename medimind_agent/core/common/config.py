@@ -436,7 +436,7 @@ def _resolve_env_var(value: str) -> str:
     import re
     
     # Pattern: ${VAR_NAME:default_value}
-    # Note: default value can be empty, e.g. ${MINERU_PIPELINE_ID:}
+    # Note: default value can be empty, e.g. ${MINERU_API_KEY:}
     pattern = r'\$\{([^:}]+):([^}]*)\}'
     
     def replace_env(match):

@@ -5,12 +5,13 @@ document_processing:
   # Mode: cloud | local
   mineru_mode: ${MINERU_MODE:cloud}
 
-  # MinerU cloud service settings (SDK-based).
+  # MinerU cloud service settings (v4 Smart Parsing API).
   mineru_cloud:
-    pipeline_id: ${MINERU_PIPELINE_ID:}
-    base_url: ${MINERU_CLOUD_BASE_URL:https://mineru.net/api/kie}
-    timeout_seconds: ${MINERU_CLOUD_TIMEOUT:300}
-    poll_interval: ${MINERU_CLOUD_POLL_INTERVAL:5}
+    api_key: ${MINERU_API_KEY:}
+    api_base: ${MINERU_V4_API_BASE:https://mineru.net}
+    timeout_seconds: ${MINERU_V4_TIMEOUT:60}
+    poll_interval: ${MINERU_V4_POLL_INTERVAL:5}
+    max_wait_seconds: ${MINERU_V4_MAX_WAIT_SECONDS:1800}
 
   # MinerU local docker API settings.
   mineru_local:

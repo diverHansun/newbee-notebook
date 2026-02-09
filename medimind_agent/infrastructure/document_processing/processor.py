@@ -86,15 +86,16 @@ class DocumentProcessor:
         if mineru_enabled:
             if mode == "cloud":
                 cloud_cfg = dp_cfg.get("mineru_cloud", {}) or {}
-                pipeline_id = str(cloud_cfg.get("pipeline_id", "") or "").strip()
-                if pipeline_id:
+                api_key = str(cloud_cfg.get("api_key", "") or "").strip()
+                if api_key:
                     try:
                         converters.append(
                             MinerUCloudConverter(
-                                pipeline_id=pipeline_id,
-                                base_url=str(cloud_cfg.get("base_url", "https://mineru.net/api/kie")),
-                                timeout_seconds=_parse_int(cloud_cfg.get("timeout_seconds"), 300),
+                                api_key=api_key,
+                                api_base=str(cloud_cfg.get("api_base", "https://mineru.net")),
+                                timeout_seconds=_parse_int(cloud_cfg.get("timeout_seconds"), 60),
                                 poll_interval=_parse_int(cloud_cfg.get("poll_interval"), 5),
+                                max_wait_seconds=_parse_int(cloud_cfg.get("max_wait_seconds"), 1800),
                             )
                         )
                     except ValueError as exc:
@@ -104,7 +105,7 @@ class DocumentProcessor:
                         )
                 else:
                     logger.warning(
-                        "MINERU_MODE=cloud but MINERU_PIPELINE_ID is empty. "
+                        "MINERU_MODE=cloud but MINERU_API_KEY is empty. "
                         "MinerU cloud converter disabled; fallback converters will be used."
                     )
             elif mode == "local":
@@ -171,7 +172,7 @@ class DocumentProcessor:
 
                 if isinstance(converter, MinerUCloudConverter) and isinstance(e, ValueError):
                     logger.warning(
-                        "MinerU cloud limit check failed for %s: %s. Falling back.",
+                        "MinerU cloud request configuration is invalid for %s: %s. Falling back.",
                         file_path,
                         e,
                     )
@@ -212,7 +213,8 @@ class DocumentProcessor:
         content_path, content_size = save_markdown(
             document_id=document_id,
             markdown=result.markdown,
-            images=result.images,
+            image_assets=result.image_assets,
+            metadata_assets=result.metadata_assets,
             base_root=self.documents_dir,
         )
         return result, content_path, content_size
