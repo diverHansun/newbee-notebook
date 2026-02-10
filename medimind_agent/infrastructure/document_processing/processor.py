@@ -23,9 +23,6 @@ from medimind_agent.infrastructure.document_processing.converters.mineru_cloud_c
 from medimind_agent.infrastructure.document_processing.converters.mineru_local_converter import (
     MinerULocalConverter,
 )
-from medimind_agent.infrastructure.document_processing.converters.pypdf_converter import (
-    PyPdfConverter,
-)
 from medimind_agent.infrastructure.document_processing.store import save_markdown
 
 logger = logging.getLogger(__name__)
@@ -75,12 +72,13 @@ class DocumentProcessor:
         self.documents_dir = dp_cfg.get("documents_dir") or get_documents_directory()
         mineru_enabled = _parse_bool(dp_cfg.get("mineru_enabled"), True)
         mode = str(dp_cfg.get("mineru_mode", "cloud")).strip().lower()
+        mineru_fail_threshold = _parse_int(dp_cfg.get("fail_threshold"), 5)
         mineru_unavailable_cooldown = _parse_float(
-            dp_cfg.get("unavailable_cooldown_seconds"),
-            300.0,
+            dp_cfg.get("cooldown_seconds"),
+            _parse_float(dp_cfg.get("unavailable_cooldown_seconds"), 120.0),
         )
 
-        # PDF converters: MinerU (with OCR) -> PyPdf (text PDFs only)
+        # PDF converters: MinerU (OCR preferred) -> MarkItDown(PDF fallback)
         # Other formats: MarkItDown
         converters: List[Converter] = []
         if mineru_enabled:
@@ -124,12 +122,14 @@ class DocumentProcessor:
                     "MinerU converter disabled; fallback converters will be used.",
                     mode,
                 )
-        converters.extend([PyPdfConverter(), MarkItDownConverter()])
+        converters.append(MarkItDownConverter())
         self._converters = converters
 
         # Circuit breaker: if MinerU is unreachable, avoid paying connect timeouts on every PDF.
         self._mineru_unavailable_until: float = 0.0
-        self._mineru_unavailable_cooldown = mineru_unavailable_cooldown
+        self._mineru_unavailable_cooldown = max(1.0, mineru_unavailable_cooldown)
+        self._mineru_fail_threshold = max(1, mineru_fail_threshold)
+        self._mineru_consecutive_failures = 0
 
     @staticmethod
     def _is_mineru_converter(converter: Converter) -> bool:
@@ -143,6 +143,36 @@ class DocumentProcessor:
             return isinstance(error, httpx.RequestError)
         return False
 
+    def _register_mineru_failure(self, file_path: str, error: Exception) -> None:
+        self._mineru_consecutive_failures += 1
+        if self._mineru_consecutive_failures >= self._mineru_fail_threshold:
+            self._mineru_unavailable_until = time.monotonic() + self._mineru_unavailable_cooldown
+            logger.warning(
+                "MinerU marked unavailable after %s consecutive failures for %s. "
+                "Entering cooldown for %.0fs. last_error=%s",
+                self._mineru_consecutive_failures,
+                file_path,
+                self._mineru_unavailable_cooldown,
+                error,
+            )
+            self._mineru_consecutive_failures = 0
+        else:
+            logger.warning(
+                "MinerU failure %s/%s for %s: %s",
+                self._mineru_consecutive_failures,
+                self._mineru_fail_threshold,
+                file_path,
+                error,
+            )
+
+    def _register_mineru_success(self) -> None:
+        if self._mineru_consecutive_failures:
+            logger.info(
+                "MinerU recovered after %s consecutive failures; resetting counter",
+                self._mineru_consecutive_failures,
+            )
+        self._mineru_consecutive_failures = 0
+
     def _get_converters_for_ext(self, ext: str) -> List[Converter]:
         """Get all converters that can handle the given extension."""
         return [c for c in self._converters if c.can_handle(ext)]
@@ -151,7 +181,7 @@ class DocumentProcessor:
         """Convert file with fallback support.
 
         For PDF files, tries MinerU first (with OCR support), then falls back
-        to PyPdf for text-based PDFs if MinerU is unavailable.
+        to MarkItDown if MinerU is unavailable.
         For other formats, uses MarkItDown.
         """
         ext = Path(file_path).suffix.lower()
@@ -166,7 +196,10 @@ class DocumentProcessor:
                 logger.info("MinerU converter is in cooldown window; skipping attempt for %s", file_path)
                 continue
             try:
-                return await converter.convert(file_path)
+                result = await converter.convert(file_path)
+                if self._is_mineru_converter(converter):
+                    self._register_mineru_success()
+                return result
             except Exception as e:
                 converter_name = type(converter).__name__
 
@@ -179,14 +212,7 @@ class DocumentProcessor:
 
                 # MinerU is an external service; if unreachable, back off for a while.
                 if self._should_trip_circuit_breaker(converter, e):
-                    self._mineru_unavailable_until = time.monotonic() + self._mineru_unavailable_cooldown
-                    logger.warning(
-                        "MinerU service appears unavailable (%s) for %s. "
-                        "Disabling MinerU attempts for %.0fs and falling back.",
-                        str(e),
-                        file_path,
-                        self._mineru_unavailable_cooldown,
-                    )
+                    self._register_mineru_failure(file_path=file_path, error=e)
                     last_error = e
                     continue
 

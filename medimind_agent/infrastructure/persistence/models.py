@@ -117,6 +117,9 @@ class DocumentModel(Base):
     content_format: Mapped[str] = mapped_column(String(50), default="markdown")
     content_size: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    processing_stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    stage_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    processing_meta: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 

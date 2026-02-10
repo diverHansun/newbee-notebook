@@ -3,7 +3,8 @@ MediMind Agent - Document Repository Interface
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional, List, Any
 from medimind_agent.domain.entities.document import Document
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 
@@ -153,6 +154,9 @@ class DocumentRepository(ABC):
         content_size: Optional[int] = None,
         content_format: Optional[str] = None,
         error_message: Optional[str] = None,
+        processing_stage: Optional[str] = None,
+        stage_updated_at: Optional[datetime] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Update Document processing status.
@@ -166,6 +170,9 @@ class DocumentRepository(ABC):
             content_size: Optional converted content size in bytes.
             content_format: Optional converted content format label.
             error_message: Optional error message when failed.
+            processing_stage: Optional processing sub-stage.
+            stage_updated_at: Optional processing stage update time.
+            processing_meta: Optional processing stage metadata.
         """
         pass
 
@@ -174,6 +181,8 @@ class DocumentRepository(ABC):
         self,
         document_id: str,
         from_statuses: Optional[List[DocumentStatus]] = None,
+        processing_stage: Optional[str] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
     ) -> bool:
         """
         Atomically move a document to PROCESSING when current status is allowed.
@@ -181,6 +190,8 @@ class DocumentRepository(ABC):
         Args:
             document_id: Document unique identifier.
             from_statuses: Allowed current statuses. Defaults to uploaded/pending/failed.
+            processing_stage: Optional first stage after claiming.
+            processing_meta: Optional metadata for the first stage.
 
         Returns:
             True if transition succeeded, False if status did not match.

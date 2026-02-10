@@ -59,7 +59,11 @@ async def _process_document_async(document_id: str):
                 logger.info("Document %s is already processing, skip duplicate run", document_id)
                 return
 
-            claimed = await doc_repo.claim_processing(document_id)
+            claimed = await doc_repo.claim_processing(
+                document_id,
+                processing_stage="converting",
+                processing_meta={"stage": "converting"},
+            )
             if not claimed:
                 current = await doc_repo.get(document_id)
                 current_status = current.status.value if current else "unknown"
@@ -72,6 +76,20 @@ async def _process_document_async(document_id: str):
             # Commit immediately so API polling can observe PROCESSING state.
             await session.commit()
 
+            current_stage = "converting"
+            indexed_anything = False
+
+            async def _set_stage(stage: str, meta: dict | None = None) -> None:
+                nonlocal current_stage
+                current_stage = stage
+                await doc_repo.update_status(
+                    document_id=document_id,
+                    status=DocumentStatus.PROCESSING,
+                    processing_stage=stage,
+                    processing_meta=meta,
+                )
+                await session.commit()
+
             try:
                 source_path = Path(document.file_path)
                 if not source_path.is_absolute():
@@ -83,12 +101,20 @@ async def _process_document_async(document_id: str):
                     document.document_id, str(source_path)
                 )
 
+                await _set_stage("splitting")
                 content_abs_path = Path(get_documents_directory()) / rel_content_path
                 nodes = _load_markdown_nodes(content_abs_path, document)
                 chunk_count = len(nodes)
 
-                # Index into pgvector and elasticsearch
-                await _index_nodes(nodes)
+                await _set_stage("embedding", {"chunk_count": chunk_count})
+                await _set_stage("indexing_pg", {"chunk_count": chunk_count})
+                await _index_pg_nodes(nodes)
+                indexed_anything = True
+
+                await _set_stage("indexing_es", {"chunk_count": chunk_count})
+                await _index_es_nodes(nodes)
+
+                await _set_stage("finalizing", {"chunk_count": chunk_count})
 
                 await doc_repo.update_status(
                     document_id,
@@ -99,35 +125,48 @@ async def _process_document_async(document_id: str):
                     content_size=content_size,
                     content_format="markdown",
                     error_message=None,
+                    processing_stage="completed",
+                    processing_meta={"chunk_count": chunk_count},
                 )
                 await session.commit()
             except Exception as exc:
                 logger.exception("Processing failed for %s", document_id)
                 await session.rollback()
+                if indexed_anything:
+                    try:
+                        await _delete_document_nodes_async(document_id)
+                    except Exception as cleanup_exc:  # noqa: BLE001
+                        logger.warning(
+                            "Compensation cleanup failed for %s at stage %s: %s",
+                            document_id,
+                            current_stage,
+                            cleanup_exc,
+                        )
                 await doc_repo.update_status(
                     document_id,
                     status=DocumentStatus.FAILED,
                     error_message=str(exc),
+                    processing_stage=current_stage,
+                    processing_meta={"failed_stage": current_stage},
                 )
                 await session.commit()
     finally:
         await close_database()
 
 
-async def _index_nodes(nodes):
-    """Index nodes into pgvector and Elasticsearch.
-
-    Note: indices are re-initialized per call to avoid event-loop coupling
-    between tasks (aiohttp clients are bound to the loop that created them).
-    """
-
+def _get_embed_model():
     global _EMBED_MODEL
     if _EMBED_MODEL is None:
         _EMBED_MODEL = build_embedding()
-    embed_model = _EMBED_MODEL
+    return _EMBED_MODEL
+
+
+async def _index_pg_nodes(nodes):
+    """Index nodes into pgvector."""
+
+    embed_model = _get_embed_model()
     storage_cfg = get_storage_config()
 
-    # pgvector config
     pg_cfg = storage_cfg.get("postgresql", {})
     provider = get_embedding_provider()
     pgvector_provider_cfg = get_pgvector_config_for_provider(provider)
@@ -143,7 +182,13 @@ async def _index_nodes(nodes):
     pg_index = await load_pgvector_index(embed_model, pg_config)
     pg_index.insert_nodes(nodes)  # sync method
 
-    # elasticsearch config
+
+async def _index_es_nodes(nodes):
+    """Index nodes into Elasticsearch."""
+
+    embed_model = _get_embed_model()
+    storage_cfg = get_storage_config()
+
     es_cfg = storage_cfg.get("elasticsearch", {})
     es_config = ElasticsearchConfig(
         url=es_cfg.get("url", "http://localhost:9200"),

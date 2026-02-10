@@ -139,11 +139,19 @@ class TestGetModeHelp:
 
 class TestSessionManager:
     """Test SessionManager functionality."""
+
+    @staticmethod
+    def _build_manager(mock_llm: MagicMock) -> SessionManager:
+        return SessionManager(
+            llm=mock_llm,
+            session_repo=AsyncMock(),
+            message_repo=AsyncMock(),
+        )
     
     def test_initialization(self):
         """Test SessionManager initialization."""
         mock_llm = MagicMock()
-        manager = SessionManager(llm=mock_llm)
+        manager = self._build_manager(mock_llm)
         
         assert manager.current_mode == ModeType.CHAT
         assert manager.session_id is None
@@ -152,7 +160,7 @@ class TestSessionManager:
     def test_switch_mode(self):
         """Test mode switching."""
         mock_llm = MagicMock()
-        manager = SessionManager(llm=mock_llm)
+        manager = self._build_manager(mock_llm)
         
         manager.switch_mode(ModeType.ASK)
         assert manager.current_mode == ModeType.ASK
@@ -163,7 +171,7 @@ class TestSessionManager:
     def test_get_status(self):
         """Test status retrieval."""
         mock_llm = MagicMock()
-        manager = SessionManager(llm=mock_llm)
+        manager = self._build_manager(mock_llm)
         
         status = manager.get_status()
         
@@ -174,6 +182,6 @@ class TestSessionManager:
         assert "memory_messages" in status
         
         assert status["current_mode"] == "chat"
-        assert status["has_persistence"] is False
+        assert status["has_persistence"] is True
 
 

@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS documents (
     content_format VARCHAR(50) DEFAULT 'markdown',
     content_size INTEGER DEFAULT 0,
     error_message TEXT,
+    processing_stage VARCHAR(64),
+    stage_updated_at TIMESTAMP,
+    processing_meta TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -87,6 +90,12 @@ CREATE INDEX IF NOT EXISTS idx_documents_library_id ON documents(library_id);
 CREATE INDEX IF NOT EXISTS idx_documents_notebook_id ON documents(notebook_id);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
+CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at ON documents(stage_updated_at);
+
+-- Backfill additive columns for existing volumes where table already exists
+ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64);
+ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP;
+ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_meta TEXT;
 
 -- Notebook document references (soft links to library docs)
 CREATE TABLE IF NOT EXISTS notebook_document_refs (

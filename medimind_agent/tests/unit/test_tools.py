@@ -12,7 +12,11 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from medimind_agent.core.tools.tavily_tools import TavilySearchTool, build_tavily_tool
-from medimind_agent.core.tools.es_search_tool import ElasticsearchSearchTool, build_es_search_tool
+from medimind_agent.core.tools.es_search_tool import (
+    ElasticsearchSearchTool,
+    build_es_search_tool,
+    _es_search,
+)
 
 
 class TestTavilySearchTool:
@@ -85,6 +89,79 @@ class TestElasticsearchSearchTool:
             max_results=3,
         )
         assert function_tool.metadata.name == "knowledge_base_search"
+
+    def test_es_search_scopes_results_to_allowed_documents(self, monkeypatch):
+        """Tool should enforce notebook scope at query and result layers."""
+        captured = {}
+
+        class _FakeIndices:
+            @staticmethod
+            def exists(index):
+                return True
+
+        class _FakeElasticsearch:
+            def __init__(self, _hosts):
+                self.indices = _FakeIndices()
+
+            def search(self, index, body):
+                captured["index"] = index
+                captured["body"] = body
+                return {
+                    "hits": {
+                        "hits": [
+                            {
+                                "_score": 1.0,
+                                "_source": {
+                                    "content": "doc 1",
+                                    "metadata": {"title": "Doc1", "document_id": "doc-1"},
+                                },
+                            },
+                            {
+                                "_score": 0.9,
+                                "_source": {
+                                    "content": "doc 2",
+                                    "metadata": {"title": "Doc2", "document_id": "doc-2"},
+                                },
+                            },
+                        ]
+                    }
+                }
+
+        monkeypatch.setattr(
+            "medimind_agent.core.tools.es_search_tool.Elasticsearch",
+            _FakeElasticsearch,
+        )
+
+        result = _es_search(
+            query="test",
+            index_name="medimind_docs",
+            max_results=5,
+            es_url="http://localhost:9200",
+            allowed_doc_ids=["doc-1"],
+        )
+
+        assert "Doc1" in result
+        assert "Doc2" not in result
+        filters = captured["body"]["query"]["bool"]["filter"]
+        assert filters and "should" in filters[0]["bool"]
+
+    def test_es_search_returns_fast_when_scope_is_empty(self, monkeypatch):
+        """Empty notebook scope should not hit ES."""
+
+        class _FailElasticsearch:
+            def __init__(self, _hosts):
+                raise AssertionError("Elasticsearch should not be initialized for empty scope")
+
+        monkeypatch.setattr(
+            "medimind_agent.core.tools.es_search_tool.Elasticsearch",
+            _FailElasticsearch,
+        )
+
+        result = _es_search(
+            query="test",
+            allowed_doc_ids=[],
+        )
+        assert "No notebook-scoped documents are available" in result
 
 
 

@@ -1,6 +1,6 @@
 ﻿"""Tool registry builder for chat/agent modes."""
 
-from typing import List, Optional
+from typing import List, Optional, Sequence
 import os
 from llama_index.core.tools import BaseTool
 from medimind_agent.core.tools.tavily_tools import (
@@ -17,11 +17,15 @@ from medimind_agent.core.common.config import get_zhipu_tools_config
 from medimind_agent.core.tools.time import build_current_time_tool
 
 
-def build_tool_registry(es_index_name: Optional[str] = None) -> List[BaseTool]:
+def build_tool_registry(
+    es_index_name: Optional[str] = None,
+    allowed_doc_ids: Optional[Sequence[str]] = None,
+) -> List[BaseTool]:
     """Build the list of enabled tools based on env/config.
 
     Args:
         es_index_name: Optional ES index name for knowledge-base search tool.
+        allowed_doc_ids: Optional notebook-scoped document IDs for ES tool.
     """
     tools: List[BaseTool] = []
 
@@ -49,6 +53,7 @@ def build_tool_registry(es_index_name: Optional[str] = None) -> List[BaseTool]:
                 build_es_search_tool(
                     index_name=es_index_name or "medimind_docs",
                     es_url=es_url,
+                    allowed_doc_ids=list(allowed_doc_ids) if allowed_doc_ids is not None else None,
                 )
             )
             print("[Tools] Elasticsearch knowledge_base_search enabled for Chat")

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -37,19 +38,20 @@ def test_get_notebook_scope_returns_completed_and_status_counts():
 
     document_repo = AsyncMock()
     document_repo.get_batch.return_value = [
-        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED),
-        SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING),
-        SimpleNamespace(document_id="doc-3", status=DocumentStatus.PENDING),
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Doc 1"),
+        SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING, title="Doc 2"),
+        SimpleNamespace(document_id="doc-3", status=DocumentStatus.PENDING, title="Doc 3"),
     ]
 
     service = _build_service(ref_repo=ref_repo, document_repo=document_repo)
-    completed, counts, blocking = asyncio.run(service._get_notebook_scope("nb-1"))
+    completed, counts, blocking, titles = asyncio.run(service._get_notebook_scope("nb-1"))
 
     assert completed == ["doc-1"]
     assert counts["completed"] == 1
     assert counts["processing"] == 1
     assert counts["pending"] == 1
     assert sorted(blocking) == ["doc-2", "doc-3"]
+    assert titles == {"doc-1": "Doc 1"}
 
 
 def test_validate_mode_guard_raises_document_processing_error_for_ask():
@@ -88,3 +90,32 @@ def test_validate_mode_guard_keeps_conclude_selected_text_rule():
             )
         )
 
+
+def test_filter_valid_sources_logs_missing_doc_once(caplog):
+    document_repo = AsyncMock()
+
+    async def _get(doc_id: str):
+        if doc_id == "doc-ok":
+            return SimpleNamespace(document_id="doc-ok")
+        return None
+
+    document_repo.get.side_effect = _get
+    service = _build_service(document_repo=document_repo)
+
+    sources = [
+        {"document_id": "doc-missing", "chunk_id": "c1", "text": "a"},
+        {"document_id": "doc-missing", "chunk_id": "c2", "text": "b"},
+        {"document_id": "doc-ok", "chunk_id": "c3", "text": "c"},
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        filtered = asyncio.run(service._filter_valid_sources(sources))
+
+    assert [item["document_id"] for item in filtered] == ["doc-ok"]
+    warning_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "missing document_id: doc-missing" in record.getMessage()
+    ]
+    assert len(warning_messages) == 1
+    assert "Skipping 2 source item(s)" in warning_messages[0]

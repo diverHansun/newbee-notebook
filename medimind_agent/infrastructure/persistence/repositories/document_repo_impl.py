@@ -2,8 +2,9 @@
 MediMind Agent - Document Repository Implementation
 """
 
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
+import json
 import uuid
 
 from sqlalchemy import select, update, delete, func
@@ -23,6 +24,24 @@ class DocumentRepositoryImpl(DocumentRepository):
 
     def __init__(self, session: AsyncSession):
         self._session = session
+
+    @staticmethod
+    def _serialize_processing_meta(processing_meta: Optional[dict[str, Any]]) -> Optional[str]:
+        if processing_meta is None:
+            return None
+        return json.dumps(processing_meta, ensure_ascii=False)
+
+    @staticmethod
+    def _deserialize_processing_meta(raw_meta: Optional[str]) -> Optional[dict[str, Any]]:
+        if not raw_meta:
+            return None
+        try:
+            parsed = json.loads(raw_meta)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+        return {"raw": raw_meta}
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -56,6 +75,9 @@ class DocumentRepositoryImpl(DocumentRepository):
             content_format=model.content_format or "markdown",
             content_size=model.content_size,
             error_message=model.error_message,
+            processing_stage=model.processing_stage,
+            stage_updated_at=model.stage_updated_at,
+            processing_meta=self._deserialize_processing_meta(model.processing_meta),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -152,6 +174,9 @@ class DocumentRepositoryImpl(DocumentRepository):
             content_path=document.content_path,
             content_format=document.content_format,
             content_size=document.content_size,
+            processing_stage=document.processing_stage,
+            stage_updated_at=document.stage_updated_at,
+            processing_meta=self._serialize_processing_meta(document.processing_meta),
             created_at=document.created_at,
             updated_at=document.updated_at,
         )
@@ -175,6 +200,9 @@ class DocumentRepositoryImpl(DocumentRepository):
                 content_path=document.content_path,
                 content_format=document.content_format,
                 content_size=document.content_size,
+                processing_stage=document.processing_stage,
+                stage_updated_at=document.stage_updated_at,
+                processing_meta=self._serialize_processing_meta(document.processing_meta),
                 updated_at=datetime.now(),
             )
         )
@@ -198,6 +226,9 @@ class DocumentRepositoryImpl(DocumentRepository):
         content_size: Optional[int] = None,
         content_format: Optional[str] = None,
         error_message: Optional[str] = None,
+        processing_stage: Optional[str] = None,
+        stage_updated_at: Optional[datetime] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
     ) -> None:
         values = {
             "status": status.value,
@@ -215,6 +246,16 @@ class DocumentRepositoryImpl(DocumentRepository):
             values["content_format"] = content_format
         if error_message is not None or status != DocumentStatus.FAILED:
             values["error_message"] = error_message
+        if processing_stage is not None:
+            values["processing_stage"] = processing_stage
+            if processing_meta is None:
+                values["processing_meta"] = None
+        if processing_meta is not None:
+            values["processing_meta"] = self._serialize_processing_meta(processing_meta)
+        if stage_updated_at is not None:
+            values["stage_updated_at"] = stage_updated_at
+        elif processing_stage is not None or processing_meta is not None:
+            values["stage_updated_at"] = datetime.now()
 
         await self._session.execute(
             update(DocumentModel)
@@ -227,6 +268,8 @@ class DocumentRepositoryImpl(DocumentRepository):
         self,
         document_id: str,
         from_statuses: Optional[List[DocumentStatus]] = None,
+        processing_stage: Optional[str] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
     ) -> bool:
         allowed = from_statuses or [
             DocumentStatus.UPLOADED,
@@ -234,17 +277,28 @@ class DocumentRepositoryImpl(DocumentRepository):
             DocumentStatus.FAILED,
         ]
         allowed_values = [status.value for status in allowed]
+        now = datetime.now()
+        values: dict[str, Any] = {
+            "status": DocumentStatus.PROCESSING.value,
+            "updated_at": now,
+            "error_message": None,
+            "processing_meta": self._serialize_processing_meta(processing_meta) if processing_meta is not None else None,
+        }
+        if processing_stage is not None:
+            values["processing_stage"] = processing_stage
+            values["stage_updated_at"] = now
+        else:
+            values["processing_stage"] = None
+            values["stage_updated_at"] = None
+        if processing_meta is not None and "stage_updated_at" not in values:
+            values["stage_updated_at"] = now
         result = await self._session.execute(
             update(DocumentModel)
             .where(
                 DocumentModel.id == uuid.UUID(document_id),
                 DocumentModel.status.in_(allowed_values),
             )
-            .values(
-                status=DocumentStatus.PROCESSING.value,
-                updated_at=datetime.now(),
-                error_message=None,
-            )
+            .values(**values)
         )
         await self._session.flush()
         return bool(result.rowcount and result.rowcount > 0)

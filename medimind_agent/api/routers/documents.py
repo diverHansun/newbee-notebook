@@ -41,6 +41,9 @@ def _to_response(doc) -> DocumentResponse:
         content_format=doc.content_format,
         content_size=doc.content_size,
         error_message=doc.error_message,
+        processing_stage=doc.processing_stage,
+        stage_updated_at=doc.stage_updated_at,
+        processing_meta=doc.processing_meta,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
     )

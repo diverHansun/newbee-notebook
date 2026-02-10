@@ -31,6 +31,7 @@ from medimind_agent.domain.value_objects.document_type import DocumentType
 from medimind_agent.infrastructure.tasks.document_tasks import process_document_task
 from medimind_agent.infrastructure.storage.local_storage import save_upload_file, _decode_filename
 from medimind_agent.core.common.config import get_documents_directory
+from medimind_agent.exceptions import DocumentProcessingError
 
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,8 @@ class DocumentService:
                 created.document_id,
                 status=DocumentStatus.PENDING,
                 error_message=None,
+                processing_stage="queued",
+                processing_meta={"queued_by": "auto_process"},
             )
             await self._document_repo.commit()
             self.enqueue_processing(created.document_id)
@@ -235,6 +238,23 @@ class DocumentService:
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError("Document not found")
+        if doc.status in {
+            DocumentStatus.UPLOADED,
+            DocumentStatus.PENDING,
+            DocumentStatus.PROCESSING,
+        }:
+            raise DocumentProcessingError(
+                message="Document is still processing",
+                details={
+                    "document_id": document_id,
+                    "status": doc.status.value,
+                    "processing_stage": doc.processing_stage,
+                    "stage_updated_at": doc.stage_updated_at.isoformat() if doc.stage_updated_at else None,
+                    "retryable": True,
+                },
+            )
+        if doc.status == DocumentStatus.FAILED:
+            raise RuntimeError("Document processing failed")
         if doc.status != DocumentStatus.COMPLETED:
             raise RuntimeError("Document not processed yet")
         if not doc.content_path:

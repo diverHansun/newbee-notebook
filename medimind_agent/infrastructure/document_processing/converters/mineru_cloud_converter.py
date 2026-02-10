@@ -41,6 +41,7 @@ class MinerUCloudConverter(Converter):
         self._timeout_seconds = int(timeout_seconds)
         self._poll_interval = int(poll_interval)
         self._max_wait_seconds = int(max_wait_seconds)
+        self._connect_timeout_seconds = 5
 
     def can_handle(self, ext: str) -> bool:
         return ext.lower() == ".pdf"
@@ -77,13 +78,21 @@ class MinerUCloudConverter(Converter):
             "Accept": "application/json",
         }
 
+    def _api_timeout(self) -> tuple[int, int]:
+        """Short connect timeout + configurable read timeout for API calls."""
+        return self._connect_timeout_seconds, self._timeout_seconds
+
+    def _transfer_timeout(self) -> tuple[int, int]:
+        """Longer read timeout for large upload/download transfers."""
+        return self._connect_timeout_seconds, max(self._timeout_seconds, 300)
+
     def _request_upload_url(self, file_name: str) -> tuple[str, str]:
         url = f"{self._api_base}/api/v4/file-urls/batch"
         payload = {"files": [{"name": file_name}]}
         headers = self._headers()
         headers["Content-Type"] = "application/json"
 
-        response = requests.post(url, headers=headers, json=payload, timeout=self._timeout_seconds)
+        response = requests.post(url, headers=headers, json=payload, timeout=self._api_timeout())
         response.raise_for_status()
         body = response.json()
         if body.get("code") != 0:
@@ -100,9 +109,8 @@ class MinerUCloudConverter(Converter):
         return batch_id, upload_url
 
     def _upload_file(self, upload_url: str, file_path: Path) -> None:
-        transfer_timeout = max(self._timeout_seconds, 300)
         with file_path.open("rb") as handle:
-            response = requests.put(upload_url, data=handle, timeout=transfer_timeout)
+            response = requests.put(upload_url, data=handle, timeout=self._transfer_timeout())
         response.raise_for_status()
 
     def _poll_until_done(self, batch_id: str) -> dict[str, Any]:
@@ -127,7 +135,7 @@ class MinerUCloudConverter(Converter):
 
     def _fetch_batch_state(self, batch_id: str) -> dict[str, Any]:
         url = f"{self._api_base}/api/v4/extract-results/batch/{batch_id}"
-        response = requests.get(url, headers=self._headers(), timeout=self._timeout_seconds)
+        response = requests.get(url, headers=self._headers(), timeout=self._api_timeout())
         response.raise_for_status()
         body = response.json()
         if body.get("code") != 0:
@@ -144,8 +152,7 @@ class MinerUCloudConverter(Converter):
         return {}
 
     def _download_zip(self, full_zip_url: str) -> bytes:
-        transfer_timeout = max(self._timeout_seconds, 300)
-        with requests.get(full_zip_url, stream=True, timeout=transfer_timeout) as response:
+        with requests.get(full_zip_url, stream=True, timeout=self._transfer_timeout()) as response:
             response.raise_for_status()
             chunks = []
             for chunk in response.iter_content(chunk_size=1024 * 1024):

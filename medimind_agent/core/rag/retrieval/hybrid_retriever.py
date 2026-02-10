@@ -60,7 +60,9 @@ class HybridRetriever(BaseRetriever):
         self._es_retriever = es_retriever
         self._fusion_strategy = fusion_strategy or RRFFusion()
         self._top_k = top_k
-        self._allowed_doc_ids = set(allowed_doc_ids) if allowed_doc_ids else None
+        self._allowed_doc_ids = (
+            None if allowed_doc_ids is None else set(allowed_doc_ids)
+        )
     
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         """Retrieve and fuse results from both sources.
@@ -80,10 +82,13 @@ class HybridRetriever(BaseRetriever):
         # Fuse results
         fused_results = self._fusion_strategy.fuse(
             results_list=[pgvector_results, es_results],
-            top_k=max(self._top_k, len(self._allowed_doc_ids) if self._allowed_doc_ids else self._top_k),
+            top_k=max(
+                self._top_k,
+                len(self._allowed_doc_ids) if self._allowed_doc_ids is not None else self._top_k,
+            ),
         )
 
-        if self._allowed_doc_ids:
+        if self._allowed_doc_ids is not None:
             fused_results = [
                 r
                 for r in fused_results
@@ -115,10 +120,13 @@ class HybridRetriever(BaseRetriever):
         # Fuse results
         fused_results = self._fusion_strategy.fuse(
             results_list=[pgvector_results, es_results],
-            top_k=max(self._top_k, len(self._allowed_doc_ids) if self._allowed_doc_ids else self._top_k),
+            top_k=max(
+                self._top_k,
+                len(self._allowed_doc_ids) if self._allowed_doc_ids is not None else self._top_k,
+            ),
         )
 
-        if self._allowed_doc_ids:
+        if self._allowed_doc_ids is not None:
             fused_results = [
                 r
                 for r in fused_results

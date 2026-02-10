@@ -5,7 +5,7 @@ This directory contains database initialization and migration scripts.
 ## Directory Structure
 
 ```
-scripts/db/
+medimind_agent/scripts/db/
 ├── README.md              # This file
 ├── init-postgres.sql      # PostgreSQL initialization (runs on first start)
 └── migrations/            # Future migration scripts (if needed)
@@ -30,7 +30,7 @@ This script runs automatically when the PostgreSQL container starts for the firs
 
 **Manual execution (if needed):**
 ```bash
-docker exec -i medimind-postgres psql -U postgres -d medimind < scripts/db/init-postgres.sql
+docker exec -i medimind-postgres psql -U postgres -d medimind < medimind_agent/scripts/db/init-postgres.sql
 ```
 
 ## Verifying Initialization

@@ -95,6 +95,9 @@ class DocumentResponse(BaseModel):
     content_format: Optional[str] = None
     content_size: Optional[int] = None
     error_message: Optional[str] = None
+    processing_stage: Optional[str] = None
+    stage_updated_at: Optional[datetime] = None
+    processing_meta: Optional[dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 
@@ -136,6 +139,7 @@ class NotebookDocumentsAddItem(BaseModel):
     document_id: str
     title: str
     status: str
+    processing_stage: Optional[str] = None
 
 
 class NotebookDocumentsProblemItem(BaseModel):
@@ -164,6 +168,9 @@ class NotebookDocumentListItemResponse(BaseModel):
     file_size: int
     page_count: int
     chunk_count: int
+    processing_stage: Optional[str] = None
+    stage_updated_at: Optional[datetime] = None
+    processing_meta: Optional[dict[str, Any]] = None
     created_at: datetime
     added_at: Optional[datetime] = None
 

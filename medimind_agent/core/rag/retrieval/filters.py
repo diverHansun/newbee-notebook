@@ -28,11 +28,11 @@ def build_document_filters(
     - allowed_doc_ids: used for post-filtering after fusion
     """
 
-    if not doc_ids:
+    if doc_ids is None:
         return None, None, None
 
     # Disable pre-filters, rely on post-filter with allowed_doc_ids
-    return None, None, doc_ids
+    return None, None, list(doc_ids)
 
 
 __all__ = ["build_document_filters"]

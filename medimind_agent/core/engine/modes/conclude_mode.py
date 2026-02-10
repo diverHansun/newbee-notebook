@@ -16,6 +16,7 @@ from llama_index.core import VectorStoreIndex
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 from medimind_agent.core.rag.retrieval.filters import build_document_filters
+from medimind_agent.core.rag.retrieval.scoped_retriever import ScopedRetriever
 from medimind_agent.core.common.node_utils import extract_document_id
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
@@ -96,11 +97,16 @@ class ConcludeMode(BaseMode):
 
     async def _refresh_engine(self) -> None:
         """Rebuild retriever/chat engine when allowed scope changes."""
-        pg_filters, es_filters, _ = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
-        # ConcludeMode 只用 pgvector 检索
-        self._retriever = self._index.as_retriever(
+        _, _, allowed_ids = build_document_filters(self.allowed_doc_ids, key="ref_doc_id")
+        # ConcludeMode only uses pgvector retrieval and enforces notebook scope post-filtering.
+        base_retriever = self._index.as_retriever(
             similarity_top_k=self._similarity_top_k,
-            filters=pg_filters,
+            filters=None,
+        )
+        self._retriever = ScopedRetriever(
+            base_retriever=base_retriever,
+            allowed_doc_ids=allowed_ids,
+            top_k=self._similarity_top_k,
         )
         self._chat_engine = RetrieverQueryEngine.from_args(
             retriever=self._retriever,
@@ -110,6 +116,7 @@ class ConcludeMode(BaseMode):
             text_qa_template=None,
             verbose=self._config.verbose,
         )
+        self._filters_cache = None if allowed_ids is None else tuple(sorted(allowed_ids))
 
     def _build_enhanced_query(self, message: str) -> str:
         """Compose query using selected_text when available."""
@@ -126,10 +133,6 @@ class ConcludeMode(BaseMode):
     
     async def _process(self, message: str) -> str:
         """Process summarization request using ChatEngine."""
-        current_scope = tuple(sorted(self.allowed_doc_ids)) if self.allowed_doc_ids else None
-        if current_scope != self._filters_cache:
-            await self._refresh_engine()
-            self._filters_cache = current_scope
         if self.scope_changed():
             await self._refresh_engine()
 

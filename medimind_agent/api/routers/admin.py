@@ -89,7 +89,13 @@ async def reindex_document(
         raise HTTPException(status_code=400, detail=f"Document status={doc.status.value}, set force=true to reindex")
 
     # Reset status to pending so worker can claim it atomically.
-    await document_repo.update_status(document_id, DocumentStatus.PENDING, error_message=None)
+    await document_repo.update_status(
+        document_id,
+        DocumentStatus.PENDING,
+        error_message=None,
+        processing_stage="queued",
+        processing_meta={"queued_by": "admin_reindex", "force": bool(force)},
+    )
     await document_repo.commit()
 
     # Clear old index nodes best-effort

@@ -52,6 +52,7 @@ async def add_documents_to_notebook(
                 document_id=doc.document_id,
                 title=doc.title,
                 status=doc.status.value,
+                processing_stage=doc.processing_stage,
             )
             for doc in result.added
         ],
@@ -102,6 +103,9 @@ async def list_notebook_documents(
                 file_size=doc.file_size,
                 page_count=doc.page_count,
                 chunk_count=doc.chunk_count,
+                processing_stage=doc.processing_stage,
+                stage_updated_at=doc.stage_updated_at,
+                processing_meta=doc.processing_meta,
                 created_at=doc.created_at,
                 added_at=added_at,
             )

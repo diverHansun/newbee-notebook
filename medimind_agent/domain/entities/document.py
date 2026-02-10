@@ -6,7 +6,7 @@ A Document represents an uploaded file that has been processed.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 from medimind_agent.domain.entities.base import Entity, generate_uuid
 from medimind_agent.domain.value_objects.document_status import DocumentStatus
 from medimind_agent.domain.value_objects.document_type import DocumentType
@@ -33,6 +33,9 @@ class Document(Entity):
         page_count: Number of pages
         chunk_count: Number of chunks after processing
         file_size: File size in bytes
+        processing_stage: Current processing sub-stage (if status=processing)
+        stage_updated_at: Last processing sub-stage update timestamp
+        processing_meta: Optional metadata for processing sub-stage
     """
     document_id: str = field(default_factory=generate_uuid)
     title: str = ""
@@ -49,6 +52,9 @@ class Document(Entity):
     content_format: str = "markdown"
     content_size: int = 0
     error_message: Optional[str] = None
+    processing_stage: Optional[str] = None
+    stage_updated_at: Optional[datetime] = None
+    processing_meta: Optional[dict[str, Any]] = None
     
     @property
     def is_library_document(self) -> bool:
@@ -80,16 +86,28 @@ class Document(Entity):
         """Check if document processing failed."""
         return self.status == DocumentStatus.FAILED
     
-    def mark_processing(self) -> None:
+    def mark_processing(
+        self,
+        processing_stage: Optional[str] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
+    ) -> None:
         """Mark document as processing."""
         self.status = DocumentStatus.PROCESSING
         self.error_message = None
+        if processing_stage is not None:
+            self.processing_stage = processing_stage
+        if processing_meta is not None:
+            self.processing_meta = dict(processing_meta)
+        self.stage_updated_at = datetime.now()
         self.touch()
 
     def mark_uploaded(self) -> None:
         """Mark document as uploaded and ready for notebook association."""
         self.status = DocumentStatus.UPLOADED
         self.error_message = None
+        self.processing_stage = None
+        self.stage_updated_at = None
+        self.processing_meta = None
         self.touch()
     
     def mark_completed(
@@ -111,12 +129,24 @@ class Document(Entity):
         if content_format is not None:
             self.content_format = content_format
         self.error_message = None
+        self.processing_stage = "completed"
+        self.stage_updated_at = datetime.now()
         self.touch()
     
-    def mark_failed(self, error_message: Optional[str] = None) -> None:
+    def mark_failed(
+        self,
+        error_message: Optional[str] = None,
+        processing_stage: Optional[str] = None,
+        processing_meta: Optional[dict[str, Any]] = None,
+    ) -> None:
         """Mark document as failed."""
         self.status = DocumentStatus.FAILED
         self.error_message = error_message
+        if processing_stage is not None:
+            self.processing_stage = processing_stage
+        if processing_meta is not None:
+            self.processing_meta = dict(processing_meta)
+        self.stage_updated_at = datetime.now()
         self.touch()
 
 

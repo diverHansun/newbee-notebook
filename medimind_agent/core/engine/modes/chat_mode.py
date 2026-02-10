@@ -53,6 +53,7 @@ class ChatMode(BaseMode):
         self._enable_es_search = enable_es_search
         self._agent = None  # lazily built FunctionAgentRunner
         self._vector_index = vector_index
+        self._tool_scope_signature: Optional[tuple[str, ...]] = None
     
     def _default_config(self) -> ModeConfig:
         """Return default Chat mode configuration."""
@@ -70,25 +71,38 @@ class ChatMode(BaseMode):
             List of tools (web search, etc.)
         """
         # Get search tools
-        return build_tool_registry(es_index_name=self._es_index_name)
-    
-    async def _initialize(self) -> None:
-        """Initialize the agent."""
-        # 1. Get tools
+        return build_tool_registry(
+            es_index_name=self._es_index_name,
+            allowed_doc_ids=self.allowed_doc_ids,
+        )
+
+    def _current_scope_signature(self) -> Optional[tuple[str, ...]]:
+        if self.allowed_doc_ids is None:
+            return None
+        return tuple(sorted(self.allowed_doc_ids))
+
+    async def _refresh_runner(self) -> None:
+        """Rebuild FunctionAgent runner with current notebook scope."""
         tools = self._build_tools()
-        
-        # 2. Get system prompt
         system_prompt = self._config.system_prompt or load_prompt("chat.md")
-        
-        # 3. Create FunctionAgentRunner (no forced tool)
         self._runner = FunctionAgentRunner(
             llm=self._llm,
             tools=tools,
             system_prompt=system_prompt,
             verbose=self._config.verbose,
         )
+        self._tool_scope_signature = self._current_scope_signature()
         print(f"[ChatMode] Initialized with {len(tools)} tool(s).")
-        
+
+    async def _ensure_runner_scope(self) -> None:
+        """Ensure tool scope follows current notebook allowed_doc_ids."""
+        current_scope = self._current_scope_signature()
+        if self._runner is None or current_scope != self._tool_scope_signature:
+            await self._refresh_runner()
+    
+    async def _initialize(self) -> None:
+        """Initialize the agent."""
+        await self._refresh_runner()
         self._initialized = True
     
     async def _process(self, message: str) -> str:
@@ -100,6 +114,8 @@ class ChatMode(BaseMode):
         Returns:
             Agent response
         """
+        await self._ensure_runner_scope()
+
         # Get chat history for context
         chat_history = []
         if self._memory is not None:
@@ -150,6 +166,8 @@ class ChatMode(BaseMode):
         Yields:
             Response text chunks
         """
+        await self._ensure_runner_scope()
+
         # Build messages list with history
         messages: List[ChatMessage] = []
 
@@ -216,9 +234,12 @@ class ChatMode(BaseMode):
         except Exception:
             return []
         sources = []
+        allowed_doc_ids = set(self.allowed_doc_ids or [])
         for node in results:
             meta = getattr(node.node, "metadata", {}) if hasattr(node, "node") else {}
             doc_id = extract_document_id(node)
+            if doc_id not in allowed_doc_ids:
+                continue
             sources.append(
                 {
                     "document_id": doc_id,

@@ -4,8 +4,8 @@ This module provides converters to transform various document formats
 to unified Markdown:
     - MinerUCloudConverter: PDF -> Markdown (via MinerU v4 cloud API)
     - MinerULocalConverter: PDF -> Markdown (via local MinerU API)
-    - PyPdfConverter: PDF -> Markdown (local, text PDFs only)
-    - MarkItDownConverter: Office/HTML/text -> Markdown (local processing)
+    - MarkItDownConverter: Office/PDF/HTML/text -> Markdown (local fallback)
+    - PyPdfConverter: Legacy PDF converter (kept for compatibility only)
 """
 
 from .base import Converter, ConversionResult

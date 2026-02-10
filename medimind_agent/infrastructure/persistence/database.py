@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 from sqlalchemy.pool import NullPool
+from sqlalchemy import text
+
+_schema_checked = False
 
 
 def get_database_url() -> str:
@@ -56,16 +59,58 @@ class Database:
     
     async def connect(self) -> None:
         """Initialize the database connection."""
+        global _schema_checked
         self._engine = create_async_engine(
             self._url,
             echo=False,  # Set to True for SQL debugging
             poolclass=NullPool,  # Disable connection pooling for serverless
         )
+        if not _schema_checked:
+            await self._ensure_runtime_schema()
+            _schema_checked = True
         self._session_factory = async_sessionmaker(
             bind=self._engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
+
+    async def _ensure_runtime_schema(self) -> None:
+        """Best-effort schema backfill for additive columns used by new releases."""
+        if not self._engine:
+            return
+        async with self._engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS documents
+                    ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS documents
+                    ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS documents
+                    ADD COLUMN IF NOT EXISTS processing_meta TEXT
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at
+                    ON documents(stage_updated_at)
+                    """
+                )
+            )
     
     async def disconnect(self) -> None:
         """Close the database connection."""

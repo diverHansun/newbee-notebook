@@ -9,7 +9,7 @@ document_processing:
   mineru_cloud:
     api_key: ${MINERU_API_KEY:}
     api_base: ${MINERU_V4_API_BASE:https://mineru.net}
-    timeout_seconds: ${MINERU_V4_TIMEOUT:60}
+    timeout_seconds: ${MINERU_V4_TIMEOUT:120}
     poll_interval: ${MINERU_V4_POLL_INTERVAL:5}
     max_wait_seconds: ${MINERU_V4_MAX_WAIT_SECONDS:1800}
 
@@ -20,8 +20,9 @@ document_processing:
     lang_list: ${MINERU_LANG_LIST:ch,en}
     timeout_seconds: ${MINERU_LOCAL_TIMEOUT:0}
 
-  # If MinerU is unreachable, back off for this many seconds before retrying.
-  unavailable_cooldown_seconds: 300
+  # MinerU circuit breaker settings.
+  fail_threshold: ${MINERU_FAIL_THRESHOLD:5}
+  cooldown_seconds: ${MINERU_COOLDOWN_SECONDS:120}
 
   # Root directory for stored markdown; falls back to DOCUMENTS_DIR env or data/documents.
   documents_dir: ${DOCUMENTS_DIR:data/documents}

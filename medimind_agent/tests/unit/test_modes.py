@@ -8,14 +8,21 @@ This test file validates:
 Note: These tests don't require actual LLM or database connections.
 """
 
+import json
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from medimind_agent.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from medimind_agent.core.engine.modes.chat_mode import ChatMode, DEFAULT_CHAT_SYSTEM_PROMPT
-from medimind_agent.core.engine.modes.ask_mode import AskMode, DEFAULT_ASK_SYSTEM_PROMPT
+from medimind_agent.core.engine.modes.ask_mode import (
+    AskMode,
+    DEFAULT_ASK_SYSTEM_PROMPT,
+    _TitleAwareFallbackRetriever,
+)
 from medimind_agent.core.engine.modes.conclude_mode import ConcludeMode, DEFAULT_CONCLUDE_SYSTEM_PROMPT
 from medimind_agent.core.engine.modes.explain_mode import ExplainMode, DEFAULT_EXPLAIN_SYSTEM_PROMPT
+from medimind_agent.core.rag.retrieval.scoped_retriever import ScopedRetriever
+from llama_index.core.schema import TextNode, NodeWithScore
 
 
 class TestModeType:
@@ -92,6 +99,40 @@ class TestChatMode:
         assert mode._initialized is False
         assert mode._agent is None
 
+    def test_collect_sources_respects_allowed_doc_scope(self):
+        """_collect_sources should drop out-of-scope nodes."""
+        mock_llm = MagicMock()
+
+        class _FakeNode:
+            def __init__(self, doc_id: str, node_id: str, text: str):
+                self.node_id = node_id
+                self.metadata = {
+                    "_node_content": json.dumps({"metadata": {"document_id": doc_id}}),
+                    "title": f"title-{doc_id}",
+                }
+                self._text = text
+
+            def get_content(self):
+                return self._text
+
+        class _FakeRetriever:
+            def retrieve(self, _message):
+                return [
+                    MagicMock(node=_FakeNode("doc-1", "chunk-1", "text-1"), score=0.9),
+                    MagicMock(node=_FakeNode("doc-2", "chunk-2", "text-2"), score=0.7),
+                ]
+
+        class _FakeVectorIndex:
+            def as_retriever(self, **_kwargs):
+                return _FakeRetriever()
+
+        mode = ChatMode(llm=mock_llm, vector_index=_FakeVectorIndex())
+        mode.set_allowed_documents(["doc-1"])
+
+        sources = mode._collect_sources("hello")
+        assert len(sources) == 1
+        assert sources[0]["document_id"] == "doc-1"
+
 
 class TestAskMode:
     """Test AskMode configuration and setup."""
@@ -118,6 +159,72 @@ class TestAskMode:
         assert mode._pgvector_top_k == 15
         assert mode._es_top_k == 15
         assert mode._final_top_k == 10
+
+    def test_build_title_fallback_query_from_context(self):
+        """Ask mode should build a compact fallback query from title hints."""
+        mode = AskMode(llm=MagicMock())
+        mode.set_context(
+            {
+                "allowed_document_titles": [
+                    "Doc A",
+                    "Doc B",
+                    "Doc A",
+                ]
+            }
+        )
+
+        fallback_query = mode._build_title_fallback_query("what is differential diagnosis")
+        assert fallback_query == "Doc A Doc B what is differential diagnosis"
+
+    def test_build_title_fallback_query_without_titles(self):
+        """No title hints should disable fallback query construction."""
+        mode = AskMode(llm=MagicMock())
+        mode.set_context({})
+
+        assert mode._build_title_fallback_query("question") is None
+
+    def test_title_aware_fallback_retriever_retries_once(self):
+        """Fallback retriever should retry with title-boosted query on empty hit."""
+
+        class _BaseRetriever:
+            def __init__(self):
+                self.queries = []
+
+            def _build_result(self):
+                node = TextNode(
+                    text="matched",
+                    metadata={
+                        "_node_content": json.dumps(
+                            {"metadata": {"document_id": "doc-1"}}
+                        )
+                    },
+                )
+                return [NodeWithScore(node=node, score=1.0)]
+
+            def retrieve(self, query_bundle):
+                query = getattr(query_bundle, "query_str", str(query_bundle))
+                self.queries.append(query)
+                if query.startswith("Doc A "):
+                    return self._build_result()
+                return []
+
+            async def aretrieve(self, query_bundle):
+                return self.retrieve(query_bundle)
+
+        base_retriever = _BaseRetriever()
+        retriever = _TitleAwareFallbackRetriever(
+            base_retriever=base_retriever,
+            fallback_query_builder=lambda query: f"Doc A {query}",
+        )
+
+        results = retriever.retrieve("what is differential diagnosis")
+
+        assert len(results) == 1
+        assert base_retriever.queries == [
+            "what is differential diagnosis",
+            "Doc A what is differential diagnosis",
+        ]
+        assert retriever.last_fallback_query == "Doc A what is differential diagnosis"
 
 
 class TestConcludeMode:
@@ -153,6 +260,26 @@ class TestConcludeMode:
         
         assert mode._similarity_top_k == 15
         assert mode._response_mode == "compact"
+
+    def test_conclude_mode_wraps_retriever_with_scope(self):
+        """Conclude mode should enforce notebook scope via ScopedRetriever."""
+        mock_llm = MagicMock()
+        base_retriever = MagicMock()
+        fake_index = MagicMock()
+        fake_index.as_retriever.return_value = base_retriever
+
+        mode = ConcludeMode(llm=mock_llm, index=fake_index)
+        mode.set_allowed_documents(["doc-1"])
+
+        with patch(
+            "medimind_agent.core.engine.modes.conclude_mode.RetrieverQueryEngine.from_args",
+            return_value=MagicMock(),
+        ):
+            import asyncio
+
+            asyncio.run(mode._refresh_engine())
+
+        assert isinstance(mode._retriever, ScopedRetriever)
 
 
 class TestExplainMode:

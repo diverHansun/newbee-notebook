@@ -281,6 +281,51 @@
             "description": "List all documents in the library with optional status filtering."
           },
           "response": []
+        },
+        {
+          "name": "Delete Library Document (Force)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Deleted document id matches\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.document_id).to.eql(pm.collectionVariables.get('document_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{api_base}}/library/documents/{{document_id}}?force=true",
+              "host": [
+                "{{api_base}}"
+              ],
+              "path": [
+                "library",
+                "documents",
+                "{{document_id}}"
+              ],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "true",
+                  "description": "Force remove even when referenced by notebook"
+                }
+              ]
+            },
+            "description": "Delete a source document from Library and trigger index cleanup. This is different from notebook disassociation."
+          },
+          "response": []
         }
       ]
     },

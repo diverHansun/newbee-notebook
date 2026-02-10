@@ -88,7 +88,7 @@ class BaseMode(ABC):
 
     def set_allowed_documents(self, document_ids: Optional[List[str]]) -> None:
         """Limit retrieval scope to the provided document IDs."""
-        self._allowed_doc_ids = document_ids if document_ids else None
+        self._allowed_doc_ids = list(document_ids) if document_ids is not None else None
         # invalidate cache marker
         self._scope_cache = None
 
@@ -120,7 +120,11 @@ class BaseMode(ABC):
 
     def scope_changed(self) -> bool:
         """Return True if allowed_doc_ids differs from cached signature."""
-        current = tuple(sorted(self.allowed_doc_ids)) if self.allowed_doc_ids else None
+        current = (
+            None
+            if self.allowed_doc_ids is None
+            else tuple(sorted(self.allowed_doc_ids))
+        )
         changed = current != self._scope_cache
         self._scope_cache = current
         return changed
@@ -281,4 +285,3 @@ class BaseMode(ABC):
         if self._memory is not None:
             return self._memory.get_all()
         return []
-

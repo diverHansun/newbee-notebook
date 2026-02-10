@@ -109,7 +109,8 @@ class ChatService:
         await self._session_manager.start_session(session_id=session_id)
 
         # Notebook scope documents
-        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
+        mode_context = self._build_mode_context(context, completed_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
             allowed_doc_ids=allowed_doc_ids,
@@ -127,7 +128,7 @@ class ChatService:
             message=message,
             mode_type=mode_enum,
             allowed_document_ids=allowed_doc_ids,
-            context=context,
+            context=mode_context,
         )
         message_id = session.message_count + 1
 
@@ -217,7 +218,8 @@ class ChatService:
 
         mode_enum = ModeType(mode)
         await self._session_manager.start_session(session_id=session_id)
-        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
+        mode_context = self._build_mode_context(context, completed_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
             allowed_doc_ids=allowed_doc_ids,
@@ -240,7 +242,7 @@ class ChatService:
                 message=message,
                 mode_type=mode_enum,
                 allowed_document_ids=allowed_doc_ids,
-                context=context,
+                context=mode_context,
             )
             while True:
                 try:
@@ -315,7 +317,7 @@ class ChatService:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        allowed_doc_ids, docs_by_status, blocking_doc_ids = await self._get_notebook_scope(session.notebook_id)
+        allowed_doc_ids, docs_by_status, blocking_doc_ids, _ = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
@@ -360,15 +362,20 @@ class ChatService:
             if self._session_manager.vector_index is None:
                 raise RuntimeError("Vector index is not available")
 
-    async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str]]:
+    async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str], Dict[str, str]]:
         """Collect retrieval scope and processing status overview for notebook refs."""
         zero_counts = {status.value: 0 for status in DocumentStatus}
         refs = await self._ref_repo.list_by_notebook(notebook_id)
         if not refs:
-            return [], zero_counts, []
+            return [], zero_counts, [], {}
 
         docs = await self._document_repo.get_batch([ref.document_id for ref in refs])
         completed_doc_ids = list({doc.document_id for doc in docs if doc.status == DocumentStatus.COMPLETED})
+        completed_doc_titles = {
+            doc.document_id: getattr(doc, "title", "")
+            for doc in docs
+            if doc.status == DocumentStatus.COMPLETED and getattr(doc, "title", "")
+        }
         counts = {status.value: 0 for status in DocumentStatus}
         blocking_ids: List[str] = []
         blocking_statuses = {DocumentStatus.UPLOADED, DocumentStatus.PENDING, DocumentStatus.PROCESSING}
@@ -377,7 +384,26 @@ class ChatService:
             if doc.status in blocking_statuses:
                 blocking_ids.append(doc.document_id)
 
-        return completed_doc_ids, counts, blocking_ids
+        return completed_doc_ids, counts, blocking_ids, completed_doc_titles
+
+    @staticmethod
+    def _build_mode_context(
+        context: Optional[dict],
+        completed_doc_titles: Dict[str, str],
+    ) -> Optional[dict]:
+        """Attach notebook title hints for retrieval fallback without changing API schema."""
+        if not completed_doc_titles:
+            return context
+        titles = [title for title in completed_doc_titles.values() if title]
+        if not titles:
+            return context
+
+        merged = dict(context or {})
+        existing_titles = merged.get("allowed_document_titles")
+        if isinstance(existing_titles, list):
+            return merged
+        merged["allowed_document_titles"] = titles
+        return merged
 
     async def _get_context_chunks(self, context: dict) -> List[dict]:
         """Fetch chunk and neighbors by chunk_id for richer context.
@@ -494,6 +520,7 @@ class ChatService:
 
         cache = {}
         valid = []
+        missing_counts: Dict[str, int] = {}
         for src in sources:
             doc_id = src.get("document_id")
             if not doc_id:
@@ -501,7 +528,14 @@ class ChatService:
             if doc_id not in cache:
                 cache[doc_id] = bool(await self._document_repo.get(doc_id))
             if not cache[doc_id]:
-                logger.warning("Skipping source with missing document_id: %s", doc_id)
+                missing_counts[doc_id] = missing_counts.get(doc_id, 0) + 1
                 continue
             valid.append(src)
+
+        for doc_id, count in missing_counts.items():
+            logger.warning(
+                "Skipping %s source item(s) with missing document_id: %s",
+                count,
+                doc_id,
+            )
         return valid

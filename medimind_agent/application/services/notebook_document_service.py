@@ -99,6 +99,8 @@ class NotebookDocumentService:
                     document_id,
                     status=DocumentStatus.PENDING,
                     error_message=None,
+                    processing_stage="queued",
+                    processing_meta={"queued_by": "notebook_association"},
                 )
                 # Commit pending before enqueue to avoid race with worker claim.
                 await self._document_repo.commit()
