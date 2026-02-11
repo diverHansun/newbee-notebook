@@ -18,8 +18,8 @@
 
 建议文件：
 
-1. `medimind_agent/tests/unit/test_document_processing_processor.py`
-2. `medimind_agent/tests/unit/test_mineru_cloud_converter.py`（如已存在则扩展）
+1. `newbee_notebook/tests/unit/test_document_processing_processor.py`
+2. `newbee_notebook/tests/unit/test_mineru_cloud_converter.py`（如已存在则扩展）
 
 ## 2.2 状态机子阶段
 
@@ -30,7 +30,7 @@
 
 建议文件：
 
-1. `medimind_agent/tests/unit/test_document_tasks_stage_transitions.py`（新增）
+1. `newbee_notebook/tests/unit/test_document_tasks_stage_transitions.py`（新增）
 
 ## 2.3 PDF 兜底链路
 
@@ -40,7 +40,7 @@
 
 建议文件：
 
-1. `medimind_agent/tests/unit/test_markitdown_pdf_fallback.py`（新增）
+1. `newbee_notebook/tests/unit/test_markitdown_pdf_fallback.py`（新增）
 
 ## 2.4 Notebook 作用域收敛
 
@@ -51,10 +51,10 @@
 
 建议文件：
 
-1. `medimind_agent/tests/unit/test_scoped_retriever.py`
-2. `medimind_agent/tests/unit/test_modes.py`
-3. `medimind_agent/tests/unit/test_tools.py`
-4. `medimind_agent/tests/unit/test_chat_service_guards.py`
+1. `newbee_notebook/tests/unit/test_scoped_retriever.py`
+2. `newbee_notebook/tests/unit/test_modes.py`
+3. `newbee_notebook/tests/unit/test_tools.py`
+4. `newbee_notebook/tests/unit/test_chat_service_guards.py`
 
 ---
 

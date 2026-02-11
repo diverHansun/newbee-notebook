@@ -38,11 +38,11 @@
 
 预期修改文件（初版）：
 
-1. `medimind_agent/application/services/chat_service.py`
-2. `medimind_agent/api/routers/chat.py`
-3. `medimind_agent/api/main.py`
-4. `medimind_agent/api/middleware/error_handler.py`（新增）
-5. `medimind_agent/common/exceptions.py`（新增或放置于现有公共目录）
+1. `newbee_notebook/application/services/chat_service.py`
+2. `newbee_notebook/api/routers/chat.py`
+3. `newbee_notebook/api/main.py`
+4. `newbee_notebook/api/middleware/error_handler.py`（新增）
+5. `newbee_notebook/common/exceptions.py`（新增或放置于现有公共目录）
 
 ## 3.2 任务 B：状态机与事务边界修正（P0）
 
@@ -58,11 +58,11 @@
 
 预期修改文件（初版）：
 
-1. `medimind_agent/application/services/notebook_document_service.py`
-2. `medimind_agent/application/services/document_service.py`
-3. `medimind_agent/infrastructure/tasks/document_tasks.py`
-4. `medimind_agent/infrastructure/persistence/repositories/document_repo_impl.py`
-5. `medimind_agent/domain/value_objects/document_status.py`（如需补充注释与约束）
+1. `newbee_notebook/application/services/notebook_document_service.py`
+2. `newbee_notebook/application/services/document_service.py`
+3. `newbee_notebook/infrastructure/tasks/document_tasks.py`
+4. `newbee_notebook/infrastructure/persistence/repositories/document_repo_impl.py`
+5. `newbee_notebook/domain/value_objects/document_status.py`（如需补充注释与约束）
 
 ## 3.3 任务 C：脚本分层与入口文档统一（P1）
 
@@ -71,7 +71,7 @@
 实施项：
 
 1. 固化分层规则（backend/frontend/global）。
-2. 统一推荐调用方式（后端优先 `python -m medimind_agent.scripts.*`）。
+2. 统一推荐调用方式（后端优先 `python -m newbee_notebook.scripts.*`）。
 3. 新增脚本索引文档（建议 `scripts/README.md`）。
 4. 校正文档中冲突命令示例。
 

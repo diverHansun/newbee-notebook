@@ -2,7 +2,7 @@
 
 ## 概述
 
-本次改进主要针对 MediMind Agent 的文档管理系统进行架构优化，解决当前存在的以下问题：
+本次改进主要针对 Newbee Notebook 的文档管理系统进行架构优化，解决当前存在的以下问题：
 
 1. 文档存储结构分散，难以通过 `document_id` 统一管理
 2. 上传即 Embedding 导致计算资源浪费
@@ -38,18 +38,18 @@
 
 ### 需要修改的模块
 
-- `medimind_agent/infrastructure/storage/local_storage.py`
-- `medimind_agent/infrastructure/document_processing/store.py`
-- `medimind_agent/application/services/document_service.py`
-- `medimind_agent/infrastructure/tasks/document_tasks.py`
-- `medimind_agent/api/routes/documents.py`
-- `medimind_agent/domain/entities/document.py`
-- `medimind_agent/domain/value_objects/document_status.py`
+- `newbee_notebook/infrastructure/storage/local_storage.py`
+- `newbee_notebook/infrastructure/document_processing/store.py`
+- `newbee_notebook/application/services/document_service.py`
+- `newbee_notebook/infrastructure/tasks/document_tasks.py`
+- `newbee_notebook/api/routes/documents.py`
+- `newbee_notebook/domain/entities/document.py`
+- `newbee_notebook/domain/value_objects/document_status.py`
 
 ### 需要新增的模块
 
-- `medimind_agent/api/routes/notebook_documents.py`
-- `medimind_agent/application/services/notebook_document_service.py`
+- `newbee_notebook/api/routes/notebook_documents.py`
+- `newbee_notebook/application/services/notebook_document_service.py`
 
 ### 废弃的功能
 

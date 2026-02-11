@@ -55,8 +55,8 @@
 
 ### 4.1 现象
 
-1. 脚本已分布在 `scripts` 与 `medimind_agent/scripts`，但职责边界未制度化。
-2. 文档中出现多种命令入口（`python scripts/...` 与 `python -m medimind_agent.scripts...` 并存）。
+1. 脚本已分布在 `scripts` 与 `newbee_notebook/scripts`，但职责边界未制度化。
+2. 文档中出现多种命令入口（`python scripts/...` 与 `python -m newbee_notebook.scripts...` 并存）。
 3. `frontend/scripts` 作为未来层尚未定义约束，后续容易继续混放。
 
 ### 4.2 根因

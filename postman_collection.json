@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "MediMind Agent API v2.1",
+    "name": "Newbee Notebook API v2.1",
     "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-    "description": "MediMind Agent API Postman Collection v2.1\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+    "description": "Newbee Notebook API Postman Collection v2.1\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [

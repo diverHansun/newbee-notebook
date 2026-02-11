@@ -7,7 +7,7 @@
 2. **RAG 系统**: 基于 Markdown 进行分块和向量索引
 3. **ES 搜索**: 基于 Markdown 进行全文索引
 
-本模块是 MediMind Agent 的基础设施层组件,是前端展示、RAG、ES 的统一数据源。
+本模块是 Newbee Notebook 的基础设施层组件,是前端展示、RAG、ES 的统一数据源。
 
 ### 1.1 与现有架构的关系
 

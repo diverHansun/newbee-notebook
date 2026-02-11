@@ -348,10 +348,10 @@ MinerU Cloud → MarkItDown(PDF) → failed
 
 **Docker 容器状态**:
 ```
-medimind-celery-worker: UP
-medimind-redis: UP
-medimind-postgres: UP
-medimind-elasticsearch: UP
+newbee-notebook-celery-worker: UP
+newbee-notebook-redis: UP
+newbee-notebook-postgres: UP
+newbee-notebook-elasticsearch: UP
 ```
 
 **Python 依赖版本**:

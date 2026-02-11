@@ -39,9 +39,9 @@ split_documents() 分块
 ```
 
 **当前实现位置**:
-- Celery 任务: `medimind_agent/infrastructure/tasks/document_tasks.py`
-- 内容提取: `medimind_agent/infrastructure/content_extraction/base.py`
-- 文档加载: `medimind_agent/core/rag/document_loader/loader.py`
+- Celery 任务: `newbee_notebook/infrastructure/tasks/document_tasks.py`
+- 内容提取: `newbee_notebook/infrastructure/content_extraction/base.py`
+- 文档加载: `newbee_notebook/core/rag/document_loader/loader.py`
 
 **当前问题**:
 1. 纯文本提取丢失原文档结构(标题层级、表格格式)

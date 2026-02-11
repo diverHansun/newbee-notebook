@@ -38,7 +38,7 @@ Phase 6
 
 ### Task 1.1: DocumentStatus 枚举变更
 
-**文件**：`medimind_agent/domain/value_objects/document_status.py`
+**文件**：`newbee_notebook/domain/value_objects/document_status.py`
 
 **变更内容**：
 ```python
@@ -58,7 +58,7 @@ class DocumentStatus(Enum):
 
 ### Task 1.2: Document 实体变更
 
-**文件**：`medimind_agent/domain/entities/document.py`
+**文件**：`newbee_notebook/domain/entities/document.py`
 
 **变更内容**：
 - 移除 `notebook_id` 字段（或标记为废弃）
@@ -97,7 +97,7 @@ def mark_uploaded(self) -> None:
 
 ### Task 2.1: 修改文件保存逻辑
 
-**文件**：`medimind_agent/infrastructure/storage/local_storage.py`
+**文件**：`newbee_notebook/infrastructure/storage/local_storage.py`
 
 **变更内容**：
 
@@ -151,7 +151,7 @@ def save_upload_file(
 
 ### Task 2.2: 修改 Markdown 保存逻辑
 
-**文件**：`medimind_agent/infrastructure/document_processing/store.py`
+**文件**：`newbee_notebook/infrastructure/document_processing/store.py`
 
 **变更内容**：
 
@@ -195,7 +195,7 @@ def save_markdown(
 
 ### Task 3.1: 修改上传服务
 
-**文件**：`medimind_agent/application/services/document_service.py`
+**文件**：`newbee_notebook/application/services/document_service.py`
 
 **变更内容**：
 - 修改 `save_upload_and_register` 方法
@@ -251,7 +251,7 @@ async def upload_to_library(
 
 ### Task 3.2: 新增 NotebookDocumentService
 
-**文件**：新建 `medimind_agent/application/services/notebook_document_service.py`
+**文件**：新建 `newbee_notebook/application/services/notebook_document_service.py`
 
 **内容**：
 
@@ -304,7 +304,7 @@ class NotebookDocumentService:
 
 ### Task 3.3: 修改删除服务
 
-**文件**：`medimind_agent/application/services/document_service.py`
+**文件**：`newbee_notebook/application/services/document_service.py`
 
 **变更内容**：
 
@@ -369,7 +369,7 @@ async def _delete_document_files(self, document_id: str) -> bool:
 
 ### Task 3.4: 新增下载服务
 
-**文件**：`medimind_agent/application/services/document_service.py`
+**文件**：`newbee_notebook/application/services/document_service.py`
 
 **变更内容**：
 
@@ -404,7 +404,7 @@ async def get_download_path(
 
 ### Task 4.1: 修改上传端点
 
-**文件**：`medimind_agent/api/routes/documents.py`
+**文件**：`newbee_notebook/api/routes/documents.py`
 
 **变更内容**：
 - 修改为支持批量上传
@@ -434,7 +434,7 @@ async def upload_to_library(
 
 ### Task 4.2: 新增 Notebook 文档端点
 
-**文件**：新建 `medimind_agent/api/routes/notebook_documents.py`
+**文件**：新建 `newbee_notebook/api/routes/notebook_documents.py`
 
 **内容**：
 
@@ -481,7 +481,7 @@ async def remove_document(
 
 ### Task 4.3: 新增下载端点
 
-**文件**：`medimind_agent/api/routes/documents.py`
+**文件**：`newbee_notebook/api/routes/documents.py`
 
 **变更内容**：
 
@@ -510,7 +510,7 @@ async def download_document(
 
 ### Task 4.4: 废弃 Notebook 上传端点
 
-**文件**：`medimind_agent/api/routes/documents.py`
+**文件**：`newbee_notebook/api/routes/documents.py`
 
 **变更内容**：
 
@@ -540,7 +540,7 @@ async def upload_to_notebook_deprecated(
 
 ### Task 5.1: 修改处理任务
 
-**文件**：`medimind_agent/infrastructure/tasks/document_tasks.py`
+**文件**：`newbee_notebook/infrastructure/tasks/document_tasks.py`
 
 **变更内容**：
 - 处理任务不再由上传触发
@@ -596,7 +596,7 @@ def process_document_task(self, document_id: str):
 
 ### Task 5.2: 新增清理任务
 
-**文件**：`medimind_agent/infrastructure/tasks/document_tasks.py`
+**文件**：`newbee_notebook/infrastructure/tasks/document_tasks.py`
 
 **变更内容**：
 

@@ -125,7 +125,7 @@ class PdfExtractor:
 ### 3.1 目录结构
 
 ```
-medimind_agent/
+newbee_notebook/
 ├── infrastructure/
 │   └── document_processing/          # 文档处理模块根目录
 │       ├── coordinator.py            # 处理协调器

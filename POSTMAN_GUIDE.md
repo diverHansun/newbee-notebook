@@ -1,6 +1,6 @@
-# MediMind Agent API - Postman 测试指南
+# Newbee Notebook API - Postman 测试指南
 
-本指南详细说明如何使用 Postman 测试 MediMind Agent 后端 API，包括环境搭建、数据库初始化、接口测试和问题排查。
+本指南详细说明如何使用 Postman 测试 Newbee Notebook 后端 API，包括环境搭建、数据库初始化、接口测试和问题排查。
 
 ---
 
@@ -37,7 +37,7 @@
 
 ```bash
 # 进入项目目录
-cd MediMind-Agent
+cd newbee-notebook
 
 # 启动所有依赖服务
 docker-compose up -d
@@ -47,10 +47,10 @@ docker-compose ps
 ```
 
 预期输出应显示以下容器正在运行：
-- `medimind-postgres` (PostgreSQL + pgvector)
-- `medimind-elasticsearch` (Elasticsearch)
-- `medimind-redis` (Redis)
-- `medimind-celery-worker` (Celery 异步任务处理)
+- `newbee-notebook-postgres` (PostgreSQL + pgvector)
+- `newbee-notebook-elasticsearch` (Elasticsearch)
+- `newbee-notebook-redis` (Redis)
+- `newbee-notebook-celery-worker` (Celery 异步任务处理)
 
 ### 2. 验证数据库初始化
 
@@ -58,10 +58,10 @@ docker-compose ps
 
 ```bash
 # 检查数据库表
-docker exec medimind-postgres psql -U postgres -d medimind -c "\dt"
+docker exec newbee-notebook-postgres psql -U postgres -d newbee_notebook -c "\dt"
 
 # 检查 pgvector 扩展
-docker exec medimind-postgres psql -U postgres -d medimind -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+docker exec newbee-notebook-postgres psql -U postgres -d newbee_notebook -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
 ```
 
 预期应看到以下表：
@@ -98,8 +98,8 @@ pip install redis
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=medimind_password
-POSTGRES_DB=medimind
+POSTGRES_PASSWORD=newbee_notebook_password
+POSTGRES_DB=newbee_notebook
 
 # Redis 配置
 REDIS_HOST=localhost
@@ -116,7 +116,7 @@ ZHIPU_API_KEY=your_api_key_here
 
 ```bash
 # 方式 1：使用 uvicorn 直接运行
-python -m uvicorn medimind_agent.api.main:app --reload --port 8000
+python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
 
 # 方式 2：使用项目脚本
 python main.py
@@ -144,7 +144,7 @@ curl http://localhost:8000/api/v1/health
 
 ### 步骤 3：验证导入
 导入成功后，在左侧 Collections 面板应该看到：
-- **MediMind Agent API (local)**
+- **Newbee Notebook API (local)**
   - Health (4 个请求)
   - Library (3 个请求)
   - Documents (7 个请求)
@@ -158,7 +158,7 @@ curl http://localhost:8000/api/v1/health
 
 ### 集合级变量配置
 
-点击 Collections 中的 "MediMind Agent API (local)"，进入 Variables 标签页：
+点击 Collections 中的 "Newbee Notebook API (local)"，进入 Variables 标签页：
 
 | 变量名 | 初始值 | 当前值 | 说明 |
 |--------|--------|--------|------|
@@ -270,7 +270,7 @@ GET /api/v1/info
 预期响应示例：
 ```json
 {
-  "name": "MediMind Agent",
+  "name": "Newbee Notebook",
   "version": "1.0.0",
   "features": {
     "library": true,
@@ -596,7 +596,7 @@ pip install redis
 # 重启 API 服务器
 # 停止当前运行的服务器（Ctrl+C）
 # 重新启动
-python -m uvicorn medimind_agent.api.main:app --reload --port 8000
+python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
 ```
 
 ### 问题 2：数据库表不存在
@@ -618,7 +618,7 @@ docker-compose up -d
 
 # 等待容器启动（约 10 秒）
 # 验证表已创建
-docker exec medimind-postgres psql -U postgres -d medimind -c "\dt"
+docker exec newbee-notebook-postgres psql -U postgres -d newbee_notebook -c "\dt"
 ```
 
 ### 问题 3：Celery Worker 无法连接到 Redis
@@ -639,7 +639,7 @@ docker ps | grep redis
 docker-compose restart celery-worker
 
 # 查看 worker 日志
-docker logs -f medimind-celery-worker
+docker logs -f newbee-notebook-celery-worker
 ```
 
 ### 问题 4：API 服务器无法连接到 PostgreSQL
@@ -656,14 +656,14 @@ could not connect to server
 docker ps | grep postgres
 
 # 检查容器健康状态
-docker exec medimind-postgres pg_isready -U postgres
+docker exec newbee-notebook-postgres pg_isready -U postgres
 
 # 验证 .env 配置
 # POSTGRES_HOST=localhost
 # POSTGRES_PORT=5432
 # POSTGRES_USER=postgres
-# POSTGRES_PASSWORD=medimind_password
-# POSTGRES_DB=medimind
+# POSTGRES_PASSWORD=newbee_notebook_password
+# POSTGRES_DB=newbee_notebook
 ```
 
 ---
@@ -691,12 +691,12 @@ Postman 支持运行整个集合或文件夹的所有请求：
 
 // 开发环境
 {
-  "base_url": "https://dev.medimind.example.com"
+  "base_url": "https://dev.newbee-notebook.example.com"
 }
 
 // 生产环境
 {
-  "base_url": "https://api.medimind.example.com"
+  "base_url": "https://api.newbee-notebook.example.com"
 }
 ```
 
@@ -747,10 +747,10 @@ cat newman-run-report.html
 # 在运行 uvicorn 的终端窗口查看输出
 
 # 查看 Celery worker 日志
-docker logs -f medimind-celery-worker
+docker logs -f newbee-notebook-celery-worker
 
 # 查看 PostgreSQL 日志
-docker logs -f medimind-postgres
+docker logs -f newbee-notebook-postgres
 
 # 查看所有容器日志
 docker-compose logs -f
@@ -760,7 +760,7 @@ docker-compose logs -f
 
 ```bash
 # 连接到数据库
-docker exec -it medimind-postgres psql -U postgres -d medimind
+docker exec -it newbee-notebook-postgres psql -U postgres -d newbee_notebook
 
 # 查看所有表
 \dt
@@ -781,7 +781,7 @@ SELECT * FROM notebooks ORDER BY created_at DESC LIMIT 5;
 # 方式 1：删除特定记录（通过 Postman DELETE 请求）
 
 # 方式 2：清空所有表（危险操作，仅用于测试环境）
-docker exec medimind-postgres psql -U postgres -d medimind -c "
+docker exec newbee-notebook-postgres psql -U postgres -d newbee_notebook -c "
 TRUNCATE TABLE messages CASCADE;
 TRUNCATE TABLE references CASCADE;
 TRUNCATE TABLE sessions CASCADE;

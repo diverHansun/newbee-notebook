@@ -1,5 +1,5 @@
 [project]
-name = "medimind-agent"
+name = "newbee-notebook"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -45,4 +45,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["medimind_agent*"]
+include = ["newbee_notebook*"]

@@ -52,8 +52,8 @@
 **影响**: 文本 PDF 因 PyPdf 回退可用, 影响较小; 扫描 PDF 无法提取文本, 影响严重.
 
 **涉及文件**:
-- `medimind_agent/configs/document_processing.yaml` (第7行)
-- `medimind_agent/infrastructure/document_processing/converters/mineru_converter.py` (第73行)
+- `newbee_notebook/configs/document_processing.yaml` (第7行)
+- `newbee_notebook/infrastructure/document_processing/converters/mineru_converter.py` (第73行)
 
 **修复方案**: 将读取超时设为无限制 (None), 仅保留连接超时 (5秒) 用于快速检测 MinerU 不可达. 配置中用 0 表示不限制.
 
@@ -64,8 +64,8 @@
 **根本原因**: `document_service.py:141` 直接使用 `upload.filename` 作为 title, 未经编码解码处理. 而 `local_storage.py` 中已有 `_decode_filename()` 函数做了 latin1->utf8 的修复, 但该函数仅用于文件存储路径, 未应用于数据库 title.
 
 **涉及文件**:
-- `medimind_agent/application/services/document_service.py` (第141行)
-- `medimind_agent/infrastructure/storage/local_storage.py` (第21-42行, 已有解码函数)
+- `newbee_notebook/application/services/document_service.py` (第141行)
+- `newbee_notebook/infrastructure/storage/local_storage.py` (第21-42行, 已有解码函数)
 
 **修复方案**: 在 `document_service.py` 中对 title 也调用 `_decode_filename()`.
 
@@ -76,7 +76,7 @@
 **根本原因**: `document_tasks.py:165,178` 对 `VectorStoreIndex.delete_ref_doc()` 使用了 `await`, 但该方法是同步方法, 返回 None. 同一文件中 `insert_nodes()` 正确地未使用 `await`.
 
 **涉及文件**:
-- `medimind_agent/infrastructure/tasks/document_tasks.py` (第165行, 第178行)
+- `newbee_notebook/infrastructure/tasks/document_tasks.py` (第165行, 第178行)
 
 **修复方案**: 移除 `await`, 改为直接同步调用.
 

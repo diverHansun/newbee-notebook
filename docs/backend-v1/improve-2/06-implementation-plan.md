@@ -76,7 +76,7 @@ Phase 5 (文档)
 
 ### Task 1.2: 更新配置文件
 
-**文件**：`medimind_agent/configs/document_processing.yaml`
+**文件**：`newbee_notebook/configs/document_processing.yaml`
 
 **变更内容**：
 
@@ -144,7 +144,7 @@ MINERU_PIPELINE_ID=
 
 ### Task 2.1: 实现 MinerUCloudConverter
 
-**文件**：新建 `medimind_agent/infrastructure/document_processing/converters/mineru_cloud_converter.py`
+**文件**：新建 `newbee_notebook/infrastructure/document_processing/converters/mineru_cloud_converter.py`
 
 **关键代码**：参考 [03-sdk-integration.md](./03-sdk-integration.md#41-类设计)
 
@@ -185,7 +185,7 @@ MINERU_PIPELINE_ID=
 
 ### Task 2.3: 更新 DocumentProcessor
 
-**文件**：`medimind_agent/infrastructure/document_processing/processor.py`
+**文件**：`newbee_notebook/infrastructure/document_processing/processor.py`
 
 **变更内容**：
 
@@ -221,7 +221,7 @@ class DocumentProcessor:
 
 ### Task 2.4: 更新导入路径
 
-**文件**：`medimind_agent/infrastructure/document_processing/converters/__init__.py`
+**文件**：`newbee_notebook/infrastructure/document_processing/converters/__init__.py`
 
 **变更内容**：
 
@@ -339,7 +339,7 @@ docker-compose ps | grep mineru
 # 2. Profile 启动（包含 mineru-api）
 docker-compose --profile mineru-local up -d
 docker-compose ps | grep mineru
-# 应该有 medimind-mineru-api
+# 应该有 newbee-notebook-mineru-api
 
 # 3. 清理
 docker-compose down

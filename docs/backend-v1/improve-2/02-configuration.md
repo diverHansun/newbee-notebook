@@ -8,7 +8,7 @@
 项目配置层级：
 .env.example                    # 环境变量模板（新增字段）
 .env                            # 实际环境变量（用户配置）
-medimind_agent/configs/
+newbee_notebook/configs/
   └── document_processing.yaml  # 文档处理配置（修改）
 ```
 

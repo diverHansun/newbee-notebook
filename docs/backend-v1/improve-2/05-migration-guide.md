@@ -47,7 +47,7 @@
 ```bash
 # 备份数据卷
 docker-compose down
-docker run --rm -v medimind_postgres_data:/data \
+docker run --rm -v newbee_notebook_postgres_data:/data \
   -v $(pwd)/backups:/backup ubuntu \
   tar czf /backup/postgres_$(date +%Y%m%d).tar.gz /data
 
@@ -155,12 +155,12 @@ docker-compose up -d
 # 3. 验证
 docker-compose ps
 # 应该看到:
-#   medimind-postgres: Up
-#   medimind-redis: Up
-#   medimind-elasticsearch: Up
-#   medimind-celery-worker: Up
+#   newbee-notebook-postgres: Up
+#   newbee-notebook-redis: Up
+#   newbee-notebook-elasticsearch: Up
+#   newbee-notebook-celery-worker: Up
 # 不应该看到:
-#   medimind-mineru-api
+#   newbee-notebook-mineru-api
 ```
 
 **本地模式**：
@@ -228,8 +228,8 @@ docker-compose logs -f celery-worker
 ```bash
 # 如果需要恢复数据
 docker-compose down -v
-docker volume create medimind_postgres_data
-docker run --rm -v medimind_postgres_data:/data \
+docker volume create newbee_notebook_postgres_data
+docker run --rm -v newbee_notebook_postgres_data:/data \
   -v $(pwd)/backups:/backup ubuntu \
   tar xzf /backup/postgres_YYYYMMDD.tar.gz -C /data --strip-components=1
 

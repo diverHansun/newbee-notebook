@@ -1,4 +1,4 @@
-# 🚀 MediMind Agent 快速开始
+# 🚀 Newbee Notebook 快速开始
 
 ## 📦 安装依赖
 
@@ -147,7 +147,7 @@ docker-compose up -d redis postgres elasticsearch celery-worker
 
 ```bash
 # 确保虚拟环境已激活
-python -m uvicorn medimind_agent.api.main:app --reload --port 8000
+python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
 ```
 
 启动成功后访问：
@@ -222,13 +222,13 @@ docker-compose down -v && docker-compose up -d
 
 ```bash
 # 开发模式（自动重载）
-python -m uvicorn medimind_agent.api.main:app --reload --port 8000
+python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
 
 # 生产模式
-python -m uvicorn medimind_agent.api.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn newbee_notebook.api.main:app --host 0.0.0.0 --port 8000
 
 # 指定 workers（生产环境）
-python -m uvicorn medimind_agent.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+python -m uvicorn newbee_notebook.api.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ## 🛠️ 可选：启动监控工具
@@ -249,14 +249,14 @@ docker-compose --profile debug up -d kibana
 
 ```bash
 # 构建 pgvector 索引
-python -m medimind_agent.scripts.rebuild_pgvector
+python -m newbee_notebook.scripts.rebuild_pgvector
 
 # 构建 Elasticsearch 索引
-python -m medimind_agent.scripts.rebuild_es
+python -m newbee_notebook.scripts.rebuild_es
 ```
 
 说明：
-- 后端脚本建议统一通过 `python -m medimind_agent.scripts.<name>` 调用。
+- 后端脚本建议统一通过 `python -m newbee_notebook.scripts.<name>` 调用。
 - `scripts/` 目录保留全局入口与用户直接运行脚本。
 
 ## 🎉 完成

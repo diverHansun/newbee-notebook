@@ -103,13 +103,13 @@ failed -> pending -> processing -> completed/failed
 
 ## 5.1 目录职责
 
-1. `medimind_agent/scripts`：后端内部脚本（索引重建、DB相关）。
+1. `newbee_notebook/scripts`：后端内部脚本（索引重建、DB相关）。
 2. `frontend/scripts`：前端工程脚本（构建、联调、mock 等）。
 3. `scripts`：全局入口脚本（用户直接运行、跨模块编排）。
 
 ## 5.2 调用约定
 
-1. 后端脚本标准入口：`python -m medimind_agent.scripts.<script_name>`
+1. 后端脚本标准入口：`python -m newbee_notebook.scripts.<script_name>`
 2. 全局脚本用于：
    - 上传辅助（如 `upload_documents.py`）
    - 环境/服务编排（如 `up-mineru.ps1`）

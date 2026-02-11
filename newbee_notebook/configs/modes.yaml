@@ -1,0 +1,35 @@
+# Mode configuration for different interaction modes
+
+modes:
+  chat:
+    agent_type: function  # FunctionAgent for function calling
+    tools:
+      - tavily
+      - elasticsearch
+    memory: true
+    description: "Free-form conversation with web search and knowledge base access"
+    
+  ask:
+    agent_type: react  # ReActAgent for reasoning + acting
+    retrieval: hybrid  # Hybrid retrieval: pgvector + ES BM25
+    memory: true
+    description: "Deep Q&A with RAG and hybrid retrieval"
+    
+  conclude:
+    engine: chat_engine  # ChatEngine with condense_plus_context
+    retrieval: pgvector
+    memory: false
+    description: "Document summarization and conclusion generation"
+    
+  explain:
+    engine: query_engine  # QueryEngine for single-turn queries
+    retrieval: pgvector
+    memory: false
+    description: "Concept explanation and knowledge clarification"
+
+retrieval:
+  hybrid:
+    pgvector_weight: 0.5
+    bm25_weight: 0.5
+    fusion_method: rrf  # reciprocal rank fusion
+    top_k: 10

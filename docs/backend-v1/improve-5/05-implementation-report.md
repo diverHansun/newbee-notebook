@@ -25,9 +25,9 @@
 
 涉及文件：
 
-1. `medimind_agent/infrastructure/document_processing/processor.py`
-2. `medimind_agent/infrastructure/document_processing/converters/mineru_cloud_converter.py`
-3. `medimind_agent/configs/document_processing.yaml`
+1. `newbee_notebook/infrastructure/document_processing/processor.py`
+2. `newbee_notebook/infrastructure/document_processing/converters/mineru_cloud_converter.py`
+3. `newbee_notebook/configs/document_processing.yaml`
 4. `.env.example`
 5. `docker-compose.yml`
 
@@ -52,17 +52,17 @@
 
 涉及文件：
 
-1. `medimind_agent/domain/entities/document.py`
-2. `medimind_agent/domain/repositories/document_repository.py`
-3. `medimind_agent/infrastructure/persistence/models.py`
-4. `medimind_agent/infrastructure/persistence/repositories/document_repo_impl.py`
-5. `medimind_agent/infrastructure/persistence/database.py`
-6. `medimind_agent/infrastructure/tasks/document_tasks.py`
-7. `medimind_agent/api/models/responses.py`
-8. `medimind_agent/api/routers/documents.py`
-9. `medimind_agent/api/routers/library.py`
-10. `medimind_agent/api/routers/notebook_documents.py`
-11. `medimind_agent/scripts/db/init-postgres.sql`
+1. `newbee_notebook/domain/entities/document.py`
+2. `newbee_notebook/domain/repositories/document_repository.py`
+3. `newbee_notebook/infrastructure/persistence/models.py`
+4. `newbee_notebook/infrastructure/persistence/repositories/document_repo_impl.py`
+5. `newbee_notebook/infrastructure/persistence/database.py`
+6. `newbee_notebook/infrastructure/tasks/document_tasks.py`
+7. `newbee_notebook/api/models/responses.py`
+8. `newbee_notebook/api/routers/documents.py`
+9. `newbee_notebook/api/routers/library.py`
+10. `newbee_notebook/api/routers/notebook_documents.py`
+11. `newbee_notebook/scripts/db/init-postgres.sql`
 
 ## 2.3 PDF 兜底改为 MarkItDown
 
@@ -74,9 +74,9 @@
 
 涉及文件：
 
-1. `medimind_agent/infrastructure/document_processing/converters/markitdown_converter.py`
-2. `medimind_agent/infrastructure/document_processing/processor.py`
-3. `medimind_agent/infrastructure/document_processing/converters/__init__.py`
+1. `newbee_notebook/infrastructure/document_processing/converters/markitdown_converter.py`
+2. `newbee_notebook/infrastructure/document_processing/processor.py`
+3. `newbee_notebook/infrastructure/document_processing/converters/__init__.py`
 
 ## 2.4 四模式 notebook 作用域收敛与日志降噪
 
@@ -91,18 +91,18 @@
 
 涉及文件：
 
-1. `medimind_agent/core/engine/modes/chat_mode.py`
-2. `medimind_agent/core/engine/modes/conclude_mode.py`
-3. `medimind_agent/core/rag/retrieval/scoped_retriever.py`
-4. `medimind_agent/core/tools/tool_registry.py`
-5. `medimind_agent/core/tools/es_search_tool.py`
-6. `medimind_agent/application/services/chat_service.py`
-7. `medimind_agent/tests/unit/test_scoped_retriever.py`
-8. `medimind_agent/tests/unit/test_modes.py`
-9. `medimind_agent/tests/unit/test_tools.py`
-10. `medimind_agent/tests/unit/test_chat_service_guards.py`
-11. `medimind_agent/core/engine/modes/ask_mode.py`
-12. `medimind_agent/tests/unit/test_modes.py`
+1. `newbee_notebook/core/engine/modes/chat_mode.py`
+2. `newbee_notebook/core/engine/modes/conclude_mode.py`
+3. `newbee_notebook/core/rag/retrieval/scoped_retriever.py`
+4. `newbee_notebook/core/tools/tool_registry.py`
+5. `newbee_notebook/core/tools/es_search_tool.py`
+6. `newbee_notebook/application/services/chat_service.py`
+7. `newbee_notebook/tests/unit/test_scoped_retriever.py`
+8. `newbee_notebook/tests/unit/test_modes.py`
+9. `newbee_notebook/tests/unit/test_tools.py`
+10. `newbee_notebook/tests/unit/test_chat_service_guards.py`
+11. `newbee_notebook/core/engine/modes/ask_mode.py`
+12. `newbee_notebook/tests/unit/test_modes.py`
 
 ---
 

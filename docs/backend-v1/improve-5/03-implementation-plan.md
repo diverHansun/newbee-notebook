@@ -23,9 +23,9 @@
 
 涉及文件（计划）：
 
-1. `medimind_agent/infrastructure/document_processing/processor.py`
-2. `medimind_agent/infrastructure/document_processing/converters/mineru_cloud_converter.py`
-3. `medimind_agent/configs/document_processing.yaml`
+1. `newbee_notebook/infrastructure/document_processing/processor.py`
+2. `newbee_notebook/infrastructure/document_processing/converters/mineru_cloud_converter.py`
+3. `newbee_notebook/configs/document_processing.yaml`
 4. `.env.example`
 
 验收标准：
@@ -56,13 +56,13 @@
 
 涉及文件（计划）：
 
-1. `medimind_agent/scripts/db/init-postgres.sql`
-2. `medimind_agent/infrastructure/persistence/models.py`
-3. `medimind_agent/infrastructure/persistence/repositories/document_repo_impl.py`
-4. `medimind_agent/infrastructure/tasks/document_tasks.py`
-5. `medimind_agent/api/models/responses.py`
-6. `medimind_agent/api/routers/documents.py`
-7. `medimind_agent/api/routers/notebook_documents.py`
+1. `newbee_notebook/scripts/db/init-postgres.sql`
+2. `newbee_notebook/infrastructure/persistence/models.py`
+3. `newbee_notebook/infrastructure/persistence/repositories/document_repo_impl.py`
+4. `newbee_notebook/infrastructure/tasks/document_tasks.py`
+5. `newbee_notebook/api/models/responses.py`
+6. `newbee_notebook/api/routers/documents.py`
+7. `newbee_notebook/api/routers/notebook_documents.py`
 
 验收标准：
 
@@ -85,8 +85,8 @@
 
 涉及文件（计划）：
 
-1. `medimind_agent/infrastructure/document_processing/converters/markitdown_converter.py`
-2. `medimind_agent/infrastructure/document_processing/processor.py`
+1. `newbee_notebook/infrastructure/document_processing/converters/markitdown_converter.py`
+2. `newbee_notebook/infrastructure/document_processing/processor.py`
 3. `requirements.txt`
 4. `pyproject.toml`
 
@@ -136,13 +136,13 @@
 
 涉及文件（计划）：
 
-1. `medimind_agent/core/engine/modes/chat_mode.py`
-2. `medimind_agent/core/engine/modes/conclude_mode.py`
-3. `medimind_agent/core/rag/retrieval/scoped_retriever.py`
-4. `medimind_agent/core/tools/es_search_tool.py`
-5. `medimind_agent/core/tools/tool_registry.py`
-6. `medimind_agent/application/services/chat_service.py`
-7. `medimind_agent/tests/unit/*`
+1. `newbee_notebook/core/engine/modes/chat_mode.py`
+2. `newbee_notebook/core/engine/modes/conclude_mode.py`
+3. `newbee_notebook/core/rag/retrieval/scoped_retriever.py`
+4. `newbee_notebook/core/tools/es_search_tool.py`
+5. `newbee_notebook/core/tools/tool_registry.py`
+6. `newbee_notebook/application/services/chat_service.py`
+7. `newbee_notebook/tests/unit/*`
 
 验收标准：
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Main entry point for MediMind Agent.
+"""Main entry point for Newbee Notebook.
 
 This script provides a multi-mode medical Q&A assistant with:
 - Chat mode: Free conversation with web search and knowledge base tools
@@ -31,15 +31,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-from medimind_agent.core.llm.zhipu import build_llm
-from medimind_agent.core.rag.embeddings import build_embedding
-from medimind_agent.core.common.config import (
+from newbee_notebook.core.llm.zhipu import build_llm
+from newbee_notebook.core.rag.embeddings import build_embedding
+from newbee_notebook.core.common.config import (
     get_documents_directory,
     get_storage_config,
     get_embedding_provider,
     get_pgvector_config_for_provider,
 )
-from medimind_agent.core.engine import (
+from newbee_notebook.core.engine import (
     ModeType,
     SessionManager,
     parse_mode_from_input,
@@ -47,13 +47,13 @@ from medimind_agent.core.engine import (
     load_pgvector_index,
     load_es_index,
 )
-from medimind_agent.infrastructure.pgvector import PGVectorConfig
-from medimind_agent.infrastructure.elasticsearch import ElasticsearchConfig
-from medimind_agent.domain.repositories.session_repository import SessionRepository
-from medimind_agent.domain.repositories.message_repository import MessageRepository
-from medimind_agent.domain.entities.session import Session
-from medimind_agent.domain.entities.message import Message
-from medimind_agent.domain.value_objects.mode_type import MessageRole
+from newbee_notebook.infrastructure.pgvector import PGVectorConfig
+from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
+from newbee_notebook.domain.repositories.session_repository import SessionRepository
+from newbee_notebook.domain.repositories.message_repository import MessageRepository
+from newbee_notebook.domain.entities.session import Session
+from newbee_notebook.domain.entities.message import Message
+from newbee_notebook.domain.value_objects.mode_type import MessageRole
 
 
 class InMemorySessionRepo(SessionRepository):
@@ -114,7 +114,7 @@ class InMemoryMessageRepo(MessageRepository):
 def print_banner():
     """Print application banner."""
     print("=" * 60)
-    print("MediMind Agent - Multi-Mode Medical Q&A Assistant")
+    print("Newbee Notebook - Multi-Mode Medical Q&A Assistant")
     print("=" * 60)
     print("Commands: /help, /mode <name>, /status, /reset, /new, /quit")
     print("-" * 60)
@@ -168,7 +168,7 @@ async def initialize_services(args):
             config = PGVectorConfig(
                 host=pg_config.get("host", "localhost"),
                 port=pg_config.get("port", 5432),
-                database=pg_config.get("database", "medimind"),
+                database=pg_config.get("database", "newbee_notebook"),
                 user=pg_config.get("user", "postgres"),
                 password=pg_config.get("password", ""),
                 # Use provider-specific table and dimension
@@ -193,7 +193,7 @@ async def initialize_services(args):
             
             config = ElasticsearchConfig(
                 url=es_cfg.get("url", "http://localhost:9200"),
-                index_name=es_cfg.get("index_name", "medimind_docs"),
+                index_name=es_cfg.get("index_name", "newbee_notebook_docs"),
             )
             
             es_index = await load_es_index(embed_model, config)
@@ -223,7 +223,7 @@ async def main_async(args):
         
         # Get ES index name from config
         storage_config = get_storage_config()
-        es_index_name = storage_config.get("elasticsearch", {}).get("index_name", "medimind_docs")
+        es_index_name = storage_config.get("elasticsearch", {}).get("index_name", "newbee_notebook_docs")
         
         # Create session manager
         session_manager = SessionManager(
@@ -393,7 +393,7 @@ async def main_async(args):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="MediMind Agent - Multi-Mode Medical Q&A Assistant",
+        description="Newbee Notebook - Multi-Mode Medical Q&A Assistant",
     )
     parser.add_argument(
         "--mode",

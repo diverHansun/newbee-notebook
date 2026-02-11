@@ -15,7 +15,7 @@
 1. 后端不“禁用模式”，但必须在文档未就绪时返回结构化响应，避免 500。
 2. 文档处理采用显式状态机更新（`uploaded -> pending -> processing -> completed/failed`）。
 3. 脚本分层规范：
-   - 后端相关命令放在 `medimind_agent/scripts`
+   - 后端相关命令放在 `newbee_notebook/scripts`
    - 前端相关命令放在 `frontend/scripts`（后续阶段）
    - 全局/用户直接运行命令放在 `scripts`
 

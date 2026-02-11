@@ -495,7 +495,7 @@ async def test_cloud_converter_convert(mock_get, mock_upload):
 # 测试脚本: scripts/test_mineru_cloud.py
 import asyncio
 from pathlib import Path
-from medimind_agent.infrastructure.document_processing.converters.mineru_cloud_converter import (
+from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter
 )
 

@@ -1,6 +1,6 @@
-# MediMind Agent
+# Newbee Notebook
 
-MediMind Agent 是一个面向医疗学习与知识问答的多模式智能助手项目，支持文档上传、知识检索问答和内容总结讲解。
+Newbee Notebook 是一个面向医疗学习与知识问答的多模式智能助手项目，支持文档上传、知识检索问答和内容总结讲解。
 
 ## 功能概览
 

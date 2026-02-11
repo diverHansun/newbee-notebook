@@ -8,8 +8,8 @@
 
 ### 1.2 代码证据
 
-1. 默认 cooldown 配置为 300 秒：`medimind_agent/configs/document_processing.yaml`
-2. 单次异常即可设置 `_mineru_unavailable_until`：`medimind_agent/infrastructure/document_processing/processor.py`
+1. 默认 cooldown 配置为 300 秒：`newbee_notebook/configs/document_processing.yaml`
+2. 单次异常即可设置 `_mineru_unavailable_until`：`newbee_notebook/infrastructure/document_processing/processor.py`
 
 ### 1.3 影响
 

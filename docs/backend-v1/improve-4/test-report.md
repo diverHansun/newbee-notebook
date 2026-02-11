@@ -118,7 +118,7 @@ GET /api/v1/documents/46b87b57...
 
 **修复**:
 - 全局脚本: `scripts/` (用户直接运行)
-- 后端脚本: `medimind_agent/scripts/` (通过 `python -m` 调用)
+- 后端脚本: `newbee_notebook/scripts/` (通过 `python -m` 调用)
 
 **验证**: 文档已更新，脚本调用符合规范
 
@@ -305,7 +305,7 @@ POST /chat/notebooks/{notebook_id}/chat
 {
   "session_id": "aeeab009...",
   "message_id": 1,
-  "content": "你好！我是MediMind Agent...",
+  "content": "你好！我是Newbee Notebook...",
   "mode": "chat"
 }
 ```

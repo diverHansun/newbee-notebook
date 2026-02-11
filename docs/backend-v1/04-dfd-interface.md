@@ -344,7 +344,7 @@ async def _process_document_async(document_id: str):
 | 服务名 | mineru-api |
 | 内部端口 | 8000 |
 | 外部端口 | 8001 |
-| 网络 | medimind_network |
+| 网络 | newbee_notebook_network |
 
 ### 5.2 调用方式
 

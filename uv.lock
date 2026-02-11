@@ -2040,7 +2040,7 @@ wheels = [
 ]
 
 [[package]]
-name = "medimind-agent"
+name = "newbee-notebook"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

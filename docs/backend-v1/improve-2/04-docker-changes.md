@@ -72,13 +72,13 @@ services:
 ```yaml
 celery-worker:
   image: python:3.11-slim
-  container_name: medimind-celery-worker
+  container_name: newbee-notebook-celery-worker
   working_dir: /app
   volumes:
     - ./:/app
   command: >
     bash -c "pip install -q -r requirements.txt && \
-             celery -A medimind_agent.infrastructure.tasks.celery_app worker --loglevel=info"
+             celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info"
   env_file:
     - .env
   environment:
@@ -107,7 +107,7 @@ celery-worker:
       condition: service_healthy
 
   networks:
-    - medimind_network
+    - newbee_notebook_network
   restart: unless-stopped
 ```
 
@@ -133,7 +133,7 @@ mineru-api:
     context: ./docker/mineru
     dockerfile: Dockerfile.cpu
   image: medimind/mineru-api:cpu
-  container_name: medimind-mineru-api
+  container_name: newbee-notebook-mineru-api
   restart: unless-stopped
   environment:
     MINERU_MODEL_SOURCE: modelscope
@@ -145,7 +145,7 @@ mineru-api:
   ports:
     - "8001:8000"
   networks:
-    - medimind_network
+    - newbee_notebook_network
   healthcheck:
     test: ["CMD-SHELL", "curl -f http://localhost:8000/docs >/dev/null 2>&1 || exit 1"]
     interval: 30s
@@ -227,12 +227,12 @@ docker-compose up -d
 # 验证
 docker-compose ps
 # 输出应该包含:
-#   medimind-postgres
-#   medimind-redis
-#   medimind-elasticsearch
-#   medimind-celery-worker
+#   newbee-notebook-postgres
+#   newbee-notebook-redis
+#   newbee-notebook-elasticsearch
+#   newbee-notebook-celery-worker
 # 不包含:
-#   medimind-mineru-api
+#   newbee-notebook-mineru-api
 ```
 
 ### 4.2 本地 CPU 模式
@@ -248,11 +248,11 @@ docker-compose --profile mineru-local up -d
 # 验证
 docker-compose ps
 # 输出应该包含:
-#   medimind-postgres
-#   medimind-redis
-#   medimind-elasticsearch
-#   medimind-celery-worker
-#   medimind-mineru-api  <-- 已启动
+#   newbee-notebook-postgres
+#   newbee-notebook-redis
+#   newbee-notebook-elasticsearch
+#   newbee-notebook-celery-worker
+#   newbee-notebook-mineru-api  <-- 已启动
 ```
 
 ### 4.3 本地 GPU 模式
@@ -270,7 +270,7 @@ docker-compose \
   up -d
 
 # 验证 GPU
-docker exec medimind-mineru-api nvidia-smi
+docker exec newbee-notebook-mineru-api nvidia-smi
 ```
 
 ### 4.4 停止服务
@@ -361,7 +361,7 @@ environment:
 
 ```bash
 # 检查容器内环境变量
-docker exec medimind-celery-worker env | grep MINERU
+docker exec newbee-notebook-celery-worker env | grep MINERU
 
 # 输出示例（云服务模式）：
 # MINERU_MODE=cloud
@@ -394,8 +394,8 @@ docker-compose ps
 
 # 输出示例:
 # NAME                      STATUS
-# medimind-mineru-api       Up (healthy)
-# medimind-celery-worker    Up
+# newbee-notebook-mineru-api       Up (healthy)
+# newbee-notebook-celery-worker    Up
 ```
 
 ### 7.2 手动健康检查
@@ -405,8 +405,8 @@ docker-compose ps
 curl http://localhost:8001/docs
 
 # 检查 celery-worker
-docker exec medimind-celery-worker \
-  celery -A medimind_agent.infrastructure.tasks.celery_app inspect ping
+docker exec newbee-notebook-celery-worker \
+  celery -A newbee_notebook.infrastructure.tasks.celery_app inspect ping
 ```
 
 ## 8. 故障排查

@@ -4,7 +4,7 @@
 
 ### 当前问题
 
-MediMind Agent 的文档处理流程目前完全依赖本地 Docker 部署的 MinerU 服务：
+Newbee Notebook 的文档处理流程目前完全依赖本地 Docker 部署的 MinerU 服务：
 
 1. **处理速度慢**：即使在性能较好的 CPU 上，处理大型 PDF 文档仍需要很长时间
 2. **资源占用高**：MinerU 容器常驻内存，即使不处理文档也占用系统资源
@@ -94,15 +94,15 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-
 ### 需要修改的文件
 
 **配置文件**：
-- `medimind_agent/configs/document_processing.yaml`
+- `newbee_notebook/configs/document_processing.yaml`
 - `.env` / `.env.example`
 - `docker-compose.yml`
 - `docker-compose.gpu.yml`
 
 **代码文件**：
-- `medimind_agent/infrastructure/document_processing/converters/mineru_converter.py`（重命名为 `mineru_local_converter.py`）
-- `medimind_agent/infrastructure/document_processing/converters/mineru_cloud_converter.py`（新增）
-- `medimind_agent/infrastructure/document_processing/processor.py`
+- `newbee_notebook/infrastructure/document_processing/converters/mineru_converter.py`（重命名为 `mineru_local_converter.py`）
+- `newbee_notebook/infrastructure/document_processing/converters/mineru_cloud_converter.py`（新增）
+- `newbee_notebook/infrastructure/document_processing/processor.py`
 
 **依赖**：
 - `requirements.txt`（新增 `mineru-kie-sdk`）

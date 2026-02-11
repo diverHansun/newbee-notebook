@@ -1,17 +1,17 @@
-# MediMind Agent 后端集成测试报告
+# Newbee Notebook 后端集成测试报告
 
 ## improve-3 阶段 -- 后端 API 全链路测试
 
 - 测试日期: 2026-02-08
 - 测试分支: stage/backend-v1
 - 测试人员: Claude Code (自动化测试)
-- 测试依据: postman_collection.json (MediMind Agent API v2.1)
+- 测试依据: postman_collection.json (Newbee Notebook API v2.1)
 
 ---
 
 ## 1. 测试概述
 
-本次测试针对 MediMind Agent 后端 API 进行全链路集成测试, 覆盖 Postman Collection 中定义的全部 6 大模块共 28 个端点. 测试按照实际业务流程顺序执行: 健康检查 -> 文档库 -> 文档上传 -> 笔记本管理 -> 文档关联与处理 -> 会话管理 -> 聊天功能 -> 管理端点.
+本次测试针对 Newbee Notebook 后端 API 进行全链路集成测试, 覆盖 Postman Collection 中定义的全部 6 大模块共 28 个端点. 测试按照实际业务流程顺序执行: 健康检查 -> 文档库 -> 文档上传 -> 笔记本管理 -> 文档关联与处理 -> 会话管理 -> 聊天功能 -> 管理端点.
 
 测试使用 curl 命令行工具执行 HTTP 请求, 文档上传使用项目自带的 `scripts/upload_documents.py` 脚本 (解决 Windows curl 中文文件名编码问题).
 
@@ -109,7 +109,7 @@ GET /api/v1/info
 
 ```json
 {
-  "name": "MediMind Agent",
+  "name": "Newbee Notebook",
   "version": "1.0.0",
   "features": {
     "library": true,
@@ -334,8 +334,8 @@ GET /api/v1/documents/6c8e0adf-17b6-4957-a960-15a5b2e7fc8d
 | +120s | uploaded | - |
 | +300s (5分钟) | uploaded | [Embedding] Using provider: biobert |
 | +480s (8分钟) | uploaded | GET elasticsearch:9200/ [status:200] |
-| +642s (10.7分钟) | uploaded | HEAD elasticsearch:9200/medimind_docs [404] |
-| +642s | uploaded | PUT elasticsearch:9200/medimind_docs [200] (创建索引) |
+| +642s (10.7分钟) | uploaded | HEAD elasticsearch:9200/newbee_notebook_docs [404] |
+| +642s | uploaded | PUT elasticsearch:9200/newbee_notebook_docs [200] (创建索引) |
 | +642s | uploaded | PUT elasticsearch:9200/_bulk [200] (批量写入) |
 | +642s | **completed** | Task process_document_task succeeded in 642.28s |
 
@@ -810,7 +810,7 @@ GET /api/v1/admin/index-stats
 
 ## 8. 结论
 
-本次后端集成测试覆盖了 MediMind Agent API v2.1 的全部 6 大模块. 在已执行的 28 项测试中, 27 项通过, 1 项失败 (Ask 模式在文档未处理完成时的 500 错误), 整体通过率 97%.
+本次后端集成测试覆盖了 Newbee Notebook API v2.1 的全部 6 大模块. 在已执行的 28 项测试中, 27 项通过, 1 项失败 (Ask 模式在文档未处理完成时的 500 错误), 整体通过率 97%.
 
 核心业务流程 -- 文档上传 -> 笔记本管理 -> 文档关联处理 -> 会话创建 -> 多模式聊天 -- 已完整验证通过. MinerU Cloud 模式成功处理了 338 页的 PDF 文件, 生成了 630 个 chunk 并完成了 BioBERT 向量化和 Elasticsearch 索引. 四种聊天模式 (chat/ask/explain/conclude) 以及 SSE 流式输出均工作正常.
 

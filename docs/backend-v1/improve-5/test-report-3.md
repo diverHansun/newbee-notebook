@@ -278,10 +278,10 @@ test-report-2 中提出的两个问题均已验证修复：
 
 **Docker 容器状态**:
 ```
-medimind-celery-worker: UP
-medimind-redis: UP
-medimind-postgres: UP
-medimind-elasticsearch: UP
+newbee-notebook-celery-worker: UP
+newbee-notebook-redis: UP
+newbee-notebook-postgres: UP
+newbee-notebook-elasticsearch: UP
 ```
 
 **配置参数**:

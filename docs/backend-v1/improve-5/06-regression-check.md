@@ -65,8 +65,8 @@
 
 执行命令：
 
-1. `.\\.venv\\Scripts\\python.exe -m pytest -q medimind_agent/tests/unit/test_document_processing_processor.py medimind_agent/tests/unit/test_document_service_content_guard.py medimind_agent/tests/unit/test_chat_service_guards.py medimind_agent/tests/unit/test_delete_document_nodes_task.py`
-2. `.\\.venv\\Scripts\\python.exe -m pytest -q medimind_agent/tests/unit`
+1. `.\\.venv\\Scripts\\python.exe -m pytest -q newbee_notebook/tests/unit/test_document_processing_processor.py newbee_notebook/tests/unit/test_document_service_content_guard.py newbee_notebook/tests/unit/test_chat_service_guards.py newbee_notebook/tests/unit/test_delete_document_nodes_task.py`
+2. `.\\.venv\\Scripts\\python.exe -m pytest -q newbee_notebook/tests/unit`
 3. `python -m json.tool postman_collection.json`
 
 结果：

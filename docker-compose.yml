@@ -1,4 +1,4 @@
-# Docker Compose configuration for MediMind Agent infrastructure
+# Docker Compose configuration for Newbee Notebook infrastructure
 # 
 # This file provides PostgreSQL with pgvector, Elasticsearch, and Kibana services
 # for local development and testing.
@@ -15,22 +15,22 @@
 services:
   redis:
     image: redis:7.2
-    container_name: medimind-redis
+    container_name: newbee-notebook-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - medimind_network
+      - newbee_notebook_network
 
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: medimind-postgres
+    container_name: newbee-notebook-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medimind_password}
-      POSTGRES_DB: ${POSTGRES_DB:-medimind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newbee_notebook_password}
+      POSTGRES_DB: ${POSTGRES_DB:-newbee_notebook}
     env_file:
       - .env
     ports:
@@ -38,18 +38,18 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Mount init script - runs automatically on first container start
-      - ./medimind_agent/scripts/db/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+      - ./newbee_notebook/scripts/db/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - medimind_network
+      - newbee_notebook_network
 
   elasticsearch:
     image: elasticsearch:8.19.0
-    container_name: medimind-elasticsearch
+    container_name: newbee-notebook-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -65,18 +65,18 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - medimind_network
+      - newbee_notebook_network
 
   # Celery worker for async document processing (uses local code)
   celery-worker:
     image: python:3.11-slim
-    container_name: medimind-celery-worker
+    container_name: newbee-notebook-celery-worker
     working_dir: /app
     volumes:
       - ./:/app
     command: >
       bash -c "pip install -q -r requirements.txt && \
-               celery -A medimind_agent.infrastructure.tasks.celery_app worker --loglevel=info"
+               celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info"
     env_file:
       - .env
     environment:
@@ -112,19 +112,19 @@ services:
       elasticsearch:
         condition: service_healthy
     networks:
-      - medimind_network
+      - newbee_notebook_network
     restart: unless-stopped
 
   # Optional: Flower monitoring UI for Celery (enable with --profile monitor)
   flower:
     image: python:3.11-slim
-    container_name: medimind-flower
+    container_name: newbee-notebook-flower
     working_dir: /app
     volumes:
       - ./:/app
     command: >
       bash -c "pip install -q -r requirements.txt && \
-               celery -A medimind_agent.infrastructure.tasks.celery_app flower --port=${FLOWER_PORT:-5555}"
+               celery -A newbee_notebook.infrastructure.tasks.celery_app flower --port=${FLOWER_PORT:-5555}"
     env_file:
       - .env
     depends_on:
@@ -133,7 +133,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - medimind_network
+      - newbee_notebook_network
     ports:
       - "${FLOWER_PORT:-5555}:${FLOWER_PORT:-5555}"
     restart: unless-stopped
@@ -143,7 +143,7 @@ services:
   # Kibana for Elasticsearch visualization and debugging
   kibana:
     image: kibana:8.19.0
-    container_name: medimind-kibana
+    container_name: newbee-notebook-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
@@ -152,7 +152,7 @@ services:
       elasticsearch:
         condition: service_healthy
     networks:
-      - medimind_network
+      - newbee_notebook_network
     # Optional: comment out this service if you don't need Kibana
     profiles:
       - debug
@@ -163,7 +163,7 @@ services:
       context: ./docker/mineru
       dockerfile: Dockerfile.cpu
     image: medimind/mineru-api:cpu
-    container_name: medimind-mineru-api
+    container_name: newbee-notebook-mineru-api
     restart: unless-stopped
     environment:
       # Use ModelScope for model downloads; models are persisted via `mineru_cache` volume.
@@ -178,7 +178,7 @@ services:
     ports:
       - "8001:8000"
     networks:
-      - medimind_network
+      - newbee_notebook_network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/docs >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -198,5 +198,6 @@ volumes:
     driver: local
 
 networks:
-  medimind_network:
+  newbee_notebook_network:
+    name: newbee_notebook_network
     driver: bridge

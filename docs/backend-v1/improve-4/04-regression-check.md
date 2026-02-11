@@ -41,10 +41,10 @@
 
 对应代码：
 
-1. `medimind_agent/application/services/notebook_document_service.py`
-2. `medimind_agent/infrastructure/tasks/document_tasks.py`
-3. `medimind_agent/api/routers/admin.py`
-4. `medimind_agent/domain/value_objects/document_status.py`
+1. `newbee_notebook/application/services/notebook_document_service.py`
+2. `newbee_notebook/infrastructure/tasks/document_tasks.py`
+3. `newbee_notebook/api/routers/admin.py`
+4. `newbee_notebook/domain/value_objects/document_status.py`
 
 ## 3.2 improve-2（MinerU 三模式与 Docker 约束）
 
@@ -79,8 +79,8 @@
 
 问题 3：脚本入口不一致
 
-1. 明确三层脚本职责：`scripts/`、`medimind_agent/scripts/`、`frontend/scripts/`。
-2. 后端脚本示例统一为 `python -m medimind_agent.scripts.<name>`。
+1. 明确三层脚本职责：`scripts/`、`newbee_notebook/scripts/`、`frontend/scripts/`。
+2. 后端脚本示例统一为 `python -m newbee_notebook.scripts.<name>`。
 
 ## 4. API 契约与 Postman 回归
 
@@ -100,8 +100,8 @@
 执行命令：
 
 1. `python -m json.tool postman_collection.json`
-2. `.\\.venv\\Scripts\\python.exe -m pytest -q medimind_agent/tests/unit/test_chat_service_guards.py`
-3. `.\\.venv\\Scripts\\python.exe -m pytest -q medimind_agent/tests/unit`
+2. `.\\.venv\\Scripts\\python.exe -m pytest -q newbee_notebook/tests/unit/test_chat_service_guards.py`
+3. `.\\.venv\\Scripts\\python.exe -m pytest -q newbee_notebook/tests/unit`
 
 结果：
 
@@ -109,7 +109,7 @@
 2. 新增守卫测试通过（3/3）。
 3. 单元测试总计 `106`，通过 `103`，失败 `3`。
 4. 失败项均为既有测试基线问题：
-   - `medimind_agent/tests/unit/test_selector.py` 中 `SessionManager` 构造参数已变化（与 improve-4 改动无直接关联）。
+   - `newbee_notebook/tests/unit/test_selector.py` 中 `SessionManager` 构造参数已变化（与 improve-4 改动无直接关联）。
 
 ## 6. 残余风险与建议
 

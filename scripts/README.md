@@ -8,9 +8,9 @@
    - 全局入口脚本
    - 面向用户直接执行
    - 可调用后端或前端子模块脚本
-2. `medimind_agent/scripts/`
+2. `newbee_notebook/scripts/`
    - 后端内部脚本
-   - 建议通过模块方式执行：`python -m medimind_agent.scripts.<name>`
+   - 建议通过模块方式执行：`python -m newbee_notebook.scripts.<name>`
 3. `frontend/scripts/`
    - 前端工程脚本（当前阶段预留）
 
@@ -26,6 +26,6 @@
 
 ## 3. 后端脚本示例
 
-1. `python -m medimind_agent.scripts.rebuild_pgvector`
-2. `python -m medimind_agent.scripts.rebuild_es`
+1. `python -m newbee_notebook.scripts.rebuild_pgvector`
+2. `python -m newbee_notebook.scripts.rebuild_es`
 
