@@ -216,13 +216,15 @@ async def list_notebook_documents_deprecated(
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: str = Path(..., description="Document ID", pattern="^[0-9a-fA-F-]{36}$"),
-    force: bool = Query(False, description="Force delete when referenced by notebooks"),
+    force: bool = Query(
+        False,
+        description="Deprecated parameter. This endpoint always performs soft delete.",
+    ),
     service: DocumentService = Depends(get_document_service),
 ):
     try:
-        await service.delete_document(document_id, force=force)
+        _ = force  # compatibility no-op
+        await service.delete_document(document_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
     return {"message": "Document deleted", "document_id": document_id}

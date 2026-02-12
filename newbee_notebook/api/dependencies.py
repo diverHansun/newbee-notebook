@@ -121,11 +121,13 @@ async def get_notebook_service(
 async def get_session_service(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
 ) -> SessionService:
     """Get SessionService instance."""
     return SessionService(
         session_repo=session_repo,
         notebook_repo=notebook_repo,
+        message_repo=message_repo,
     )
 
 

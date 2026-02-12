@@ -236,30 +236,28 @@ class TestConcludeMode:
         mode = ConcludeMode(llm=mock_llm)
         
         assert mode.mode_type == ModeType.CONCLUDE
-        assert mode.config.has_memory is False  # No memory for conclude
+        assert mode.config.has_memory is True
         assert DEFAULT_CONCLUDE_SYSTEM_PROMPT in mode.config.system_prompt
     
-    def test_memory_forced_to_none(self):
-        """Test that memory is always None for ConcludeMode."""
+    def test_memory_is_preserved(self):
+        """Test that provided memory is retained for ConcludeMode."""
         mock_llm = MagicMock()
         mock_memory = MagicMock()
         
         mode = ConcludeMode(llm=mock_llm, memory=mock_memory)
         
-        assert mode.memory is None
-        assert mode.has_memory is False
+        assert mode.memory is mock_memory
+        assert mode.has_memory is True
     
-    def test_response_mode_settings(self):
-        """Test ConcludeMode response settings."""
+    def test_similarity_settings(self):
+        """Test ConcludeMode retrieval settings."""
         mock_llm = MagicMock()
         mode = ConcludeMode(
             llm=mock_llm,
             similarity_top_k=15,
-            response_mode="compact",
         )
         
         assert mode._similarity_top_k == 15
-        assert mode._response_mode == "compact"
 
     def test_conclude_mode_wraps_retriever_with_scope(self):
         """Conclude mode should enforce notebook scope via ScopedRetriever."""
@@ -272,7 +270,7 @@ class TestConcludeMode:
         mode.set_allowed_documents(["doc-1"])
 
         with patch(
-            "newbee_notebook.core.engine.modes.conclude_mode.RetrieverQueryEngine.from_args",
+            "newbee_notebook.core.engine.modes.conclude_mode.CondensePlusContextChatEngine.from_defaults",
             return_value=MagicMock(),
         ):
             import asyncio
@@ -291,30 +289,28 @@ class TestExplainMode:
         mode = ExplainMode(llm=mock_llm)
         
         assert mode.mode_type == ModeType.EXPLAIN
-        assert mode.config.has_memory is False  # No memory for explain
+        assert mode.config.has_memory is True
         assert DEFAULT_EXPLAIN_SYSTEM_PROMPT in mode.config.system_prompt
     
-    def test_memory_forced_to_none(self):
-        """Test that memory is always None for ExplainMode."""
+    def test_memory_is_preserved(self):
+        """Test that provided memory is retained for ExplainMode."""
         mock_llm = MagicMock()
         mock_memory = MagicMock()
         
         mode = ExplainMode(llm=mock_llm, memory=mock_memory)
         
-        assert mode.memory is None
-        assert mode.has_memory is False
+        assert mode.memory is mock_memory
+        assert mode.has_memory is True
     
     def test_query_settings(self):
-        """Test ExplainMode query settings."""
+        """Test ExplainMode retrieval settings."""
         mock_llm = MagicMock()
         mode = ExplainMode(
             llm=mock_llm,
             similarity_top_k=3,
-            response_mode="tree_summarize",
         )
         
         assert mode._similarity_top_k == 3
-        assert mode._response_mode == "tree_summarize"
 
 
 class TestModeMemoryBehavior:
@@ -338,22 +334,22 @@ class TestModeMemoryBehavior:
         
         assert mode.has_memory is True
     
-    def test_conclude_mode_no_memory(self):
-        """Test Conclude mode has no memory."""
+    def test_conclude_mode_has_memory(self):
+        """Test Conclude mode uses memory."""
         mock_llm = MagicMock()
         mock_memory = MagicMock()
         
         mode = ConcludeMode(llm=mock_llm, memory=mock_memory)
         
-        assert mode.has_memory is False
+        assert mode.has_memory is True
     
-    def test_explain_mode_no_memory(self):
-        """Test Explain mode has no memory."""
+    def test_explain_mode_has_memory(self):
+        """Test Explain mode uses memory."""
         mock_llm = MagicMock()
         mock_memory = MagicMock()
         
         mode = ExplainMode(llm=mock_llm, memory=mock_memory)
         
-        assert mode.has_memory is False
+        assert mode.has_memory is True
 
 

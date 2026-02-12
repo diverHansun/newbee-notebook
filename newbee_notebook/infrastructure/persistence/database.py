@@ -111,6 +111,14 @@ class Database:
                     """
                 )
             )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE IF EXISTS sessions
+                    ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
+            )
     
     async def disconnect(self) -> None:
         """Close the database connection."""

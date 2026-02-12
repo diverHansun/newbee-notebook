@@ -1,9 +1,9 @@
 """SQLAlchemy implementation of MessageRepository."""
 
-from typing import List
+from typing import List, Optional
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from newbee_notebook.domain.entities.message import Message
@@ -45,11 +45,42 @@ class MessageRepositoryImpl(MessageRepository):
             created.append(await self.create(msg))
         return created
 
-    async def list_by_session(self, session_id: str, limit: int = 100) -> List[Message]:
-        result = await self._session.execute(
+    async def list_by_session(
+        self,
+        session_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        modes: Optional[List[ModeType]] = None,
+    ) -> List[Message]:
+        query = (
             select(MessageModel)
             .where(MessageModel.session_id == uuid.UUID(session_id))
             .order_by(MessageModel.created_at.asc())
             .limit(limit)
+            .offset(offset)
         )
+        if modes is not None:
+            mode_values = [mode.value for mode in modes]
+            if not mode_values:
+                return []
+            query = query.where(MessageModel.mode.in_(mode_values))
+
+        result = await self._session.execute(query)
         return [self._to_entity(m) for m in result.scalars().all()]
+
+    async def count_by_session(
+        self,
+        session_id: str,
+        modes: Optional[List[ModeType]] = None,
+    ) -> int:
+        query = select(func.count()).select_from(MessageModel).where(
+            MessageModel.session_id == uuid.UUID(session_id)
+        )
+        if modes is not None:
+            mode_values = [mode.value for mode in modes]
+            if not mode_values:
+                return 0
+            query = query.where(MessageModel.mode.in_(mode_values))
+
+        result = await self._session.execute(query)
+        return int(result.scalar() or 0)

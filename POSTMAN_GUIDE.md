@@ -149,7 +149,7 @@ curl http://localhost:8000/api/v1/health
   - Library (3 个请求)
   - Documents (7 个请求)
   - Notebooks (7 个请求)
-  - Sessions (5 个请求)
+  - Sessions (6 个请求，包含消息列表接口)
   - Chat (3 个请求)
 
 ---
@@ -387,7 +387,8 @@ POST /api/v1/notebooks/{{notebook_id}}/sessions
 Content-Type: application/json
 
 {
-  "title": "Test Session"
+  "title": "Test Session",
+  "include_ec_context": false
 }
 ```
 验证：
@@ -395,6 +396,7 @@ Content-Type: application/json
 - 返回新创建的 session_id
 - 自动保存 session_id 到集合变量
 - message_count 初始为 0
+- include_ec_context 默认值正确（未传时为 false）
 
 **4.2 List Sessions**
 ```
@@ -427,6 +429,20 @@ DELETE /api/v1/sessions/{{session_id}}
 - 响应状态码 204
 - 相关的 Message 和 Reference 被级联删除
 
+**4.6 Get Session Messages**
+```
+GET /api/v1/sessions/{{session_id}}/messages?mode=chat,ask&limit=20&offset=0
+```
+参数说明：
+- `mode`: 可选，逗号分隔过滤（`chat|ask|explain|conclude`）
+- `limit`: 每页条数（1-100）
+- `offset`: 分页偏移量
+
+验证：
+- 响应状态码 200
+- 返回 `data + pagination`
+- mode 过滤生效（如 `mode=explain,conclude`）
+
 ### 5. Chat 模块
 
 #### 目的
@@ -443,7 +459,8 @@ Content-Type: application/json
   "message": "Hello, can you help me?",
   "mode": "chat",
   "session_id": "{{session_id}}",
-  "context": null
+  "context": null,
+  "include_ec_context": null
 }
 ```
 参数说明：
@@ -451,6 +468,7 @@ Content-Type: application/json
 - `mode`: 聊天模式（chat/ask/explain/conclude）
 - `session_id`: 会话 ID（可选，如果省略会自动创建新会话）
 - `context`: 额外上下文信息（可选）
+- `include_ec_context`: 可选，请求级覆盖开关。`true` 时在 Chat/Ask 中注入近期 Explain/Conclude 摘要；`null` 时沿用 Session 默认值
 
 验证：
 - 响应状态码 200
@@ -479,7 +497,8 @@ Accept: text/event-stream
   "message": "Stream a short answer",
   "mode": "ask",
   "session_id": "{{session_id}}",
-  "context": null
+  "context": null,
+  "include_ec_context": true
 }
 ```
 验证：
@@ -517,7 +536,7 @@ POST /api/v1/chat/stream/{{message_id}}/cancel
 
 #### 测试请求
 
-**6.1 Register Library Document (metadata)**
+**6.1 Register Library Document (metadata) [已废弃]**
 ```
 POST /api/v1/documents/library
 Content-Type: application/json
@@ -530,12 +549,11 @@ Content-Type: application/json
   "file_size": 102400
 }
 ```
-验证：
-- 响应状态码 201
-- 返回新创建的 document_id
-- 状态为 "pending"（等待处理）
+当前行为：
+- 返回 `410 Gone`（已废弃）
+- 请改用 `POST /api/v1/documents/library/upload`
 
-**6.2 Upload File to Library**
+**6.2 Upload File to Library（推荐）**
 ```
 POST /api/v1/documents/library/upload
 Content-Type: multipart/form-data
@@ -567,6 +585,30 @@ GET /api/v1/documents/library?limit=20&offset=0&status=completed
 验证：
 - 返回属于 Library 的文档列表
 - 支持状态过滤
+
+**6.5 Delete Document（软删除）**
+```
+DELETE /api/v1/documents/{{document_id}}
+```
+行为：
+- 删除 DB 记录 + 清除索引数据
+- 保留文件系统目录 `data/documents/{{document_id}}/`
+
+**6.6 Delete Library Document（可选硬删除）**
+```
+DELETE /api/v1/library/documents/{{document_id}}?force=true
+```
+行为：
+- `force=false`（默认）：软删除（同上）
+- `force=true`：硬删除（额外删除 `data/documents/{{document_id}}/`）
+
+**6.7 Remove Document from Notebook（仅取消关联）**
+```
+DELETE /api/v1/notebooks/{{notebook_id}}/documents/{{document_id}}
+```
+行为：
+- 仅删除 notebook-document 关联
+- 不删除文档本体，不删除文件系统
 
 ---
 
@@ -615,6 +657,12 @@ relation "documents" does not exist
 # 重置 Docker volumes 并重新创建容器
 docker-compose down -v
 docker-compose up -d
+
+# 说明：down -v 只会清理 Docker volumes，不会删除宿主机 data/documents
+# 如需清理孤儿文档目录，可执行：
+make clean-orphans
+# 或按 document_id 精确删除：
+make clean-doc ID=<document_id>
 
 # 等待容器启动（约 10 秒）
 # 验证表已创建
@@ -736,7 +784,7 @@ cat newman-run-report.html
 | 204 | 删除成功（无内容） | - | - |
 | 400 | 请求参数错误 | 缺少必需字段、格式错误 | 检查请求体格式和必需字段 |
 | 404 | 资源不存在 | ID 错误、资源已删除 | 验证 ID 是否正确 |
-| 409 | 冲突 | 删除被引用的文档 | 使用 `confirm=true` 强制删除 |
+| 409 | 业务冲突 | 资源状态冲突（非删除端点常态） | 检查错误详情并调整请求 |
 | 422 | 验证错误 | 字段值不符合要求 | 检查字段类型和约束 |
 | 500 | 服务器内部错误 | 数据库连接、依赖服务 | 检查服务器日志 |
 
@@ -794,6 +842,9 @@ TRUNCATE TABLE library CASCADE;
 # 方式 3：完全重置数据库
 docker-compose down -v
 docker-compose up -d
+
+# 可选：清理宿主机孤儿文档目录
+make clean-orphans
 ```
 
 ---
@@ -824,6 +875,7 @@ docker-compose up -d
   - [ ] List sessions
   - [ ] Get session
   - [ ] Get latest session
+  - [ ] Get session messages
   - [ ] Delete session
 
 - [ ] Chat 模块
@@ -832,11 +884,12 @@ docker-compose up -d
   - [ ] Cancel stream
 
 - [ ] Documents 模块
-  - [ ] Register library document
   - [ ] Upload file to library
   - [ ] Get document
   - [ ] List documents
-  - [ ] Delete document
+  - [ ] Delete document（soft）
+  - [ ] Delete library document（force hard delete）
+  - [ ] Remove document from notebook（unlink only）
 
 - [ ] Integration 测试
   - [ ] Create notebook -> session -> chat (完整流程)

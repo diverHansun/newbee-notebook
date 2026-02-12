@@ -34,6 +34,10 @@ class ChatRequest(BaseModel):
     )
     session_id: Optional[str] = Field(None, description="Session ID (optional)")
     context: Optional[ChatContext] = Field(None, description="Selected text context")
+    include_ec_context: Optional[bool] = Field(
+        None,
+        description="Optional override for including recent explain/conclude context in chat/ask requests.",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -192,6 +196,7 @@ async def chat(
             message=request.message,
             mode=request.mode,
             context=request.context.dict() if request.context else None,
+            include_ec_context=request.include_ec_context,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -252,6 +257,7 @@ async def chat_stream(
         message=request.message,
         mode=request.mode,
         context=request.context.dict() if request.context else None,
+        include_ec_context=request.include_ec_context,
     )
     stream = sse_adapter(business_stream)
     

@@ -126,14 +126,14 @@ async def delete_library_document(
         
     Raises:
         404: Document not found.
-        409: Document is referenced (without force=true).
     """
     try:
-        await service.delete_document(document_id, force=force)
+        if force:
+            await service.force_delete_document(document_id)
+        else:
+            await service.delete_document(document_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
 
     return {"message": "Document deleted", "document_id": document_id}
 

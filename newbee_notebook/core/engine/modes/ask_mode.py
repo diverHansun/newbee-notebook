@@ -312,6 +312,7 @@ class AskMode(BaseMode):
         chat_history = []
         if self._memory is not None:
             chat_history = self._memory.get_all()
+        chat_history = self._augment_chat_history_with_ec_summary(chat_history)
         
         # Run agent through runner (SRP: runner handles LlamaIndex API)
         response = await self._runner.run(
@@ -376,3 +377,15 @@ class AskMode(BaseMode):
         """Get the retriever instance."""
         return self._retriever
 
+    def _augment_chat_history_with_ec_summary(self, history: List[ChatMessage]) -> List[ChatMessage]:
+        """Inject optional EC summary as a transient system message."""
+        if not isinstance(self.context, dict):
+            return history
+        ec_summary = (self.context.get("ec_context_summary") or "").strip()
+        if not ec_summary:
+            return history
+        summary_message = ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=f"[Recent Explain/Conclude Context]\n{ec_summary}",
+        )
+        return [summary_message, *history]

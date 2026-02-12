@@ -41,7 +41,7 @@ class ModeSelector:
         es_index: Optional[VectorStoreIndex] = None,
         memory: Optional[BaseMemory] = None,
         es_index_name: str = "newbee_notebook_docs",
-        conclude_memory: Optional[BaseMemory] = None,
+        ec_memory: Optional[BaseMemory] = None,
     ):
         """Initialize ModeSelector.
         
@@ -56,7 +56,7 @@ class ModeSelector:
         self._pgvector_index = pgvector_index
         self._es_index = es_index
         self._memory = memory
-        self._conclude_memory = conclude_memory or memory
+        self._ec_memory = ec_memory or memory
         self._es_index_name = es_index_name
         
         # Mode cache
@@ -136,7 +136,8 @@ class ModeSelector:
             return ConcludeMode(
                 llm=self._llm,
                 index=self._pgvector_index,
-                memory=self._conclude_memory,
+                es_index=self._es_index,
+                memory=self._ec_memory,
             )
         
         elif mode_type == ModeType.EXPLAIN:
@@ -146,6 +147,7 @@ class ModeSelector:
                 llm=self._llm,
                 index=self._pgvector_index,
                 es_index=self._es_index,
+                memory=self._ec_memory,
             )
         
         else:
@@ -248,13 +250,13 @@ class ModeSelector:
             ModeType.CONCLUDE: {
                 "name": "Conclude",
                 "description": "Document summarization and conclusion generation",
-                "has_memory": False,
+                "has_memory": True,
                 "has_rag": True,
             },
             ModeType.EXPLAIN: {
                 "name": "Explain",
                 "description": "Concept explanation and knowledge clarification",
-                "has_memory": False,
+                "has_memory": True,
                 "has_rag": True,
             },
         }
@@ -326,4 +328,3 @@ Current session commands:
   /help                - Show this help
   /quit                - Exit the application
 """
-

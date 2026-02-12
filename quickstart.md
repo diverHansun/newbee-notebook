@@ -210,13 +210,24 @@ docker-compose restart mineru-api
 # 查看实时日志
 docker-compose logs -f celery-worker
 
-# 清理并重启（会删除数据！）
-docker-compose down -v && docker-compose up -d
+# 清理并重启（会删除 Docker volumes 中的数据）
+docker-compose down -v
+docker-compose up -d
+
+# 注意：down -v 不会删除宿主机 data/documents 目录中的文件
+# 如需清理孤儿目录（推荐）
+make clean-orphans
+
+# 或按 document_id 精确删除
+make clean-doc ID=<document_id>
+# Windows PowerShell:
+# .\scripts\clean-doc.ps1 -Id <document_id>
 ```
 
 说明：
 - `mineru-api` 只有在 `--profile mineru-local` 启动后才会存在。
 - cloud 模式通常不需要 `restart mineru-api`。
+- 应用启动时会检测 `data/documents` 中的孤儿目录并输出日志告警，不会自动删除。
 
 ### FastAPI 开发
 

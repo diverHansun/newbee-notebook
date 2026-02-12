@@ -107,8 +107,29 @@ class InMemoryMessageRepo(MessageRepository):
     async def create_batch(self, messages):
         return [await self.create(m) for m in messages]
 
-    async def list_by_session(self, session_id: str, limit: int = 100):
-        return [m for m in self._messages if m.session_id == session_id][:limit]
+    async def list_by_session(
+        self,
+        session_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        modes=None,
+    ):
+        rows = [m for m in self._messages if m.session_id == session_id]
+        if modes is not None:
+            mode_values = {mode.value if hasattr(mode, "value") else str(mode) for mode in modes}
+            if not mode_values:
+                return []
+            rows = [m for m in rows if (m.mode.value if hasattr(m.mode, "value") else str(m.mode)) in mode_values]
+        return rows[offset: offset + limit]
+
+    async def count_by_session(self, session_id: str, modes=None) -> int:
+        rows = [m for m in self._messages if m.session_id == session_id]
+        if modes is not None:
+            mode_values = {mode.value if hasattr(mode, "value") else str(mode) for mode in modes}
+            if not mode_values:
+                return 0
+            rows = [m for m in rows if (m.mode.value if hasattr(m.mode, "value") else str(m.mode)) in mode_values]
+        return len(rows)
 
 
 def print_banner():

@@ -120,6 +120,7 @@ class ChatMode(BaseMode):
         chat_history = []
         if self._memory is not None:
             chat_history = self._memory.get_all()
+        chat_history = self._augment_chat_history_with_ec_summary(chat_history)
         
         # Run agent through runner (SRP: runner handles LlamaIndex API)
         try:
@@ -180,6 +181,7 @@ class ChatMode(BaseMode):
         if self._memory is not None:
             history = self._memory.get_all()
             messages.extend(history)
+        messages = self._augment_chat_history_with_ec_summary(messages)
 
         # Add current user message
         messages.append(ChatMessage(role=MessageRole.USER, content=message))
@@ -250,3 +252,16 @@ class ChatMode(BaseMode):
                 }
             )
         return sources
+
+    def _augment_chat_history_with_ec_summary(self, history: List[ChatMessage]) -> List[ChatMessage]:
+        """Inject optional EC summary as a transient system message."""
+        if not isinstance(self.context, dict):
+            return history
+        ec_summary = (self.context.get("ec_context_summary") or "").strip()
+        if not ec_summary:
+            return history
+        summary_message = ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=f"[Recent Explain/Conclude Context]\n{ec_summary}",
+        )
+        return [summary_message, *history]

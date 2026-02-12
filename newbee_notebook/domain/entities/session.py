@@ -35,6 +35,7 @@ class Session(Entity):
     title: Optional[str] = None
     message_count: int = 0
     context_summary: Optional[str] = None
+    include_ec_context: bool = False
     
     @property
     def round_count(self) -> int:

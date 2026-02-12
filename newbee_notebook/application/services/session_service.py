@@ -9,8 +9,11 @@ import logging
 
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.entities.notebook import MAX_SESSIONS_PER_NOTEBOOK
+from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
+from newbee_notebook.domain.repositories.message_repository import MessageRepository
+from newbee_notebook.domain.value_objects.mode_type import ModeType
 
 
 logger = logging.getLogger(__name__)
@@ -51,14 +54,17 @@ class SessionService:
         self,
         session_repo: SessionRepository,
         notebook_repo: NotebookRepository,
+        message_repo: MessageRepository,
     ):
         self.session_repo = session_repo
         self.notebook_repo = notebook_repo
+        self.message_repo = message_repo
     
     async def create(
         self,
         notebook_id: str,
         title: Optional[str] = None,
+        include_ec_context: bool = False,
     ) -> Session:
         """
         Create a new Session in a Notebook.
@@ -88,6 +94,7 @@ class SessionService:
         session = Session(
             notebook_id=notebook_id,
             title=title,
+            include_ec_context=include_ec_context,
         )
         result = await self.session_repo.create(session)
         
@@ -159,6 +166,27 @@ class SessionService:
         total = await self.session_repo.count_by_notebook(notebook_id)
         
         return sessions, total
+
+    async def list_messages(
+        self,
+        session_id: str,
+        modes: Optional[List[ModeType]] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Message], int]:
+        """List session messages with optional mode filtering."""
+        await self.get_or_raise(session_id)
+        messages = await self.message_repo.list_by_session(
+            session_id=session_id,
+            modes=modes,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self.message_repo.count_by_session(
+            session_id=session_id,
+            modes=modes,
+        )
+        return messages, total
     
     async def get_latest(self, notebook_id: str) -> Optional[Session]:
         """

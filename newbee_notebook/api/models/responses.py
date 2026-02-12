@@ -66,6 +66,7 @@ class SessionResponse(BaseModel):
     notebook_id: str
     title: Optional[str]
     message_count: int
+    include_ec_context: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -73,6 +74,22 @@ class SessionResponse(BaseModel):
 class SessionListResponse(BaseModel):
     """Response model for session list."""
     data: List[SessionResponse]
+    pagination: PaginationInfo
+
+
+class MessageResponse(BaseModel):
+    """Response model for a single message."""
+    message_id: int
+    session_id: str
+    mode: str
+    role: str
+    content: str
+    created_at: datetime
+
+
+class MessageListResponse(BaseModel):
+    """Response model for paginated session messages."""
+    data: List[MessageResponse]
     pagination: PaginationInfo
 
 

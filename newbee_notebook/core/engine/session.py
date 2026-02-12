@@ -24,6 +24,8 @@ from newbee_notebook.core.common.config import get_memory_token_limit
 class SessionManager:
     """Manages conversation sessions with mode support."""
 
+    EC_MEMORY_TOKEN_LIMIT = 2000
+
     def __init__(
         self,
         llm: LLM,
@@ -43,8 +45,8 @@ class SessionManager:
             token_limit=self._memory_token_limit,
             llm=llm,
         )
-        self._conclude_memory = ChatMemoryBuffer.from_defaults(
-            token_limit=self._memory_token_limit,
+        self._ec_memory = ChatMemoryBuffer.from_defaults(
+            token_limit=self.EC_MEMORY_TOKEN_LIMIT,
             llm=llm,
         )
 
@@ -54,11 +56,12 @@ class SessionManager:
             es_index=es_index,
             memory=self._memory,
             es_index_name=es_index_name,
-            conclude_memory=self._conclude_memory,
+            ec_memory=self._ec_memory,
         )
 
         self._current_session: Optional[Session] = None
         self._current_mode: ModeType = ModeType.CHAT
+        self._ec_context_summary: str = ""
 
     @property
     def session_id(self) -> Optional[str]:
@@ -103,16 +106,49 @@ class SessionManager:
         """Load persisted messages into memory for the active session."""
         if not self._current_session:
             return
-        messages = await self._message_repo.list_by_session(
-            self._current_session.session_id,
+
+        sid = self._current_session.session_id
+        ca_messages = await self._message_repo.list_by_session(
+            sid,
             limit=50,
+            modes=[ModeType.CHAT, ModeType.ASK],
         )
+        ec_messages = await self._message_repo.list_by_session(
+            sid,
+            limit=10,
+            modes=[ModeType.EXPLAIN, ModeType.CONCLUDE],
+        )
+
         self._memory.reset()
+        self._ec_memory.reset()
         from llama_index.core.llms import ChatMessage as LlamaChatMessage, MessageRole as LlamaMessageRole
 
-        for msg in messages:
+        for msg in ca_messages:
             role = LlamaMessageRole.USER if msg.role == MessageRole.USER else LlamaMessageRole.ASSISTANT
             self._memory.put(LlamaChatMessage(role=role, content=msg.content))
+
+        for msg in ec_messages:
+            role = LlamaMessageRole.USER if msg.role == MessageRole.USER else LlamaMessageRole.ASSISTANT
+            self._ec_memory.put(LlamaChatMessage(role=role, content=msg.content))
+
+        self._ec_context_summary = self._build_ec_context_summary(ec_messages)
+
+    @staticmethod
+    def _build_ec_context_summary(ec_messages: List[Message]) -> str:
+        """Build a compact summary from recent explain/conclude interactions."""
+        if not ec_messages:
+            return ""
+
+        recent_messages = ec_messages[-6:]
+        lines = ["[Recent Explain/Conclude Context]"]
+        for msg in recent_messages:
+            role = "User" if msg.role == MessageRole.USER else "Assistant"
+            mode = "Explain" if msg.mode == ModeType.EXPLAIN else "Conclude"
+            content = (msg.content or "").strip()
+            if len(content) > 200:
+                content = content[:200] + "..."
+            lines.append(f"[{mode}] {role}: {content}")
+        return "\n".join(lines)
 
     def switch_mode(self, mode_type: ModeType) -> None:
         self._current_mode = mode_type
@@ -123,11 +159,21 @@ class SessionManager:
         mode_type: Optional[ModeType] = None,
         allowed_document_ids: Optional[List[str]] = None,
         context: Optional[dict] = None,
+        include_ec_context: bool = False,
     ) -> tuple:
         if not self._current_session:
             raise ValueError("Session not started")
 
         effective_mode = mode_type or self._current_mode
+        if (
+            include_ec_context
+            and effective_mode in (ModeType.CHAT, ModeType.ASK)
+            and self._ec_context_summary
+        ):
+            merged_context = dict(context or {})
+            merged_context["ec_context_summary"] = self._ec_context_summary
+            context = merged_context
+
         response = await self._mode_selector.run(
             message,
             effective_mode,
@@ -144,6 +190,7 @@ class SessionManager:
         mode_type: Optional[ModeType] = None,
         allowed_document_ids: Optional[List[str]] = None,
         context: Optional[dict] = None,
+        include_ec_context: bool = False,
     ) -> AsyncGenerator[str, None]:
         """Stream a chat response.
 
@@ -160,6 +207,15 @@ class SessionManager:
             raise ValueError("Session not started")
 
         effective_mode = mode_type or self._current_mode
+        if (
+            include_ec_context
+            and effective_mode in (ModeType.CHAT, ModeType.ASK)
+            and self._ec_context_summary
+        ):
+            merged_context = dict(context or {})
+            merged_context["ec_context_summary"] = self._ec_context_summary
+            context = merged_context
+
         async for chunk in self._mode_selector.run_stream(
             message,
             effective_mode,
@@ -197,7 +253,8 @@ class SessionManager:
     async def end_session(self) -> None:
         self._current_session = None
         self._memory.reset()
-        self._conclude_memory.reset()
+        self._ec_memory.reset()
+        self._ec_context_summary = ""
 
     def get_status(self) -> dict:
         return {
@@ -206,4 +263,5 @@ class SessionManager:
             "mode_info": self._mode_selector.get_mode_info(self._current_mode),
             "has_persistence": True,
             "memory_messages": len(self._memory.get_all()) if self._memory else 0,
+            "ec_memory_messages": len(self._ec_memory.get_all()) if self._ec_memory else 0,
         }

@@ -7,6 +7,7 @@
 #   docker-compose up -d              # Start all services in background
 #   docker-compose up -d postgres es  # Start only databases (without Kibana)
 #   docker-compose down               # Stop and remove services
+#   docker-compose down -v            # Remove Docker volumes (host bind-mount files are preserved)
 #   docker-compose logs -f            # View logs
 #
 # Web UIs:

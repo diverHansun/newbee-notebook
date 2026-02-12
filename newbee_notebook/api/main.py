@@ -5,6 +5,7 @@ Newbee Notebook - FastAPI Application Entry Point
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 
 from newbee_notebook.exceptions import NewbeeNotebookException
 from newbee_notebook.api.middleware.error_handler import (
@@ -24,12 +25,31 @@ from newbee_notebook.api.routers import (
     admin,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events."""
     # Startup
     print("Starting Newbee Notebook API...")
+    try:
+        from newbee_notebook.core.common.config import get_documents_directory
+        from newbee_notebook.infrastructure.persistence.database import get_database
+        from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl import (
+            DocumentRepositoryImpl,
+        )
+        from newbee_notebook.scripts.detect_orphans import detect_orphan_documents
+
+        db = await get_database()
+        async with db.session() as session:
+            doc_repo = DocumentRepositoryImpl(session)
+            await detect_orphan_documents(
+                documents_dir=get_documents_directory(),
+                document_repo=doc_repo,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Orphan detection skipped due to startup error: %s", exc)
     yield
     # Shutdown
     print("Shutting down Newbee Notebook API...")

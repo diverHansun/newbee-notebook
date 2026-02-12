@@ -11,6 +11,8 @@ from newbee_notebook.api.models.requests import CreateSessionRequest
 from newbee_notebook.api.models.responses import (
     SessionResponse,
     SessionListResponse,
+    MessageResponse,
+    MessageListResponse,
     PaginationInfo,
 )
 from newbee_notebook.api.dependencies import get_session_service
@@ -20,6 +22,7 @@ from newbee_notebook.application.services.session_service import (
     SessionNotFoundError,
     SessionLimitExceededError,
 )
+from newbee_notebook.domain.value_objects.mode_type import ModeType
 
 
 router = APIRouter()
@@ -32,9 +35,32 @@ def _to_response(session) -> SessionResponse:
         notebook_id=session.notebook_id,
         title=session.title,
         message_count=session.message_count,
+        include_ec_context=getattr(session, "include_ec_context", False),
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
+
+
+def _parse_mode_filter(mode: Optional[str]) -> Optional[list[ModeType]]:
+    if not mode:
+        return None
+
+    parsed: list[ModeType] = []
+    for raw in mode.split(","):
+        candidate = raw.strip().lower()
+        if not candidate:
+            continue
+        try:
+            parsed.append(ModeType(candidate))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid mode value: '{candidate}'. "
+                    "Valid values are: chat, ask, explain, conclude."
+                ),
+            ) from exc
+    return parsed if parsed else None
 
 
 # =============================================================================
@@ -69,7 +95,8 @@ async def create_session(
     """
     try:
         title = request.title if request else None
-        session = await service.create(notebook_id, title)
+        include_ec_context = request.include_ec_context if request else False
+        session = await service.create(notebook_id, title, include_ec_context=include_ec_context)
         return _to_response(session)
     except NotebookNotFoundError:
         raise HTTPException(status_code=404, detail="Notebook not found")
@@ -206,6 +233,47 @@ async def delete_session(
     """
     try:
         await service.delete(session_id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get("/sessions/{session_id}/messages", response_model=MessageListResponse)
+async def list_session_messages(
+    session_id: str = Path(..., description="Session ID"),
+    mode: Optional[str] = Query(None, description="Comma-separated modes: chat,ask,explain,conclude"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    service: SessionService = Depends(get_session_service),
+):
+    """List messages in a session with optional mode filtering and pagination."""
+    try:
+        mode_filter = _parse_mode_filter(mode)
+        messages, total = await service.list_messages(
+            session_id=session_id,
+            modes=mode_filter,
+            limit=limit,
+            offset=offset,
+        )
+        return MessageListResponse(
+            data=[
+                MessageResponse(
+                    message_id=msg.message_id or 0,
+                    session_id=msg.session_id,
+                    mode=msg.mode.value if hasattr(msg.mode, "value") else str(msg.mode),
+                    role=msg.role.value if hasattr(msg.role, "value") else str(msg.role),
+                    content=msg.content,
+                    created_at=msg.created_at,
+                )
+                for msg in messages
+            ],
+            pagination=PaginationInfo(
+                total=total,
+                limit=limit,
+                offset=offset,
+                has_next=offset + limit < total,
+                has_prev=offset > 0,
+            ),
+        )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
 

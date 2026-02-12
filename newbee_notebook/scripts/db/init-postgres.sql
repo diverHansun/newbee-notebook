@@ -115,12 +115,16 @@ CREATE TABLE IF NOT EXISTS sessions (
     title VARCHAR(500),
     message_count INTEGER DEFAULT 0,
     context_summary TEXT,
+    include_ec_context BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_notebook_id ON sessions(notebook_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
+
+-- Backfill additive columns for existing volumes where table already exists
+ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- References (source tracing; chunk_id stored as LlamaIndex node id text)
 CREATE TABLE IF NOT EXISTS "references" (

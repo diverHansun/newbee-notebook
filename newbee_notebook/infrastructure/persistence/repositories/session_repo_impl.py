@@ -30,6 +30,7 @@ class SessionRepositoryImpl(SessionRepository):
             title=model.title,
             message_count=model.message_count,
             context_summary=model.context_summary,
+            include_ec_context=getattr(model, "include_ec_context", False),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -86,6 +87,7 @@ class SessionRepositoryImpl(SessionRepository):
             title=session.title,
             message_count=session.message_count,
             context_summary=session.context_summary,
+            include_ec_context=session.include_ec_context,
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
@@ -102,6 +104,7 @@ class SessionRepositoryImpl(SessionRepository):
                 title=session.title,
                 message_count=session.message_count,
                 context_summary=session.context_summary,
+                include_ec_context=session.include_ec_context,
                 updated_at=datetime.now(),
             )
         )

@@ -86,6 +86,7 @@ class ChatService:
         message: str,
         mode: str = "chat",
         context: Optional[dict] = None,
+        include_ec_context: Optional[bool] = None,
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -104,6 +105,11 @@ class ChatService:
             raise ValueError(f"Session not found: {session_id}")
         
         mode_enum = ModeType(mode)
+        effective_include_ec_context = (
+            include_ec_context
+            if include_ec_context is not None
+            else bool(getattr(session, "include_ec_context", False))
+        )
 
         # Ensure session manager is aligned with this session (loads history)
         await self._session_manager.start_session(session_id=session_id)
@@ -129,6 +135,7 @@ class ChatService:
             mode_type=mode_enum,
             allowed_document_ids=allowed_doc_ids,
             context=mode_context,
+            include_ec_context=effective_include_ec_context,
         )
         message_id = session.message_count + 1
 
@@ -191,6 +198,7 @@ class ChatService:
         message: str,
         mode: str = "chat",
         context: Optional[dict] = None,
+        include_ec_context: Optional[bool] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -217,6 +225,11 @@ class ChatService:
             raise ValueError(f"Session not found: {session_id}")
 
         mode_enum = ModeType(mode)
+        effective_include_ec_context = (
+            include_ec_context
+            if include_ec_context is not None
+            else bool(getattr(session, "include_ec_context", False))
+        )
         await self._session_manager.start_session(session_id=session_id)
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
         mode_context = self._build_mode_context(context, completed_doc_titles)
@@ -243,6 +256,7 @@ class ChatService:
                 mode_type=mode_enum,
                 allowed_document_ids=allowed_doc_ids,
                 context=mode_context,
+                include_ec_context=effective_include_ec_context,
             )
             while True:
                 try:

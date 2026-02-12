@@ -27,6 +27,10 @@ class CreateSessionRequest(BaseModel):
     """Request model for creating a session."""
 
     title: Optional[str] = Field(None, max_length=500, description="Optional session title")
+    include_ec_context: bool = Field(
+        False,
+        description="Whether Chat/Ask requests should include recent Explain/Conclude context by default.",
+    )
 
 
 class CreateReferenceRequest(BaseModel):

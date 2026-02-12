@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     Integer,
     DateTime,
+    Boolean,
     ForeignKey,
     UniqueConstraint,
     CheckConstraint,
@@ -156,6 +157,7 @@ class SessionModel(Base):
     title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    include_ec_context: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 

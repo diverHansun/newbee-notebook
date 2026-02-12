@@ -184,16 +184,13 @@ class DocumentService:
     # ------------------------------------------------------------------ #
     # Deletion
     # ------------------------------------------------------------------ #
-    async def delete_document(self, document_id: str, force: bool = False) -> bool:
+    async def delete_document(self, document_id: str) -> bool:
+        """Soft delete: remove index/DB data but keep on-disk document artifacts."""
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError(f"Document not found: {document_id}")
 
         refs = await self._ref_repo.list_by_document(document_id)
-        if refs and not force:
-            raise RuntimeError(
-                f"Document is referenced by {len(refs)} notebook(s). Use force=true to delete."
-            )
 
         # Preserve chat references before deletion.
         try:
@@ -214,10 +211,14 @@ class DocumentService:
 
         delete_document_nodes_task.delay(document_id)
 
-        # Delete file system artifacts synchronously.
-        await self._delete_document_files(document_id)
-
         return await self._document_repo.delete(document_id)
+
+    async def force_delete_document(self, document_id: str) -> bool:
+        """Hard delete: soft delete plus file-system cleanup."""
+        deleted = await self.delete_document(document_id)
+        if deleted:
+            await self._delete_document_files(document_id)
+        return deleted
 
     async def _delete_document_files(self, document_id: str) -> bool:
         """Delete all files under data/documents/{document_id}."""
