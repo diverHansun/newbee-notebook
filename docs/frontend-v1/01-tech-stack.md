@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-本文档描述MediMind Agent前端的技术栈选型,参考了SurfSense、Open Notebook和RAGFlow等项目的设计。
+本文档描述Newbee Notebook前端的技术栈选型,参考了SurfSense、Open Notebook和RAGFlow等项目的设计。
 
 ---
 
