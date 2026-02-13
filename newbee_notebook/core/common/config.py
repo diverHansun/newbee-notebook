@@ -42,30 +42,29 @@ def get_zhipu_api_key():
 
 
 def get_embedding_provider():
-    """Get embedding provider with priority: YAML config > environment variable > default.
+    """Get embedding provider with priority: environment variable > YAML config > default.
 
     Priority order:
-    1. configs/embeddings.yaml (embeddings.provider)
-    2. EMBEDDING_PROVIDER environment variable
-    3. Default: 'zhipu' (maintains backward compatibility)
+    1. EMBEDDING_PROVIDER environment variable
+    2. configs/embeddings.yaml (embeddings.provider)
+    3. Default: 'qwen3-embedding'
 
     Returns:
-        str: Embedding provider ('zhipu' or 'biobert')
+        str: Embedding provider (for example: 'qwen3-embedding', 'zhipu')
     """
-    # Try to get from YAML config first
+    provider = os.getenv("EMBEDDING_PROVIDER")
+    if provider and provider.strip():
+        return provider.strip()
+
+    # Try to get from YAML config
     embeddings_config = get_embeddings_config()
     if embeddings_config and 'embeddings' in embeddings_config:
         provider = embeddings_config['embeddings'].get('provider')
         if provider:
             return provider
 
-    # Fall back to environment variable
-    provider = os.getenv("EMBEDDING_PROVIDER")
-    if provider:
-        return provider
-
-    # Default to zhipu (backward compatibility)
-    return "zhipu"
+    # Default to qwen3-embedding
+    return "qwen3-embedding"
 
 
 def get_embedding_dimension():
@@ -75,8 +74,8 @@ def get_embedding_dimension():
     1. configs/embeddings.yaml (provider-specific dim)
     2. EMBEDDING_DIMENSION environment variable
     3. Default based on provider:
-       - zhipu: 1024 (embedding-3)
-       - biobert: 768 (BioBERT-v1.1)
+       - qwen3-embedding: 1024
+       - zhipu: 1024
 
     Returns:
         int: Embedding dimension
@@ -94,12 +93,8 @@ def get_embedding_dimension():
     if dim and dim.isdigit():
         return int(dim)
 
-    # Default based on provider
-    provider = get_embedding_provider()
-    if provider == "biobert":
-        return 768
-    else:  # zhipu
-        return 1024
+    # Default (both supported providers are 1024-dim)
+    return 1024
 
 
 def get_embedding_model():
@@ -109,43 +104,6 @@ def get_embedding_model():
         str: Embedding model name
     """
     return os.getenv("EMBEDDING_MODEL", "embedding-3")
-
-
-def get_biobert_config():
-    """Get BioBERT configuration from YAML config.
-
-    Returns:
-        dict: BioBERT configuration including model_path, normalize, device, etc.
-    """
-    embeddings_config = get_embeddings_config()
-    if embeddings_config and 'embeddings' in embeddings_config:
-        return embeddings_config['embeddings'].get('biobert', {})
-    return {}
-
-
-def get_biobert_model_path():
-    """Get BioBERT model path with priority: YAML config > environment variable > default.
-
-    Priority order:
-    1. configs/embeddings.yaml (biobert.model_path)
-    2. BIOBERT_MODEL_PATH environment variable
-    3. Default: 'models/biobert-v1.1'
-
-    Returns:
-        str: Path to BioBERT model files or HuggingFace model ID
-    """
-    # Try YAML config first
-    biobert_config = get_biobert_config()
-    if 'model_path' in biobert_config:
-        return biobert_config['model_path']
-
-    # Fall back to environment variable
-    model_path = os.getenv("BIOBERT_MODEL_PATH")
-    if model_path:
-        return model_path
-
-    # Default to local model path
-    return "models/biobert-v1.1"
 
 
 def get_embeddings_config():
@@ -238,146 +196,95 @@ def get_memory_summarize_prompt():
     return None
 
 
-def get_llm_model():
-    """Get LLM model name with priority: YAML config > environment variable > default.
-    
-    Priority order:
-    1. configs/llm.yaml (llm.zhipu.model)
-    2. LLM_MODEL environment variable
-    3. Default: glm-4
-    
-    Returns:
-        str: LLM model name
-    """
-    # Try YAML config first
+def get_llm_provider() -> str:
+    """Get LLM provider with priority: env > YAML > default."""
+    provider = os.getenv("LLM_PROVIDER")
+    if provider and provider.strip():
+        return provider.strip().lower()
+
     llm_config = get_llm_config()
-    if llm_config and 'llm' in llm_config:
-        zhipu_config = llm_config['llm'].get('zhipu', {})
-        if 'model' in zhipu_config:
-            return zhipu_config['model']
-    
-    # Fall back to environment variable
+    if llm_config and "llm" in llm_config:
+        provider = llm_config["llm"].get("provider")
+        if provider and str(provider).strip():
+            return str(provider).strip().lower()
+
+    return "zhipu"
+
+
+def _get_llm_provider_config(provider: str | None = None) -> dict:
+    """Get provider-specific config map under llm.*."""
+    llm_config = get_llm_config()
+    if not llm_config:
+        return {}
+    selected = provider or get_llm_provider()
+    return llm_config.get("llm", {}).get(selected, {})
+
+
+def get_llm_model():
+    """Get LLM model name for current provider."""
+    cfg = _get_llm_provider_config()
+    if "model" in cfg:
+        return cfg["model"]
     model = os.getenv("LLM_MODEL")
     if model:
         return model
-    
-    # Default
-    return "glm-4"
+    provider = get_llm_provider()
+    if provider == "qwen":
+        return "qwen-plus"
+    if provider == "openai":
+        return "gpt-4o-mini"
+    return "glm-4.7-flash"
 
 
 def get_llm_temperature():
-    """Get LLM temperature with priority: YAML config > environment variable > default.
-    
-    Priority order:
-    1. configs/llm.yaml (llm.zhipu.temperature)
-    2. LLM_TEMPERATURE environment variable
-    3. Default: 0.2
-    
-    Returns:
-        float: LLM temperature
-    """
-    # Try YAML config first
-    llm_config = get_llm_config()
-    if llm_config and 'llm' in llm_config:
-        zhipu_config = llm_config['llm'].get('zhipu', {})
-        if 'temperature' in zhipu_config:
-            return float(zhipu_config['temperature'])
-    
-    # Fall back to environment variable
+    """Get LLM temperature for current provider."""
+    cfg = _get_llm_provider_config()
+    if "temperature" in cfg:
+        return float(cfg["temperature"])
     temp = os.getenv("LLM_TEMPERATURE")
     if temp:
         try:
             return float(temp)
         except ValueError:
             pass
-    
-    # Default
     return 0.2
 
 
 def get_llm_max_tokens():
-    """Get LLM max tokens with priority: YAML config > environment variable > default.
-    
-    Priority order:
-    1. configs/llm.yaml (llm.zhipu.max_tokens)
-    2. LLM_MAX_TOKENS environment variable
-    3. Default: 2048
-    
-    Returns:
-        int: Maximum tokens to generate
-    """
-    # Try YAML config first
-    llm_config = get_llm_config()
-    if llm_config and 'llm' in llm_config:
-        zhipu_config = llm_config['llm'].get('zhipu', {})
-        if 'max_tokens' in zhipu_config:
-            return int(zhipu_config['max_tokens'])
-    
-    # Fall back to environment variable
+    """Get LLM max tokens for current provider."""
+    cfg = _get_llm_provider_config()
+    if "max_tokens" in cfg:
+        return int(cfg["max_tokens"])
     max_tokens = os.getenv("LLM_MAX_TOKENS")
     if max_tokens and max_tokens.isdigit():
         return int(max_tokens)
-    
-    # Default
     return 2048
 
 
 def get_llm_top_p():
-    """Get LLM top_p with priority: YAML config > environment variable > default.
-    
-    Priority order:
-    1. configs/llm.yaml (llm.zhipu.top_p)
-    2. LLM_TOP_P environment variable
-    3. Default: 0.7
-    
-    Returns:
-        float: Nucleus sampling parameter
-    """
-    # Try YAML config first
-    llm_config = get_llm_config()
-    if llm_config and 'llm' in llm_config:
-        zhipu_config = llm_config['llm'].get('zhipu', {})
-        if 'top_p' in zhipu_config:
-            return float(zhipu_config['top_p'])
-    
-    # Fall back to environment variable
+    """Get LLM top_p for current provider."""
+    cfg = _get_llm_provider_config()
+    if "top_p" in cfg:
+        return float(cfg["top_p"])
     top_p = os.getenv("LLM_TOP_P")
     if top_p:
         try:
             return float(top_p)
         except ValueError:
             pass
-    
-    # Default
     return 0.7
 
 
 def get_llm_system_prompt():
-    """Get LLM system prompt with priority: YAML config > environment variable > None.
-    
-    Priority order:
-    1. configs/llm.yaml (llm.zhipu.system_prompt)
-    2. LLM_SYSTEM_PROMPT environment variable
-    3. None (no system prompt)
-    
-    Returns:
-        str or None: System prompt for the LLM
-    """
-    # Try YAML config first
-    llm_config = get_llm_config()
-    if llm_config and 'llm' in llm_config:
-        zhipu_config = llm_config['llm'].get('zhipu', {})
-        if 'system_prompt' in zhipu_config:
-            prompt = zhipu_config['system_prompt']
-            if prompt and prompt.strip():
-                return prompt.strip()
-    
-    # Fall back to environment variable
+    """Get LLM system prompt for current provider."""
+    cfg = _get_llm_provider_config()
+    if "system_prompt" in cfg:
+        prompt = cfg["system_prompt"]
+        if prompt and str(prompt).strip():
+            return str(prompt).strip()
     prompt = os.getenv("LLM_SYSTEM_PROMPT")
     if prompt and prompt.strip():
         return prompt.strip()
-    
-    # No system prompt
     return None
 
 
@@ -388,8 +295,8 @@ def get_index_directory():
     1. configs/embeddings.yaml (provider-specific index_dir)
     2. INDEX_DIR environment variable
     3. Default based on provider:
+       - qwen3-embedding: data/indexes/qwen3_embedding
        - zhipu: data/indexes/zhipu
-       - biobert: data/indexes/biobert
 
     Returns:
         str: Index directory path
@@ -408,11 +315,9 @@ def get_index_directory():
         return index_dir
 
     # Default directory based on provider
-    provider = get_embedding_provider()
-    if provider == "biobert":
-        return "data/indexes/biobert"
-    else:  # zhipu
-        return "data/indexes/zhipu"
+    if get_embedding_provider() == "qwen3-embedding":
+        return "data/indexes/qwen3_embedding"
+    return "data/indexes/zhipu"
 
 
 def get_documents_directory():
@@ -507,19 +412,19 @@ def get_pgvector_config_for_provider(provider: str = None) -> dict:
     provider-specific table names and embedding dimensions.
 
     Args:
-        provider: Embedding provider name ('biobert' or 'zhipu').
-                  If None, uses the current configured provider.
+        provider: Embedding provider name (for example: 'qwen3-embedding', 'zhipu').
+            If None, uses the current configured provider.
 
     Returns:
         dict: Configuration with keys:
-            - table_name: Provider-specific table name (e.g., 'documents_biobert')
+            - table_name: Provider-specific table name (for example: 'documents_qwen3_embedding')
             - embedding_dimension: Vector dimension for this provider
             - distance_metric: Distance metric for similarity search
 
     Example:
-        >>> config = get_pgvector_config_for_provider('biobert')
+        >>> config = get_pgvector_config_for_provider('qwen3-embedding')
         >>> print(config)
-        {'table_name': 'documents_biobert', 'embedding_dimension': 768, 'distance_metric': 'cosine'}
+        {'table_name': 'documents_qwen3_embedding', 'embedding_dimension': 1024, 'distance_metric': 'cosine'}
     """
     if provider is None:
         provider = get_embedding_provider()
@@ -532,17 +437,17 @@ def get_pgvector_config_for_provider(provider: str = None) -> dict:
     provider_config = tables_config.get(provider, {})
 
     if provider_config:
+        provider_table_fallback = f"documents_{provider.replace('-', '_')}"
         return {
-            "table_name": provider_config.get("table_name", f"documents_{provider}"),
-            "embedding_dimension": provider_config.get("embedding_dimension", 768 if provider == "biobert" else 1024),
+            "table_name": provider_config.get("table_name", provider_table_fallback),
+            "embedding_dimension": provider_config.get("embedding_dimension", 1024),
             "distance_metric": provider_config.get("distance_metric", "cosine"),
         }
 
-    # Fallback to legacy single-table config with provider-based defaults
-    default_dim = 768 if provider == "biobert" else 1024
+    # Fallback to legacy single-table config with 1024-dim defaults
     return {
         "table_name": pgvector_config.get("table_name", "documents"),
-        "embedding_dimension": pgvector_config.get("embedding_dimension", default_dim),
+        "embedding_dimension": pgvector_config.get("embedding_dimension", 1024),
         "distance_metric": pgvector_config.get("distance_metric", "cosine"),
     }
 
@@ -595,6 +500,7 @@ def get_config():
         "embedding_model": get_embedding_model(),
         "index_directory": get_index_directory(),
         "documents_directory": get_documents_directory(),
+        "llm_provider": get_llm_provider(),
         "llm_model": get_llm_model(),
         "llm_temperature": get_llm_temperature(),
         "llm_max_tokens": get_llm_max_tokens(),

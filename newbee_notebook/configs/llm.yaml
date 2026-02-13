@@ -1,23 +1,43 @@
-# LLM Configuration
-# Configuration for Large Language Model parameters
+# LLM configuration
 
 llm:
-  # ZhipuAI GLM-4 configuration
+  # Provider selection: 'zhipu', 'qwen', 'openai'
+  # Can be overridden by LLM_PROVIDER
+  provider: zhipu
+
+  # ZhipuAI GLM family (default)
   zhipu:
-    model: glm-4-plus                 # Available models: glm-4, glm-4-plus, glm-4-0520, glm-4-long, 
-                                      # glm-4-airx, glm-4-air, glm-4-flashx, glm-4-flash, glm-4v, glm-4-alltools
-    temperature: 0.7                # Sampling temperature (0.0-1.0, higher = more random)
-    max_tokens: 8192                # Maximum tokens to generate (glm-4-plus limit: 4096)
-    top_p: 0.8                      # Nucleus sampling parameter (0.0-1.0, higher = more diverse)
-    api_base: https://open.bigmodel.cn/api/paas/v4  # OpenAI-compatible endpoint for Zhipu
+    model: glm-4.7-flash
+    temperature: 0.7
+    max_tokens: 8192
+    top_p: 0.8
+    api_base: https://open.bigmodel.cn/api/paas/v4
+    request_timeout: 60.0
+    max_retries: 3
+    streaming: false
+    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
 
-    # Optional parameters
-    request_timeout: 60.0           # Request timeout in seconds
-    max_retries: 3                  # Maximum number of retries on failure
-    
-    # Streaming configuration
-    streaming: false                # Enable streaming responses
-    
-    # System prompt (optional)
-    system_prompt: "Your name is newbee-notebook.You are a professional assistant. Provide accurate, evidence-based information."
+  # Alibaba Cloud DashScope Qwen via OpenAI-compatible endpoint
+  qwen:
+    model: qwen-plus
+    temperature: 0.7
+    max_tokens: 8192
+    top_p: 0.8
+    api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+    request_timeout: 60.0
+    max_retries: 3
+    streaming: false
+    enable_search: false
+    enable_thinking: false
+    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
 
+  # Native OpenAI models
+  openai:
+    model: gpt-4o-mini
+    temperature: 0.2
+    max_tokens: 4096
+    top_p: 1.0
+    request_timeout: 60.0
+    max_retries: 3
+    streaming: false
+    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."

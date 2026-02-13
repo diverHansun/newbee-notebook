@@ -21,7 +21,7 @@ from newbee_notebook.application.services.session_service import SessionService
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
-from newbee_notebook.core.llm.zhipu import build_llm
+from newbee_notebook.core.llm import build_llm
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
 from newbee_notebook.core.common.config import (

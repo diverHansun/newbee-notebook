@@ -25,15 +25,15 @@ def register_embedding(name: str):
     that return BaseEmbeddingModel instances.
 
     Args:
-        name: Provider name (e.g., 'biobert', 'zhipu', 'openai')
+        name: Provider name (for example: 'qwen3-embedding', 'zhipu')
 
     Returns:
         Decorator function that registers the builder
 
     Example:
-        >>> @register_embedding("biobert")
-        ... def build_biobert_embedding() -> BaseEmbeddingModel:
-        ...     return BioBERTEmbedding(...)
+        >>> @register_embedding("qwen3-embedding")
+        ... def build_qwen3_embedding() -> BaseEmbeddingModel:
+        ...     return Qwen3LocalEmbedding(...)
 
     Raises:
         ValueError: If provider name is already registered
@@ -53,7 +53,7 @@ def get_registered_providers() -> List[str]:
     """Get list of all registered embedding providers.
 
     Returns:
-        List of provider names (e.g., ['biobert', 'zhipu'])
+        List of provider names (for example: ['qwen3-embedding', 'zhipu'])
 
     Example:
         >>> providers = get_registered_providers()
@@ -66,7 +66,7 @@ def get_builder(provider: str) -> Callable[[], BaseEmbeddingModel]:
     """Get builder function for specified provider.
 
     Args:
-        provider: Provider name (e.g., 'biobert', 'zhipu')
+        provider: Provider name (for example: 'qwen3-embedding', 'zhipu')
 
     Returns:
         Builder function that creates BaseEmbeddingModel instance
@@ -75,7 +75,7 @@ def get_builder(provider: str) -> Callable[[], BaseEmbeddingModel]:
         ValueError: If provider is not registered
 
     Example:
-        >>> builder = get_builder("biobert")
+        >>> builder = get_builder("qwen3-embedding")
         >>> embed_model = builder()
     """
     if provider not in _EMBEDDING_REGISTRY:
@@ -98,8 +98,8 @@ def is_registered(provider: str) -> bool:
         True if provider is registered, False otherwise
 
     Example:
-        >>> if is_registered("biobert"):
-        ...     print("BioBERT is available")
+        >>> if is_registered("qwen3-embedding"):
+        ...     print("Qwen3 embedding is available")
     """
     return provider in _EMBEDDING_REGISTRY
 

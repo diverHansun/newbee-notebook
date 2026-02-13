@@ -2,7 +2,7 @@
   "info": {
     "name": "Newbee Notebook API v2.2",
     "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-    "description": "Newbee Notebook API Postman Collection v2.2 (improve-6)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Document** (`DELETE /documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+    "description": "Newbee Notebook API Postman Collection v2.2 (improve-6)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1024,50 +1024,6 @@
                   "    pm.response.to.have.status(204);",
                   "});",
                   "console.log(\"Document removed from notebook successfully\");"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Delete Document",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{api_base}}/documents/{{document_id}}?force=true",
-              "host": [
-                "{{api_base}}"
-              ],
-              "path": [
-                "documents",
-                "{{document_id}}"
-              ],
-              "query": [
-                {
-                  "key": "force",
-                  "value": "true",
-                  "description": "Deprecated -- this endpoint always performs soft delete regardless of force value."
-                }
-              ]
-            },
-            "description": "Soft delete a document (Level 2 -- remove indexes).\n\nRemoves pgvector/ES indexes, DB records, and all notebook associations. On-disk files (`data/documents/{id}/`) are preserved.\n\nNote: The `force` parameter is deprecated on this endpoint. To perform a hard delete (including file removal), use `DELETE /library/documents/{id}?force=true` instead."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Document deleted\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.message).to.eql(\"Document deleted\");",
-                  "});"
                 ],
                 "type": "text/javascript"
               }

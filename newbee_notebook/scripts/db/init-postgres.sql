@@ -162,22 +162,22 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 -- The definitions below are for reference only and match the expected schema.
 --
 -- LlamaIndex automatically prefixes table names with 'data_', so:
--- - 'documents_biobert' becomes 'data_documents_biobert'
+-- - 'documents_qwen3_embedding' becomes 'data_documents_qwen3_embedding'
 -- - 'documents_zhipu' becomes 'data_documents_zhipu'
 
--- BioBERT vector store table (768 dimensions)
+-- Qwen3 embedding vector store table (1024 dimensions)
 -- This table is auto-created by LlamaIndex during index building
 -- Uncomment if you want to pre-create it manually:
 /*
-CREATE TABLE IF NOT EXISTS data_documents_biobert (
+CREATE TABLE IF NOT EXISTS data_documents_qwen3_embedding (
     id BIGSERIAL PRIMARY KEY,
     text VARCHAR NOT NULL,
     metadata_ JSON,
     node_id VARCHAR,
-    embedding vector(768)
+    embedding vector(1024)
 );
-CREATE INDEX IF NOT EXISTS documents_biobert_idx_1
-    ON data_documents_biobert ((metadata_->>'ref_doc_id'));
+CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_idx_1
+    ON data_documents_qwen3_embedding ((metadata_->>'ref_doc_id'));
 */
 
 -- ZhipuAI vector store table (1024 dimensions)
@@ -205,6 +205,6 @@ BEGIN
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> processing -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
-    RAISE NOTICE '  - data_documents_biobert (768 dims)';
+    RAISE NOTICE '  - data_documents_qwen3_embedding (1024 dims)';
     RAISE NOTICE '  - data_documents_zhipu (1024 dims)';
 END $$;

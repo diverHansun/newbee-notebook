@@ -43,7 +43,7 @@ data/documents/*
 # Keep indexes/raw ignored explicitly for readability.
 data/indexes/
 data/raw/
-storage/
+/storage/
 logs/
 .cache/
 *.db

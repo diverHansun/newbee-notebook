@@ -118,8 +118,8 @@ ZHIPU_API_KEY=your_api_key_here
 # 方式 1：使用 uvicorn 直接运行
 python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
 
-# 方式 2：使用项目脚本
-python main.py
+# 方式 2：使用项目入口脚本（仅启动 FastAPI，Docker 服务请先单独启动）
+python main.py --reload --port 8000
 ```
 
 验证服务器启动成功：

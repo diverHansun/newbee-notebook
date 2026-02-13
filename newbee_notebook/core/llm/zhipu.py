@@ -17,17 +17,20 @@ from llama_index.core.base.llms.types import LLMMetadata, MessageRole
 
 from newbee_notebook.core.common.config import (
     get_llm_config,
-    get_llm_model,
-    get_llm_temperature,
-    get_llm_max_tokens,
-    get_llm_top_p,
-    get_llm_system_prompt,
     get_zhipu_api_key,
 )
+from newbee_notebook.core.llm.registry import register_llm
 
 # Zhipu's OpenAI-compatible endpoint
 DEFAULT_ZHIPU_OPENAI_BASE = "https://open.bigmodel.cn/api/paas/v4"
-DEFAULT_CONTEXT_WINDOW = 128000  # glm-4-plus rough limit
+DEFAULT_CONTEXT_WINDOW = 128000  # fallback for non-standard/unknown model names
+
+
+def _get_zhipu_config() -> Dict[str, Any]:
+    llm_cfg = get_llm_config()
+    if not llm_cfg:
+        return {}
+    return llm_cfg.get("llm", {}).get("zhipu", {})
 
 
 def _get_api_key() -> Optional[str]:
@@ -37,7 +40,7 @@ def _get_api_key() -> Optional[str]:
 
 def _get_api_base() -> str:
     """Resolve API base URL with sensible defaults for Zhipu OpenAI compatibility."""
-    llm_cfg = get_llm_config().get("llm", {}).get("zhipu", {}) if get_llm_config() else {}
+    llm_cfg = _get_zhipu_config()
     return (
         os.getenv("OPENAI_API_BASE")
         or os.getenv("LLM_API_BASE")
@@ -49,7 +52,7 @@ def _get_api_base() -> str:
 
 def _get_timeout_and_retries() -> tuple[float, int]:
     """Read timeout and max_retries from llm.yaml if provided."""
-    llm_cfg = get_llm_config().get("llm", {}).get("zhipu", {}) if get_llm_config() else {}
+    llm_cfg = _get_zhipu_config()
     timeout = float(llm_cfg.get("request_timeout", 60.0))
     max_retries = int(llm_cfg.get("max_retries", 3))
     return timeout, max_retries
@@ -89,6 +92,7 @@ class ZhipuOpenAI(OpenAI):
             return None
 
 
+@register_llm("zhipu")
 def build_llm(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
@@ -99,11 +103,19 @@ def build_llm(
     api_key: Optional[str] = None,
 ) -> OpenAI:
     """Build and return an OpenAI-compatible LLM targeting Zhipu models."""
-    final_model = model if model is not None else get_llm_model()
-    final_temperature = temperature if temperature is not None else get_llm_temperature()
-    final_max_tokens = max_tokens if max_tokens is not None else get_llm_max_tokens()
-    final_top_p = top_p if top_p is not None else get_llm_top_p()
-    final_system_prompt = system_prompt if system_prompt is not None else get_llm_system_prompt()
+    cfg = _get_zhipu_config()
+
+    final_model = model if model is not None else cfg.get("model", "glm-4.7-flash")
+    final_temperature = (
+        temperature if temperature is not None else float(cfg.get("temperature", 0.7))
+    )
+    final_max_tokens = (
+        max_tokens if max_tokens is not None else int(cfg.get("max_tokens", 8192))
+    )
+    final_top_p = top_p if top_p is not None else cfg.get("top_p", 0.8)
+    final_system_prompt = (
+        system_prompt if system_prompt is not None else cfg.get("system_prompt")
+    )
 
     resolved_api_key = api_key or _get_api_key()
     if not resolved_api_key:
@@ -134,5 +146,9 @@ def build_llm(
         llm_kwargs["additional_kwargs"] = additional_kwargs
 
     return ZhipuOpenAI(**llm_kwargs)
+
+
+# Backward-compatible naming style
+build_zhipu_llm = build_llm
 
 

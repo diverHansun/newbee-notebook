@@ -55,7 +55,7 @@ def main():
     # Build LLM
     print("\n4. Building LLM...")
     llm = build_llm()
-    print(f"   [OK] LLM ready: glm-4-plus")
+    print(f"   [OK] LLM ready: glm-4.7-flash")
 
     # Build Memory
     print("\n5. Building chat memory...")

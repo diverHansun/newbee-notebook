@@ -11,8 +11,8 @@ from llama_index.llms.openai import OpenAI
 
 from newbee_notebook.core.common.config import (
     get_llm_config,
-    get_llm_system_prompt,
 )
+from newbee_notebook.core.llm.registry import register_llm
 
 
 def _get_openai_config() -> Dict[str, Any]:
@@ -32,6 +32,7 @@ def _resolve(param: str, default: Any) -> Any:
         "max_tokens": "OPENAI_MAX_TOKENS",
         "top_p": "OPENAI_TOP_P",
         "api_base": "OPENAI_API_BASE",
+        "system_prompt": "OPENAI_SYSTEM_PROMPT",
     }
     env_val = os.getenv(env_map.get(param, ""), None)
     if env_val is not None:
@@ -39,6 +40,7 @@ def _resolve(param: str, default: Any) -> Any:
     return cfg.get(param, default)
 
 
+@register_llm("openai")
 def build_llm(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
@@ -53,7 +55,7 @@ def build_llm(
     final_temperature = temperature if temperature is not None else float(_resolve("temperature", 0.2))
     final_max_tokens = max_tokens if max_tokens is not None else _resolve("max_tokens", None)
     final_top_p = top_p if top_p is not None else _resolve("top_p", None)
-    final_system_prompt = system_prompt if system_prompt is not None else get_llm_system_prompt()
+    final_system_prompt = system_prompt if system_prompt is not None else _resolve("system_prompt", None)
 
     resolved_api_key = api_key or _get_api_key()
     if not resolved_api_key:
@@ -81,5 +83,9 @@ def build_llm(
         llm_kwargs["max_retries"] = int(cfg["max_retries"])
 
     return OpenAI(**llm_kwargs)
+
+
+# Backward-compatible naming style
+build_openai_llm = build_llm
 
 

@@ -4,11 +4,12 @@
 This script:
 1. Loads documents from data/documents/
 2. Clears existing pgvector data
-3. Builds new index with embeddings
+3. Builds a new index with the selected embedding provider
 
 Usage:
     python -m newbee_notebook.scripts.rebuild_pgvector
     python -m newbee_notebook.scripts.rebuild_pgvector --documents-dir /path/to/docs
+    python -m newbee_notebook.scripts.rebuild_pgvector --provider qwen3-embedding
     python -m newbee_notebook.scripts.rebuild_pgvector --clear-only
 """
 
@@ -24,12 +25,36 @@ from newbee_notebook.core.common.config import (
     get_documents_directory,
     get_storage_config,
     get_embedding_provider,
+    get_embeddings_config,
     get_pgvector_config_for_provider,
 )
-from newbee_notebook.core.rag.embeddings import build_embedding, build_biobert_embedding, build_zhipu_embedding
+from newbee_notebook.core.rag.embeddings import build_embedding
+from newbee_notebook.core.rag.embeddings.registry import get_builder, get_registered_providers
 from newbee_notebook.infrastructure.pgvector import PGVectorStore, PGVectorConfig
 from newbee_notebook.core.engine.index_builder import IndexBuilder
 from llama_index.core import StorageContext, VectorStoreIndex
+
+
+def _build_embedding_for_provider(provider: str | None):
+    """Build embedding model for an explicit provider or configured default."""
+    if provider:
+        return get_builder(provider)()
+    return build_embedding()
+
+
+def _get_enabled_embedding_providers() -> list[str]:
+    """Return registry providers that are enabled in embeddings.yaml."""
+    registered = get_registered_providers()
+    embeddings_cfg = get_embeddings_config().get("embeddings", {})
+
+    enabled: list[str] = []
+    for provider in registered:
+        provider_cfg = embeddings_cfg.get(provider, {})
+        if isinstance(provider_cfg, dict) and provider_cfg.get("enabled") is False:
+            continue
+        enabled.append(provider)
+
+    return enabled or registered
 
 
 async def rebuild_pgvector_index(
@@ -46,37 +71,31 @@ async def rebuild_pgvector_index(
         clear_only: If True, only clear existing data
         chunk_size: Text chunk size
         chunk_overlap: Overlap between chunks
-        provider: Embedding provider ('biobert' or 'zhipu'). If None, uses config default.
+        provider: Embedding provider (for example: 'qwen3-embedding', 'zhipu').
+            If None, uses current configuration.
     """
     print("=" * 60)
     print("Rebuild pgvector Index")
     print("=" * 60)
 
-    # Load storage config
     storage_config = get_storage_config()
     pg_config = storage_config.get("postgresql", {})
 
-    # Determine provider
     effective_provider = provider or get_embedding_provider()
     print(f"\nUsing embedding provider: {effective_provider}")
 
-    # Step 1: Initialize embedding model for specified provider
     print("\n[1/4] Initializing embedding model...")
-    if effective_provider == "biobert":
-        embed_model = build_biobert_embedding()
-    elif effective_provider == "zhipu":
-        embed_model = build_zhipu_embedding()
-    else:
-        # Fallback to default build_embedding
-        embed_model = build_embedding()
+    embed_model = _build_embedding_for_provider(provider=effective_provider)
 
-    embed_dim = getattr(embed_model, "dimensions", None) or getattr(embed_model, "dimension", None) or 1024
-    print(f"Embedding model loaded (dimension: {embed_dim})")
+    embed_dim = (
+        getattr(embed_model, "dimensions", None)
+        or getattr(embed_model, "dimension", None)
+        or 1024
+    )
+    embed_model_name = getattr(embed_model, "model_name", "unknown")
+    print(f"Embedding model loaded: {embed_model_name} (dimension: {embed_dim})")
 
-    # Get provider-specific pgvector configuration
     pgvector_provider_cfg = get_pgvector_config_for_provider(effective_provider)
-
-    # Create pgvector config using provider-specific settings
     config = PGVectorConfig(
         host=pg_config.get("host", "localhost"),
         port=pg_config.get("port", 5432),
@@ -90,13 +109,12 @@ async def rebuild_pgvector_index(
     print(f"\nPostgreSQL: {config.host}:{config.port}/{config.database}")
     print(f"Table: {config.table_name}")
     print(f"Embedding dimension: {config.embedding_dimension}")
-    
-    # Initialize store
+
     print("\n[2/4] Initializing pgvector store...")
     store = PGVectorStore(config)
     await store.initialize()
     print("Connected to PostgreSQL")
-    
+
     if clear_only:
         print("\n[3/4] Clearing existing data...")
         await store.clear()
@@ -104,30 +122,28 @@ async def rebuild_pgvector_index(
         print("\n" + "=" * 60)
         print("Done! (clear only mode)")
         return
-    
-    # Load and parse documents
+
     print(f"\n[3/4] Loading documents from {documents_dir}...")
     builder = IndexBuilder(
         embed_model=embed_model,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
-    
+
     try:
         nodes = builder.load_and_parse_documents(
             documents_dir=documents_dir,
             show_progress=True,
         )
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
+    except FileNotFoundError as exc:
+        print(f"\nError: {exc}")
         print(f"Please add documents to: {documents_dir}")
         sys.exit(1)
-    
-    # Clear existing data and build index
+
     print("\n[4/4] Building pgvector index...")
     print("Clearing existing data...")
     await store.clear()
-    
+
     print("Adding nodes to index...")
     storage_context = StorageContext.from_defaults(
         vector_store=store.get_llamaindex_store()
@@ -138,13 +154,15 @@ async def rebuild_pgvector_index(
         embed_model=embed_model,
         show_progress=True,
     )
-    
+
     print("\n" + "=" * 60)
     print(f"Success! Indexed {len(nodes)} chunks to pgvector")
     print("=" * 60)
 
 
 def main():
+    available_providers = _get_enabled_embedding_providers()
+
     parser = argparse.ArgumentParser(
         description="Rebuild pgvector index from documents",
     )
@@ -174,27 +192,28 @@ def main():
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["biobert", "zhipu"],
+        choices=available_providers,
         default=None,
-        help="Embedding provider to use (default: from embeddings.yaml)",
+        help=(
+            "Embedding provider to use "
+            f"(default: from embeddings.yaml, available: {', '.join(available_providers)})"
+        ),
     )
 
     args = parser.parse_args()
 
-    # Get documents directory
     documents_dir = args.documents_dir or get_documents_directory()
 
-    # Run rebuild
-    asyncio.run(rebuild_pgvector_index(
-        documents_dir=documents_dir,
-        clear_only=args.clear_only,
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
-        provider=args.provider,
-    ))
+    asyncio.run(
+        rebuild_pgvector_index(
+            documents_dir=documents_dir,
+            clear_only=args.clear_only,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            provider=args.provider,
+        )
+    )
 
 
 if __name__ == "__main__":
     main()
-
-

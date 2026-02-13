@@ -17,12 +17,6 @@ class BaseEmbeddingModel(BaseEmbedding):
         """Return embedding vector dimension (e.g. 768, 1024)."""
         pass
 
-    @property
-    @abstractmethod
-    def model_name(self) -> str:
-        """Return provider/model identifier for logs and debugging."""
-        pass
-
     @abstractmethod
     def _get_query_embedding(self, query: str) -> List[float]:
         """Generate an embedding vector for a query string."""
