@@ -12,6 +12,12 @@ document_processing:
     timeout_seconds: ${MINERU_V4_TIMEOUT:120}
     poll_interval: ${MINERU_V4_POLL_INTERVAL:5}
     max_wait_seconds: ${MINERU_V4_MAX_WAIT_SECONDS:1800}
+    # Fallback: use system curl when requests/OpenSSL fails to handshake with CDN.
+    cdn_curl_fallback_enabled: ${MINERU_CDN_CURL_FALLBACK_ENABLED:true}
+    # curl executable name/path, e.g. "curl" or "C:\\Windows\\System32\\curl.exe"
+    cdn_curl_binary: ${MINERU_CDN_CURL_BINARY:curl}
+    # Optional insecure mode for emergency diagnostics only.
+    cdn_curl_insecure: ${MINERU_CDN_CURL_INSECURE:false}
 
   # MinerU local docker API settings.
   mineru_local:

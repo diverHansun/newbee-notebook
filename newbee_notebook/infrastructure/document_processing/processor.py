@@ -19,6 +19,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
     MinerULocalConverter,
@@ -94,6 +95,15 @@ class DocumentProcessor:
                                 timeout_seconds=_parse_int(cloud_cfg.get("timeout_seconds"), 60),
                                 poll_interval=_parse_int(cloud_cfg.get("poll_interval"), 5),
                                 max_wait_seconds=_parse_int(cloud_cfg.get("max_wait_seconds"), 1800),
+                                enable_curl_fallback=_parse_bool(
+                                    cloud_cfg.get("cdn_curl_fallback_enabled"),
+                                    True,
+                                ),
+                                curl_binary=str(cloud_cfg.get("cdn_curl_binary", "curl")),
+                                curl_insecure=_parse_bool(
+                                    cloud_cfg.get("cdn_curl_insecure"),
+                                    False,
+                                ),
                             )
                         )
                     except ValueError as exc:
@@ -138,7 +148,7 @@ class DocumentProcessor:
     @staticmethod
     def _should_trip_circuit_breaker(converter: Converter, error: Exception) -> bool:
         if isinstance(converter, MinerUCloudConverter):
-            return isinstance(error, (requests.RequestException, TimeoutError))
+            return isinstance(error, (requests.RequestException, TimeoutError, MinerUCloudTransientError))
         if isinstance(converter, MinerULocalConverter):
             return isinstance(error, httpx.RequestError)
         return False
@@ -191,6 +201,7 @@ class DocumentProcessor:
             raise RuntimeError(f"Unsupported file type: {ext}")
 
         last_error: Optional[Exception] = None
+        errors: list[tuple[str, Exception]] = []
         for converter in converters:
             if self._is_mineru_converter(converter) and time.monotonic() < self._mineru_unavailable_until:
                 logger.info("MinerU converter is in cooldown window; skipping attempt for %s", file_path)
@@ -202,6 +213,7 @@ class DocumentProcessor:
                 return result
             except Exception as e:
                 converter_name = type(converter).__name__
+                errors.append((converter_name, e))
 
                 if isinstance(converter, MinerUCloudConverter) and isinstance(e, ValueError):
                     logger.warning(
@@ -219,6 +231,17 @@ class DocumentProcessor:
                 logger.warning("%s failed for %s: %s. Trying next converter...", converter_name, file_path, e)
                 last_error = e
                 continue
+
+        if errors:
+            first_name, first_error = errors[0]
+            last_name, last_error = errors[-1]
+            error_chain = " | ".join(f"{name}: {error}" for name, error in errors)
+            raise RuntimeError(
+                f"All converters failed for {file_path}. "
+                f"First error ({first_name}): {first_error}. "
+                f"Last error ({last_name}): {last_error}. "
+                f"Error chain: {error_chain}"
+            )
 
         raise RuntimeError(
             f"All converters failed for {file_path}. Last error: {last_error}"

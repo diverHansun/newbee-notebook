@@ -4,6 +4,7 @@ import asyncio
 import time
 
 import requests
+import pytest
 
 from newbee_notebook.core.common.config import get_document_processing_config
 from newbee_notebook.infrastructure.document_processing.processor import DocumentProcessor
@@ -13,6 +14,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
     MinerULocalConverter,
@@ -173,3 +175,52 @@ def test_processor_resets_failure_counter_after_mineru_success(monkeypatch):
         assert processor._mineru_consecutive_failures == 0
 
     asyncio.run(_run())
+
+
+def test_processor_trips_cooldown_on_mineru_cdn_transient_error(monkeypatch):
+    cfg = _base_config()
+    cfg["document_processing"]["fail_threshold"] = 1
+    cfg["document_processing"]["cooldown_seconds"] = 120
+    processor = DocumentProcessor(config=cfg)
+
+    mineru = next(c for c in processor._converters if isinstance(c, MinerUCloudConverter))
+    markitdown = next(c for c in processor._converters if isinstance(c, MarkItDownConverter))
+
+    async def _mineru_fail(_file_path: str):
+        raise MinerUCloudTransientError("MinerU CDN download failed after 3 retries")
+
+    async def _fallback_ok(_file_path: str):
+        return ConversionResult(markdown="# fallback")
+
+    monkeypatch.setattr(mineru, "convert", _mineru_fail)
+    monkeypatch.setattr(markitdown, "convert", _fallback_ok)
+
+    result = asyncio.run(processor.convert("sample.pdf"))
+    assert result.markdown == "# fallback"
+    assert processor._mineru_unavailable_until > time.monotonic()
+
+
+def test_processor_error_chain_preserves_root_cause(monkeypatch):
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    mineru = next(c for c in processor._converters if isinstance(c, MinerUCloudConverter))
+    markitdown = next(c for c in processor._converters if isinstance(c, MarkItDownConverter))
+
+    async def _mineru_fail(_file_path: str):
+        raise MinerUCloudTransientError("MinerU CDN download failed after 3 retries")
+
+    async def _markitdown_fail(_file_path: str):
+        raise RuntimeError("MarkItDown produced empty markdown")
+
+    monkeypatch.setattr(mineru, "convert", _mineru_fail)
+    monkeypatch.setattr(markitdown, "convert", _markitdown_fail)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(processor.convert("sample.pdf"))
+
+    text = str(exc_info.value)
+    assert "First error (MinerUCloudConverter)" in text
+    assert "MinerU CDN download failed after 3 retries" in text
+    assert "Last error (MarkItDownConverter)" in text
+    assert "MarkItDown produced empty markdown" in text
