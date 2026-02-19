@@ -392,7 +392,12 @@ class ChatService:
         }
         counts = {status.value: 0 for status in DocumentStatus}
         blocking_ids: List[str] = []
-        blocking_statuses = {DocumentStatus.UPLOADED, DocumentStatus.PENDING, DocumentStatus.PROCESSING}
+        blocking_statuses = {
+            DocumentStatus.UPLOADED,
+            DocumentStatus.PENDING,
+            DocumentStatus.PROCESSING,
+            DocumentStatus.CONVERTED,
+        }
         for doc in docs:
             counts[doc.status.value] = counts.get(doc.status.value, 0) + 1
             if doc.status in blocking_statuses:

@@ -72,6 +72,11 @@ class Document(Entity):
         return self.status == DocumentStatus.COMPLETED
 
     @property
+    def is_converted(self) -> bool:
+        """Check if document conversion is completed but indexing is pending."""
+        return self.status == DocumentStatus.CONVERTED
+
+    @property
     def is_uploaded(self) -> bool:
         """Check if document is uploaded and waiting for processing."""
         return self.status == DocumentStatus.UPLOADED
@@ -85,6 +90,21 @@ class Document(Entity):
     def is_failed(self) -> bool:
         """Check if document processing failed."""
         return self.status == DocumentStatus.FAILED
+
+    @property
+    def needs_conversion(self) -> bool:
+        """Check if document needs conversion stage."""
+        return self.status in (DocumentStatus.UPLOADED, DocumentStatus.FAILED)
+
+    @property
+    def needs_indexing(self) -> bool:
+        """Check if document needs indexing stage only."""
+        return self.status == DocumentStatus.CONVERTED
+
+    @property
+    def is_ready_for_chat(self) -> bool:
+        """Check if document can participate in retrieval/chat."""
+        return self.status == DocumentStatus.COMPLETED
     
     def mark_processing(
         self,
@@ -129,8 +149,32 @@ class Document(Entity):
         if content_format is not None:
             self.content_format = content_format
         self.error_message = None
-        self.processing_stage = "completed"
-        self.stage_updated_at = datetime.now()
+        self.processing_stage = None
+        self.stage_updated_at = None
+        self.processing_meta = None
+        self.touch()
+
+    def mark_converted(
+        self,
+        page_count: int = 0,
+        content_path: Optional[str] = None,
+        content_size: Optional[int] = None,
+        content_format: Optional[str] = None,
+    ) -> None:
+        """Mark document as converted and waiting for indexing."""
+        self.status = DocumentStatus.CONVERTED
+        self.page_count = page_count
+        self.chunk_count = 0
+        if content_path is not None:
+            self.content_path = content_path
+        if content_size is not None:
+            self.content_size = content_size
+        if content_format is not None:
+            self.content_format = content_format
+        self.error_message = None
+        self.processing_stage = None
+        self.stage_updated_at = None
+        self.processing_meta = None
         self.touch()
     
     def mark_failed(

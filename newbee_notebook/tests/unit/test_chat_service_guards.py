@@ -34,6 +34,7 @@ def test_get_notebook_scope_returns_completed_and_status_counts():
         SimpleNamespace(document_id="doc-1"),
         SimpleNamespace(document_id="doc-2"),
         SimpleNamespace(document_id="doc-3"),
+        SimpleNamespace(document_id="doc-4"),
     ]
 
     document_repo = AsyncMock()
@@ -41,6 +42,7 @@ def test_get_notebook_scope_returns_completed_and_status_counts():
         SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Doc 1"),
         SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING, title="Doc 2"),
         SimpleNamespace(document_id="doc-3", status=DocumentStatus.PENDING, title="Doc 3"),
+        SimpleNamespace(document_id="doc-4", status=DocumentStatus.CONVERTED, title="Doc 4"),
     ]
 
     service = _build_service(ref_repo=ref_repo, document_repo=document_repo)
@@ -50,7 +52,8 @@ def test_get_notebook_scope_returns_completed_and_status_counts():
     assert counts["completed"] == 1
     assert counts["processing"] == 1
     assert counts["pending"] == 1
-    assert sorted(blocking) == ["doc-2", "doc-3"]
+    assert counts["converted"] == 1
+    assert sorted(blocking) == ["doc-2", "doc-3", "doc-4"]
     assert titles == {"doc-1": "Doc 1"}
 
 

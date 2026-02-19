@@ -147,8 +147,12 @@ docker-compose up -d redis postgres elasticsearch celery-worker
 
 ```bash
 # 确保虚拟环境已激活
-python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
+python main.py --reload --port 8000
 ```
+
+说明：
+- 统一通过根目录入口脚本 `main.py` 启动 FastAPI。
+- `--reload` 与 `--workers` 不能同时使用（脚本会直接报错提示）。
 
 启动成功后访问：
 - 📖 API 文档：http://localhost:8000/docs
@@ -233,13 +237,16 @@ make clean-doc ID=<document_id>
 
 ```bash
 # 开发模式（自动重载）
-python -m uvicorn newbee_notebook.api.main:app --reload --port 8000
+python main.py --reload --port 8000
 
 # 生产模式
-python -m uvicorn newbee_notebook.api.main:app --host 0.0.0.0 --port 8000
+python main.py --host 0.0.0.0 --port 8000
 
 # 指定 workers（生产环境）
-python -m uvicorn newbee_notebook.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+python main.py --host 0.0.0.0 --port 8000 --workers 4
+
+# 指定日志级别
+python main.py --port 8000 --log-level debug
 ```
 
 ## 🛠️ 可选：启动监控工具

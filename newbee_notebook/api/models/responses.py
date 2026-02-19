@@ -156,6 +156,7 @@ class NotebookDocumentsAddItem(BaseModel):
     document_id: str
     title: str
     status: str
+    action: str
     processing_stage: Optional[str] = None
 
 
@@ -182,9 +183,9 @@ class NotebookDocumentListItemResponse(BaseModel):
     title: str
     status: str
     content_type: str
-    file_size: int
-    page_count: int
-    chunk_count: int
+    file_size: int = 0
+    page_count: int = 0
+    chunk_count: int = 0
     processing_stage: Optional[str] = None
     stage_updated_at: Optional[datetime] = None
     processing_meta: Optional[dict[str, Any]] = None

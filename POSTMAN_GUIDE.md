@@ -304,7 +304,7 @@ GET /api/v1/library/documents?limit=20&offset=0&status=completed
 参数说明：
 - `limit`: 返回结果数量（默认 20）
 - `offset`: 分页偏移量（默认 0）
-- `status`: 文档状态过滤（pending/processing/completed/failed）
+- `status`: 文档状态过滤（uploaded/pending/processing/converted/completed/failed）
 
 验证：
 - 返回文档列表
@@ -568,7 +568,7 @@ file: [选择本地文件]
 验证：
 - 响应状态码 201
 - 文件被上传并创建文档记录
-- 自动触发异步处理
+- 不会自动触发异步处理（需通过 Notebook 关联或 Admin 端点触发）
 
 **6.3 Get Document**
 ```
@@ -912,8 +912,10 @@ http://localhost:8000/api/v1
 - `conclude`: 文档总结模式
 
 ### 文档状态
+- `uploaded`: 已上传，等待处理
 - `pending`: 等待处理
 - `processing`: 正在处理
+- `converted`: 已完成转换，等待索引
 - `completed`: 处理完成
 - `failed`: 处理失败
 

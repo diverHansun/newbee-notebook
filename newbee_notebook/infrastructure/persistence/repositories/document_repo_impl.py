@@ -16,6 +16,8 @@ from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.domain.repositories.document_repository import DocumentRepository
 from newbee_notebook.infrastructure.persistence.models import DocumentModel
 
+_UNSET = object()
+
 
 class DocumentRepositoryImpl(DocumentRepository):
     """
@@ -68,9 +70,9 @@ class DocumentRepositoryImpl(DocumentRepository):
             library_id=str(model.library_id) if model.library_id else None,
             notebook_id=str(model.notebook_id) if model.notebook_id else None,
             url=model.url,
-            page_count=model.page_count,
-            chunk_count=model.chunk_count,
-            file_size=model.file_size,
+            page_count=model.page_count or 0,
+            chunk_count=model.chunk_count or 0,
+            file_size=model.file_size or 0,
             content_path=model.content_path,
             content_format=model.content_format or "markdown",
             content_size=model.content_size,
@@ -220,41 +222,48 @@ class DocumentRepositoryImpl(DocumentRepository):
         self,
         document_id: str,
         status: DocumentStatus,
-        chunk_count: Optional[int] = None,
-        page_count: Optional[int] = None,
-        content_path: Optional[str] = None,
-        content_size: Optional[int] = None,
-        content_format: Optional[str] = None,
-        error_message: Optional[str] = None,
-        processing_stage: Optional[str] = None,
-        stage_updated_at: Optional[datetime] = None,
-        processing_meta: Optional[dict[str, Any]] = None,
+        chunk_count: Optional[int] | object = _UNSET,
+        page_count: Optional[int] | object = _UNSET,
+        content_path: Optional[str] | object = _UNSET,
+        content_size: Optional[int] | object = _UNSET,
+        content_format: Optional[str] | object = _UNSET,
+        error_message: Optional[str] | object = _UNSET,
+        processing_stage: Optional[str] | object = _UNSET,
+        stage_updated_at: Optional[datetime] | object = _UNSET,
+        processing_meta: Optional[dict[str, Any]] | object = _UNSET,
     ) -> None:
         values = {
             "status": status.value,
             "updated_at": datetime.now(),
         }
-        if chunk_count is not None:
+        if chunk_count is not _UNSET:
             values["chunk_count"] = chunk_count
-        if page_count is not None:
+        if page_count is not _UNSET:
             values["page_count"] = page_count
-        if content_path is not None:
+        if content_path is not _UNSET:
             values["content_path"] = content_path
-        if content_size is not None:
+        if content_size is not _UNSET:
             values["content_size"] = content_size
-        if content_format is not None:
+        if content_format is not _UNSET:
             values["content_format"] = content_format
-        if error_message is not None or status != DocumentStatus.FAILED:
+
+        if error_message is _UNSET:
+            if status != DocumentStatus.FAILED:
+                values["error_message"] = None
+        else:
             values["error_message"] = error_message
-        if processing_stage is not None:
+
+        if processing_stage is not _UNSET:
             values["processing_stage"] = processing_stage
-            if processing_meta is None:
+            if processing_meta is _UNSET:
                 values["processing_meta"] = None
-        if processing_meta is not None:
+
+        if processing_meta is not _UNSET:
             values["processing_meta"] = self._serialize_processing_meta(processing_meta)
-        if stage_updated_at is not None:
+
+        if stage_updated_at is not _UNSET:
             values["stage_updated_at"] = stage_updated_at
-        elif processing_stage is not None or processing_meta is not None:
+        elif processing_stage is not _UNSET or processing_meta is not _UNSET:
             values["stage_updated_at"] = datetime.now()
 
         await self._session.execute(
@@ -275,6 +284,7 @@ class DocumentRepositoryImpl(DocumentRepository):
             DocumentStatus.UPLOADED,
             DocumentStatus.PENDING,
             DocumentStatus.FAILED,
+            DocumentStatus.CONVERTED,
         ]
         allowed_values = [status.value for status in allowed]
         now = datetime.now()

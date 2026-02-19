@@ -59,9 +59,9 @@ async def _process_document_async(document_id: str):
 
 | 入口 | 调用的 Task | 阶段范围 | 可控粒度 |
 |------|------------|----------|---------|
-| notebook 关联 | `process_document_task` | 完整 6 阶段 | ❌ 不可拆分 |
-| admin reprocess | `process_pending_documents_task` | 完整 6 阶段 | ❌ 不可拆分 |
-| admin reindex | `process_document_task` | 完整 6 阶段 | ❌ 不可拆分 |
+| notebook 关联 | `process_document_task` | 完整 6 阶段 | 不可拆分 |
+| admin reprocess | `process_pending_documents_task` | 完整 6 阶段 | 不可拆分 |
+| admin reindex | `process_document_task` | 完整 6 阶段 | 不可拆分 |
 
 ### 2.3 状态机的缺失
 

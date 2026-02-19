@@ -59,7 +59,7 @@ class SSEEvent:
     @staticmethod
     def format(event_type: str, data: dict) -> str:
         """Format data as SSE event."""
-        return f"data: {json.dumps({'type': event_type, **data})}\n\n"
+        return f"data: {json.dumps({'type': event_type, **data}, ensure_ascii=False)}\n\n"
     
     @staticmethod
     def start(message_id: int) -> str:

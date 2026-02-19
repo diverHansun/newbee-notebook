@@ -1,313 +1,234 @@
-# 04 - API 端点设计：Admin 独立操作端点
+# 04 - API 端点设计
 
 ## 1. 概述
 
-新增 3 个 Admin 端点，提供文档转换和索引的独立触发能力。所有新端点在 `/admin/` 路径下，与现有 admin 端点（`reprocess-pending`, `reindex`, `index-stats`）风格一致。
+本文档定义 Improve-8 引入的 Admin API 端点。这些端点用于开发调试和运维排查，不是用户态功能。
 
-## 2. 新增端点一览
+新增端点总览：
 
-| 方法 | 路径 | 说明 | 对应 Celery Task |
-|------|------|------|-----------------|
-| `POST` | `/admin/documents/{id}/convert` | 单文档仅转换 | `convert_document_task` |
-| `POST` | `/admin/documents/{id}/index` | 单文档仅索引 | `index_document_task` |
-| `POST` | `/admin/convert-pending` | 批量转换 | `convert_pending_task` (新增) |
+| 端点 | 方法 | 用途 |
+|------|------|------|
+| `/admin/documents/{id}/convert` | POST | 仅转换单个文档 |
+| `/admin/documents/{id}/index` | POST | 仅索引单个文档 |
+| `/admin/convert-pending` | POST | 批量转换待处理文档 |
+| `/admin/index-pending` | POST | 批量索引已转换文档 |
 
-## 3. 端点详细规范
+现有端点变更：
 
-### 3.1 POST `/admin/documents/{document_id}/convert`
+| 端点 | 变更说明 |
+|------|---------|
+| `POST /admin/documents/{id}/reindex` | 支持智能跳过转换阶段 |
+| `GET /library/documents` | 支持 `status=converted` 过滤 |
+| `GET /admin/index-stats` | 统计包含 `converted` 状态计数 |
 
-**功能**：触发单个文档的 MinerU/MarkItDown 转换，完成后状态变为 `CONVERTED`。
+## 2. 新增端点：单文档转换
 
-**请求**：
-
-```http
+```
 POST /api/v1/admin/documents/{document_id}/convert
-Content-Type: application/json
-
-{
-  "force": false
-}
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
+### 请求参数
+
+| 参数 | 类型 | 位置 | 说明 |
 |------|------|------|------|
-| `document_id` | path, UUID | ✅ | 文档 ID |
-| `force` | body, bool | ❌ | `true` = 即使已 CONVERTED/COMPLETED 也强制重新转换（先重置为 UPLOADED）|
+| document_id | string (UUID) | path | 文档 ID |
+| force | bool | query, 默认 false | 是否强制重转换 |
 
-**前置条件**：
+### 前置条件检查
 
-| 当前状态 | force=false | force=true |
-|----------|------------|------------|
-| UPLOADED | ✅ 触发转换 | ✅ 触发转换 |
-| FAILED | ✅ 触发转换（重试）| ✅ 触发转换 |
-| PENDING | ✅ 触发转换 | ✅ 触发转换 |
-| PROCESSING | ❌ 409 Conflict | ❌ 409 Conflict |
-| CONVERTED | ❌ 200 已完成 | ✅ 重置为 UPLOADED → 重新转换 |
-| COMPLETED | ❌ 200 已完成 | ✅ 重置为 UPLOADED → 重新转换（删除旧索引）|
+| 当前状态 | force=false 行为 | force=true 行为 |
+|----------|----------------|----------------|
+| UPLOADED / FAILED | 正常触发 | 正常触发 |
+| PENDING / PROCESSING | 拒绝 (409) | 拒绝 (409) |
+| CONVERTED | 跳过 (200, 已转换) | 重置为 UPLOADED，清理旧索引，重新转换 |
+| COMPLETED | 跳过 (200, 已完成) | 重置为 UPLOADED，清理旧索引，重新转换 |
 
-**成功响应** (202 Accepted)：
+### 响应
 
 ```json
 {
-  "message": "Conversion queued",
-  "document_id": "c64a48d1-bb53-457d-8b89-e306b66de0c1",
-  "previous_status": "uploaded",
-  "target_status": "converted"
+  "document_id": "uuid",
+  "status": "queued",
+  "message": "Convert task queued",
+  "action": "convert_only"
 }
 ```
 
-**错误响应**：
+### 实现要点
 
-| 状态码 | 场景 |
-|--------|------|
-| 404 | 文档不存在 |
-| 409 | 文档正在处理中 |
+force=true 时的清理逻辑内联到 `convert_document_task` 中执行（非异步分发），避免竟态条件：
 
-### 3.2 POST `/admin/documents/{document_id}/index`
+```python
+@router.post("/documents/{document_id}/convert")
+async def convert_document(document_id: str, force: bool = False, ...):
+    doc = await document_repo.get(document_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
 
-**功能**：对已转换文档执行 RAG 分块 + pgvector 索引 + ES 索引，完成后状态变为 `COMPLETED`。
+    if doc.status in {DocumentStatus.PENDING, DocumentStatus.PROCESSING}:
+        raise HTTPException(409, f"Document is {doc.status.value}")
 
-**请求**：
+    if not force and doc.status in {DocumentStatus.CONVERTED, DocumentStatus.COMPLETED}:
+        return {"document_id": document_id, "status": doc.status.value,
+                "message": "Already converted/completed", "action": "none"}
 
-```http
+    convert_document_task.delay(document_id, force=force)
+    return {"document_id": document_id, "status": "queued",
+            "message": "Convert task queued", "action": "convert_only"}
+```
+
+## 3. 新增端点：单文档索引
+
+```
 POST /api/v1/admin/documents/{document_id}/index
-Content-Type: application/json
-
-{
-  "force": false
-}
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
+### 请求参数
+
+| 参数 | 类型 | 位置 | 说明 |
 |------|------|------|------|
-| `document_id` | path, UUID | ✅ | 文档 ID |
-| `force` | body, bool | ❌ | `true` = 即使已 COMPLETED 也强制重建索引（先删除旧索引 + 重置为 CONVERTED）|
+| document_id | string (UUID) | path | 文档 ID |
+| force | bool | query, 默认 false | 是否强制重索引 |
 
-**前置条件**：
+### 前置条件检查
 
-| 当前状态 | force=false | force=true |
-|----------|------------|------------|
-| CONVERTED | ✅ 触发索引 | ✅ 触发索引 |
-| COMPLETED | ❌ 200 已完成 | ✅ 删除旧索引 → 重置 CONVERTED → 重新索引 |
-| FAILED (有 content_path) | ✅ 重置 CONVERTED → 触发索引 | ✅ 同左 |
-| FAILED (无 content_path) | ❌ 422 需要先转换 | ❌ 422 需要先转换 |
-| UPLOADED | ❌ 422 需要先转换 | ❌ 422 需要先转换 |
-| PROCESSING | ❌ 409 Conflict | ❌ 409 Conflict |
+| 当前状态 | force=false 行为 | force=true 行为 |
+|----------|----------------|----------------|
+| CONVERTED | 正常触发 | 正常触发 |
+| UPLOADED / PENDING | 拒绝 (400, 需要先转换) | 拒绝 (400, 需要先转换) |
+| PROCESSING | 拒绝 (409) | 拒绝 (409) |
+| COMPLETED | 跳过 (200, 已完成) | 清理旧索引，重新索引 |
+| FAILED (有 content_path) | 正常触发 | 正常触发 |
+| FAILED (无 content_path) | 拒绝 (400, 需要先转换) | 拒绝 (400, 需要先转换) |
 
-**成功响应** (202 Accepted)：
+### 响应
 
 ```json
 {
-  "message": "Indexing queued",
-  "document_id": "c64a48d1-bb53-457d-8b89-e306b66de0c1",
-  "previous_status": "converted",
-  "target_status": "completed"
+  "document_id": "uuid",
+  "status": "queued",
+  "message": "Index task queued",
+  "action": "index_only"
 }
 ```
 
-**错误响应**：
+## 4. 新增端点：批量转换
 
-| 状态码 | 场景 | 错误信息 |
-|--------|------|---------|
-| 404 | 文档不存在 | Document not found |
-| 409 | 文档正在处理中 | Document is currently processing |
-| 422 | 文档未转换 | Document must be converted first (status: uploaded) |
-
-### 3.3 POST `/admin/convert-pending`
-
-**功能**：批量触发待转换文档的仅转换操作。支持指定 document_ids 过滤。
-
-**请求**：
-
-```http
+```
 POST /api/v1/admin/convert-pending
-Content-Type: application/json
+```
 
+### 请求体
+
+```json
 {
   "document_ids": ["uuid1", "uuid2"],
   "dry_run": false
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `document_ids` | body, list[UUID] | ❌ | 指定文档 ID 列表。为空或省略则处理所有 uploaded/failed 文档 |
-| `dry_run` | body, bool | ❌ | `true` = 仅返回待转换列表，不触发任何处理 |
+- `document_ids` 可选。为空时转换所有 UPLOADED / FAILED 文档。
+- `dry_run` 可选。为 true 时仅返回待转换列表，不实际触发。
 
-**成功响应** (200 OK)：
+### 响应
 
-dry_run=true:
 ```json
 {
-  "pending_count": 3,
-  "document_ids": ["uuid1", "uuid2", "uuid3"],
-  "dry_run": true
+  "queued_count": 5,
+  "document_ids": ["uuid1", "uuid2", "uuid3", "uuid4", "uuid5"]
 }
 ```
 
-dry_run=false:
+### 实现要点
+
+批量操作为每个文档分派独立的 `convert_document_task`，不在单个函数中循环 await。
+
+## 5. 新增端点：批量索引
+
+```
+POST /api/v1/admin/index-pending
+```
+
+### 请求体
+
+```json
+{
+  "document_ids": ["uuid1", "uuid2"],
+  "dry_run": false
+}
+```
+
+- `document_ids` 可选。为空时索引所有 CONVERTED 文档。
+- `dry_run` 可选。
+
+### 响应
+
 ```json
 {
   "queued_count": 3,
-  "document_ids": ["uuid1", "uuid2", "uuid3"],
-  "skipped": [
-    {
-      "document_id": "uuid4",
-      "reason": "status is completed"
-    }
-  ],
-  "mode": "convert_only"
+  "document_ids": ["uuid1", "uuid2", "uuid3"]
 }
 ```
 
-## 4. 现有端点变更
+### 实现要点
 
-### 4.1 POST `/admin/reprocess-pending` — 保持不变
+查找 `CONVERTED` 状态文档，为每个分派 `index_document_task`。与批量转换结构对称。
 
-行为完全不变：触发所有 uploaded/failed/pending 文档的**完整流水线**。
+## 6. 现有端点变更
 
-### 4.2 POST `/admin/documents/{id}/reindex` — 行为增强
+### 6.1 POST /admin/documents/{id}/reindex
 
-现有行为保持不变。但内部实现使用重构后的 `_process_document_async()`，会智能判断：
-- 如果文档状态为 CONVERTED → 从索引阶段开始（跳过转换）
-- 如果文档状态为 UPLOADED/FAILED → 完整流水线
+变更要点：支持智能跳过。
 
-### 4.3 GET `/library/documents` — 过滤条件扩展
-
-已有的 `status` query 参数支持新增的 `converted` 值：
-
-```http
-GET /api/v1/library/documents?status=converted
-```
-
-### 4.4 GET `/admin/index-stats` — 统计扩展
-
-在现有统计中新增 `converted` 状态计数：
-
-```json
-{
-  "by_status": {
-    "uploaded": 2,
-    "pending": 0,
-    "processing": 1,
-    "converted": 3,
-    "completed": 15,
-    "failed": 0
-  },
-  "total": 21
-}
-```
-
-## 5. Request/Response Schema
-
-### 5.1 Pydantic Models
+- 如果文档 `content_path` 存在（说明转换产物完整），不再重置为 PENDING 后跑完整流水线，而是直接分派 `index_document_task`
+- 如果文档 `content_path` 不存在，行为不变，分派 `process_document_task`
+- force=true 时始终执行完整流水线
 
 ```python
-# api/models.py
+@router.post("/documents/{document_id}/reindex")
+async def reindex_document(document_id: str, force: bool = False, ...):
+    doc = await document_repo.get(document_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
 
-class ConvertDocumentRequest(BaseModel):
-    force: bool = False
+    if not force and doc.status in {DocumentStatus.PENDING, DocumentStatus.PROCESSING}:
+        raise HTTPException(400, f"Document status={doc.status.value}")
 
-class IndexDocumentRequest(BaseModel):
-    force: bool = False
-
-class ConvertPendingRequest(BaseModel):
-    document_ids: list[str] | None = None
-    dry_run: bool = False
-
-class DocumentOperationResponse(BaseModel):
-    message: str
-    document_id: str
-    previous_status: str
-    target_status: str
-
-class ConvertPendingResponse(BaseModel):
-    queued_count: int | None = None
-    pending_count: int | None = None
-    document_ids: list[str]
-    skipped: list[dict] | None = None
-    dry_run: bool = False
-    mode: str | None = None
-```
-
-### 5.2 Router 实现样例
-
-```python
-# api/routers/admin.py
-
-@router.post("/documents/{document_id}/convert", response_model=DocumentOperationResponse)
-async def convert_document(
-    document_id: str,
-    request: ConvertDocumentRequest = ConvertDocumentRequest(),
-    session: AsyncSession = Depends(get_session),
-):
-    """触发单文档转换（仅 MinerU/MarkItDown，不执行索引）。"""
-    doc_repo = DocumentRepositoryImpl(session)
-    document = await doc_repo.get(document_id)
-    
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    if document.status == DocumentStatus.PROCESSING:
-        raise HTTPException(status_code=409, detail="Document is currently processing")
-    
-    if not request.force and document.status in (DocumentStatus.CONVERTED, DocumentStatus.COMPLETED):
-        return DocumentOperationResponse(
-            message="Document already converted",
-            document_id=document_id,
-            previous_status=document.status.value,
-            target_status=document.status.value,
+    # 智能判断：有转换产物则仅重索引
+    if not force and doc.content_path:
+        # 注意：不单独分派 delete_document_nodes_task。
+        # force=True 时 _do_index 内部会同步执行旧索引清理，
+        # 避免"清理未完成就开始索引"的竟态条件（见决策 #11）。
+        index_document_task.delay(document_id, force=True)
+        return ReindexResponse(
+            document_id=document_id, status="queued",
+            message="Index-only task queued (conversion preserved)",
         )
-    
-    previous_status = document.status.value
-    
-    if request.force and document.status == DocumentStatus.COMPLETED:
-        # 强制重转换：删除旧索引
-        delete_document_nodes_task.delay(document_id)
-    
-    if request.force and document.status in (DocumentStatus.CONVERTED, DocumentStatus.COMPLETED):
-        # 重置为 UPLOADED
-        await doc_repo.update_status(
-            document_id,
-            status=DocumentStatus.UPLOADED,
-            processing_stage=None,
-            processing_meta=None,
-            chunk_count=0,
-        )
-        await session.commit()
-    
-    # 触发转换
-    convert_document_task.delay(document_id)
-    
-    return DocumentOperationResponse(
-        message="Conversion queued",
-        document_id=document_id,
-        previous_status=previous_status,
-        target_status="converted",
+
+    # 完整重处理：force=True 时 _do_full_pipeline 内部处理清理
+    await document_repo.update_status(document_id, DocumentStatus.PENDING, ...)
+    await document_repo.commit()
+    process_document_task.delay(document_id)
+    return ReindexResponse(
+        document_id=document_id, status="queued",
+        message="Full reindex task queued",
     )
 ```
 
-## 6. Postman Collection 更新
+### 6.2 GET /library/documents
 
-新增以下请求到 Postman Collection 的 Admin 文件夹：
+`status` 查询参数新增 `converted` 合法值，用于筛选已转换但未索引的文档。
 
-| 请求名 | 方法 | URL |
-|--------|------|-----|
-| Convert Document | POST | `{{api_base}}/admin/documents/{{document_id}}/convert` |
-| Convert Document (Force) | POST | `{{api_base}}/admin/documents/{{document_id}}/convert` body: `{"force": true}` |
-| Index Document | POST | `{{api_base}}/admin/documents/{{document_id}}/index` |
-| Index Document (Force) | POST | `{{api_base}}/admin/documents/{{document_id}}/index` body: `{"force": true}` |
-| Convert Pending (All) | POST | `{{api_base}}/admin/convert-pending` body: `{"dry_run": false}` |
-| Convert Pending (Filtered) | POST | `{{api_base}}/admin/convert-pending` body: `{"document_ids": ["{{document_id}}"], "dry_run": false}` |
-| Convert Pending (Dry Run) | POST | `{{api_base}}/admin/convert-pending` body: `{"dry_run": true}` |
+### 6.3 GET /admin/index-stats
 
-## 7. 与现有端点的关系矩阵
+`documents_by_status` 响应中自动包含 `"converted"` 的计数（因为 DocumentStatus 枚举已扩展）。
 
-| 操作 | 端点 | 执行阶段 | 终态 |
-|------|------|---------|------|
-| 单文档仅转换 | `POST /admin/documents/{id}/convert` | converting | CONVERTED |
-| 单文档仅索引 | `POST /admin/documents/{id}/index` | splitting → indexing | COMPLETED |
-| 单文档完整流水线 | `POST /admin/documents/{id}/reindex` | 所有阶段 | COMPLETED |
-| 批量仅转换 | `POST /admin/convert-pending` | converting | CONVERTED |
-| 批量完整流水线 | `POST /admin/reprocess-pending` | 所有阶段 | COMPLETED |
-| Notebook 关联触发 | `POST /notebooks/{id}/documents` | 智能补齐 | COMPLETED |
+## 7. 端点汇总与 HTTP 状态码
+
+| 端点 | 成功 | 文档不存在 | 状态冲突 | 前置条件不满足 |
+|------|------|-----------|---------|--------------|
+| POST .../convert | 200 | 404 | 409 | -- |
+| POST .../index | 200 | 404 | 409 | 400 |
+| POST convert-pending | 200 | -- | -- | -- |
+| POST index-pending | 200 | -- | -- | -- |
+| POST .../reindex | 200 | 404 | 400 | -- |

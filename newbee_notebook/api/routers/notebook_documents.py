@@ -49,12 +49,13 @@ async def add_documents_to_notebook(
         notebook_id=result.notebook_id,
         added=[
             NotebookDocumentsAddItem(
-                document_id=doc.document_id,
-                title=doc.title,
-                status=doc.status.value,
-                processing_stage=doc.processing_stage,
+                document_id=item.document.document_id,
+                title=item.document.title,
+                status=item.document.status.value,
+                action=item.action,
+                processing_stage=item.document.processing_stage,
             )
-            for doc in result.added
+            for item in result.added
         ],
         skipped=[
             NotebookDocumentsProblemItem(document_id=item.document_id, reason=item.reason)
@@ -72,7 +73,7 @@ async def list_notebook_documents(
     notebook_id: str = Path(..., description="Notebook ID"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None, description="uploaded|pending|processing|completed|failed"),
+    status: Optional[str] = Query(None, description="uploaded|pending|processing|converted|completed|failed"),
     service: NotebookDocumentService = Depends(get_notebook_document_service),
 ):
     """List documents associated with notebook."""
@@ -100,9 +101,9 @@ async def list_notebook_documents(
                 title=doc.title,
                 status=doc.status.value,
                 content_type=doc.content_type.value,
-                file_size=doc.file_size,
-                page_count=doc.page_count,
-                chunk_count=doc.chunk_count,
+                file_size=doc.file_size or 0,
+                page_count=doc.page_count or 0,
+                chunk_count=doc.chunk_count or 0,
                 processing_stage=doc.processing_stage,
                 stage_updated_at=doc.stage_updated_at,
                 processing_meta=doc.processing_meta,

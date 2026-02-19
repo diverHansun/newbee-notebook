@@ -78,7 +78,7 @@ async def list_library_documents(
     Args:
         limit: Maximum number of documents to return.
         offset: Number of documents to skip.
-        status: Optional status filter (uploaded, pending, processing, completed, failed).
+        status: Optional status filter (uploaded, pending, processing, converted, completed, failed).
         
     Returns:
         List of documents with pagination info.

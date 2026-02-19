@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS documents (
     file_path VARCHAR(1000),
     url VARCHAR(2000),
     status VARCHAR(20) DEFAULT 'uploaded'
-        CHECK (status IN ('uploaded', 'pending', 'processing', 'completed', 'failed')),
+        CHECK (status IN ('uploaded', 'pending', 'processing', 'converted', 'completed', 'failed')),
     page_count INTEGER DEFAULT 0,
     chunk_count INTEGER DEFAULT 0,
     file_size INTEGER DEFAULT 0,
@@ -96,6 +96,19 @@ CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at ON documents(stage_upd
 ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64);
 ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP;
 ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_meta TEXT;
+
+-- Migrate status CHECK constraint to include 'converted' (improve-8)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'documents_status_check' AND conrelid = 'documents'::regclass
+    ) THEN
+        ALTER TABLE documents DROP CONSTRAINT documents_status_check;
+        ALTER TABLE documents ADD CONSTRAINT documents_status_check
+            CHECK (status IN ('uploaded', 'pending', 'processing', 'converted', 'completed', 'failed'));
+    END IF;
+END $$;
 
 -- Notebook document references (soft links to library docs)
 CREATE TABLE IF NOT EXISTS notebook_document_refs (
@@ -203,7 +216,7 @@ BEGIN
     RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references';
     RAISE NOTICE 'Legacy tables: chat_sessions, chat_messages';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
-    RAISE NOTICE 'Document statuses: uploaded -> processing -> completed | failed';
+    RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
     RAISE NOTICE '  - data_documents_qwen3_embedding (1024 dims)';
     RAISE NOTICE '  - data_documents_zhipu (1024 dims)';

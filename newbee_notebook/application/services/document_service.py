@@ -28,6 +28,7 @@ from newbee_notebook.domain.repositories.reference_repository import (
 )
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.document_type import DocumentType
+from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.tasks.document_tasks import process_document_task
 from newbee_notebook.infrastructure.storage.local_storage import save_upload_file, _decode_filename
 from newbee_notebook.core.common.config import get_documents_directory
@@ -93,7 +94,7 @@ class DocumentService:
                 created.document_id,
                 status=DocumentStatus.PENDING,
                 error_message=None,
-                processing_stage="queued",
+                processing_stage=ProcessingStage.QUEUED.value,
                 processing_meta={"queued_by": "auto_process"},
             )
             await self._document_repo.commit()
@@ -243,6 +244,7 @@ class DocumentService:
             DocumentStatus.UPLOADED,
             DocumentStatus.PENDING,
             DocumentStatus.PROCESSING,
+            DocumentStatus.CONVERTED,
         }:
             raise DocumentProcessingError(
                 message="Document is still processing",

@@ -39,3 +39,33 @@ def test_get_document_content_raises_structured_processing_error():
             assert exc.details["retryable"] is True
 
     asyncio.run(_run())
+
+
+def test_get_document_content_treats_converted_as_blocking():
+    doc_repo = AsyncMock()
+    doc_repo.get = AsyncMock(
+        return_value=Document(
+            document_id="doc-2",
+            title="converted",
+            status=DocumentStatus.CONVERTED,
+            processing_stage=None,
+        )
+    )
+
+    service = DocumentService(
+        document_repo=doc_repo,
+        library_repo=AsyncMock(),
+        notebook_repo=AsyncMock(),
+        ref_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+    )
+
+    async def _run():
+        try:
+            await service.get_document_content("doc-2", format="markdown")
+            raise AssertionError("DocumentProcessingError was not raised")
+        except DocumentProcessingError as exc:
+            assert exc.details["status"] == "converted"
+            assert exc.details["retryable"] is True
+
+    asyncio.run(_run())

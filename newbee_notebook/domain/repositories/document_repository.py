@@ -8,6 +8,8 @@ from typing import Optional, List, Any
 from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 
+_UNSET = object()
+
 
 class DocumentRepository(ABC):
     """Repository interface for Document operations."""
@@ -148,15 +150,15 @@ class DocumentRepository(ABC):
         self, 
         document_id: str, 
         status: DocumentStatus,
-        chunk_count: Optional[int] = None,
-        page_count: Optional[int] = None,
-        content_path: Optional[str] = None,
-        content_size: Optional[int] = None,
-        content_format: Optional[str] = None,
-        error_message: Optional[str] = None,
-        processing_stage: Optional[str] = None,
-        stage_updated_at: Optional[datetime] = None,
-        processing_meta: Optional[dict[str, Any]] = None,
+        chunk_count: Optional[int] | object = _UNSET,
+        page_count: Optional[int] | object = _UNSET,
+        content_path: Optional[str] | object = _UNSET,
+        content_size: Optional[int] | object = _UNSET,
+        content_format: Optional[str] | object = _UNSET,
+        error_message: Optional[str] | object = _UNSET,
+        processing_stage: Optional[str] | object = _UNSET,
+        stage_updated_at: Optional[datetime] | object = _UNSET,
+        processing_meta: Optional[dict[str, Any]] | object = _UNSET,
     ) -> None:
         """
         Update Document processing status.
