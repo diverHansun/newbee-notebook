@@ -1050,7 +1050,7 @@ GET /api/v1/info
 {
   "version": "1.0.0",
   "supported_formats": ["pdf", "docx", "xlsx", "youtube", "bilibili"],
-  "max_file_size": 104857600,
+  "max_file_size": 314572800,
   "supported_modes": ["chat", "ask", "conclude", "explain"],
   "session_limit_per_notebook": 20
 }

@@ -257,11 +257,11 @@ class MinerUCloudConverter(Converter):
         """检查云服务限制"""
         # 检查文件大小
         size = path.stat().st_size
-        max_size = 100 * 1024 * 1024  # 100MB
+        max_size = 300 * 1024 * 1024  # 300MB
         if size > max_size:
             raise ValueError(
                 f"文件过大 ({size / 1024 / 1024:.1f}MB)，"
-                f"云服务限制为 100MB"
+                f"上传限制为 300MB"
             )
 
         # 检查 PDF 页数

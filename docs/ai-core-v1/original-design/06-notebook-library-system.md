@@ -877,7 +877,7 @@ notebook:
 # configs/document.yaml
 document:
   upload:
-    max_file_size: 104857600  # 100MB
+    max_file_size: 314572800  # 300MB
     allowed_types:
       - pdf
       - docx
