@@ -51,22 +51,28 @@ class PipelineContext:
         content_format: str | None = None,
     ) -> None:
         """Set terminal status and clear transient stage/error fields."""
-        await self.doc_repo.update_status(
-            document_id=self.document_id,
-            status=status,
-            chunk_count=chunk_count,
-            page_count=page_count,
-            content_path=content_path,
-            content_size=content_size,
-            content_format=content_format,
-            error_message=None,
-            processing_stage=None,
-            processing_meta=None,
-        )
+        payload: dict[str, Any] = {
+            "document_id": self.document_id,
+            "status": status,
+            "error_message": None,
+            "processing_stage": None,
+            "processing_meta": None,
+        }
+        if chunk_count is not None:
+            payload["chunk_count"] = chunk_count
+        if page_count is not None:
+            payload["page_count"] = page_count
+        if content_path is not None:
+            payload["content_path"] = content_path
+        if content_size is not None:
+            payload["content_size"] = content_size
+        if content_format is not None:
+            payload["content_format"] = content_format
+
+        await self.doc_repo.update_status(**payload)
         await self.session.commit()
 
     @property
     def current_stage(self) -> str | None:
         """Return current in-flight stage for diagnostics."""
         return self._current_stage
-

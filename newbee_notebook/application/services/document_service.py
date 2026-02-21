@@ -244,7 +244,6 @@ class DocumentService:
             DocumentStatus.UPLOADED,
             DocumentStatus.PENDING,
             DocumentStatus.PROCESSING,
-            DocumentStatus.CONVERTED,
         }:
             raise DocumentProcessingError(
                 message="Document is still processing",
@@ -258,16 +257,25 @@ class DocumentService:
             )
         if doc.status == DocumentStatus.FAILED:
             raise RuntimeError("Document processing failed")
-        if doc.status != DocumentStatus.COMPLETED:
+        if doc.status not in {DocumentStatus.CONVERTED, DocumentStatus.COMPLETED}:
             raise RuntimeError("Document not processed yet")
-        if not doc.content_path:
-            raise RuntimeError("Content not available for this document")
 
-        content_path = Path(get_documents_directory()) / doc.content_path
-        if not content_path.exists():
+        resolved_content_path, absolute_content_path = self._resolve_content_path(doc)
+        if not absolute_content_path.exists():
             raise FileNotFoundError("Content file not found on disk")
 
-        content = content_path.read_text(encoding="utf-8")
+        # Self-heal legacy rows where content file exists but content_path was not persisted.
+        if doc.content_path != resolved_content_path:
+            await self._document_repo.update_status(
+                document_id=document_id,
+                status=doc.status,
+                content_path=resolved_content_path,
+                content_format=doc.content_format or "markdown",
+            )
+            await self._document_repo.commit()
+            doc.content_path = resolved_content_path
+
+        content = absolute_content_path.read_text(encoding="utf-8")
         if format == "markdown":
             return doc, content
         if format == "text":
@@ -301,6 +309,30 @@ class DocumentService:
         if not candidate.exists() or not candidate.is_file():
             raise FileNotFoundError("Asset file not found on disk")
         return candidate
+
+    def _resolve_content_path(self, doc: Document) -> tuple[str, Path]:
+        """Resolve and normalize content.md path with legacy fallbacks."""
+        root = Path(get_documents_directory())
+        candidates: list[str] = []
+        if doc.content_path:
+            candidates.append(doc.content_path)
+            if doc.content_path.startswith("documents/"):
+                candidates.append(doc.content_path[len("documents/"):])
+        candidates.append(f"{doc.document_id}/markdown/content.md")
+
+        seen: set[str] = set()
+        for rel in candidates:
+            if not rel or rel in seen:
+                continue
+            seen.add(rel)
+
+            path_obj = Path(rel)
+            absolute = path_obj if path_obj.is_absolute() else root / path_obj
+            if absolute.exists():
+                normalized_rel = rel if path_obj.is_absolute() else path_obj.as_posix()
+                return normalized_rel, absolute
+
+        raise RuntimeError("Content not available for this document")
 
 
 def _markdown_to_text(markdown: str) -> str:
