@@ -1,0 +1,23 @@
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "500mb",
+    },
+    // Raise the default 10 MB body-size cap that Next.js applies
+    // when proxying requests through middleware / rewrites.
+    middlewareClientMaxBodySize: 500 * 1024 * 1024, // 500 MB
+  } as NextConfig["experimental"],
+  async rewrites() {
+    const apiHost = process.env.INTERNAL_API_URL || "http://localhost:8000";
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${apiHost}/api/v1/:path*`,
+      },
+    ];
+  },
+};
+
+export default nextConfig;
