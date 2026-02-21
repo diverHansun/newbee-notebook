@@ -12,7 +12,18 @@
   color: hsl(var(--foreground));
   word-wrap: break-word;
   overflow-wrap: break-word;
+}
+
+.markdown-content .markdown-chunk {
   content-visibility: auto;
+  contain-intrinsic-size: auto 1000px;
+}
+
+.markdown-load-more {
+  padding: 10px 0 18px;
+  text-align: center;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
 }
 
 /* ---- Headings ---- */
@@ -244,11 +255,16 @@
 }
 
 /* loading placeholder for images before they load */
-.markdown-content img[loading="lazy"]:not([src=""]) {
+.markdown-content img[data-loaded="0"]:not([src=""]) {
   background:
     linear-gradient(90deg, hsl(var(--accent)) 25%, hsl(var(--border)) 50%, hsl(var(--accent)) 75%)
     0 0 / 200% 100%;
   animation: img-shimmer 1.5s infinite;
+}
+
+.markdown-content img[data-loaded="1"] {
+  animation: none;
+  background: transparent;
 }
 
 @keyframes img-shimmer {

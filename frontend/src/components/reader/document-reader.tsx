@@ -116,7 +116,11 @@ export function DocumentReader({
 
     return (
       <div style={{ padding: "8px 24px 24px" }}>
-        <MarkdownViewer content={contentQuery.data?.content || ""} containerRef={viewerRef} />
+        <MarkdownViewer
+          content={contentQuery.data?.content || ""}
+          documentId={documentId}
+          containerRef={viewerRef}
+        />
       </div>
     );
   };
