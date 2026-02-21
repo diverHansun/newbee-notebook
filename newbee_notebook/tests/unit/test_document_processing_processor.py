@@ -95,6 +95,30 @@ def test_processor_local_mode_uses_local_converter():
     assert isinstance(pdf_converters[1], MarkItDownConverter)
 
 
+def test_processor_local_mode_enables_metadata_by_default():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    cfg["document_processing"]["mineru_local"].pop("return_content_list", None)
+    cfg["document_processing"]["mineru_local"].pop("return_model_output", None)
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_local = next(c for c in processor._converters if isinstance(c, MinerULocalConverter))
+    assert mineru_local._return_content_list is True
+    assert mineru_local._return_model_output is True
+
+
+def test_processor_local_mode_allows_disabling_metadata_flags():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    cfg["document_processing"]["mineru_local"]["return_content_list"] = False
+    cfg["document_processing"]["mineru_local"]["return_model_output"] = False
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_local = next(c for c in processor._converters if isinstance(c, MinerULocalConverter))
+    assert mineru_local._return_content_list is False
+    assert mineru_local._return_model_output is False
+
+
 def test_processor_invalid_mode_disables_mineru():
     cfg = _base_config()
     cfg["document_processing"]["mineru_mode"] = "invalid"

@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Optional, List
 
-import httpx
 import requests
 
 from newbee_notebook.core.common.config import (
@@ -124,6 +123,10 @@ class DocumentProcessor:
                         timeout_seconds=_parse_int(local_cfg.get("timeout_seconds"), 0),
                         backend=str(local_cfg.get("backend", "pipeline")),
                         lang_list=str(local_cfg.get("lang_list", "ch,en")),
+                        return_images=_parse_bool(local_cfg.get("return_images"), True),
+                        return_content_list=_parse_bool(local_cfg.get("return_content_list"), True),
+                        return_model_output=_parse_bool(local_cfg.get("return_model_output"), True),
+                        max_pages_per_batch=_parse_int(local_cfg.get("max_pages_per_batch"), 60),
                     )
                 )
             else:
@@ -150,7 +153,7 @@ class DocumentProcessor:
         if isinstance(converter, MinerUCloudConverter):
             return isinstance(error, (requests.RequestException, TimeoutError, MinerUCloudTransientError))
         if isinstance(converter, MinerULocalConverter):
-            return isinstance(error, httpx.RequestError)
+            return isinstance(error, (requests.RequestException, TimeoutError))
         return False
 
     def _register_mineru_failure(self, file_path: str, error: Exception) -> None:

@@ -76,8 +76,7 @@ services:
     volumes:
       - ./:/app
     command: >
-      bash -c "pip install -q -r requirements.txt && \
-               celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info"
+      bash -c "pip install -q -r requirements.txt && celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-1} --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-1} --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-4}"
     env_file:
       - .env
     environment:

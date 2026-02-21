@@ -1,11 +1,17 @@
 """Admin management endpoints for document processing and index monitoring."""
 
+import gc
+import os
+import platform
 from typing import Dict, Iterable, Optional
+from urllib.parse import urlsplit, urlunsplit
 
+import requests as http_requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from newbee_notebook.api.dependencies import get_document_repo
+from newbee_notebook.core.common.config import get_document_processing_config
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl import (
     DocumentRepositoryImpl,
@@ -250,3 +256,147 @@ async def index_stats(
         for status in DocumentStatus
     }
     return IndexStats(documents={"total": total}, documents_by_status=by_status)
+
+
+# ---- System memory diagnostics & cleanup --------------------------------
+
+
+class SystemCleanupResponse(BaseModel):
+    status: str
+    gc_collected: int = Field(description="Number of objects collected by gc.collect()")
+    rss_before_mb: Optional[float] = Field(default=None, description="RSS before cleanup (MB)")
+    rss_after_mb: Optional[float] = Field(default=None, description="RSS after cleanup (MB)")
+
+
+class SystemMemoryResponse(BaseModel):
+    backend: Dict[str, object] = Field(description="Backend process memory stats")
+    mineru: Dict[str, object] = Field(description="MinerU service health status")
+
+
+def _get_rss_mb() -> Optional[float]:
+    """Read current process RSS in MB from /proc or psutil."""
+    try:
+        # Linux
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        pass
+    try:
+        # Windows / fallback
+        import psutil
+        proc = psutil.Process(os.getpid())
+        return round(proc.memory_info().rss / (1024 ** 2), 1)
+    except Exception:
+        return None
+
+
+def _get_mineru_api_url() -> str:
+    """Resolve the MinerU local API base URL from config."""
+    try:
+        cfg = get_document_processing_config()
+        dp_cfg = cfg.get("document_processing", cfg)
+        local_cfg = dp_cfg.get("mineru_local", {}) or {}
+        return str(local_cfg.get("api_url", "http://mineru-api:8000")).rstrip("/")
+    except Exception:
+        return "http://mineru-api:8000"
+
+
+def _get_mineru_probe_urls() -> list[str]:
+    """Build candidate MinerU URLs for mixed host/docker deployments."""
+    primary = _get_mineru_api_url().rstrip("/")
+    candidates = [primary]
+
+    try:
+        parsed = urlsplit(primary)
+    except Exception:
+        return candidates
+
+    public = os.getenv("MINERU_LOCAL_API_PUBLIC_URL", "").strip().rstrip("/")
+    if public:
+        candidates.append(public)
+
+    if parsed.hostname == "mineru-api":
+        scheme = parsed.scheme or "http"
+        port = parsed.port or 8000
+        host_port = 8001 if port == 8000 else port
+        host_candidate = urlunsplit((scheme, f"localhost:{host_port}", "", "", ""))
+        candidates.append(host_candidate.rstrip("/"))
+
+    # Deduplicate while preserving order
+    deduped: list[str] = []
+    for url in candidates:
+        if url and url not in deduped:
+            deduped.append(url)
+    return deduped
+
+
+@router.post("/system/cleanup", response_model=SystemCleanupResponse)
+async def system_cleanup():
+    """Force Python garbage collection on the backend process.
+
+    Useful after processing large batches of documents to reclaim memory
+    held by accumulated temporary objects (ZIP data, markdown content,
+    image bytes, etc.).
+    """
+    rss_before = _get_rss_mb()
+    collected = gc.collect()
+    rss_after = _get_rss_mb()
+
+    return SystemCleanupResponse(
+        status="ok",
+        gc_collected=collected,
+        rss_before_mb=rss_before,
+        rss_after_mb=rss_after,
+    )
+
+
+@router.get("/system/memory", response_model=SystemMemoryResponse)
+async def system_memory():
+    """Report backend process memory and MinerU service health.
+
+    Backend memory is read directly; MinerU health is probed via its
+    /docs endpoint (same endpoint used by Docker healthcheck).
+    """
+    # Backend process stats
+    backend: Dict[str, object] = {
+        "pid": os.getpid(),
+        "platform": platform.system(),
+    }
+    rss = _get_rss_mb()
+    if rss is not None:
+        backend["rss_mb"] = rss
+    try:
+        # Linux: also read VmSize
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmSize:"):
+                    backend["vms_mb"] = round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        pass
+
+    # MinerU health probe (best-effort)
+    probe_urls = _get_mineru_probe_urls()
+    mineru: Dict[str, object] = {"api_url": probe_urls[0], "probe_candidates": probe_urls}
+    for idx, mineru_url in enumerate(probe_urls):
+        try:
+            resp = http_requests.get(f"{mineru_url}/docs", timeout=3.0)
+            if resp.ok:
+                mineru["status"] = "healthy"
+            else:
+                mineru["status"] = f"unhealthy ({resp.status_code})"
+            mineru["probe_url"] = mineru_url
+            if idx > 0:
+                mineru["note"] = "primary mineru url unreachable; used fallback probe url"
+            break
+        except http_requests.ConnectionError:
+            continue
+        except Exception as exc:
+            mineru["status"] = f"error: {exc}"
+            mineru["probe_url"] = mineru_url
+            break
+    else:
+        mineru["status"] = "unreachable"
+
+    return SystemMemoryResponse(backend=backend, mineru=mineru)

@@ -1,6 +1,7 @@
 """Celery tasks for document processing pipelines."""
 
 import asyncio
+import gc
 import logging
 import os
 from pathlib import Path
@@ -41,6 +42,35 @@ _PIPELINE_LOCK_RELEASE_SCRIPT = (
     "return redis.call('DEL', KEYS[1]) "
     "else return 0 end"
 )
+
+
+def _truthy(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _cleanup_worker_memory(task_name: str, document_id: str | None = None) -> None:
+    """Best-effort memory cleanup after each heavy document task."""
+    collected = gc.collect()
+    cuda_cleaned = False
+
+    if _truthy(os.getenv("WORKER_CUDA_EMPTY_CACHE", "true"), default=True):
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                cuda_cleaned = True
+        except Exception:
+            cuda_cleaned = False
+
+    logger.info(
+        "[%s] worker cleanup done document_id=%s gc_collected=%d cuda_cache_cleared=%s",
+        task_name,
+        document_id or "-",
+        collected,
+        cuda_cleaned,
+    )
 
 
 def _get_pipeline_lock_ttl_seconds() -> int:
@@ -160,19 +190,28 @@ async def _release_pipeline_lock(lock_key: str | None, lock_token: str | None) -
 @app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.process_document_task")
 def process_document_task(document_id: str, force: bool = False) -> None:
     """Run full pipeline (convert + index), with optional forced cleanup."""
-    asyncio.run(_process_document_async(document_id, force=force))
+    try:
+        asyncio.run(_process_document_async(document_id, force=force))
+    finally:
+        _cleanup_worker_memory(task_name="process_document_task", document_id=document_id)
 
 
 @app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.convert_document_task")
 def convert_document_task(document_id: str, force: bool = False) -> None:
     """Run conversion-only pipeline."""
-    asyncio.run(_convert_document_async(document_id, force=force))
+    try:
+        asyncio.run(_convert_document_async(document_id, force=force))
+    finally:
+        _cleanup_worker_memory(task_name="convert_document_task", document_id=document_id)
 
 
 @app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.index_document_task")
 def index_document_task(document_id: str, force: bool = False) -> None:
     """Run indexing-only pipeline."""
-    asyncio.run(_index_document_async(document_id, force=force))
+    try:
+        asyncio.run(_index_document_async(document_id, force=force))
+    finally:
+        _cleanup_worker_memory(task_name="index_document_task", document_id=document_id)
 
 
 @app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.convert_pending_task")

@@ -2429,6 +2429,101 @@
                                       "response":  [
 
                                                    ]
+                                  },
+                                  {
+                                      "name":  "System Memory",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\"Status code is 200\", function () {",
+                                                                                    "    pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "pm.test(\"Has backend/mineru fields\", function () {",
+                                                                                    "    var jsonData = pm.response.json();",
+                                                                                    "    pm.expect(jsonData).to.have.property('backend');",
+                                                                                    "    pm.expect(jsonData).to.have.property('mineru');",
+                                                                                    "});"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/admin/system/memory",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "admin",
+                                                                               "system",
+                                                                               "memory"
+                                                                           ]
+                                                              },
+                                                      "description":  "Inspect backend process memory and MinerU service health."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "System Cleanup",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\"Status code is 200\", function () {",
+                                                                                    "    pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "pm.test(\"Cleanup response has status\", function () {",
+                                                                                    "    var jsonData = pm.response.json();",
+                                                                                    "    pm.expect(jsonData.status).to.eql('ok');",
+                                                                                    "});"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/admin/system/cleanup",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "admin",
+                                                                               "system",
+                                                                               "cleanup"
+                                                                           ]
+                                                              },
+                                                      "description":  "Force backend garbage collection and return RSS before/after."
+                                                  },
+                                      "response":  [
+
+                                                   ]
                                   }
                               ]
                  }

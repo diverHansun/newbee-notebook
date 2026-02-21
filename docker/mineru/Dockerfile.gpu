@@ -1,4 +1,8 @@
-FROM vllm/vllm-openai:v0.11.0
+# RTX 5060 Ti (Blackwell, Compute Capability >= 10.0) requires vllm v0.11.0
+# vllm v0.10.x only supports CC 8.0-9.0 (Ampere / Ada Lovelace / Hopper)
+# vllm v0.11.0 supports CC 7.0-7.9 (Volta/Turing) AND CC >= 10.0 (Blackwell)
+# DaoCloud mirror for China-region pull acceleration
+FROM docker.m.daocloud.io/vllm/vllm-openai:v0.11.0
 
 # Install libgl for opencv support & Noto fonts for Chinese characters
 RUN apt-get update && \
@@ -12,11 +16,21 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# MinerU server (GPU runtime is provided by the base image + host)
-RUN python3 -m pip install -U --no-cache-dir "mineru[core]>=2.7.0" --break-system-packages
+# Install MinerU (GPU runtime is provided by the vllm base image)
+# Use Aliyun PyPI mirror for faster installs in China
+RUN python3 -m pip install -U --no-cache-dir 'mineru[core]>=2.7.0' \
+        -i https://mirrors.aliyun.com/pypi/simple \
+        --break-system-packages && \
+    python3 -m pip cache purge
 
 EXPOSE 8000
 
-# Keep backend selection request-driven (form field `backend`) to avoid
-# argument conflicts and keep CPU/GPU behavior consistent.
+# CRITICAL: Override vllm's ENTRYPOINT so CMD is executed directly.
+# Sets MINERU_MODEL_SOURCE=local if models are pre-baked, or modelscope/huggingface
+# for first-run download. The compose volume (mineru_cache:/root/.cache) ensures
+# downloaded models survive container recreations without re-downloading.
+ENTRYPOINT ["/bin/bash", "-c", "export MINERU_MODEL_SOURCE=${MINERU_MODEL_SOURCE:-modelscope} && exec \"$@\"", "--"]
+
+# Backend selection is kept request-driven (form field `backend`) to support
+# both `pipeline` (CPU-fallback) and `hybrid-auto-engine` (GPU) per request.
 CMD ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]

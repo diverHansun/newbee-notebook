@@ -25,6 +25,13 @@ document_processing:
     backend: ${MINERU_BACKEND:pipeline}
     lang_list: ${MINERU_LANG_LIST:ch,en}
     timeout_seconds: ${MINERU_LOCAL_TIMEOUT:0}
+    # Split large PDFs into smaller requests to avoid burst memory peaks.
+    max_pages_per_batch: ${MINERU_LOCAL_MAX_PAGES_PER_BATCH:60}
+    # Keep image extraction enabled so markdown image links can be rewritten.
+    return_images: ${MINERU_LOCAL_RETURN_IMAGES:true}
+    # Keep MinerU structured metadata by default (used by viewer/debug/recovery flows).
+    return_content_list: ${MINERU_LOCAL_RETURN_CONTENT_LIST:true}
+    return_model_output: ${MINERU_LOCAL_RETURN_MODEL_OUTPUT:true}
 
   # MinerU circuit breaker settings.
   fail_threshold: ${MINERU_FAIL_THRESHOLD:5}
