@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
+import { ApiListResponse, ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
 import { normalizeSources } from "@/lib/utils/sources";
@@ -23,6 +23,19 @@ function mapMessages(messages: SessionMessage[]): ChatMessage[] {
     status: "done",
     createdAt: msg.created_at,
   }));
+}
+
+function generateDefaultSessionTitle(sessions: Session[]): string {
+  const existingTitles = new Set(
+    sessions.map((session) => session.title?.trim()).filter((title): title is string => Boolean(title))
+  );
+
+  let nextIndex = sessions.length + 1;
+  while (existingTitles.has(`会话 ${nextIndex}`)) {
+    nextIndex += 1;
+  }
+
+  return `会话 ${nextIndex}`;
 }
 
 export function useChatSession(notebookId: string) {
@@ -102,7 +115,42 @@ export function useChatSession(notebookId: string) {
         title,
       }),
     onSuccess: (newSession) => {
+      queryClient.setQueryData<ApiListResponse<Session> | undefined>(
+        SESSION_QUERY_KEY(notebookId),
+        (prev) => {
+          if (!prev) {
+            return {
+              data: [newSession],
+              pagination: {
+                total: 1,
+                limit: 20,
+                offset: 0,
+                has_next: false,
+                has_prev: false,
+              },
+            };
+          }
+
+          if (prev.data.some((session) => session.session_id === newSession.session_id)) {
+            return prev;
+          }
+
+          const nextTotal = prev.pagination.total + 1;
+          const nextData = [newSession, ...prev.data].slice(0, prev.pagination.limit);
+
+          return {
+            ...prev,
+            data: nextData,
+            pagination: {
+              ...prev.pagination,
+              total: nextTotal,
+              has_next: prev.pagination.offset + prev.pagination.limit < nextTotal,
+            },
+          };
+        }
+      );
       setCurrentSessionId(newSession.session_id);
+      clearMessages();
       queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
     },
   });
@@ -372,9 +420,11 @@ export function useChatSession(notebookId: string) {
 
   const createNewSession = useCallback(
     async (title?: string) => {
-      await createSessionMutation.mutateAsync(title);
+      const normalizedTitle = title?.trim();
+      const resolvedTitle = normalizedTitle || generateDefaultSessionTitle(sessions);
+      await createSessionMutation.mutateAsync(resolvedTitle);
     },
-    [createSessionMutation]
+    [createSessionMutation, sessions]
   );
 
   const removeSession = useCallback(

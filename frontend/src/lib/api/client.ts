@@ -18,7 +18,7 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: BodyInit | object | null;
 };
 
-function buildError(status: number, payload: ApiErrorPayload | null): ApiError {
+export function buildError(status: number, payload: ApiErrorPayload | null): ApiError {
   if (!payload) {
     return new ApiError(status, "E_HTTP", `HTTP ${status}`);
   }

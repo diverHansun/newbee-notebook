@@ -1,5 +1,5 @@
-import { ApiError } from "@/lib/api/client";
-import { ChatRequest, ChatResponse, SseEvent } from "@/lib/api/types";
+import { ApiError, apiFetch, buildError } from "@/lib/api/client";
+import { ApiErrorPayload, ChatRequest, ChatResponse, SseEvent } from "@/lib/api/types";
 import { parseSseStream } from "@/lib/utils/sse-parser";
 
 type StreamOptions = {
@@ -7,31 +7,24 @@ type StreamOptions = {
   onEvent: (event: SseEvent) => void;
 };
 
-export async function chatOnce(notebookId: string, request: ChatRequest) {
-  const response = await fetch(`/api/v1/chat/notebooks/${notebookId}/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-  });
+async function throwIfNotOk(response: Response): Promise<void> {
+  if (response.ok) return;
 
-  if (!response.ok) {
-    let errorPayload: any = null;
-    try {
-      errorPayload = await response.json();
-    } catch {
-      errorPayload = null;
-    }
-    throw new ApiError(
-      response.status,
-      errorPayload?.error_code || "E_CHAT",
-      errorPayload?.message || String(errorPayload?.detail || "Chat request failed"),
-      errorPayload?.details
-    );
+  let payload: ApiErrorPayload | null = null;
+  try {
+    payload = (await response.json()) as ApiErrorPayload;
+  } catch {
+    payload = null;
   }
 
-  return (await response.json()) as ChatResponse;
+  throw buildError(response.status, payload);
+}
+
+export function chatOnce(notebookId: string, request: ChatRequest) {
+  return apiFetch<ChatResponse>(`/chat/notebooks/${notebookId}/chat`, {
+    method: "POST",
+    body: request,
+  });
 }
 
 export async function chatStream(
@@ -49,20 +42,7 @@ export async function chatStream(
     signal: options.signal,
   });
 
-  if (!response.ok) {
-    let errorPayload: any = null;
-    try {
-      errorPayload = await response.json();
-    } catch {
-      errorPayload = null;
-    }
-    throw new ApiError(
-      response.status,
-      errorPayload?.error_code || "E_CHAT_STREAM",
-      errorPayload?.message || String(errorPayload?.detail || "Chat stream request failed"),
-      errorPayload?.details
-    );
-  }
+  await throwIfNotOk(response);
 
   if (!response.body) {
     throw new ApiError(500, "E_STREAM_BODY", "Stream body is empty");
@@ -75,7 +55,7 @@ export async function chatStream(
 }
 
 export function cancelChatStream(messageId: number) {
-  return fetch(`/api/v1/chat/stream/${messageId}/cancel`, {
+  return apiFetch<void>(`/chat/stream/${messageId}/cancel`, {
     method: "POST",
   });
 }

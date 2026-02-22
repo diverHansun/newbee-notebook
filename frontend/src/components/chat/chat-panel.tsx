@@ -41,7 +41,6 @@ export function ChatPanel({
   onDeleteSession,
   onOpenDocument,
 }: ChatPanelProps) {
-  const [sessionTitle, setSessionTitle] = useState("");
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -91,20 +90,10 @@ export function ChatPanel({
           )}
         </div>
         <div className="row">
-          <input
-            className="input"
-            style={{ width: 150 }}
-            value={sessionTitle}
-            placeholder="新会话标题（可选）"
-            onChange={(event) => setSessionTitle(event.target.value)}
-          />
           <button
             className="btn btn-sm"
             type="button"
-            onClick={() => {
-              onCreateSession(sessionTitle.trim() || undefined);
-              setSessionTitle("");
-            }}
+            onClick={() => onCreateSession()}
           >
             + 新建会话
           </button>

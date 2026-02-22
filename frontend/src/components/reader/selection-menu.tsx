@@ -29,6 +29,7 @@ export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
   return (
     <div
       ref={menuRef}
+      data-selection-menu="true"
       className="selection-menu"
       style={{
         left: menuPosition.left,
