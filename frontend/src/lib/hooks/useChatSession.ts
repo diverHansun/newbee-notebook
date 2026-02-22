@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
@@ -52,12 +52,30 @@ export function useChatSession(notebookId: string) {
     queryFn: () => listSessions(notebookId),
   });
 
-  const sessions: Session[] = sessionQuery.data?.data ?? [];
+  const sessions: Session[] = useMemo(() => sessionQuery.data?.data ?? [], [sessionQuery.data?.data]);
 
   useEffect(() => {
-    if (currentSessionId || sessions.length === 0) return;
-    setCurrentSessionId(sessions[0].session_id);
-  }, [currentSessionId, sessions, setCurrentSessionId]);
+    if (sessions.length === 0) {
+      if (currentSessionId) {
+        setCurrentSessionId(null);
+        clearMessages();
+      }
+      return;
+    }
+
+    if (!currentSessionId) {
+      setCurrentSessionId(sessions[0].session_id);
+      return;
+    }
+
+    const belongsToCurrentNotebook = sessions.some(
+      (session) => session.session_id === currentSessionId
+    );
+    if (!belongsToCurrentNotebook) {
+      setCurrentSessionId(sessions[0].session_id);
+      clearMessages();
+    }
+  }, [clearMessages, currentSessionId, sessions, setCurrentSessionId]);
 
   const messageQuery = useQuery({
     queryKey: MESSAGE_QUERY_KEY(currentSessionId),
@@ -116,7 +134,36 @@ export function useChatSession(notebookId: string) {
 
   const sendMessage = useCallback(
     async (message: string, mode: MessageMode, context?: ChatContext) => {
-      const sessionId = await ensureSession(message.slice(0, 30));
+      const isExplainOrConclude = mode === "explain" || mode === "conclude";
+      const explainMode = mode as "explain" | "conclude";
+      const hasCurrentSession =
+        !!currentSessionId && sessions.some((session) => session.session_id === currentSessionId);
+      let resolvedSessionId = hasCurrentSession ? currentSessionId : null;
+
+      if (isExplainOrConclude && !resolvedSessionId && sessions.length > 0) {
+        resolvedSessionId = sessions[0].session_id;
+        setCurrentSessionId(resolvedSessionId);
+      }
+
+      if (isExplainOrConclude && !resolvedSessionId) {
+        setExplainCard({
+          visible: true,
+          mode: explainMode,
+          selectedText: context?.selected_text || "",
+          content: "\u8bf7\u5148\u521b\u5efa\u4f1a\u8bdd",
+          isStreaming: false,
+        });
+        setStreaming(false, null);
+        return;
+      }
+
+      const sessionId = isExplainOrConclude
+        ? resolvedSessionId
+        : await ensureSession(message.slice(0, 30));
+
+      if (!sessionId) {
+        return;
+      }
       const createdAt = new Date().toISOString();
       const userMessageId = `local-user-${Date.now()}`;
 
@@ -213,7 +260,7 @@ export function useChatSession(notebookId: string) {
 
       setExplainCard({
         visible: true,
-        mode: mode as "explain" | "conclude",
+        mode: explainMode,
         selectedText: context?.selected_text || "",
         content: "",
         isStreaming: true,
@@ -243,7 +290,7 @@ export function useChatSession(notebookId: string) {
                     }
                   : {
                       visible: true,
-                      mode: mode as "explain" | "conclude",
+                      mode: explainMode,
                       selectedText: context?.selected_text || "",
                       content: "",
                       isStreaming: false,
@@ -288,10 +335,13 @@ export function useChatSession(notebookId: string) {
       addMessage,
       appendExplainContent,
       appendMessageContent,
+      currentSessionId,
       ensureSession,
       notebookId,
       queryClient,
+      sessions,
       setExplainCard,
+      setCurrentSessionId,
       setStreaming,
       stream,
       updateMessage,

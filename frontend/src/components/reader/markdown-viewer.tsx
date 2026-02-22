@@ -7,6 +7,8 @@ import { renderMarkdownToHtml } from "@/components/reader/markdown-pipeline";
 const LARGE_DOC_THRESHOLD_CHARS = 120_000;
 const TARGET_CHUNK_CHARS = 24_000;
 const CHUNK_LOAD_STEP = 1;
+const MIN_ROOT_MARGIN_PX = 360;
+const MAX_ROOT_MARGIN_PX = 1800;
 
 type MarkdownViewerProps = {
   content: string;
@@ -58,12 +60,35 @@ function getInitialVisibleChunkCount(totalChunks: number): number {
   return 3;
 }
 
+function getDynamicRootMargin(contentChars: number, totalChunks: number): string {
+  if (contentChars <= LARGE_DOC_THRESHOLD_CHARS || totalChunks <= 1) {
+    return `${MIN_ROOT_MARGIN_PX}px 0px`;
+  }
+
+  const chunkAvgChars = contentChars / Math.max(totalChunks, 1);
+  const chunkComplexity = Math.max(1, Math.floor(chunkAvgChars / 80));
+  const contentFactor = Math.floor(
+    Math.log2(Math.max(1, contentChars / LARGE_DOC_THRESHOLD_CHARS) + 1) * 320
+  );
+
+  const marginPx = Math.max(
+    MIN_ROOT_MARGIN_PX,
+    Math.min(MAX_ROOT_MARGIN_PX, MIN_ROOT_MARGIN_PX + chunkComplexity * 8 + contentFactor)
+  );
+
+  return `${marginPx}px 0px`;
+}
+
 export function MarkdownViewer({ content, documentId, className, containerRef }: MarkdownViewerProps) {
   const fallbackRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const htmlCacheRef = useRef<Map<number, string>>(new Map());
   const ref = containerRef || fallbackRef;
   const chunks = useMemo(() => splitMarkdownIntoChunks(content), [content]);
+  const rootMargin = useMemo(
+    () => getDynamicRootMargin(content.length, chunks.length),
+    [chunks.length, content.length]
+  );
   const [visibleChunkCount, setVisibleChunkCount] = useState(() =>
     getInitialVisibleChunkCount(chunks.length)
   );
@@ -85,11 +110,11 @@ export function MarkdownViewer({ content, documentId, className, containerRef }:
         if (!entries.some((entry) => entry.isIntersecting)) return;
         setVisibleChunkCount((prev) => Math.min(prev + CHUNK_LOAD_STEP, chunks.length));
       },
-      { root: null, rootMargin: "600px 0px" }
+      { root: null, rootMargin }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [chunks.length, hasMoreChunks]);
+  }, [chunks.length, hasMoreChunks, rootMargin]);
 
   const htmlChunks = useMemo(() => {
     const output: string[] = [];
@@ -114,7 +139,7 @@ export function MarkdownViewer({ content, documentId, className, containerRef }:
       ))}
       {hasMoreChunks ? (
         <div ref={sentinelRef} className="markdown-load-more">
-          正在加载更多内容...
+          {"\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9..."}
         </div>
       ) : null}
     </div>

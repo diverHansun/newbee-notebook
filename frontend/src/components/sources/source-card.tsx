@@ -5,7 +5,7 @@ import { NotebookDocumentItem } from "@/lib/api/types";
 type SourceCardProps = {
   document: NotebookDocumentItem;
   onView: (documentId: string) => void;
-  onRemove: (documentId: string) => void;
+  onRemove: (document: NotebookDocumentItem) => void;
 };
 
 function canViewDocument(status: string) {
@@ -105,8 +105,8 @@ export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
         <button
           className="btn btn-ghost btn-sm"
           type="button"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-          onClick={() => onRemove(document.document_id)}
+          style={{ color: "hsl(var(--destructive))" }}
+          onClick={() => onRemove(document)}
         >
           移除
         </button>

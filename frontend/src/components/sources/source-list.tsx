@@ -11,6 +11,7 @@ import {
 import { listLibraryDocuments } from "@/lib/api/library";
 import { NotebookDocumentItem } from "@/lib/api/types";
 import { SourceCard } from "@/components/sources/source-card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type SourceListProps = {
   notebookId: string;
@@ -26,6 +27,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
   const queryClient = useQueryClient();
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [pendingRemoveDocument, setPendingRemoveDocument] = useState<NotebookDocumentItem | null>(null);
 
   const notebookDocumentsQuery = useQuery({
     queryKey: ["notebook-documents", notebookId],
@@ -207,11 +209,30 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
               key={document.document_id}
               document={document}
               onView={onOpenDocument}
-              onRemove={(id) => removeMutation.mutate(id)}
+              onRemove={(doc) => setPendingRemoveDocument(doc)}
             />
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingRemoveDocument)}
+        title="移除文档"
+        message={
+          pendingRemoveDocument
+            ? `确定要从当前 Notebook 中移除「${pendingRemoveDocument.title}」吗？\n文档本身不会被删除，可以稍后重新添加。`
+            : ""
+        }
+        variant="warning"
+        confirmLabel="确认移除"
+        confirmDisabled={removeMutation.isPending}
+        onCancel={() => setPendingRemoveDocument(null)}
+        onConfirm={() => {
+          if (!pendingRemoveDocument) return;
+          removeMutation.mutate(pendingRemoveDocument.document_id);
+          setPendingRemoveDocument(null);
+        }}
+      />
     </div>
   );
 }

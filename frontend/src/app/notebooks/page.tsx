@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { createNotebook, deleteNotebook, listNotebooks } from "@/lib/api/notebooks";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 function formatRelativeTime(dateString: string): string {
   const now = Date.now();
@@ -39,6 +40,10 @@ export default function NotebooksPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [pendingDeleteNotebook, setPendingDeleteNotebook] = useState<{
+    notebookId: string;
+    title: string;
+  } | null>(null);
 
   const notebooksQuery = useQuery({
     queryKey: ["notebooks"],
@@ -165,7 +170,10 @@ export default function NotebooksPage() {
                     style={{ color: "hsl(var(--destructive))" }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteMutation.mutate(notebook.notebook_id);
+                      setPendingDeleteNotebook({
+                        notebookId: notebook.notebook_id,
+                        title: notebook.title,
+                      });
                     }}
                   >
                     删除
@@ -239,6 +247,25 @@ export default function NotebooksPage() {
             </div>
           </div>
         )}
+
+        <ConfirmDialog
+          open={Boolean(pendingDeleteNotebook)}
+          title="删除笔记本"
+          message={
+            pendingDeleteNotebook
+              ? `确定要删除笔记本「${pendingDeleteNotebook.title}」吗？\n所有相关会话将被一并删除，此操作不可撤销。`
+              : ""
+          }
+          variant="danger"
+          confirmLabel="确认删除"
+          confirmDisabled={deleteMutation.isPending}
+          onCancel={() => setPendingDeleteNotebook(null)}
+          onConfirm={() => {
+            if (!pendingDeleteNotebook) return;
+            deleteMutation.mutate(pendingDeleteNotebook.notebookId);
+            setPendingDeleteNotebook(null);
+          }}
+        />
       </main>
 
       {/* Bottom action bar */}

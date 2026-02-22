@@ -4,11 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadDocumentsToLibrary } from "@/lib/api/documents";
 import { deleteLibraryDocument, listLibraryDocuments } from "@/lib/api/library";
 import { DocumentStatus } from "@/lib/api/types";
 
 type StatusFilter = "all" | DocumentStatus;
+type PendingDeleteAction =
+  | { kind: "soft"; documentId: string; title: string }
+  | { kind: "hard"; documentId: string; title: string }
+  | { kind: "batch"; documentIds: string[]; count: number };
 
 const STATUS_TABS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "全部" },
@@ -65,6 +70,7 @@ export default function LibraryPage() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null);
 
   const libraryQuery = useQuery({
     queryKey: ["library-documents", status],
@@ -109,6 +115,54 @@ export default function LibraryPage() {
     } else {
       setSelectedIds(new Set(rows.map((r) => r.document_id)));
     }
+  };
+
+  const confirmTitle =
+    pendingDeleteAction?.kind === "hard"
+      ? "彻底删除文档"
+      : pendingDeleteAction?.kind === "batch"
+        ? "批量删除文档"
+        : "删除文档";
+
+  const confirmMessage = (() => {
+    if (!pendingDeleteAction) return "";
+    if (pendingDeleteAction.kind === "hard") {
+      return `确定要彻底删除「${pendingDeleteAction.title}」吗？\n原始文件与索引数据都会被永久删除，此操作不可撤销。`;
+    }
+    if (pendingDeleteAction.kind === "batch") {
+      return `确定要删除选中的 ${pendingDeleteAction.count} 个文档吗？\n本次执行的是软删除（保留原始文件）。`;
+    }
+    return `确定要删除「${pendingDeleteAction.title}」吗？\n将清除索引与数据库记录，但保留原始文件。`;
+  })();
+
+  const confirmVariant = pendingDeleteAction?.kind === "soft" ? "warning" : "danger";
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteAction) return;
+
+    if (pendingDeleteAction.kind === "hard") {
+      await deleteMutation.mutateAsync({
+        documentId: pendingDeleteAction.documentId,
+        force: true,
+      });
+      setPendingDeleteAction(null);
+      return;
+    }
+
+    if (pendingDeleteAction.kind === "soft") {
+      await deleteMutation.mutateAsync({
+        documentId: pendingDeleteAction.documentId,
+        force: false,
+      });
+      setPendingDeleteAction(null);
+      return;
+    }
+
+    for (const documentId of pendingDeleteAction.documentIds) {
+      await deleteMutation.mutateAsync({ documentId, force: false });
+    }
+    setSelectedIds(new Set());
+    setPendingDeleteAction(null);
   };
 
   return (
@@ -228,9 +282,14 @@ export default function LibraryPage() {
                         <button
                           className="btn btn-ghost btn-sm"
                           type="button"
-                          onClick={() =>
-                            deleteMutation.mutate({ documentId: row.document_id, force: false })
-                          }
+                          style={{ color: "hsl(var(--destructive))" }}
+                          onClick={() => {
+                            setPendingDeleteAction({
+                              kind: "soft",
+                              documentId: row.document_id,
+                              title: row.title,
+                            });
+                          }}
                         >
                           删除
                         </button>
@@ -238,9 +297,13 @@ export default function LibraryPage() {
                           className="btn btn-ghost btn-sm"
                           type="button"
                           style={{ color: "hsl(var(--destructive))" }}
-                          onClick={() =>
-                            deleteMutation.mutate({ documentId: row.document_id, force: true })
-                          }
+                          onClick={() => {
+                            setPendingDeleteAction({
+                              kind: "hard",
+                              documentId: row.document_id,
+                              title: row.title,
+                            });
+                          }}
                         >
                           彻底删除
                         </button>
@@ -264,16 +327,30 @@ export default function LibraryPage() {
               type="button"
               style={{ color: "hsl(var(--destructive))" }}
               onClick={() => {
-                selectedIds.forEach((id) =>
-                  deleteMutation.mutate({ documentId: id, force: false })
-                );
-                setSelectedIds(new Set());
+                const documentIds = Array.from(selectedIds);
+                if (documentIds.length === 0) return;
+                setPendingDeleteAction({
+                  kind: "batch",
+                  documentIds,
+                  count: documentIds.length,
+                });
               }}
             >
               批量删除
             </button>
           </div>
         )}
+
+        <ConfirmDialog
+          open={Boolean(pendingDeleteAction)}
+          title={confirmTitle}
+          message={confirmMessage}
+          variant={confirmVariant}
+          confirmLabel={pendingDeleteAction?.kind === "hard" ? "确认彻底删除" : "确认删除"}
+          confirmDisabled={deleteMutation.isPending}
+          onCancel={() => setPendingDeleteAction(null)}
+          onConfirm={handleConfirmDelete}
+        />
       </main>
     </div>
   );

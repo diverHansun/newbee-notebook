@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageItem } from "@/components/chat/message-item";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Session } from "@/lib/api/types";
 import type { ChatMessage } from "@/stores/chat-store";
 
@@ -41,6 +42,7 @@ export function ChatPanel({
   onOpenDocument,
 }: ChatPanelProps) {
   const [sessionTitle, setSessionTitle] = useState("");
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = useMemo(
@@ -82,7 +84,7 @@ export function ChatPanel({
               className="btn btn-ghost btn-sm"
               type="button"
               style={{ color: "hsl(var(--destructive))" }}
-              onClick={() => onDeleteSession(currentSession.session_id)}
+              onClick={() => setPendingDeleteSession(currentSession)}
             >
               删除
             </button>
@@ -165,6 +167,24 @@ export function ChatPanel({
           onCancel={onCancel}
         />
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteSession)}
+        title="删除会话"
+        message={
+          pendingDeleteSession
+            ? `确定要删除会话「${pendingDeleteSession.title || pendingDeleteSession.session_id.slice(0, 8)}」吗？\n该会话中的聊天记录将被删除。`
+            : ""
+        }
+        variant="danger"
+        confirmLabel="确认删除"
+        onCancel={() => setPendingDeleteSession(null)}
+        onConfirm={() => {
+          if (!pendingDeleteSession) return;
+          onDeleteSession(pendingDeleteSession.session_id);
+          setPendingDeleteSession(null);
+        }}
+      />
     </div>
   );
 }
