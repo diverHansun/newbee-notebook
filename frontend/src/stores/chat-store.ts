@@ -10,6 +10,7 @@ export type ChatMessage = {
   role: MessageRole;
   mode: MessageMode;
   content: string;
+  thinkingStage?: string | null;
   messageId?: number;
   sources?: NormalizedSource[];
   status?: "streaming" | "done" | "cancelled" | "error";
@@ -34,7 +35,9 @@ type ChatState = {
   setCurrentSessionId: (sessionId: string | null) => void;
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (message: ChatMessage) => void;
+  removeMessage: (id: string) => void;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  updateThinkingStage: (id: string, stage: string | null) => void;
   appendMessageContent: (id: string, delta: string) => void;
   setStreaming: (isStreaming: boolean, messageId?: number | null) => void;
   setMode: (mode: "chat" | "ask") => void;
@@ -55,14 +58,24 @@ export const useChatStore = create<ChatState>((set) => ({
   setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),
   setMessages: (messages) => set({ messages }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  removeMessage: (id) =>
+    set((state) => ({
+      messages: state.messages.filter((msg) => msg.id !== id),
+    })),
   updateMessage: (id, updates) =>
     set((state) => ({
       messages: state.messages.map((msg) => (msg.id === id ? { ...msg, ...updates } : msg)),
     })),
+  updateThinkingStage: (id, stage) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id ? { ...msg, thinkingStage: stage } : msg
+      ),
+    })),
   appendMessageContent: (id, delta) =>
     set((state) => ({
       messages: state.messages.map((msg) =>
-        msg.id === id ? { ...msg, content: `${msg.content}${delta}` } : msg
+        msg.id === id ? { ...msg, content: `${msg.content}${delta}`, thinkingStage: null } : msg
       ),
     })),
   setStreaming: (isStreaming, messageId = null) =>

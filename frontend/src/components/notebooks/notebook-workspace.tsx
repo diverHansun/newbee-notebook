@@ -57,9 +57,10 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
   const sendByMode = async (
     text: string,
     mode: MessageMode,
-    context?: { document_id: string; selected_text: string }
+    context?: { document_id: string; selected_text: string },
+    sourceDocIds?: string[] | null
   ) => {
-    await chat.sendMessage(text, mode, context);
+    await chat.sendMessage(text, mode, context, sourceDocIds);
   };
 
   const mainContent =
@@ -85,6 +86,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
       />
     ) : (
       <ChatPanel
+        notebookId={notebookId}
         sessions={chat.sessions}
         currentSessionId={chat.currentSessionId}
         messages={chat.messages}
@@ -93,7 +95,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         askBlocked={askBlocked}
         ragHint={ragHint || undefined}
         onModeChange={chat.setMode}
-        onSendMessage={(text, mode) => sendByMode(text, mode)}
+        onSendMessage={(text, mode, sourceDocIds) => sendByMode(text, mode, undefined, sourceDocIds)}
         onCancel={chat.cancelStream}
         onSwitchSession={chat.switchSession}
         onCreateSession={chat.createSession}

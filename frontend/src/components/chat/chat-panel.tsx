@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageItem } from "@/components/chat/message-item";
@@ -9,6 +9,7 @@ import type { Session } from "@/lib/api/types";
 import type { ChatMessage } from "@/stores/chat-store";
 
 type ChatPanelProps = {
+  notebookId: string;
   sessions: Session[];
   currentSessionId: string | null;
   messages: ChatMessage[];
@@ -17,7 +18,7 @@ type ChatPanelProps = {
   askBlocked: boolean;
   ragHint?: string;
   onModeChange: (mode: "chat" | "ask") => void;
-  onSendMessage: (text: string, mode: "chat" | "ask") => void;
+  onSendMessage: (text: string, mode: "chat" | "ask", sourceDocIds?: string[] | null) => void;
   onCancel: () => void;
   onSwitchSession: (sessionId: string) => void;
   onCreateSession: (title?: string) => void;
@@ -26,6 +27,7 @@ type ChatPanelProps = {
 };
 
 export function ChatPanel({
+  notebookId,
   sessions,
   currentSessionId,
   messages,
@@ -42,12 +44,17 @@ export function ChatPanel({
   onOpenDocument,
 }: ChatPanelProps) {
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
+  const [sourceDocIds, setSourceDocIds] = useState<string[] | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentSession = useMemo(
     () => sessions.find((item) => item.session_id === currentSessionId) || null,
     [currentSessionId, sessions]
   );
+
+  useEffect(() => {
+    setSourceDocIds(null);
+  }, [currentSessionId]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 0 }}>
@@ -148,11 +155,14 @@ export function ChatPanel({
       {/* Chat input */}
       <div style={{ flexShrink: 0, borderTop: "1px solid hsl(var(--border))" }}>
         <ChatInput
+          notebookId={notebookId}
           mode={mode}
           isStreaming={isStreaming}
           askBlocked={askBlocked}
+          sourceDocIds={sourceDocIds}
+          onSourceDocIdsChange={setSourceDocIds}
           onModeChange={onModeChange}
-          onSend={(text, selectedMode) => onSendMessage(text, selectedMode)}
+          onSend={(text, selectedMode) => onSendMessage(text, selectedMode, sourceDocIds)}
           onCancel={onCancel}
         />
       </div>

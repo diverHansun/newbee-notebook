@@ -172,6 +172,7 @@ export type ChatRequest = {
   session_id?: string;
   context?: ChatContext | null;
   include_ec_context?: boolean | null;
+  source_document_ids?: string[] | null;
 };
 
 export type SseEventStart = {
@@ -182,6 +183,11 @@ export type SseEventStart = {
 export type SseEventContent = {
   type: "content";
   delta: string;
+};
+
+export type SseEventThinking = {
+  type: "thinking";
+  stage?: string | null;
 };
 
 export type SseEventSources = {
@@ -207,6 +213,7 @@ export type SseEventHeartbeat = {
 export type SseEvent =
   | SseEventStart
   | SseEventContent
+  | SseEventThinking
   | SseEventSources
   | SseEventDone
   | SseEventError

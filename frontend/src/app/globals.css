@@ -34,7 +34,7 @@
   --input: 214 32% 91%;
   --ring: 215 20% 65%;
 
-  --radius: 0.375rem;             /* 6px base */
+  --radius: 0.5rem;               /* 8px base */
 
   /* Bee mascot accent */
   --bee-yellow: 45 93% 47%;
@@ -214,7 +214,7 @@ a {
   justify-content: center;
   gap: 6px;
   border: 1px solid hsl(var(--border));
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: var(--radius);
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 500;
@@ -295,7 +295,7 @@ a {
 .textarea {
   width: 100%;
   border: 1px solid hsl(var(--input));
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: var(--radius);
   padding: 8px 12px;
   font-size: 13px;
   line-height: 1.5;
@@ -322,6 +322,322 @@ a {
   min-height: 80px;
 }
 
+.segmented-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+
+.segmented-control.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.segmented-control-option {
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 200ms ease-out;
+}
+
+.segmented-control-option:hover {
+  color: hsl(var(--foreground));
+}
+
+.segmented-control-option.is-active {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.chat-input-shell {
+  padding: 12px 16px;
+}
+
+.chat-input-container {
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--card));
+  padding: 8px 12px;
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.chat-input-textarea {
+  width: 100%;
+  min-height: 56px;
+  max-height: 140px;
+  resize: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 4px 2px 8px;
+}
+
+.chat-input-textarea:focus {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.chat-input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-input-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.chat-input-toolbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.chat-input-source-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.chat-input-source-chip {
+  max-width: min(220px, 42vw);
+}
+
+.chat-input-source-chip-label {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-input-source-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.chat-input-source-chip-remove:hover {
+  opacity: 1;
+  background: hsl(var(--accent));
+}
+
+.chat-action-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 180ms ease-out;
+}
+
+.chat-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.chat-action-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.chat-action-btn:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.45);
+  outline-offset: 2px;
+}
+
+.chat-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.chat-action-btn.is-ready {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.chat-action-btn.is-stop {
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.source-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.source-selector-trigger {
+  width: 28px;
+  height: 28px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 180ms ease-out;
+}
+
+.source-selector-trigger:hover {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.source-selector-trigger.is-disabled {
+  opacity: 0.5;
+}
+
+.source-selector-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(360px, 78vw);
+  max-height: 260px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px 8px 0 0;
+  background: hsl(var(--card));
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  z-index: 30;
+}
+
+.source-selector-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.source-selector-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.source-selector-panel-header strong {
+  font-size: 13px;
+}
+
+.source-selector-panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  max-height: 210px;
+}
+
+.source-selector-list {
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.source-selector-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background 150ms ease-out;
+}
+
+.source-selector-row:hover {
+  background: hsl(var(--accent));
+}
+
+.source-selector-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.source-selector-row input[type="checkbox"] {
+  margin: 0;
+  pointer-events: none;
+}
+
+.source-selector-row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.source-selector-row-all {
+  font-weight: 500;
+  border-bottom: 0;
+}
+
+.source-selector-divider {
+  height: 1px;
+  background: hsl(var(--border));
+}
+
+.source-selector-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  text-align: center;
+}
+
+.source-selector-footer-hint {
+  padding: 6px 10px 8px;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+
 /* ================================================================
    8. Badges / Chips
    ================================================================ */
@@ -330,7 +646,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: calc(var(--radius) - 4px);
+  border-radius: 999px;
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 500;
@@ -345,7 +661,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: calc(var(--radius) - 4px);
+  border-radius: 999px;
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 500;
@@ -446,7 +762,7 @@ a {
 
 .card {
   border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius) + 2px);
   background: hsl(var(--card));
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition: box-shadow 200ms ease-out, transform 200ms ease-out;
@@ -458,6 +774,10 @@ a {
 
 .card-interactive:hover {
   transform: translateY(-1px);
+}
+
+.message-bubble-assistant {
+  border-left: 2px solid hsl(var(--bee-yellow) / 0.6);
 }
 
 /* ================================================================
@@ -804,7 +1124,98 @@ a {
 }
 
 /* ================================================================
-   22. Responsive
+   22. Chat Thinking Indicator
+   ================================================================ */
+
+.thinking-indicator {
+  max-width: 240px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.5);
+  padding: 10px 14px;
+}
+
+.thinking-indicator-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thinking-indicator-ring {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 50%;
+  background: conic-gradient(
+    hsl(var(--bee-yellow)),
+    hsl(var(--bee-amber)),
+    hsl(var(--bee-yellow))
+  );
+  animation: thinking-spin 1s linear infinite;
+}
+
+.thinking-indicator-ring::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: hsl(var(--card));
+}
+
+.thinking-indicator-label {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thinking-indicator-progress {
+  position: relative;
+  margin-top: 8px;
+  height: 2px;
+  width: 100%;
+  border-radius: 999px;
+  background: hsl(var(--border));
+  overflow: hidden;
+}
+
+.thinking-indicator-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--bee-yellow)) 40%,
+    hsl(var(--bee-amber)) 60%,
+    transparent 100%
+  );
+  animation: thinking-shimmer 1.2s linear infinite;
+}
+
+@keyframes thinking-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes thinking-shimmer {
+  0% { transform: translateX(-140%); }
+  100% { transform: translateX(260%); }
+}
+
+@keyframes thinking-fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* ================================================================
+   23. Responsive
    ================================================================ */
 
 @media (max-width: 1024px) {

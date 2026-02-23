@@ -12,8 +12,8 @@ type ExplainCardProps = {
   card: ExplainCardState | null;
 };
 
-const DEFAULT_WIDTH = 400;
-const DEFAULT_HEIGHT = 380;
+const DEFAULT_WIDTH = 520;
+const DEFAULT_HEIGHT = 680;
 
 export function ExplainCard({ card }: ExplainCardProps) {
   const [collapsed, setCollapsed] = useState(true);
@@ -62,8 +62,8 @@ export function ExplainCard({ card }: ExplainCardProps) {
 
   const { size, onResizePointerDown, isResizing } = useResizable({
     initialSize: { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT },
-    minSize: { width: 300, height: 180 },
-    maxSize: { width: 600, height: 500 },
+    minSize: { width: 380, height: 400 },
+    maxSize: { width: 720, height: 900 },
   });
 
   useEffect(() => {
@@ -93,6 +93,11 @@ export function ExplainCard({ card }: ExplainCardProps) {
   const anchorRight = anchorRect
     ? window.innerWidth - anchorRect.right + 8
     : 8;
+  const cardTop = anchorTop + position.y;
+  const boundedHeight = Math.min(
+    size.height,
+    Math.max(120, window.innerHeight - cardTop - 16)
+  );
 
   const pill = (
     <div
@@ -119,10 +124,10 @@ export function ExplainCard({ card }: ExplainCardProps) {
     <aside
       className="explain-card"
       style={{
-        top: anchorTop + position.y,
+        top: cardTop,
         right: anchorRight - position.x,
         width: size.width,
-        height: size.height,
+        height: boundedHeight,
         transition:
           isDragging || isResizing ? "none" : "box-shadow 200ms ease-out",
       }}
