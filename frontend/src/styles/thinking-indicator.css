@@ -1,0 +1,76 @@
+﻿/* ================================================================
+   22. Chat Thinking Indicator
+   ================================================================ */
+
+.thinking-indicator {
+  max-width: 240px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.5);
+  padding: 10px 14px;
+}
+
+.thinking-indicator-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thinking-indicator-ring {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 50%;
+  background: conic-gradient(
+    hsl(var(--bee-yellow)),
+    hsl(var(--bee-amber)),
+    hsl(var(--bee-yellow))
+  );
+  animation: thinking-spin 1s linear infinite;
+}
+
+.thinking-indicator-ring::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: hsl(var(--card));
+}
+
+.thinking-indicator-label {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thinking-indicator-progress {
+  position: relative;
+  margin-top: 8px;
+  height: 2px;
+  width: 100%;
+  border-radius: 999px;
+  background: hsl(var(--border));
+  overflow: hidden;
+}
+
+.thinking-indicator-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--bee-yellow)) 40%,
+    hsl(var(--bee-amber)) 60%,
+    transparent 100%
+  );
+  animation: thinking-shimmer 1.2s linear infinite;
+}
+
+

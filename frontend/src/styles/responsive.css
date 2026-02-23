@@ -1,0 +1,28 @@
+﻿/* ================================================================
+   23. Responsive
+   ================================================================ */
+
+@media (max-width: 1024px) {
+  .workspace-grid {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .studio-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    padding: 12px 16px;
+  }
+
+  .page-main {
+    padding: 16px;
+  }
+}
+

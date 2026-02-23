@@ -1,0 +1,130 @@
+﻿/* ================================================================
+   3. Layout utilities
+   ================================================================ */
+
+.page-shell {
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-header {
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 12px 24px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.page-main {
+  flex: 1;
+  padding: 24px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 280px;
+  gap: 16px;
+  min-height: calc(100vh - 74px);
+}
+
+/* ================================================================
+   4. Panel
+   ================================================================ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.panel-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* ================================================================
+   13. Notebook card grid
+   ================================================================ */
+
+.notebook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* ================================================================
+   14. Tab filter bar
+   ================================================================ */
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 0;
+}
+
+.tab-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 200ms ease-out;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.tab-item:hover {
+  color: hsl(var(--foreground));
+}
+
+.tab-item.active {
+  color: hsl(var(--foreground));
+  border-bottom-color: hsl(var(--primary));
+}
+
+/* ================================================================
+   17. Bottom action bar
+   ================================================================ */
+
+.bottom-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 16px 24px;
+}
+
+

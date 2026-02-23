@@ -1,0 +1,183 @@
+﻿/* ================================================================
+   18. Selection floating menu
+   ================================================================ */
+
+.selection-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid hsl(var(--bee-yellow) / 0.35);
+  border-radius: var(--radius);
+  background: hsl(0 0% 100% / 0.85);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+.selection-menu .btn:hover {
+  background: hsl(var(--bee-yellow-light));
+}
+
+/* ================================================================
+   19. Resizable panel handle
+   ================================================================ */
+
+.resize-handle {
+  flex: 0 0 6px;
+  width: 6px;
+  min-width: 6px;
+  background: hsl(var(--border));
+  position: relative;
+  cursor: col-resize;
+  transition: background 150ms ease-out;
+  z-index: 10;
+}
+
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 99px;
+  background: hsl(var(--ring));
+  opacity: 0;
+  transition: opacity 150ms ease-out, height 150ms ease-out;
+}
+
+.resize-handle:hover {
+  background: hsl(var(--muted));
+}
+
+.resize-handle:hover::after {
+  opacity: 1;
+}
+
+.resize-handle[data-panel-resize-handle-state="drag"] {
+  background: hsl(var(--primary));
+}
+
+.resize-handle[data-panel-resize-handle-state="drag"]::after {
+  opacity: 1;
+  background: hsl(var(--primary-foreground));
+  height: 60px;
+}
+
+/* ================================================================
+   21. Explain / Conclude floating card
+   ================================================================ */
+
+.explain-card-pill {
+  position: fixed;
+  z-index: 9990;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid hsl(var(--bee-yellow) / 0.35);
+  border-radius: 999px;
+  background: hsl(var(--card));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  user-select: none;
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+
+.explain-card-pill:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: hsl(var(--bee-yellow) / 0.6);
+}
+
+.explain-card-pill-hint {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.explain-card-pill .streaming-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  background: hsl(var(--bee-yellow));
+  animation: bee-pulse 1.2s ease-in-out infinite;
+}
+
+.explain-card {
+  position: fixed;
+  z-index: 9991;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  user-select: none;
+}
+
+.explain-card-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+  cursor: move;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--bee-yellow-light)),
+    hsl(var(--card))
+  );
+  border-left: 3px solid hsl(var(--bee-yellow));
+  touch-action: none;
+}
+
+.explain-card-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  user-select: text;
+}
+
+.explain-card-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.explain-card-resize-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid hsl(var(--bee-yellow));
+  border-bottom: 2px solid hsl(var(--bee-yellow));
+  opacity: 0.5;
+  transition: opacity 150ms ease-out;
+}
+
+.explain-card-resize-handle:hover::after {
+  opacity: 1;
+}
+
+.explain-card .streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  background: hsl(var(--bee-yellow));
+  animation: bee-pulse 1.2s ease-in-out infinite;
+}
+
+

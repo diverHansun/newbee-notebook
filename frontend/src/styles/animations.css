@@ -1,0 +1,27 @@
+﻿@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes bee-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+@keyframes thinking-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes thinking-shimmer {
+  0% { transform: translateX(-140%); }
+  100% { transform: translateX(260%); }
+}
+
+@keyframes thinking-fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+

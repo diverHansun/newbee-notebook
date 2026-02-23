@@ -1,0 +1,90 @@
+﻿/* ================================================================
+   5. Flexbox helpers
+   ================================================================ */
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row-between {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stack-md {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ================================================================
+   12. Muted text helper
+   ================================================================ */
+
+.muted {
+  color: hsl(var(--muted-foreground));
+}
+
+/* ================================================================
+   16. Empty state
+   ================================================================ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.empty-state strong {
+  font-size: 16px;
+  color: hsl(var(--foreground));
+}
+
+/* ================================================================
+   9. List
+   ================================================================ */
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-item {
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  padding: 12px;
+  background: hsl(var(--card));
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
+
+.list-item:hover {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* ================================================================
+   20. Skeleton / Loading
+   ================================================================ */
+
+.skeleton {
+  background: hsl(var(--muted));
+  border-radius: calc(var(--radius) - 2px);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+
