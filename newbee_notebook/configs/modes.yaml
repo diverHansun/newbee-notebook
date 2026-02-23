@@ -19,12 +19,14 @@ modes:
     engine: chat_engine  # ChatEngine with condense_plus_context
     retrieval: pgvector
     memory: false
+    skip_condense: true
     description: "Document summarization and conclusion generation"
     
   explain:
     engine: query_engine  # QueryEngine for single-turn queries
     retrieval: pgvector
     memory: false
+    skip_condense: true
     description: "Concept explanation and knowledge clarification"
 
 retrieval:

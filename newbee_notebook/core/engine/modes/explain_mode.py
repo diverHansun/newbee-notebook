@@ -8,6 +8,7 @@ from llama_index.core.chat_engine.types import BaseChatEngine
 from llama_index.core.llms import LLM
 from llama_index.core.memory import BaseMemory
 
+from newbee_notebook.core.common.config import get_explain_skip_condense
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from newbee_notebook.core.prompts import load_prompt
@@ -69,7 +70,7 @@ class ExplainMode(BaseMode):
             llm=self._llm,
             memory=self._memory,
             system_prompt=self._config.system_prompt or load_prompt("explain.md"),
-            skip_condense=False,
+            skip_condense=get_explain_skip_condense(),
             verbose=self._config.verbose,
         )
 

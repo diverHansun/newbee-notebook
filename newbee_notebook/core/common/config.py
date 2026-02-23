@@ -461,6 +461,18 @@ def get_modes_config():
     return load_yaml_config(CONFIG_DIR / "modes.yaml")
 
 
+def get_explain_skip_condense() -> bool:
+    """Return explain mode skip_condense setting from modes.yaml."""
+    cfg = get_modes_config()
+    return bool(cfg.get("modes", {}).get("explain", {}).get("skip_condense", True))
+
+
+def get_conclude_skip_condense() -> bool:
+    """Return conclude mode skip_condense setting from modes.yaml."""
+    cfg = get_modes_config()
+    return bool(cfg.get("modes", {}).get("conclude", {}).get("skip_condense", True))
+
+
 def get_zhipu_tools_config() -> dict:
     """Get Zhipu tools configuration from YAML file.
 
