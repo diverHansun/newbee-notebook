@@ -1,6 +1,8 @@
 "use client";
 
 import { NotebookDocumentItem } from "@/lib/api/types";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
 type SourceCardProps = {
   document: NotebookDocumentItem;
@@ -24,30 +26,35 @@ function statusBadgeClass(status: string): string {
   return map[status] || "badge-default";
 }
 
-function statusLabel(status: string, stage?: string | null): string {
+function statusLabel(
+  status: string,
+  stage: string | null | undefined,
+  t: ReturnType<typeof useLang>["t"]
+): string {
   const map: Record<string, string> = {
-    uploaded: "等待处理",
-    pending: "等待处理",
-    processing: stage ? stageLabel(stage) : "处理中...",
-    converted: "已转换，待索引",
-    completed: "已完成",
-    failed: "处理失败",
+    uploaded: t(uiStrings.sourceCard.waiting),
+    pending: t(uiStrings.sourceCard.waiting),
+    processing: stage ? stageLabel(stage, t) : t(uiStrings.sourceCard.processing),
+    converted: t(uiStrings.sourceCard.converted),
+    completed: t(uiStrings.sourceCard.completed),
+    failed: t(uiStrings.sourceCard.failed),
   };
   return map[status] || status;
 }
 
-function stageLabel(stage: string): string {
+function stageLabel(stage: string, t: ReturnType<typeof useLang>["t"]): string {
   const map: Record<string, string> = {
-    converting: "转换文档中...",
-    splitting: "文本分块中...",
-    indexing_pg: "构建向量索引...",
-    indexing_es: "构建全文索引...",
-    finalizing: "完成处理中...",
+    converting: t(uiStrings.sourceCard.converting),
+    splitting: t(uiStrings.sourceCard.splitting),
+    indexing_pg: t(uiStrings.sourceCard.indexingPg),
+    indexing_es: t(uiStrings.sourceCard.indexingEs),
+    finalizing: t(uiStrings.sourceCard.finalizing),
   };
   return map[stage] || stage;
 }
 
 export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
+  const { t } = useLang();
   const canView = canViewDocument(document.status);
 
   return (
@@ -87,7 +94,7 @@ export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
         </div>
         <div className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
           <span className={`badge ${statusBadgeClass(document.status)}`}>
-            {statusLabel(document.status, document.processing_stage)}
+            {statusLabel(document.status, document.processing_stage, t)}
           </span>
         </div>
       </div>
@@ -100,7 +107,7 @@ export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
           disabled={!canView}
           onClick={() => onView(document.document_id)}
         >
-          View
+          {t(uiStrings.common.view)}
         </button>
         <button
           className="btn btn-ghost btn-sm"
@@ -108,7 +115,7 @@ export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
           style={{ color: "hsl(var(--destructive))" }}
           onClick={() => onRemove(document)}
         >
-          移除
+          {t(uiStrings.common.remove)}
         </button>
       </div>
     </li>

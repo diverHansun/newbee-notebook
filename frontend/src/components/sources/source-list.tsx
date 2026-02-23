@@ -10,6 +10,8 @@ import {
 } from "@/lib/api/documents";
 import { listLibraryDocuments } from "@/lib/api/library";
 import { NotebookDocumentItem } from "@/lib/api/types";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import { SourceCard } from "@/components/sources/source-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -24,6 +26,7 @@ function isNonTerminalStatus(status: string) {
 }
 
 export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: SourceListProps) {
+  const { t, ti } = useLang();
   const queryClient = useQueryClient();
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -83,7 +86,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
       {/* Header row */}
       <div className="row-between">
         <span style={{ fontSize: 13, fontWeight: 600 }}>
-          Notebook Sources
+          {t(uiStrings.sourceList.title)}
           {documentRows.length > 0 && (
             <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>
               ({documentRows.length})
@@ -96,14 +99,14 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
             type="button"
             onClick={() => setShowLibrary(!showLibrary)}
           >
-            + 添加
+            {t(uiStrings.sourceList.add)}
           </button>
           <button
             className="btn btn-ghost btn-sm"
             type="button"
             onClick={() => notebookDocumentsQuery.refetch()}
           >
-            刷新
+            {t(uiStrings.sourceList.refresh)}
           </button>
         </div>
       </div>
@@ -116,7 +119,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
         >
           <div className="stack-sm">
             <div className="row-between">
-              <span style={{ fontSize: 12, fontWeight: 600 }}>从 Library 添加</span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{t(uiStrings.sourceList.addFromLibrary)}</span>
               <div className="row" style={{ gap: 4 }}>
                 <button
                   className="btn btn-primary btn-sm"
@@ -124,7 +127,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
                   disabled={selectedLibraryIds.length === 0 || addMutation.isPending}
                   onClick={() => addMutation.mutate(selectedLibraryIds)}
                 >
-                  添加 ({selectedLibraryIds.length})
+                  {ti(uiStrings.sourceList.addSelected, { n: selectedLibraryIds.length })}
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
@@ -134,7 +137,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
                     setSelectedLibraryIds([]);
                   }}
                 >
-                  取消
+                  {t(uiStrings.sourceList.cancel)}
                 </button>
               </div>
             </div>
@@ -197,9 +200,9 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
         </div>
       ) : documentRows.length === 0 ? (
         <div className="empty-state" style={{ padding: "32px 16px" }}>
-          <span>当前 Notebook 还没有文档</span>
+          <span>{t(uiStrings.sourceList.emptyDocuments)}</span>
           <button className="btn btn-sm" type="button" onClick={() => setShowLibrary(true)}>
-            + 从 Library 添加
+            {t(uiStrings.sourceList.addFromLibraryCTA)}
           </button>
         </div>
       ) : (
@@ -217,14 +220,14 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
 
       <ConfirmDialog
         open={Boolean(pendingRemoveDocument)}
-        title="移除文档"
+        title={t(uiStrings.sourceList.removeTitle)}
         message={
           pendingRemoveDocument
-            ? `确定要从当前 Notebook 中移除「${pendingRemoveDocument.title}」吗？\n文档本身不会被删除，可以稍后重新添加。`
+            ? `${ti(uiStrings.sourceList.removeConfirm, { title: pendingRemoveDocument.title })}\n${t(uiStrings.sourceList.removeConfirmDetail)}`
             : ""
         }
         variant="warning"
-        confirmLabel="确认移除"
+        confirmLabel={t(uiStrings.sourceList.confirmRemove)}
         confirmDisabled={removeMutation.isPending}
         onCancel={() => setPendingRemoveDocument(null)}
         onConfirm={() => {

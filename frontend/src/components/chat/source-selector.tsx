@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listDocumentsInNotebook } from "@/lib/api/documents";
 import type { NotebookDocumentItem } from "@/lib/api/types";
-import { zh, uiStrings } from "@/lib/i18n/strings";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
 type SourceSelectorProps = {
   notebookId: string;
@@ -36,6 +37,7 @@ export function SourceSelector({
   disabled = false,
   onDocsChange,
 }: SourceSelectorProps) {
+  const { t, ti } = useLang();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotebookDocumentItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -77,7 +79,7 @@ export function SourceSelector({
       hasLoadedRef.current = true;
     } catch (err) {
       if (requestSeqRef.current !== reqId) return;
-      setError(err instanceof Error ? err.message : zh(uiStrings.sourceSelector.loadFailed));
+      setError(err instanceof Error ? err.message : t(uiStrings.sourceSelector.loadFailed));
     } finally {
       if (requestSeqRef.current === reqId) {
         setLoading(false);
@@ -122,8 +124,8 @@ export function SourceSelector({
       <button
         type="button"
         className={`source-selector-trigger${triggerLooksDisabled ? " is-disabled" : ""}`}
-        aria-label={zh(uiStrings.sourceSelector.open)}
-        title={zh(uiStrings.sourceSelector.open)}
+        aria-label={t(uiStrings.sourceSelector.open)}
+        title={t(uiStrings.sourceSelector.open)}
         aria-expanded={open}
         onClick={async () => {
           if (disabled) return;
@@ -139,9 +141,9 @@ export function SourceSelector({
 
       <div className={`source-selector-panel${open ? " is-open" : ""}`} aria-hidden={!open}>
         <div className="source-selector-panel-header">
-          <strong>{zh(uiStrings.sourceSelector.open)}</strong>
+          <strong>{t(uiStrings.sourceSelector.open)}</strong>
           <button className="btn btn-sm btn-ghost" type="button" onClick={() => setOpen(false)}>
-            {zh(uiStrings.sourceSelector.done)}
+            {t(uiStrings.sourceSelector.done)}
           </button>
         </div>
 
@@ -153,22 +155,22 @@ export function SourceSelector({
             disabled={loading}
           >
             <input type="checkbox" readOnly checked={selectedIds === null} tabIndex={-1} />
-            <span>{zh(uiStrings.sourceSelector.allDocuments)}</span>
+            <span>{t(uiStrings.sourceSelector.allDocuments)}</span>
           </button>
 
           <div className="source-selector-divider" />
 
           {loading ? (
-            <div className="source-selector-empty">{zh(uiStrings.sourceSelector.loading)}</div>
+            <div className="source-selector-empty">{t(uiStrings.sourceSelector.loading)}</div>
           ) : error ? (
             <div className="source-selector-empty">
-              <span>{zh(uiStrings.sourceSelector.loadFailed)}</span>
+              <span>{t(uiStrings.sourceSelector.loadFailed)}</span>
               <button className="btn btn-sm" type="button" onClick={() => void loadDocuments()}>
-                {zh(uiStrings.sourceSelector.retry)}
+                {t(uiStrings.sourceSelector.retry)}
               </button>
             </div>
           ) : items.length === 0 ? (
-            <div className="source-selector-empty">{zh(uiStrings.sourceSelector.noDocuments)}</div>
+            <div className="source-selector-empty">{t(uiStrings.sourceSelector.noDocuments)}</div>
           ) : (
             <>
               <div className="source-selector-list">
@@ -191,7 +193,7 @@ export function SourceSelector({
               </div>
               {total > items.length && (
                 <div className="source-selector-footer-hint">
-                  {`共 ${total} 个文档，${zh(uiStrings.sourceSelector.firstNHint)} ${items.length} 个`}
+                  {ti(uiStrings.sourceSelector.summary, { total, shown: items.length })}
                 </div>
               )}
             </>

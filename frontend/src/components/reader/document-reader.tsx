@@ -7,6 +7,8 @@ import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { SelectionMenu } from "@/components/reader/selection-menu";
 import { getDocument, getDocumentContent } from "@/lib/api/documents";
 import { ApiError } from "@/lib/api/client";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import { useTextSelection } from "@/lib/hooks/useTextSelection";
 import { useReaderStore } from "@/stores/reader-store";
 
@@ -23,6 +25,7 @@ export function DocumentReader({
   onExplain,
   onConclude,
 }: DocumentReaderProps) {
+  const { t, ti } = useLang();
   const viewerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isSelecting = useReaderStore((state) => state.isSelecting);
@@ -72,16 +75,16 @@ export function DocumentReader({
     if (documentQuery.isError) {
       return (
         <div className="empty-state">
-          <span>文档信息加载失败</span>
+          <span>{t(uiStrings.reader.loadFailed)}</span>
           <button className="btn btn-sm" type="button" onClick={() => documentQuery.refetch()}>
-            重试
+            {t(uiStrings.reader.retry)}
           </button>
         </div>
       );
     }
 
     if (!canReadByStatus) {
-      const hint = statusHint(status);
+      const hint = statusHint(status, t);
       return (
         <div className="empty-state">
           <span className={`badge ${statusBadgeClass(status || "unknown")}`}>
@@ -106,12 +109,12 @@ export function DocumentReader({
 
     if (contentQuery.isError) {
       const err = contentQuery.error as ApiError;
-      const friendlyMsg = contentErrorMessage(err, status);
+      const friendlyMsg = contentErrorMessage(err, status, t, ti);
       return (
         <div className="empty-state">
           <span>{friendlyMsg}</span>
           <button className="btn btn-sm" type="button" onClick={() => contentQuery.refetch()}>
-            重试
+            {t(uiStrings.reader.retry)}
           </button>
         </div>
       );
@@ -143,10 +146,10 @@ export function DocumentReader({
       >
         <div className="row">
           <button className="btn btn-ghost btn-sm" type="button" onClick={onBack}>
-            ← 返回聊天
+            {t(uiStrings.reader.backToChat)}
           </button>
           <strong style={{ fontSize: 14, fontWeight: 600 }}>
-            {documentQuery.data?.title || "文档"}
+            {documentQuery.data?.title || t(uiStrings.reader.documentFallbackTitle)}
           </strong>
         </div>
         {status && (
@@ -178,32 +181,40 @@ function statusBadgeClass(status: string): string {
   return map[status] || "badge-default";
 }
 
-function statusHint(status: string | undefined): string {
+function statusHint(status: string | undefined, t: ReturnType<typeof useLang>["t"]): string {
   switch (status) {
     case "processing":
-      return "文档正在处理中，请稍后再试。";
+      return t(uiStrings.reader.processing);
     case "pending":
     case "uploaded":
-      return "文档等待处理，请稍后再试。";
+      return t(uiStrings.reader.pending);
     case "failed":
-      return "文档处理失败，请检查文档格式或重新上传。";
+      return t(uiStrings.reader.failed);
     default:
-      return "文档尚未可读，请等待处理完成。";
+      return t(uiStrings.reader.notReady);
   }
 }
 
-function contentErrorMessage(err: ApiError, status?: string): string {
+function contentErrorMessage(
+  err: ApiError,
+  status: string | undefined,
+  t: ReturnType<typeof useLang>["t"],
+  ti: ReturnType<typeof useLang>["ti"]
+): string {
   if (err.errorCode === "E4001" && status === "converted") {
-    return "文档处于 converted 状态，但后端当前仍将其视为处理中，暂不可预览。";
+    return t(uiStrings.reader.convertedBlocked);
   }
   if (
     err.errorCode === "E_HTTP_DETAIL" &&
     err.message?.toLowerCase().includes("content not available")
   ) {
-    return "文档状态已就绪，但后端未找到 content_path（内容文件路径）。请在后端检查该文档并重试处理。";
+    return t(uiStrings.reader.contentPathMissing);
   }
   if (err.errorCode === "E4001") {
-    return "文档正在处理中，请稍后再试。";
+    return t(uiStrings.reader.processing);
   }
-  return `文档内容加载失败：[${err.errorCode}] ${err.message}`;
+  return ti(uiStrings.reader.contentLoadFailedWithCode, {
+    errorCode: err.errorCode || "E_UNKNOWN",
+    message: err.message || "Unknown error",
+  });
 }

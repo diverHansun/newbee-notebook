@@ -1,6 +1,10 @@
 "use client";
 
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
+
 export function StudioPanel() {
+  const { t } = useLang();
   return (
     <div
       style={{
@@ -13,7 +17,7 @@ export function StudioPanel() {
       }}
     >
       <p className="muted" style={{ fontSize: 13 }}>
-        Studio（即将推出）
+        {t(uiStrings.studio.comingSoon)}
       </p>
     </div>
   );

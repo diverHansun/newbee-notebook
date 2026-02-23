@@ -7,6 +7,8 @@ import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadDocumentsToLibrary } from "@/lib/api/documents";
 import { deleteLibraryDocument, listLibraryDocuments } from "@/lib/api/library";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import { DocumentStatus } from "@/lib/api/types";
 
 type StatusFilter = "all" | DocumentStatus;
@@ -14,14 +16,6 @@ type PendingDeleteAction =
   | { kind: "soft"; documentId: string; title: string }
   | { kind: "hard"; documentId: string; title: string }
   | { kind: "batch"; documentIds: string[]; count: number };
-
-const STATUS_TABS: Array<{ value: StatusFilter; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "uploaded", label: "已上传" },
-  { value: "processing", label: "处理中" },
-  { value: "completed", label: "已完成" },
-  { value: "failed", label: "失败" },
-];
 
 function statusBadgeClass(status: string): string {
   const map: Record<string, string> = {
@@ -35,42 +29,55 @@ function statusBadgeClass(status: string): string {
   return map[status] || "badge-default";
 }
 
-function statusLabel(status: string, stage?: string | null): string {
+function statusLabel(
+  status: string,
+  stage: string | null | undefined,
+  t: ReturnType<typeof useLang>["t"]
+): string {
   const map: Record<string, string> = {
-    uploaded: "已上传",
-    pending: "等待处理",
-    processing: stage ? stageLabel(stage) : "处理中...",
-    converted: "已转换",
-    completed: "已完成",
-    failed: "处理失败",
+    uploaded: t(uiStrings.libraryPage.statusUploaded),
+    pending: t(uiStrings.libraryPage.statusWaiting),
+    processing: stage ? stageLabel(stage, t) : t(uiStrings.libraryPage.statusProcessing),
+    converted: t(uiStrings.libraryPage.statusConverted),
+    completed: t(uiStrings.libraryPage.statusCompleted),
+    failed: t(uiStrings.libraryPage.statusFailed),
   };
   return map[status] || status;
 }
 
-function stageLabel(stage: string): string {
+function stageLabel(stage: string, t: ReturnType<typeof useLang>["t"]): string {
   const map: Record<string, string> = {
-    converting: "转换文档中...",
-    splitting: "文本分块中...",
-    indexing_pg: "构建向量索引...",
-    indexing_es: "构建全文索引...",
-    finalizing: "完成处理中...",
+    converting: t(uiStrings.sourceCard.converting),
+    splitting: t(uiStrings.sourceCard.splitting),
+    indexing_pg: t(uiStrings.sourceCard.indexingPg),
+    indexing_es: t(uiStrings.sourceCard.indexingEs),
+    finalizing: t(uiStrings.sourceCard.finalizing),
   };
   return map[stage] || stage;
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("zh-CN", {
+function formatDate(dateString: string, lang: "zh" | "en"): string {
+  return new Date(dateString).toLocaleDateString(lang === "en" ? "en-US" : "zh-CN", {
     month: "short",
     day: "numeric",
   });
 }
 
 export default function LibraryPage() {
+  const { lang, t, ti } = useLang();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("all");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null);
+
+  const statusTabs: Array<{ value: StatusFilter; label: string }> = [
+    { value: "all", label: t(uiStrings.libraryPage.tabsAll) },
+    { value: "uploaded", label: t(uiStrings.libraryPage.tabsUploaded) },
+    { value: "processing", label: t(uiStrings.libraryPage.tabsProcessing) },
+    { value: "completed", label: t(uiStrings.libraryPage.tabsCompleted) },
+    { value: "failed", label: t(uiStrings.libraryPage.tabsFailed) },
+  ];
 
   const libraryQuery = useQuery({
     queryKey: ["library-documents", status],
@@ -119,20 +126,20 @@ export default function LibraryPage() {
 
   const confirmTitle =
     pendingDeleteAction?.kind === "hard"
-      ? "彻底删除文档"
+      ? t(uiStrings.libraryPage.hardDeleteTitle)
       : pendingDeleteAction?.kind === "batch"
-        ? "批量删除文档"
-        : "删除文档";
+        ? t(uiStrings.libraryPage.batchDeleteTitle)
+        : t(uiStrings.libraryPage.softDeleteTitle);
 
   const confirmMessage = (() => {
     if (!pendingDeleteAction) return "";
     if (pendingDeleteAction.kind === "hard") {
-      return `确定要彻底删除「${pendingDeleteAction.title}」吗？\n原始文件与索引数据都会被永久删除，此操作不可撤销。`;
+      return ti(uiStrings.libraryPage.hardDeleteConfirm, { title: pendingDeleteAction.title });
     }
     if (pendingDeleteAction.kind === "batch") {
-      return `确定要删除选中的 ${pendingDeleteAction.count} 个文档吗？\n本次执行的是软删除（保留原始文件）。`;
+      return ti(uiStrings.libraryPage.batchDeleteConfirm, { n: pendingDeleteAction.count });
     }
-    return `确定要删除「${pendingDeleteAction.title}」吗？\n将清除索引与数据库记录，但保留原始文件。`;
+    return ti(uiStrings.libraryPage.softDeleteConfirm, { title: pendingDeleteAction.title });
   })();
 
   const confirmVariant = pendingDeleteAction?.kind === "soft" ? "warning" : "danger";
@@ -172,10 +179,10 @@ export default function LibraryPage() {
         <div className="row">
           <strong className="text-base tracking-tight">Newbee Notebook</strong>
           <span className="muted">/</span>
-          <span className="muted">Library</span>
+          <span className="muted">{t(uiStrings.libraryPage.breadcrumbLibrary)}</span>
         </div>
         <Link href="/notebooks" className="btn btn-ghost">
-          返回 Notebooks
+          {t(uiStrings.libraryPage.backToNotebooks)}
         </Link>
       </header>
 
@@ -183,10 +190,10 @@ export default function LibraryPage() {
         {/* Title + Upload */}
         <div className="row-between">
           <h1 className="text-xl font-semibold tracking-tight" style={{ margin: 0 }}>
-            Library 文档管理
+            {t(uiStrings.libraryPage.title)}
           </h1>
           <label className="btn btn-primary" style={{ cursor: "pointer" }}>
-            上传文档
+            {t(uiStrings.libraryPage.uploadDocuments)}
             <input
               type="file"
               multiple
@@ -205,13 +212,13 @@ export default function LibraryPage() {
         {/* Upload pending indicator */}
         {uploadMutation.isPending && (
           <div className="badge badge-processing" style={{ alignSelf: "flex-start" }}>
-            上传中...
+            {t(uiStrings.common.uploadInProgress)}
           </div>
         )}
 
         {/* Tab filter */}
         <div className="tab-bar">
-          {STATUS_TABS.map((tab) => (
+          {statusTabs.map((tab) => (
             <button
               key={tab.value}
               className={`tab-item ${status === tab.value ? "active" : ""}`}
@@ -235,7 +242,7 @@ export default function LibraryPage() {
             </div>
           ) : rows.length === 0 ? (
             <div className="empty-state">
-              <span>暂无文档</span>
+              <span>{t(uiStrings.common.noDocuments)}</span>
             </div>
           ) : (
             <table className="data-table">
@@ -248,10 +255,10 @@ export default function LibraryPage() {
                       onChange={toggleAll}
                     />
                   </th>
-                  <th>文档标题</th>
-                  <th style={{ width: 140 }}>状态</th>
-                  <th style={{ width: 100 }}>上传时间</th>
-                  <th style={{ width: 120 }}>操作</th>
+                  <th>{t(uiStrings.libraryPage.tableTitle)}</th>
+                  <th style={{ width: 140 }}>{t(uiStrings.libraryPage.tableStatus)}</th>
+                  <th style={{ width: 100 }}>{t(uiStrings.libraryPage.tableUploadedAt)}</th>
+                  <th style={{ width: 120 }}>{t(uiStrings.libraryPage.tableActions)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -269,12 +276,12 @@ export default function LibraryPage() {
                     </td>
                     <td>
                       <span className={`badge ${statusBadgeClass(row.status)}`}>
-                        {statusLabel(row.status, row.processing_stage)}
+                        {statusLabel(row.status, row.processing_stage, t)}
                       </span>
                     </td>
                     <td>
                       <span className="muted" style={{ fontSize: 12 }}>
-                        {formatDate(row.created_at)}
+                        {formatDate(row.created_at, lang)}
                       </span>
                     </td>
                     <td>
@@ -291,7 +298,7 @@ export default function LibraryPage() {
                             });
                           }}
                         >
-                          删除
+                          {t(uiStrings.common.delete)}
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -305,7 +312,7 @@ export default function LibraryPage() {
                             });
                           }}
                         >
-                          彻底删除
+                          {t(uiStrings.libraryPage.hardDeleteLabel)}
                         </button>
                       </div>
                     </td>
@@ -320,7 +327,7 @@ export default function LibraryPage() {
         {selectedIds.size > 0 && (
           <div className="row">
             <span className="muted" style={{ fontSize: 13 }}>
-              已选 {selectedIds.size} 个
+              {ti(uiStrings.libraryPage.selectedCount, { n: selectedIds.size })}
             </span>
             <button
               className="btn btn-sm"
@@ -336,7 +343,7 @@ export default function LibraryPage() {
                 });
               }}
             >
-              批量删除
+              {t(uiStrings.libraryPage.batchDelete)}
             </button>
           </div>
         )}
@@ -346,7 +353,11 @@ export default function LibraryPage() {
           title={confirmTitle}
           message={confirmMessage}
           variant={confirmVariant}
-          confirmLabel={pendingDeleteAction?.kind === "hard" ? "确认彻底删除" : "确认删除"}
+          confirmLabel={
+            pendingDeleteAction?.kind === "hard"
+              ? t(uiStrings.libraryPage.confirmHardDelete)
+              : t(uiStrings.common.confirmDelete)
+          }
           confirmDisabled={deleteMutation.isPending}
           onCancel={() => setPendingDeleteAction(null)}
           onConfirm={handleConfirmDelete}

@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ApiError } from "@/lib/api/client";
 import { chatOnce } from "@/lib/api/chat";
 import { ApiListResponse, ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
 import { normalizeSources } from "@/lib/utils/sources";
@@ -101,6 +103,7 @@ async function findRecentPersistedAssistantReply(
 }
 
 export function useChatSession(notebookId: string) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const stream = useChatStream();
   const activeAssistantIdRef = useRef<string | null>(null);
@@ -287,7 +290,7 @@ export function useChatSession(notebookId: string) {
           visible: true,
           mode: explainMode,
           selectedText: context?.selected_text || "",
-          content: "\u8bf7\u5148\u521b\u5efa\u4f1a\u8bdd",
+          content: t(uiStrings.explainCard.createSessionFirst),
           isStreaming: false,
         });
         setStreaming(false, null);
@@ -367,6 +370,7 @@ export function useChatSession(notebookId: string) {
                 status: "done",
                 messageId: fallback.message_id,
                 sources: normalizeSources(fallback.sources),
+                sourcesType: mode === "chat" ? "tool_results" : "retrieval",
               });
             } catch (fallbackError) {
               const fallbackApiError = fallbackError as ApiError;
@@ -422,6 +426,7 @@ export function useChatSession(notebookId: string) {
                 if (activeAssistantIdRef.current) {
                   updateMessage(activeAssistantIdRef.current, {
                     sources: normalizeSources(event.sources),
+                    sourcesType: event.sources_type || "retrieval",
                   });
                 }
                 return;
@@ -664,6 +669,7 @@ export function useChatSession(notebookId: string) {
       scheduleThinkingTimeout,
       stream,
       updateMessage,
+      t,
     ]
   );
 

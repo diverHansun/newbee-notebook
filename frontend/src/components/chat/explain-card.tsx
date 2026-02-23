@@ -7,6 +7,8 @@ import type { ExplainCardState } from "@/stores/chat-store";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { useDraggable } from "@/lib/hooks/useDraggable";
 import { useResizable } from "@/lib/hooks/useResizable";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
 type ExplainCardProps = {
   card: ExplainCardState | null;
@@ -16,6 +18,7 @@ const DEFAULT_WIDTH = 520;
 const DEFAULT_HEIGHT = 680;
 
 export function ExplainCard({ card }: ExplainCardProps) {
+  const { t } = useLang();
   const [collapsed, setCollapsed] = useState(true);
   const prevCardKeyRef = useRef<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -78,7 +81,11 @@ export function ExplainCard({ card }: ExplainCardProps) {
 
   const hasContent = card?.visible && (card.content || card.isStreaming);
   const modeLabel =
-    card?.mode === "explain" ? "解释" : card?.mode === "conclude" ? "总结" : "解释/总结";
+    card?.mode === "explain"
+      ? t(uiStrings.explainCard.titleExplain)
+      : card?.mode === "conclude"
+        ? t(uiStrings.explainCard.titleConclude)
+        : t(uiStrings.explainCard.titleDefault);
   const badgeClass =
     card?.mode === "explain"
       ? "badge-explain"
@@ -103,7 +110,7 @@ export function ExplainCard({ card }: ExplainCardProps) {
     <div
       className="explain-card-pill"
       onClick={() => setCollapsed(false)}
-      title="点击展开解释/总结面板"
+      title={t(uiStrings.explainCard.expandTitle)}
       role="button"
       tabIndex={0}
       style={{ top: anchorTop, right: anchorRight }}
@@ -113,7 +120,7 @@ export function ExplainCard({ card }: ExplainCardProps) {
       </span>
       {hasContent && (
         <span className="explain-card-pill-hint">
-          {card.isStreaming ? "生成中..." : "点击展开"}
+          {card.isStreaming ? t(uiStrings.explainCard.loading) : t(uiStrings.explainCard.clickToExpand)}
         </span>
       )}
       {card?.isStreaming && <span className="streaming-dot" />}
@@ -155,7 +162,7 @@ export function ExplainCard({ card }: ExplainCardProps) {
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setCollapsed(true)}
-          title="收起"
+          title={t(uiStrings.explainCard.collapseTitle)}
         >
           ▲
         </button>
@@ -170,15 +177,15 @@ export function ExplainCard({ card }: ExplainCardProps) {
             style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}
           >
             {card?.isStreaming
-              ? "正在生成内容..."
-              : "选中文档中的文本，点击「解释」或「总结」"}
+              ? t(uiStrings.explainCard.loading)
+              : t(uiStrings.explainCard.selectHint)}
           </div>
         )}
         {card?.isStreaming && (
           <div className="row" style={{ marginTop: 8, gap: 6 }}>
             <span className="streaming-dot" />
             <span style={{ fontSize: 12, color: "hsl(var(--bee-amber))" }}>
-              生成中...
+              {t(uiStrings.explainCard.loading)}
             </span>
           </div>
         )}

@@ -6,6 +6,8 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { MessageItem } from "@/components/chat/message-item";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Session } from "@/lib/api/types";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import type { ChatMessage } from "@/stores/chat-store";
 
 type ChatPanelProps = {
@@ -43,9 +45,13 @@ export function ChatPanel({
   onDeleteSession,
   onOpenDocument,
 }: ChatPanelProps) {
+  const { t, ti } = useLang();
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
   const [sourceDocIds, setSourceDocIds] = useState<string[] | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const pendingSessionScrollRef = useRef<string | null>(null);
 
   const currentSession = useMemo(
     () => sessions.find((item) => item.session_id === currentSessionId) || null,
@@ -54,7 +60,66 @@ export function ChatPanel({
 
   useEffect(() => {
     setSourceDocIds(null);
+    pendingSessionScrollRef.current = currentSessionId;
+    isNearBottomRef.current = true;
   }, [currentSessionId]);
+
+  useEffect(() => {
+    if (!currentSessionId) return;
+    if (pendingSessionScrollRef.current !== currentSessionId) return;
+    if (messages.length === 0) return;
+
+    let rafId = 0;
+    const startedAt = window.performance.now();
+
+    const settleScrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+
+      const el = messageListRef.current;
+      const distanceToBottom = el
+        ? el.scrollHeight - el.scrollTop - el.clientHeight
+        : 0;
+
+      // History content (markdown/tables) can expand across frames after the
+      // first render. Keep nudging to bottom briefly until layout stabilizes.
+      if (distanceToBottom <= 100 || window.performance.now() - startedAt > 600) {
+        pendingSessionScrollRef.current = null;
+        isNearBottomRef.current = true;
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(settleScrollToBottom);
+    };
+
+    rafId = window.requestAnimationFrame(settleScrollToBottom);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [currentSessionId, messages.length]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!isStreaming) return;
+
+    let rafId = 0;
+    const tick = () => {
+      if (isNearBottomRef.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isStreaming]);
+
+  const handleMessageListScroll = () => {
+    const el = messageListRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceToBottom <= 100;
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 0 }}>
@@ -77,7 +142,7 @@ export function ChatPanel({
             onChange={(event) => onSwitchSession(event.target.value)}
           >
             <option value="" disabled>
-              选择会话
+              {t(uiStrings.chat.sessionSelect)}
             </option>
             {sessions.map((session) => (
               <option key={session.session_id} value={session.session_id}>
@@ -92,7 +157,7 @@ export function ChatPanel({
               style={{ color: "hsl(var(--destructive))" }}
               onClick={() => setPendingDeleteSession(currentSession)}
             >
-              删除
+              {t(uiStrings.chat.deleteSession)}
             </button>
           )}
         </div>
@@ -102,11 +167,11 @@ export function ChatPanel({
             type="button"
             onClick={() => onCreateSession()}
           >
-            + 新建会话
+            + {t(uiStrings.chat.newSession)}
           </button>
         </div>
         <div className="muted" style={{ fontSize: 11, width: "100%" }}>
-          {sessions.length} / 20 个会话
+          {ti(uiStrings.chat.sessionCount, { n: sessions.length })}
         </div>
       </div>
 
@@ -130,26 +195,17 @@ export function ChatPanel({
       )}
 
       {/* Message list */}
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: 16,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
+      <div ref={messageListRef} className="chat-message-list" onScroll={handleMessageListScroll}>
         {messages.length === 0 ? (
           <div className="empty-state" style={{ flex: 1 }}>
-            <span>还没有消息，先发第一条。</span>
+            <span>{t(uiStrings.chat.emptyMessages)}</span>
           </div>
         ) : (
           messages.map((message) => (
             <MessageItem key={message.id} message={message} onOpenDocument={onOpenDocument} />
           ))
         )}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} style={{ height: 0 }} aria-hidden />
       </div>
 
       {/* Chat input */}
@@ -169,14 +225,16 @@ export function ChatPanel({
 
       <ConfirmDialog
         open={Boolean(pendingDeleteSession)}
-        title="删除会话"
+        title={t(uiStrings.chat.deleteSession)}
         message={
           pendingDeleteSession
-            ? `确定要删除会话「${pendingDeleteSession.title || pendingDeleteSession.session_id.slice(0, 8)}」吗？\n该会话中的聊天记录将被删除。`
+            ? `${ti(uiStrings.chat.confirmDelete, {
+                name: pendingDeleteSession.title || pendingDeleteSession.session_id.slice(0, 8),
+              })}\n${t(uiStrings.chat.confirmDeleteSessionDetail)}`
             : ""
         }
         variant="danger"
-        confirmLabel="确认删除"
+        confirmLabel={t(uiStrings.common.confirmDelete)}
         onCancel={() => setPendingDeleteSession(null)}
         onConfirm={() => {
           if (!pendingDeleteSession) return;

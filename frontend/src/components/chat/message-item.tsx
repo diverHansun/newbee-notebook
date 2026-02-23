@@ -1,14 +1,17 @@
 "use client";
 
-import { zh, uiStrings } from "@/lib/i18n/strings";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
+import { DocumentReferencesCard, ToolResultsCard } from "@/components/chat/sources-card";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage } from "@/stores/chat-store";
-import { SourcesCard } from "@/components/chat/sources-card";
 
 type MessageItemProps = {
   message: ChatMessage;
   onOpenDocument: (documentId: string) => void;
 };
+
+type TranslateFn = (text: LocalizedString) => string;
 
 function modeBadgeClass(mode: string): string {
   const map: Record<string, string> = {
@@ -30,27 +33,33 @@ function modeLabel(mode: string): string {
   return map[mode] || mode;
 }
 
-function thinkingStageLabel(stage?: string | null): string {
-  if (stage === "retrieving") return zh(uiStrings.thinking.retrieving);
-  if (stage === "searching") return zh(uiStrings.thinking.searching);
-  if (stage === "generating") return zh(uiStrings.thinking.generating);
-  return zh(uiStrings.thinking.default);
+function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
+  if (stage === "retrieving") return t(uiStrings.thinking.retrieving);
+  if (stage === "searching") return t(uiStrings.thinking.searching);
+  if (stage === "generating") return t(uiStrings.thinking.generating);
+  return t(uiStrings.thinking.default);
 }
 
-function messageStatusLabel(status?: ChatMessage["status"]): string {
+function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
   if (!status) return "";
-  if (status === "streaming") return "生成中...";
-  if (status === "cancelled") return "已取消";
-  if (status === "error") return "错误";
+  if (status === "streaming") return t(uiStrings.messageStatus.streaming);
+  if (status === "cancelled") return t(uiStrings.messageStatus.cancelled);
+  if (status === "error") return t(uiStrings.messageStatus.error);
   return status;
 }
 
-function ThinkingIndicator({ stage }: { stage?: string | null }) {
+function ThinkingIndicator({
+  stage,
+  t,
+}: {
+  stage?: string | null;
+  t: TranslateFn;
+}) {
   return (
     <div className="thinking-indicator" role="status" aria-live="polite">
       <div className="thinking-indicator-header">
         <span className="thinking-indicator-ring" aria-hidden="true" />
-        <span className="thinking-indicator-label">{thinkingStageLabel(stage)}</span>
+        <span className="thinking-indicator-label">{thinkingStageLabel(t, stage)}</span>
       </div>
       <div className="thinking-indicator-progress" aria-hidden="true">
         <span className="thinking-indicator-progress-bar" />
@@ -60,6 +69,7 @@ function ThinkingIndicator({ stage }: { stage?: string | null }) {
 }
 
 export function MessageItem({ message, onOpenDocument }: MessageItemProps) {
+  const { t } = useLang();
   const isUser = message.role === "user";
   const showThinkingIndicator =
     !isUser && message.status === "streaming" && !message.content;
@@ -100,21 +110,21 @@ export function MessageItem({ message, onOpenDocument }: MessageItemProps) {
           </span>
           {message.status && message.status !== "done" && !showThinkingIndicator && (
             <span className="muted" style={{ fontSize: 11 }}>
-              {messageStatusLabel(message.status)}
+              {messageStatusLabel(t, message.status)}
             </span>
           )}
         </div>
 
         {/* Message bubble */}
         {showThinkingIndicator ? (
-          <ThinkingIndicator stage={message.thinkingStage} />
+          <ThinkingIndicator stage={message.thinkingStage} t={t} />
         ) : (
           <div
             className={`card${isUser ? "" : " message-bubble-assistant"}`}
             style={{
               padding: isUser ? "12px 16px" : "12px 16px 12px 14px",
-              background: isUser ? "hsl(var(--primary))" : "hsl(var(--card))",
-              color: isUser ? "hsl(var(--primary-foreground))" : "hsl(var(--card-foreground))",
+              background: isUser ? "hsl(var(--user-bubble-bg))" : "hsl(var(--card))",
+              color: isUser ? "hsl(var(--user-bubble-fg))" : "hsl(var(--card-foreground))",
             }}
           >
             {isUser ? (
@@ -130,7 +140,11 @@ export function MessageItem({ message, onOpenDocument }: MessageItemProps) {
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <SourcesCard sources={message.sources} onOpenDocument={onOpenDocument} />
+            {message.sourcesType === "tool_results" ? (
+              <ToolResultsCard sources={message.sources} />
+            ) : (
+              <DocumentReferencesCard sources={message.sources} onOpenDocument={onOpenDocument} />
+            )}
           </div>
         )}
       </div>

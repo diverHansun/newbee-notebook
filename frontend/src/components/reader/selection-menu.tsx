@@ -2,6 +2,8 @@
 
 import { useReaderStore } from "@/stores/reader-store";
 import { useEffect, useRef } from "react";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
 type SelectionMenuProps = {
   onExplain: (payload: { documentId: string; selectedText: string }) => void;
@@ -9,6 +11,7 @@ type SelectionMenuProps = {
 };
 
 export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
+  const { t } = useLang();
   const { selection, isMenuVisible, menuPosition, hideMenu } = useReaderStore();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +51,7 @@ export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
           });
         }}
       >
-        💡 解释
+        💡 {t(uiStrings.selectionMenu.explain)}
       </button>
       <button
         className="btn btn-ghost btn-sm"
@@ -61,7 +64,7 @@ export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
           });
         }}
       >
-        📝 总结
+        📝 {t(uiStrings.selectionMenu.conclude)}
       </button>
     </div>
   );

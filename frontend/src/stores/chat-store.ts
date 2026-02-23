@@ -13,6 +13,7 @@ export type ChatMessage = {
   thinkingStage?: string | null;
   messageId?: number;
   sources?: NormalizedSource[];
+  sourcesType?: "tool_results" | "retrieval" | "none";
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
 };

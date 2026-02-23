@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useMemo, useState } from "react";
 
 import { SourceSelector } from "@/components/chat/source-selector";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { NotebookDocumentItem } from "@/lib/api/types";
-import { zh, uiStrings } from "@/lib/i18n/strings";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
 type ChatInputProps = {
   notebookId: string;
@@ -57,6 +58,7 @@ export function ChatInput({
   onSend,
   onCancel,
 }: ChatInputProps) {
+  const { t, ti } = useLang();
   const [input, setInput] = useState("");
   const [sourceDocs, setSourceDocs] = useState<NotebookDocumentItem[]>([]);
   const [sourceDocsTotal, setSourceDocsTotal] = useState(0);
@@ -90,6 +92,10 @@ export function ChatInput({
   }, [sourceDocIds, sourceDocMap]);
   const visibleChipDocs = selectedSourceDocs.slice(0, 3);
   const hiddenChipCount = Math.max(0, selectedSourceDocs.length - visibleChipDocs.length);
+  const handleSourceDocsChange = useCallback((items: NotebookDocumentItem[], total: number) => {
+    setSourceDocs(items);
+    setSourceDocsTotal(total);
+  }, []);
 
   return (
     <form onSubmit={submit} className="chat-input-shell">
@@ -97,7 +103,7 @@ export function ChatInput({
         {sourceDocIds !== null && (
           <div className="chat-input-source-chips">
             {sourceDocIds.length === 0 ? (
-              <span className="chip">{zh(uiStrings.sourceSelector.noSourcesChip)}</span>
+              <span className="chip">{t(uiStrings.sourceSelector.noSourcesChip)}</span>
             ) : (
               <>
                 {visibleChipDocs.map((doc) => (
@@ -108,7 +114,7 @@ export function ChatInput({
                     <button
                       type="button"
                       className="chat-input-source-chip-remove"
-                      aria-label={`移除 ${doc.title}`}
+                      aria-label={ti(uiStrings.chat.removeDoc, { title: doc.title })}
                       onClick={() => {
                         if (sourceDocIds === null) return;
                         const next = sourceDocIds.filter((id) => id !== doc.document_id);
@@ -120,7 +126,7 @@ export function ChatInput({
                   </span>
                 ))}
                 {hiddenChipCount > 0 && (
-                  <span className="chip">{`+${hiddenChipCount} ${zh(uiStrings.sourceSelector.more)}`}</span>
+                  <span className="chip">{`+${hiddenChipCount} ${t(uiStrings.sourceSelector.more)}`}</span>
                 )}
               </>
             )}
@@ -129,7 +135,11 @@ export function ChatInput({
 
         <textarea
           className="textarea chat-input-textarea"
-          placeholder={mode === "ask" ? "输入问题（基于文档检索）..." : "输入消息..."}
+          placeholder={
+            mode === "ask"
+              ? t(uiStrings.chat.inputPlaceholderAsk)
+              : t(uiStrings.chat.inputPlaceholderChat)
+          }
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -153,19 +163,16 @@ export function ChatInput({
               selectedIds={sourceDocIds}
               onChange={onSourceDocIdsChange}
               disabled={isStreaming}
-              onDocsChange={(items, total) => {
-                setSourceDocs(items);
-                setSourceDocsTotal(total);
-              }}
+              onDocsChange={handleSourceDocsChange}
             />
             {mode === "ask" && askBlocked && (
               <span className="badge badge-failed" style={{ fontSize: 10 }}>
-                RAG 不可用
+                {t(uiStrings.chat.ragUnavailable)}
               </span>
             )}
             {sourceDocsTotal > 0 && sourceDocIds !== null && sourceDocIds.length > 0 && (
               <span className="muted" style={{ fontSize: 11 }}>
-                {`${sourceDocIds.length}/${sourceDocsTotal} 文档`}
+                {ti(uiStrings.chat.docCount, { selected: sourceDocIds.length, total: sourceDocsTotal })}
               </span>
             )}
           </div>
@@ -176,8 +183,8 @@ export function ChatInput({
               type={isStreaming ? "button" : "submit"}
               onClick={isStreaming ? onCancel : undefined}
               disabled={!isStreaming && sendDisabled}
-              aria-label={isStreaming ? "停止生成" : "发送消息"}
-              title={isStreaming ? "停止生成" : "发送消息"}
+              aria-label={isStreaming ? t(uiStrings.chat.stopGenerate) : t(uiStrings.chat.sendMessage)}
+              title={isStreaming ? t(uiStrings.chat.stopGenerate) : t(uiStrings.chat.sendMessage)}
             >
               {isStreaming ? <StopIcon /> : <SendIcon />}
             </button>

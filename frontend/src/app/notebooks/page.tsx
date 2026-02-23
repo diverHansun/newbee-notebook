@@ -7,19 +7,30 @@ import { useState } from "react";
 
 import { createNotebook, deleteNotebook, listNotebooks } from "@/lib/api/notebooks";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 
-function formatRelativeTime(dateString: string): string {
+function formatRelativeTime(
+  dateString: string,
+  lang: "zh" | "en",
+  t: ReturnType<typeof useLang>["t"],
+  ti: ReturnType<typeof useLang>["ti"]
+): string {
   const now = Date.now();
   const then = new Date(dateString).getTime();
   const diff = now - then;
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "刚刚";
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 1) return t(uiStrings.notebooksPage.justNow);
+  if (minutes < 60) return ti(uiStrings.notebooksPage.minutesAgo, { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return ti(uiStrings.notebooksPage.hoursAgo, { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  return new Date(dateString).toLocaleDateString("zh-CN");
+  if (days < 30) {
+    return ti(days === 1 ? uiStrings.notebooksPage.daysAgo : uiStrings.notebooksPage.daysAgoPlural, {
+      n: days,
+    });
+  }
+  return new Date(dateString).toLocaleDateString(lang === "en" ? "en-US" : "zh-CN");
 }
 
 function statusBadgeClass(status: string): string {
@@ -35,6 +46,7 @@ function statusBadgeClass(status: string): string {
 }
 
 export default function NotebooksPage() {
+  const { lang, t, ti } = useLang();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -78,7 +90,7 @@ export default function NotebooksPage() {
           <strong className="text-base tracking-tight">Newbee Notebook</strong>
         </div>
         <Link href="/library" className="btn btn-ghost">
-          查看 Library
+          {t(uiStrings.notebooksPage.viewLibrary)}
         </Link>
       </header>
 
@@ -86,7 +98,7 @@ export default function NotebooksPage() {
       <main className="page-main stack-md">
         <div className="row-between">
           <h1 className="text-xl font-semibold tracking-tight" style={{ margin: 0 }}>
-            我的 Notebooks
+            {t(uiStrings.notebooksPage.title)}
           </h1>
         </div>
 
@@ -106,16 +118,16 @@ export default function NotebooksPage() {
         {/* Empty state */}
         {!notebooksQuery.isLoading && notebooks.length === 0 && (
           <div className="empty-state">
-            <strong>还没有 Notebook</strong>
+            <strong>{t(uiStrings.notebooksPage.emptyTitle)}</strong>
             <p style={{ maxWidth: 360 }}>
-              Notebook 是你的 AI 知识助手工作区。先上传文档到 Library，再创建 Notebook 开始对话。
+              {t(uiStrings.notebooksPage.emptyDesc)}
             </p>
             <div className="row">
               <button className="btn btn-primary" type="button" onClick={() => setShowCreate(true)}>
-                创建 Notebook
+                {t(uiStrings.notebooksPage.createNotebook)}
               </button>
               <Link href="/library" className="btn">
-                查看 Library
+                {t(uiStrings.notebooksPage.viewLibrary)}
               </Link>
             </div>
           </div>
@@ -149,11 +161,17 @@ export default function NotebooksPage() {
                     </span>
                   )}
                   <div className="row" style={{ marginTop: "auto" }}>
-                    <span className="badge badge-default">{notebook.document_count} 文档</span>
-                    <span className="badge badge-default">{notebook.session_count} 会话</span>
+                    <span className="badge badge-default">
+                      {ti(uiStrings.notebooksPage.documentsCount, { n: notebook.document_count })}
+                    </span>
+                    <span className="badge badge-default">
+                      {ti(uiStrings.notebooksPage.sessionsCount, { n: notebook.session_count })}
+                    </span>
                   </div>
                   <span className="muted" style={{ fontSize: 11 }}>
-                    更新于 {formatRelativeTime(notebook.updated_at)}
+                    {ti(uiStrings.notebooksPage.updatedAt, {
+                      value: formatRelativeTime(notebook.updated_at, lang, t, ti),
+                    })}
                   </span>
                 </Link>
                 <div
@@ -176,7 +194,7 @@ export default function NotebooksPage() {
                       });
                     }}
                   >
-                    删除
+                    {t(uiStrings.common.delete)}
                   </button>
                 </div>
               </div>
@@ -206,33 +224,33 @@ export default function NotebooksPage() {
             >
               <div className="stack-md">
                 <div className="row-between">
-                  <strong className="text-base font-semibold">创建新 Notebook</strong>
+                  <strong className="text-base font-semibold">{t(uiStrings.notebooksPage.createNewNotebook)}</strong>
                   <button className="btn btn-ghost btn-icon" type="button" onClick={() => setShowCreate(false)}>
                     ✕
                   </button>
                 </div>
                 <div className="stack-sm">
-                  <label className="muted" style={{ fontSize: 12 }}>标题 *</label>
+                  <label className="muted" style={{ fontSize: 12 }}>{t(uiStrings.notebooksPage.titleLabel)}</label>
                   <input
                     className="input"
-                    placeholder="输入 Notebook 标题..."
+                    placeholder={t(uiStrings.notebooksPage.titlePlaceholder)}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     autoFocus
                   />
                 </div>
                 <div className="stack-sm">
-                  <label className="muted" style={{ fontSize: 12 }}>描述（可选）</label>
+                  <label className="muted" style={{ fontSize: 12 }}>{t(uiStrings.notebooksPage.descriptionLabel)}</label>
                   <textarea
                     className="textarea"
-                    placeholder="简要描述这个 Notebook 的用途..."
+                    placeholder={t(uiStrings.notebooksPage.descriptionPlaceholder)}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
                 <div className="row" style={{ justifyContent: "flex-end" }}>
                   <button className="btn" type="button" onClick={() => setShowCreate(false)}>
-                    取消
+                    {t(uiStrings.common.cancel)}
                   </button>
                   <button
                     className="btn btn-primary"
@@ -240,7 +258,7 @@ export default function NotebooksPage() {
                     disabled={!title.trim() || createMutation.isPending}
                     onClick={() => createMutation.mutate()}
                   >
-                    创建
+                    {t(uiStrings.notebooksPage.create)}
                   </button>
                 </div>
               </div>
@@ -250,14 +268,16 @@ export default function NotebooksPage() {
 
         <ConfirmDialog
           open={Boolean(pendingDeleteNotebook)}
-          title="删除笔记本"
+          title={t(uiStrings.notebooksPage.deleteNotebookTitle)}
           message={
             pendingDeleteNotebook
-              ? `确定要删除笔记本「${pendingDeleteNotebook.title}」吗？\n所有相关会话将被一并删除，此操作不可撤销。`
+              ? `${ti(uiStrings.notebooksPage.deleteNotebookConfirm, {
+                  title: pendingDeleteNotebook.title,
+                })}\n${t(uiStrings.notebooksPage.deleteNotebookConfirmDetail)}`
               : ""
           }
           variant="danger"
-          confirmLabel="确认删除"
+          confirmLabel={t(uiStrings.common.confirmDelete)}
           confirmDisabled={deleteMutation.isPending}
           onCancel={() => setPendingDeleteNotebook(null)}
           onConfirm={() => {
@@ -271,10 +291,10 @@ export default function NotebooksPage() {
       {/* Bottom action bar */}
       <div className="bottom-bar">
         <button className="btn btn-primary" type="button" onClick={() => setShowCreate(true)}>
-          + 创建 Notebook
+          {t(uiStrings.notebooksPage.createNotebookBottom)}
         </button>
         <Link href="/library" className="btn">
-          查看 Library
+          {t(uiStrings.notebooksPage.viewLibrary)}
         </Link>
       </div>
     </div>
