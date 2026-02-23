@@ -3,6 +3,10 @@ import asyncio
 from newbee_notebook.api.routers.chat import SSEEvent, heartbeat_generator
 
 
+def test_sse_event_thinking_formats_stage():
+    assert SSEEvent.thinking("searching") == 'data: {"type": "thinking", "stage": "searching"}\n\n'
+
+
 def test_heartbeat_generator_emits_heartbeat_while_waiting_for_first_event():
     async def delayed_stream():
         await asyncio.sleep(0.12)

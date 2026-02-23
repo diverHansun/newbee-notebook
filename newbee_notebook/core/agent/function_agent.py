@@ -45,6 +45,8 @@ class FunctionAgentRunner(AgentRunner):
             system_prompt=system_prompt,
             verbose=verbose,
         )
+        self._had_tool_calls = False
+        self._last_tool_calls: List[str] = []
     
     async def run(
         self,
@@ -60,6 +62,8 @@ class FunctionAgentRunner(AgentRunner):
         Returns:
             Agent response as string
         """
+        self._had_tool_calls = False
+        self._last_tool_calls = []
         try:
             # Run the workflow and await the handler
             handler = self._agent.run(
@@ -89,6 +93,8 @@ class FunctionAgentRunner(AgentRunner):
         tool_calls = getattr(result, "tool_calls", None)
         if tool_calls:
             tool_names = [getattr(tc, "tool_name", "unknown") for tc in tool_calls]
+            self._had_tool_calls = len(tool_names) > 0
+            self._last_tool_calls = tool_names
             print(f"[FunctionAgentRunner] tools used: {', '.join(tool_names)}")
 
         if hasattr(result, "response"):
@@ -108,5 +114,13 @@ class FunctionAgentRunner(AgentRunner):
     def agent(self) -> SupportsWorkflowAgent:
         """Get the underlying FunctionAgent instance."""
         return self._agent
+
+    @property
+    def had_tool_calls(self) -> bool:
+        return self._had_tool_calls
+
+    @property
+    def last_tool_calls(self) -> List[str]:
+        return list(self._last_tool_calls)
 
 

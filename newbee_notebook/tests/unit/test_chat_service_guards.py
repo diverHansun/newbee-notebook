@@ -36,6 +36,20 @@ class _DummyStreamingSessionManager(_DummySessionManager):
         ]
 
 
+class _DummyPhaseStreamingSessionManager(_DummySessionManager):
+    async def start_session(self, session_id: str):
+        return None
+
+    async def chat_stream(self, **kwargs):
+        yield "__PHASE__:searching"
+        yield "__PHASE__:generating"
+        yield "hello "
+        yield "world"
+
+    def get_last_sources(self):
+        return []
+
+
 class _CancelledInnerStream:
     def __init__(self):
         self.closed = False
@@ -76,6 +90,8 @@ class _DummyNonStreamFailsButStreamWorksSessionManager(_DummySessionManager):
         raise APIConnectionError("Connection error")
 
     async def chat_stream(self, **kwargs):
+        yield "__PHASE__:searching"
+        yield "__PHASE__:generating"
         yield "hello "
         yield "fallback"
 
@@ -122,6 +138,15 @@ def test_get_notebook_scope_returns_completed_and_status_counts():
     assert counts["converted"] == 1
     assert sorted(blocking) == ["doc-2", "doc-3", "doc-4"]
     assert titles == {"doc-1": "Doc 1"}
+
+
+def test_apply_source_filter_preserves_semantics():
+    service = _build_service()
+    all_ids = ["doc-1", "doc-2", "doc-3"]
+
+    assert service._apply_source_filter(all_ids, None) == all_ids
+    assert service._apply_source_filter(all_ids, []) == []
+    assert service._apply_source_filter(all_ids, ["doc-3", "doc-x", "doc-1"]) == ["doc-3", "doc-1"]
 
 
 def test_validate_mode_guard_raises_document_processing_error_for_ask():
@@ -235,6 +260,45 @@ def test_chat_stream_persists_messages_before_done_event():
 
     assert observed_types[:2] == ["start", "content"]
     assert "done" in observed_types
+
+
+def test_chat_stream_emits_thinking_events_for_phase_markers():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyPhaseStreamingSessionManager(),
+    )
+
+    async def _collect_types_and_stages():
+        observed = []
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="chat"):
+            observed.append((event["type"], event.get("stage")))
+            if event["type"] == "done":
+                break
+        return observed
+
+    observed = asyncio.run(_collect_types_and_stages())
+    assert observed[0] == ("start", None)
+    assert ("thinking", "searching") in observed
+    assert ("thinking", "generating") in observed
+    assert any(event_type == "content" for event_type, _ in observed)
 
 
 def test_chat_stream_closes_upstream_generator_on_cancelled_error():

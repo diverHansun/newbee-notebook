@@ -20,6 +20,11 @@ from newbee_notebook.core.common.node_utils import extract_document_id
 
 # Backward-compatible exported prompt constant for tests
 DEFAULT_CHAT_SYSTEM_PROMPT = load_prompt("chat.md")
+PHASE_MARKER = "__PHASE__"
+
+
+def build_phase_marker(stage: str) -> str:
+    return f"{PHASE_MARKER}:{stage}"
 
 
 class ChatMode(BaseMode):
@@ -156,68 +161,88 @@ class ChatMode(BaseMode):
         return []
 
     async def _stream(self, message: str) -> AsyncGenerator[str, None]:
-        """Stream response directly from LLM.
+        """Stream response in two phases to preserve tool-call correctness.
 
-        This bypasses the FunctionAgent to provide true token-by-token streaming.
-        Tool calling is not supported in streaming mode; use _process() for that.
-
-        Args:
-            message: User message
-
-        Yields:
-            Response text chunks
+        Phase 1 runs the FunctionAgent (with tools) to resolve intermediate steps.
+        Phase 2 streams the final user-facing answer from the LLM using the agent
+        result as context.
         """
         await self._ensure_runner_scope()
 
-        # Build messages list with history
-        messages: List[ChatMessage] = []
+        chat_history: List[ChatMessage] = []
+        if self._memory is not None:
+            chat_history = self._memory.get_all()
+        chat_history = self._augment_chat_history_with_ec_summary(chat_history)
 
-        # Add system prompt
+        yield build_phase_marker("searching")
+
+        agent_response = await self._runner.run(
+            message=message,
+            chat_history=chat_history,
+        )
+        had_tool_calls = bool(getattr(self._runner, "had_tool_calls", False))
+        looks_like_tool_intent = (
+            "<tool_call>" in agent_response
+            or "</tool_call>" in agent_response
+            or "\"tool_name\"" in agent_response
+            or "\"function\"" in agent_response
+        )
+
+        yield build_phase_marker("generating")
+
+        # Fast path: agent already produced a direct answer without invoking tools.
+        if not had_tool_calls and not looks_like_tool_intent:
+            self._last_sources = self._collect_sources(message)
+            if self._memory is not None and agent_response:
+                self._memory.put(ChatMessage(role=MessageRole.USER, content=message))
+                self._memory.put(ChatMessage(role=MessageRole.ASSISTANT, content=agent_response))
+
+            chunk_size = 20
+            for idx in range(0, len(agent_response), chunk_size):
+                yield agent_response[idx: idx + chunk_size]
+            return
+
+        # Phase 2: stream a polished final answer grounded in the agent output.
+        messages: List[ChatMessage] = []
         system_prompt = self._config.system_prompt or ""
         if system_prompt:
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=system_prompt))
 
-        # Add chat history
         if self._memory is not None:
-            history = self._memory.get_all()
-            messages.extend(history)
+            messages.extend(self._memory.get_all())
         messages = self._augment_chat_history_with_ec_summary(messages)
 
-        # Add current user message
         messages.append(ChatMessage(role=MessageRole.USER, content=message))
+        messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=agent_response))
+        messages.append(
+            ChatMessage(
+                role=MessageRole.USER,
+                content="请基于以上信息，直接回答用户的问题。",
+            )
+        )
 
-        # Collect sources before streaming (non-blocking retrieval)
         self._last_sources = self._collect_sources(message)
 
-        # Stream response from LLM
         full_response = ""
-        try:
-            # Use astream_chat for true streaming
-            stream_response = await self._llm.astream_chat(messages)
-            async for chunk in stream_response:
-                # Extract delta content from chunk
-                delta = getattr(chunk, "delta", None)
-                if delta:
-                    full_response += delta
-                    yield delta
-                else:
-                    # Fallback: try message.content for final chunk
-                    content = ""
-                    if hasattr(chunk, "message"):
-                        content = getattr(chunk.message, "content", "") or ""
-                    elif hasattr(chunk, "content"):
-                        content = chunk.content or ""
-                    if content and content != full_response:
-                        # Only yield new content
-                        new_content = content[len(full_response):]
-                        if new_content:
-                            full_response = content
-                            yield new_content
-        except Exception as exc:
-            raise
-            return
+        stream_response = await self._llm.astream_chat(messages)
+        async for chunk in stream_response:
+            delta = getattr(chunk, "delta", None)
+            if delta:
+                full_response += delta
+                yield delta
+                continue
 
-        # Store in memory
+            content = ""
+            if hasattr(chunk, "message"):
+                content = getattr(chunk.message, "content", "") or ""
+            elif hasattr(chunk, "content"):
+                content = chunk.content or ""
+            if content and content != full_response:
+                new_content = content[len(full_response):]
+                if new_content:
+                    full_response = content
+                    yield new_content
+
         if self._memory is not None and full_response:
             self._memory.put(ChatMessage(role=MessageRole.USER, content=message))
             self._memory.put(ChatMessage(role=MessageRole.ASSISTANT, content=full_response))

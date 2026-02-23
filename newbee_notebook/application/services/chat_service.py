@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS = 90
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
+STREAM_PHASE_MARKER_PREFIX = "__PHASE__:"
 
 
 @dataclass
@@ -90,6 +91,15 @@ class ChatService:
         if mode in {ModeType.EXPLAIN, ModeType.CONCLUDE}:
             return STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES
         return STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT
+
+    @staticmethod
+    def _parse_stream_phase_marker(chunk: str) -> Optional[str]:
+        if not isinstance(chunk, str):
+            return None
+        if not chunk.startswith(STREAM_PHASE_MARKER_PREFIX):
+            return None
+        stage = chunk[len(STREAM_PHASE_MARKER_PREFIX):].strip()
+        return stage or None
     
     async def chat(
         self,
@@ -98,6 +108,7 @@ class ChatService:
         mode: str = "chat",
         context: Optional[dict] = None,
         include_ec_context: Optional[bool] = None,
+        source_document_ids: Optional[List[str]] = None,
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -127,7 +138,14 @@ class ChatService:
 
         # Notebook scope documents
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
-        mode_context = self._build_mode_context(context, completed_doc_titles)
+        allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
+        allowed_doc_id_set = set(allowed_doc_ids)
+        filtered_doc_titles = {
+            doc_id: title
+            for doc_id, title in completed_doc_titles.items()
+            if doc_id in allowed_doc_id_set
+        }
+        mode_context = self._build_mode_context(context, filtered_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
             allowed_doc_ids=allowed_doc_ids,
@@ -255,6 +273,8 @@ class ChatService:
                     )
                 except StopAsyncIteration:
                     break
+                if self._parse_stream_phase_marker(chunk):
+                    continue
                 full_response += chunk
         finally:
             try:
@@ -296,6 +316,7 @@ class ChatService:
         mode: str = "chat",
         context: Optional[dict] = None,
         include_ec_context: Optional[bool] = None,
+        source_document_ids: Optional[List[str]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -312,6 +333,7 @@ class ChatService:
         Yields:
             Event dictionaries with type and data:
             - {"type": "start", "message_id": int}
+            - {"type": "thinking", "stage": str}
             - {"type": "content", "delta": str}
             - {"type": "sources", "sources": list}
             - {"type": "done"}
@@ -329,7 +351,14 @@ class ChatService:
         )
         await self._session_manager.start_session(session_id=session_id)
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
-        mode_context = self._build_mode_context(context, completed_doc_titles)
+        allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
+        allowed_doc_id_set = set(allowed_doc_ids)
+        filtered_doc_titles = {
+            doc_id: title
+            for doc_id, title in completed_doc_titles.items()
+            if doc_id in allowed_doc_id_set
+        }
+        mode_context = self._build_mode_context(context, filtered_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
             allowed_doc_ids=allowed_doc_ids,
@@ -342,6 +371,9 @@ class ChatService:
         message_id = session.message_count + 1
 
         yield {"type": "start", "message_id": message_id}
+        if mode_enum != ModeType.CHAT:
+            # Chat mode emits finer-grained phase markers from ChatMode._stream().
+            yield {"type": "thinking", "stage": "retrieving"}
 
         full_response = ""
         sources: List[dict] = []
@@ -366,6 +398,10 @@ class ChatService:
                     )
                 except StopAsyncIteration:
                     break
+                phase_stage = self._parse_stream_phase_marker(chunk)
+                if phase_stage:
+                    yield {"type": "thinking", "stage": phase_stage}
+                    continue
                 full_response += chunk
                 yield {"type": "content", "delta": chunk}
 
@@ -491,6 +527,17 @@ class ChatService:
                 raise ValueError("selected_text requires a document_id to ensure traceable sources")
             if self._session_manager.vector_index is None:
                 raise RuntimeError("Vector index is not available")
+
+    @staticmethod
+    def _apply_source_filter(
+        all_doc_ids: List[str],
+        source_document_ids: Optional[List[str]],
+    ) -> List[str]:
+        """Apply user-selected source filtering at the notebook scope boundary."""
+        if source_document_ids is None:
+            return all_doc_ids
+        valid_set = set(all_doc_ids)
+        return [doc_id for doc_id in source_document_ids if doc_id in valid_set]
 
     async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str], Dict[str, str]]:
         """Collect retrieval scope and processing status overview for notebook refs."""

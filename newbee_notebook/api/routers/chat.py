@@ -40,6 +40,10 @@ class ChatRequest(BaseModel):
         None,
         description="Optional override for including recent explain/conclude context in chat/ask requests.",
     )
+    source_document_ids: Optional[list[str]] = Field(
+        None,
+        description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -70,6 +74,10 @@ class SSEEvent:
     @staticmethod
     def content(delta: str) -> str:
         return SSEEvent.format("content", {"delta": delta})
+
+    @staticmethod
+    def thinking(stage: str = "thinking") -> str:
+        return SSEEvent.format("thinking", {"stage": stage})
     
     @staticmethod
     def sources(sources: list) -> str:
@@ -223,6 +231,7 @@ async def chat(
             mode=request.mode,
             context=request.context.dict() if request.context else None,
             include_ec_context=request.include_ec_context,
+            source_document_ids=request.source_document_ids,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -292,6 +301,7 @@ async def chat_stream(
         mode=request.mode,
         context=request.context.dict() if request.context else None,
         include_ec_context=request.include_ec_context,
+        source_document_ids=request.source_document_ids,
     )
     stream = sse_adapter(business_stream)
     
