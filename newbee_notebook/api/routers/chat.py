@@ -6,6 +6,7 @@ Handles chat-related API endpoints including streaming responses.
 
 import asyncio
 import json
+from contextlib import suppress
 from typing import Optional, AsyncGenerator, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -20,6 +21,7 @@ from newbee_notebook.domain.value_objects.mode_type import ModeType
 
 
 router = APIRouter(prefix="/chat")
+SSE_HEARTBEAT_INTERVAL_SECONDS = 10
 
 
 # =============================================================================
@@ -145,17 +147,41 @@ async def heartbeat_generator(
     Yields:
         Events from original stream, with heartbeats interspersed.
     """
-    import time
-    last_heartbeat = time.time()
-    
-    async for event in stream:
-        yield event
-        
-        # Check if heartbeat needed
-        current_time = time.time()
-        if current_time - last_heartbeat >= heartbeat_interval:
-            yield SSEEvent.heartbeat()
-            last_heartbeat = current_time
+    stream_iter = stream.__aiter__()
+    next_event_task: Optional[asyncio.Task] = None
+
+    try:
+        next_event_task = asyncio.create_task(stream_iter.__anext__())
+
+        while True:
+            done, _ = await asyncio.wait(
+                {next_event_task},
+                timeout=heartbeat_interval,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if not done:
+                # Emit heartbeat while waiting for the next business event.
+                # This prevents idle SSE connections from being closed by
+                # proxies/load balancers during long retrieval/LLM gaps.
+                yield SSEEvent.heartbeat()
+                continue
+
+            try:
+                event = next_event_task.result()
+            except StopAsyncIteration:
+                break
+
+            yield event
+            next_event_task = asyncio.create_task(stream_iter.__anext__())
+    finally:
+        if next_event_task and not next_event_task.done():
+            next_event_task.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await next_event_task
+
+        with suppress(Exception):
+            await stream.aclose()
 
 
 # =============================================================================
@@ -202,6 +228,14 @@ async def chat(
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        # Surface upstream OpenAI-compatible API status errors (e.g. 429) as
+        # explicit HTTP responses instead of generic 500s.
+        module_name = e.__class__.__module__
+        status_code = getattr(e, "status_code", None)
+        if module_name.startswith("openai") and isinstance(status_code, int):
+            raise HTTPException(status_code=status_code, detail=str(e))
+        raise
 
     return ChatResponse(
         session_id=result.session_id,
@@ -262,7 +296,10 @@ async def chat_stream(
     stream = sse_adapter(business_stream)
     
     # Add heartbeat
-    stream_with_heartbeat = heartbeat_generator(stream, heartbeat_interval=15)
+    stream_with_heartbeat = heartbeat_generator(
+        stream,
+        heartbeat_interval=SSE_HEARTBEAT_INTERVAL_SECONDS,
+    )
     
     return StreamingResponse(
         stream_with_heartbeat,

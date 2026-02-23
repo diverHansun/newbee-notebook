@@ -28,6 +28,9 @@ from newbee_notebook.exceptions import DocumentProcessingError
 
 
 logger = logging.getLogger(__name__)
+NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS = 90
+STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
+STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
 
 
 @dataclass
@@ -79,6 +82,14 @@ class ChatService:
         self._message_repo = message_repo
         self._session_manager = session_manager
         self._vector_index = session_manager.vector_index
+
+    @staticmethod
+    def _get_stream_chunk_timeout_seconds(mode: ModeType) -> int:
+        # explain/conclude requests may have a longer retrieval/prompting gap
+        # before the first token arrives on some providers (e.g. qwen).
+        if mode in {ModeType.EXPLAIN, ModeType.CONCLUDE}:
+            return STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES
+        return STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT
     
     async def chat(
         self,
@@ -129,14 +140,39 @@ class ChatService:
         # Fetch context-based chunks (used for sources/references)
         context_chunks = await self._get_context_chunks(context) if context else []
 
-        # Generate response via SessionManager + ModeSelector
-        response_content, sources = await self._session_manager.chat(
-            message=message,
-            mode_type=mode_enum,
-            allowed_document_ids=allowed_doc_ids,
-            context=mode_context,
-            include_ec_context=effective_include_ec_context,
-        )
+        # Generate response via SessionManager + ModeSelector.
+        # If the provider-specific non-stream path fails with a transport error,
+        # fall back to aggregating the streaming path so /chat can still succeed.
+        try:
+            response_content, sources = await self._session_manager.chat(
+                message=message,
+                mode_type=mode_enum,
+                allowed_document_ids=allowed_doc_ids,
+                context=mode_context,
+                include_ec_context=effective_include_ec_context,
+            )
+        except Exception as exc:
+            if not self._is_llm_transport_error(exc):
+                raise
+
+            logger.warning(
+                "Non-stream chat failed; falling back to aggregated stream. session=%s mode=%s error=%s",
+                session_id,
+                mode_enum.value,
+                exc,
+            )
+            try:
+                response_content, sources = await self._chat_via_stream_fallback(
+                    message=message,
+                    mode_enum=mode_enum,
+                    allowed_doc_ids=allowed_doc_ids,
+                    mode_context=mode_context,
+                    include_ec_context=effective_include_ec_context,
+                )
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"LLM request failed in non-stream and stream fallback paths: {fallback_exc}"
+                ) from fallback_exc
         message_id = session.message_count + 1
 
         # Persist messages
@@ -191,6 +227,67 @@ class ChatService:
                 for s in sources
             ],
         )
+
+    async def _chat_via_stream_fallback(
+        self,
+        message: str,
+        mode_enum: ModeType,
+        allowed_doc_ids: List[str],
+        mode_context: Optional[dict],
+        include_ec_context: bool,
+    ) -> tuple[str, List[dict]]:
+        """Aggregate SessionManager.chat_stream() as a fallback for /chat."""
+        stream = self._session_manager.chat_stream(
+            message=message,
+            mode_type=mode_enum,
+            allowed_document_ids=allowed_doc_ids,
+            context=mode_context,
+            include_ec_context=include_ec_context,
+        )
+
+        full_response = ""
+        try:
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        stream.__anext__(),
+                        timeout=NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS,
+                    )
+                except StopAsyncIteration:
+                    break
+                full_response += chunk
+        finally:
+            try:
+                await stream.aclose()
+            except Exception:
+                pass
+
+        return full_response, self._session_manager.get_last_sources() or []
+
+    @staticmethod
+    def _is_llm_transport_error(exc: Exception) -> bool:
+        """Best-effort classifier for transient provider/network failures."""
+        seen = set()
+        current: Optional[BaseException] = exc
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            cls_name = current.__class__.__name__
+            module_name = current.__class__.__module__
+
+            if module_name.startswith("openai") and cls_name in {"APIConnectionError", "APITimeoutError"}:
+                return True
+
+            if module_name.startswith("httpx") or module_name.startswith("httpcore"):
+                return True
+
+            if cls_name in {"APIConnectionError", "APITimeoutError"}:
+                return True
+
+            if isinstance(current, (asyncio.TimeoutError, TimeoutError, ConnectionError)):
+                return True
+
+            current = current.__cause__ or current.__context__
+        return False
     
     async def chat_stream(
         self,
@@ -249,6 +346,8 @@ class ChatService:
         full_response = ""
         sources: List[dict] = []
         context_chunks = await self._get_context_chunks(context) if context else []
+        stream_ready_to_finish = False
+        stream = None
 
         try:
             stream = self._session_manager.chat_stream(
@@ -258,9 +357,13 @@ class ChatService:
                 context=mode_context,
                 include_ec_context=effective_include_ec_context,
             )
+            chunk_timeout_seconds = self._get_stream_chunk_timeout_seconds(mode_enum)
             while True:
                 try:
-                    chunk = await asyncio.wait_for(stream.__anext__(), timeout=60)
+                    chunk = await asyncio.wait_for(
+                        stream.__anext__(),
+                        timeout=chunk_timeout_seconds,
+                    )
                 except StopAsyncIteration:
                     break
                 full_response += chunk
@@ -272,9 +375,9 @@ class ChatService:
             sources = await self._filter_valid_sources(sources)
 
             yield {"type": "sources", "sources": sources or []}
-            yield {"type": "done"}
 
-            # Persist messages after successful streaming
+            # Persist messages before "done" so client-side connection close does not
+            # race with database writes and cause missing chat history.
             user_msg = Message(
                 session_id=session_id,
                 mode=mode_enum,
@@ -307,10 +410,23 @@ class ChatService:
                 if refs:
                     await self._reference_repo.create_batch(refs)
 
+            # Mark completion before yielding "done" so a client-side connection
+            # close immediately after receiving the event is treated as normal.
+            stream_ready_to_finish = True
+            yield {"type": "done"}
+
         except asyncio.TimeoutError:
             yield {"type": "error", "error_code": "timeout", "message": "Stream timeout"}
         except asyncio.CancelledError:
-            logger.info(f"Stream cancelled for session {session_id}")
+            if stream is not None:
+                try:
+                    await stream.aclose()
+                except Exception:
+                    logger.debug("Failed to close upstream stream cleanly for session %s", session_id)
+            if stream_ready_to_finish:
+                logger.debug("Stream connection closed after completion for session %s", session_id)
+            else:
+                logger.info("Stream cancelled before completion for session %s", session_id)
             return
         except DocumentProcessingError as exc:
             payload = {"type": "error", "error_code": exc.error_code, "message": exc.message}

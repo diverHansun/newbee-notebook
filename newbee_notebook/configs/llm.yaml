@@ -3,7 +3,7 @@
 llm:
   # Provider selection: 'zhipu', 'qwen', 'openai'
   # Can be overridden by LLM_PROVIDER
-  provider: zhipu
+  provider: qwen
 
   # ZhipuAI GLM family (default)
   zhipu:
@@ -19,9 +19,9 @@ llm:
 
   # Alibaba Cloud DashScope Qwen via OpenAI-compatible endpoint
   qwen:
-    model: qwen-plus
+    model: qwen3.5-plus
     temperature: 0.7
-    max_tokens: 8192
+    max_tokens: 32768
     top_p: 0.8
     api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
     request_timeout: 60.0

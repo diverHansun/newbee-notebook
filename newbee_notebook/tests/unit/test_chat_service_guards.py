@@ -16,6 +16,73 @@ class _DummySessionManager:
         self.vector_index = object()
 
 
+class _DummyStreamingSessionManager(_DummySessionManager):
+    async def start_session(self, session_id: str):
+        return None
+
+    async def chat_stream(self, **kwargs):
+        yield "hello "
+        yield "world"
+
+    def get_last_sources(self):
+        return [
+            {
+                "document_id": "doc-1",
+                "chunk_id": "chunk-1",
+                "text": "source text",
+                "title": "Doc 1",
+                "score": 0.9,
+            }
+        ]
+
+
+class _CancelledInnerStream:
+    def __init__(self):
+        self.closed = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise asyncio.CancelledError()
+
+    async def aclose(self):
+        self.closed = True
+
+
+class _DummyCancelledStreamingSessionManager(_DummySessionManager):
+    def __init__(self):
+        super().__init__()
+        self.inner_stream = _CancelledInnerStream()
+
+    async def start_session(self, session_id: str):
+        return None
+
+    def chat_stream(self, **kwargs):
+        return self.inner_stream
+
+    def get_last_sources(self):
+        return []
+
+
+class _DummyNonStreamFailsButStreamWorksSessionManager(_DummySessionManager):
+    async def start_session(self, session_id: str):
+        return None
+
+    async def chat(self, **kwargs):
+        class APIConnectionError(Exception):
+            __module__ = "openai"
+
+        raise APIConnectionError("Connection error")
+
+    async def chat_stream(self, **kwargs):
+        yield "hello "
+        yield "fallback"
+
+    def get_last_sources(self):
+        return []
+
+
 def _build_service(ref_repo=None, document_repo=None):
     return ChatService(
         session_repo=AsyncMock(),
@@ -122,3 +189,119 @@ def test_filter_valid_sources_logs_missing_doc_once(caplog):
     ]
     assert len(warning_messages) == 1
     assert "Skipping 2 source item(s)" in warning_messages[0]
+
+
+def test_chat_stream_persists_messages_before_done_event():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    document_repo.get.return_value = SimpleNamespace(document_id="doc-1")
+
+    message_repo = AsyncMock()
+    reference_repo = AsyncMock()
+    session_manager = _DummyStreamingSessionManager()
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=reference_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=session_manager,
+    )
+
+    observed_types: list[str] = []
+
+    async def _consume_until_done():
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="chat"):
+            observed_types.append(event["type"])
+            if event["type"] == "done":
+                assert message_repo.create_batch.await_count == 1
+                assert session_repo.increment_message_count.await_count == 1
+                assert reference_repo.create_batch.await_count == 1
+                break
+
+    asyncio.run(_consume_until_done())
+
+    assert observed_types[:2] == ["start", "content"]
+    assert "done" in observed_types
+
+
+def test_chat_stream_closes_upstream_generator_on_cancelled_error():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+
+    session_manager = _DummyCancelledStreamingSessionManager()
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=session_manager,
+    )
+
+    async def _consume():
+        events = []
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="chat"):
+            events.append(event)
+        return events
+
+    events = asyncio.run(_consume())
+
+    assert events == [{"type": "start", "message_id": 1}]
+    assert session_manager.inner_stream.closed is True
+
+
+def test_chat_falls_back_to_aggregated_stream_on_nonstream_transport_error():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+
+    message_repo = AsyncMock()
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummyNonStreamFailsButStreamWorksSessionManager(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="chat"))
+
+    assert result.content == "hello fallback"
+    assert message_repo.create_batch.await_count == 1
+    assert session_repo.increment_message_count.await_count == 1

@@ -195,7 +195,9 @@ async def get_session_manager_singleton(
     session_repo: SessionRepositoryImpl,
     message_repo: MessageRepositoryImpl,
 ):
-    llm = get_llm_singleton()
+    # Use a fresh LLM client per request. A shared singleton client can leak
+    # transport state across aborted stream + immediate fallback requests.
+    llm = build_llm()
     pg_index = await get_pg_index_singleton()
     es_index = await get_es_index_singleton()
     return SessionManager(
