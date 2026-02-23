@@ -7,7 +7,7 @@ search against the document index.
 
 import json
 import os
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 
 from elasticsearch import Elasticsearch
 from llama_index.core.tools import FunctionTool
@@ -51,25 +51,25 @@ def _extract_hit_document_id(source: dict) -> Optional[str]:
     return None
 
 
-def _es_search(
+def _coerce_metadata(metadata: object) -> dict:
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    if not isinstance(metadata, dict):
+        return {}
+    return metadata
+
+
+def _es_search_with_raw(
     query: str,
     index_name: str = "newbee_notebook_docs",
     max_results: int = 5,
     es_url: Optional[str] = None,
     allowed_doc_ids: Optional[List[str]] = None,
-) -> str:
-    """Search documents using Elasticsearch BM25.
-
-    Args:
-        query: Search query string
-        index_name: Elasticsearch index name
-        max_results: Maximum number of results to return
-        es_url: Elasticsearch URL (defaults to ELASTICSEARCH_URL env var)
-        allowed_doc_ids: Optional notebook-scoped document IDs
-
-    Returns:
-        Formatted search results as a string
-    """
+) -> Tuple[List[dict], str]:
+    """Search documents using Elasticsearch BM25 and return raw + formatted results."""
     es_url = es_url or os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
     allowed_set: Optional[Set[str]]
     if allowed_doc_ids is None:
@@ -77,14 +77,12 @@ def _es_search(
     else:
         allowed_set = set(allowed_doc_ids)
         if not allowed_set:
-            return "No notebook-scoped documents are available for knowledge base search."
+            return [], "No notebook-scoped documents are available for knowledge base search."
 
-    # Create Elasticsearch client
     es = Elasticsearch([es_url])
 
-    # Check if index exists
     if not es.indices.exists(index=index_name):
-        return f"Index '{index_name}' does not exist. Please index documents first."
+        return [], f"Index '{index_name}' does not exist. Please index documents first."
 
     bool_query = {
         "must": [
@@ -115,7 +113,6 @@ def _es_search(
             }
         ]
 
-    # Execute BM25 search
     response = es.search(
         index=index_name,
         body={
@@ -125,53 +122,78 @@ def _es_search(
         },
     )
 
-    # Format results
     hits = response.get("hits", {}).get("hits", [])
 
     if not hits:
         if allowed_set is None:
-            return "No documents found matching your query in the knowledge base."
-        return "No notebook-scoped documents found matching your query in the knowledge base."
+            return [], "No documents found matching your query in the knowledge base."
+        return [], "No notebook-scoped documents found matching your query in the knowledge base."
 
-    results = []
+    formatted_results = []
+    raw_results: List[dict] = []
     result_index = 0
+
     for hit in hits:
-        score = hit.get("_score", 0)
-        source = hit.get("_source", {})
+        score = hit.get("_score", 0) or 0
+        source = hit.get("_source", {}) or {}
         doc_id = _extract_hit_document_id(source)
         if allowed_set is not None and doc_id not in allowed_set:
             continue
 
         result_index += 1
-        # Get content from various possible fields
-        content = (
-            source.get("content")
-            or source.get("text")
-            or "No content available"
-        )
-
-        # Truncate long content
+        content = source.get("content") or source.get("text") or "No content available"
         if len(content) > 500:
             content = content[:500] + "..."
 
-        metadata = source.get("metadata", {})
-        if isinstance(metadata, str):
-            try:
-                metadata = json.loads(metadata)
-            except json.JSONDecodeError:
-                metadata = {}
-        if not isinstance(metadata, dict):
-            metadata = {}
+        metadata = _coerce_metadata(source.get("metadata", {}))
         doc_title = metadata.get("title", metadata.get("file_name", f"Document {result_index}"))
 
-        results.append(
-            f"{result_index}. [{doc_title}] (score: {score:.2f})\n"
+        raw_results.append(
+            {
+                "document_id": doc_id or "",
+                "title": str(doc_title),
+                "score": float(score),
+                "text": content,
+                "chunk_id": "",
+            }
+        )
+        formatted_results.append(
+            f"{result_index}. [{doc_title}] (score: {float(score):.2f})\n"
             f"   {content}\n"
         )
 
-    if not results:
-        return "No notebook-scoped documents found matching your query in the knowledge base."
-    return "\n".join(results)
+    if not formatted_results:
+        return [], "No notebook-scoped documents found matching your query in the knowledge base."
+    return raw_results, "\n".join(formatted_results)
+
+
+def _es_search(
+    query: str,
+    index_name: str = "newbee_notebook_docs",
+    max_results: int = 5,
+    es_url: Optional[str] = None,
+    allowed_doc_ids: Optional[List[str]] = None,
+) -> str:
+    """Search documents using Elasticsearch BM25.
+
+    Args:
+        query: Search query string
+        index_name: Elasticsearch index name
+        max_results: Maximum number of results to return
+        es_url: Elasticsearch URL (defaults to ELASTICSEARCH_URL env var)
+        allowed_doc_ids: Optional notebook-scoped document IDs
+
+    Returns:
+        Formatted search results as a string
+    """
+    _, formatted = _es_search_with_raw(
+        query=query,
+        index_name=index_name,
+        max_results=max_results,
+        es_url=es_url,
+        allowed_doc_ids=allowed_doc_ids,
+    )
+    return formatted
 
 
 class ElasticsearchSearchTool:
@@ -209,6 +231,7 @@ class ElasticsearchSearchTool:
         )
         self.allowed_doc_ids = allowed_doc_ids
         self._tool: Optional[FunctionTool] = None
+        self._last_raw_results: List[dict] = []
 
     def get_tool(self) -> FunctionTool:
         """Get the FunctionTool instance for use with agents.
@@ -237,13 +260,22 @@ class ElasticsearchSearchTool:
         Returns:
             Formatted search results
         """
-        return _es_search(
+        raw_results, formatted = _es_search_with_raw(
             query=query,
             index_name=self.index_name,
             max_results=self.max_results,
             es_url=self.es_url,
             allowed_doc_ids=self.allowed_doc_ids,
         )
+        self._last_raw_results = raw_results
+        return formatted
+
+    @property
+    def last_raw_results(self) -> List[dict]:
+        return list(self._last_raw_results)
+
+    def clear_last_raw_results(self) -> None:
+        self._last_raw_results = []
 
 
 def build_es_search_tool(

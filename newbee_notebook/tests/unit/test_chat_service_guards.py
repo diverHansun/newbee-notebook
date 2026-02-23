@@ -149,6 +149,17 @@ def test_apply_source_filter_preserves_semantics():
     assert service._apply_source_filter(all_ids, ["doc-3", "doc-x", "doc-1"]) == ["doc-3", "doc-1"]
 
 
+def test_filter_sources_by_mode_quality_keeps_ask_sources_when_scores_absent():
+    sources = [
+        {"document_id": "doc-1", "chunk_id": "c1", "text": "a", "score": 0.0},
+        {"document_id": "doc-1", "chunk_id": "c2", "text": "b"},
+    ]
+
+    filtered = ChatService._filter_sources_by_mode_quality(sources, ModeType.ASK)
+
+    assert filtered == sources
+
+
 def test_validate_mode_guard_raises_document_processing_error_for_ask():
     service = _build_service()
 

@@ -32,6 +32,7 @@ NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS = 90
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
 STREAM_PHASE_MARKER_PREFIX = "__PHASE__:"
+ASK_SOURCE_SCORE_THRESHOLD = 0.3
 
 
 @dataclass
@@ -211,7 +212,14 @@ class ChatService:
 
         # Merge sources with user selection/context chunks for consistency
         sources = self._merge_sources_with_context(sources or [], context, context_chunks)
+        sources_before_validation = list(sources)
         sources = await self._filter_valid_sources(sources)
+        sources = self._filter_sources_by_mode_quality(sources, mode_enum)
+        sources = self._restore_ask_display_sources_if_empty(
+            sources=sources,
+            prevalidated_sources=sources_before_validation,
+            mode_enum=mode_enum,
+        )
 
         if sources:
             refs = [
@@ -408,9 +416,21 @@ class ChatService:
             sources = self._merge_sources_with_context(
                 self._session_manager.get_last_sources(), context, context_chunks
             )
+            sources_before_validation = list(sources)
             sources = await self._filter_valid_sources(sources)
+            sources = self._filter_sources_by_mode_quality(sources, mode_enum)
+            sources = self._restore_ask_display_sources_if_empty(
+                sources=sources,
+                prevalidated_sources=sources_before_validation,
+                mode_enum=mode_enum,
+            )
 
-            yield {"type": "sources", "sources": sources or []}
+            if sources:
+                yield {
+                    "type": "sources",
+                    "sources": sources,
+                    "sources_type": self._resolve_sources_type(mode_enum),
+                }
 
             # Persist messages before "done" so client-side connection close does not
             # race with database writes and cause missing chat history.
@@ -538,6 +558,72 @@ class ChatService:
             return all_doc_ids
         valid_set = set(all_doc_ids)
         return [doc_id for doc_id in source_document_ids if doc_id in valid_set]
+
+    @staticmethod
+    def _resolve_sources_type(mode_enum: ModeType) -> str:
+        if mode_enum == ModeType.CHAT:
+            return "tool_results"
+        return "retrieval"
+
+    @staticmethod
+    def _filter_sources_by_mode_quality(sources: List[dict], mode_enum: ModeType) -> List[dict]:
+        if not sources:
+            return []
+        if mode_enum != ModeType.ASK:
+            return sources
+
+        scored_values: List[float] = []
+        scored_items: List[tuple[dict, float]] = []
+        for src in sources:
+            try:
+                score = float(src.get("score", 0.0) or 0.0)
+            except Exception:
+                score = 0.0
+            scored_items.append((src, score))
+            scored_values.append(score)
+
+        # Some retrievers/mode paths may omit scores or report 0.0 while still
+        # returning valid source nodes. In that case, do not drop all citations.
+        if not any(score > 0 for score in scored_values):
+            return sources
+
+        filtered: List[dict] = []
+        for src, score in scored_items:
+            if score >= ASK_SOURCE_SCORE_THRESHOLD:
+                filtered.append(src)
+        return filtered
+
+    @staticmethod
+    def _restore_ask_display_sources_if_empty(
+        sources: List[dict],
+        prevalidated_sources: List[dict],
+        mode_enum: ModeType,
+    ) -> List[dict]:
+        if sources or mode_enum != ModeType.ASK or not prevalidated_sources:
+            return sources
+
+        # Display-only fallback: keep retrieval snippets for UI even if document_id
+        # validation failed, while reference persistence still skips invalid IDs.
+        display_candidates = ChatService._filter_sources_by_mode_quality(
+            list(prevalidated_sources),
+            mode_enum,
+        )
+        restored: List[dict] = []
+        for src in display_candidates:
+            title = str(src.get("title", "") or "")
+            text = str(src.get("text", "") or "")
+            if not title and not text:
+                continue
+            restored.append(
+                {
+                    "document_id": str(src.get("document_id", "") or ""),
+                    "chunk_id": str(src.get("chunk_id", "") or ""),
+                    "title": title,
+                    "text": text,
+                    "score": src.get("score", 0.0),
+                }
+            )
+        return restored
 
     async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str], Dict[str, str]]:
         """Collect retrieval scope and processing status overview for notebook refs."""

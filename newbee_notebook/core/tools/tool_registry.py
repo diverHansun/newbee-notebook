@@ -8,7 +8,7 @@ from newbee_notebook.core.tools.tavily_tools import (
     build_tavily_news_tool,
     build_tavily_crawl_tool,
 )
-from newbee_notebook.core.tools.es_search_tool import build_es_search_tool
+from newbee_notebook.core.tools.es_search_tool import ElasticsearchSearchTool
 from newbee_notebook.core.tools.zhipu_tools import (
     build_zhipu_web_search_tool,
     build_zhipu_web_crawl_tool,
@@ -49,13 +49,14 @@ def build_tool_registry(
     es_url = os.getenv("ELASTICSEARCH_URL", None)
     if es_url:
         try:
-            tools.append(
-                build_es_search_tool(
-                    index_name=es_index_name or "newbee_notebook_docs",
-                    es_url=es_url,
-                    allowed_doc_ids=list(allowed_doc_ids) if allowed_doc_ids is not None else None,
-                )
+            es_tool_wrapper = ElasticsearchSearchTool(
+                index_name=es_index_name or "newbee_notebook_docs",
+                es_url=es_url,
+                allowed_doc_ids=list(allowed_doc_ids) if allowed_doc_ids is not None else None,
             )
+            es_tool = es_tool_wrapper.get_tool()
+            setattr(es_tool, "_newbee_es_search_wrapper", es_tool_wrapper)
+            tools.append(es_tool)
             print("[Tools] Elasticsearch knowledge_base_search enabled for Chat")
         except Exception as e:
             print(f"[Tools] Warning: Failed to initialize Elasticsearch tool: {e}")

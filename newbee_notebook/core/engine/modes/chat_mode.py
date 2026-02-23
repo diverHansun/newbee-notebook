@@ -1,4 +1,4 @@
-"""Chat mode implementation using FunctionAgent.
+﻿"""Chat mode implementation using FunctionAgent.
 
 This mode uses the FunctionAgent (Workflow-based) to handle standard
 conversation with tool support.
@@ -59,6 +59,7 @@ class ChatMode(BaseMode):
         self._agent = None  # lazily built FunctionAgentRunner
         self._vector_index = vector_index
         self._tool_scope_signature: Optional[tuple[str, ...]] = None
+        self._es_search_tool_wrapper = None
     
     def _default_config(self) -> ModeConfig:
         """Return default Chat mode configuration."""
@@ -76,10 +77,46 @@ class ChatMode(BaseMode):
             List of tools (web search, etc.)
         """
         # Get search tools
-        return build_tool_registry(
+        tools = build_tool_registry(
             es_index_name=self._es_index_name,
             allowed_doc_ids=self.allowed_doc_ids,
         )
+        self._es_search_tool_wrapper = None
+        for tool in tools:
+            wrapper = getattr(tool, "_newbee_es_search_wrapper", None)
+            if wrapper is not None:
+                self._es_search_tool_wrapper = wrapper
+                break
+        return tools
+
+    def _clear_tool_result_sources(self) -> None:
+        if self._es_search_tool_wrapper and hasattr(self._es_search_tool_wrapper, "clear_last_raw_results"):
+            self._es_search_tool_wrapper.clear_last_raw_results()
+
+    def _collect_tool_result_sources(self) -> List[dict]:
+        if self._es_search_tool_wrapper is None:
+            return []
+        raw_results = getattr(self._es_search_tool_wrapper, "last_raw_results", []) or []
+        sources: List[dict] = []
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            sources.append(
+                {
+                    "document_id": item.get("document_id", ""),
+                    "chunk_id": item.get("chunk_id", "") or "",
+                    "text": item.get("text", "") or "",
+                    "score": float(item.get("score", 0.0) or 0.0),
+                    "title": item.get("title", "") or "",
+                }
+            )
+        return sources
+
+    def _update_last_sources_after_agent(self, had_tool_calls: bool) -> None:
+        if not had_tool_calls:
+            self._last_sources = []
+            return
+        self._last_sources = self._collect_tool_result_sources()
 
     def _current_scope_signature(self) -> Optional[tuple[str, ...]]:
         if self.allowed_doc_ids is None:
@@ -128,6 +165,7 @@ class ChatMode(BaseMode):
         chat_history = self._augment_chat_history_with_ec_summary(chat_history)
         
         # Run agent through runner (SRP: runner handles LlamaIndex API)
+        self._clear_tool_result_sources()
         try:
             response = await self._runner.run(
                 message=message,
@@ -150,7 +188,8 @@ class ChatMode(BaseMode):
         if self._memory is not None:
             self._memory.put(ChatMessage(role=MessageRole.USER, content=message))
             self._memory.put(ChatMessage(role=MessageRole.ASSISTANT, content=response))
-        self._last_sources = self._collect_sources(message)
+        had_tool_calls = bool(getattr(self._runner, "had_tool_calls", False))
+        self._update_last_sources_after_agent(had_tool_calls)
         return response
     
     @property
@@ -176,6 +215,7 @@ class ChatMode(BaseMode):
 
         yield build_phase_marker("searching")
 
+        self._clear_tool_result_sources()
         agent_response = await self._runner.run(
             message=message,
             chat_history=chat_history,
@@ -192,7 +232,7 @@ class ChatMode(BaseMode):
 
         # Fast path: agent already produced a direct answer without invoking tools.
         if not had_tool_calls and not looks_like_tool_intent:
-            self._last_sources = self._collect_sources(message)
+            self._update_last_sources_after_agent(False)
             if self._memory is not None and agent_response:
                 self._memory.put(ChatMessage(role=MessageRole.USER, content=message))
                 self._memory.put(ChatMessage(role=MessageRole.ASSISTANT, content=agent_response))
@@ -217,11 +257,11 @@ class ChatMode(BaseMode):
         messages.append(
             ChatMessage(
                 role=MessageRole.USER,
-                content="请基于以上信息，直接回答用户的问题。",
+                content="Based on the information above, directly answer the user's question.",
             )
         )
 
-        self._last_sources = self._collect_sources(message)
+        self._update_last_sources_after_agent(had_tool_calls)
 
         full_response = ""
         stream_response = await self._llm.astream_chat(messages)

@@ -80,8 +80,11 @@ class SSEEvent:
         return SSEEvent.format("thinking", {"stage": stage})
     
     @staticmethod
-    def sources(sources: list) -> str:
-        return SSEEvent.format("sources", {"sources": sources})
+    def sources(sources: list, sources_type: Optional[str] = None) -> str:
+        payload = {"sources": sources}
+        if sources_type:
+            payload["sources_type"] = sources_type
+        return SSEEvent.format("sources", payload)
     
     @staticmethod
     def done() -> str:
