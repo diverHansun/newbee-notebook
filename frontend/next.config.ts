@@ -11,12 +11,16 @@ const nextConfig: NextConfig = {
   } as NextConfig["experimental"],
   async rewrites() {
     const apiHost = process.env.INTERNAL_API_URL || "http://localhost:8000";
-    return [
-      {
-        source: "/api/v1/:path*",
-        destination: `${apiHost}/api/v1/:path*`,
-      },
-    ];
+    return {
+      // Keep the catch-all backend proxy as a fallback so local app/api route
+      // handlers (for streaming and long /chat requests) win first.
+      fallback: [
+        {
+          source: "/api/v1/:path*",
+          destination: `${apiHost}/api/v1/:path*`,
+        },
+      ],
+    };
   },
 };
 

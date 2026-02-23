@@ -8,6 +8,7 @@ import { SelectionMenu } from "@/components/reader/selection-menu";
 import { getDocument, getDocumentContent } from "@/lib/api/documents";
 import { ApiError } from "@/lib/api/client";
 import { useTextSelection } from "@/lib/hooks/useTextSelection";
+import { useReaderStore } from "@/stores/reader-store";
 
 type DocumentReaderProps = {
   documentId: string;
@@ -23,6 +24,8 @@ export function DocumentReader({
   onConclude,
 }: DocumentReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isSelecting = useReaderStore((state) => state.isSelecting);
 
   const documentQuery = useQuery({
     queryKey: ["document", documentId],
@@ -120,6 +123,8 @@ export function DocumentReader({
           content={contentQuery.data?.content || ""}
           documentId={documentId}
           containerRef={viewerRef}
+          scrollRootRef={scrollContainerRef}
+          freezeLazyLoad={isSelecting}
         />
       </div>
     );
@@ -152,7 +157,7 @@ export function DocumentReader({
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: "auto" }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflow: "auto" }}>
         {renderBody()}
       </div>
 

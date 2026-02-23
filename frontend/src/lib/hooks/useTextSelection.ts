@@ -12,12 +12,18 @@ type UseTextSelectionOptions = {
 export function useTextSelection({ containerRef, documentId }: UseTextSelectionOptions) {
   const isSelectingRef = useRef(false);
   const startedInContainerRef = useRef(false);
-  const { setSelection, showMenu, hideMenu } = useReaderStore();
+  const { setSelection, setIsSelecting, showMenu, hideMenu } = useReaderStore();
 
   useEffect(() => {
     const clearSelectionUi = () => {
       setSelection(null);
       hideMenu();
+    };
+
+    const resetSelectingState = () => {
+      isSelectingRef.current = false;
+      startedInContainerRef.current = false;
+      setIsSelecting(false);
     };
 
     const isTargetInsideSelectionMenu = (target: EventTarget | null) => {
@@ -112,31 +118,48 @@ export function useTextSelection({ containerRef, documentId }: UseTextSelectionO
         return;
       }
 
+      const isPrimaryButton = event.button === 0;
       const startedInContainer = isTargetInsideContainer(event.target);
       startedInContainerRef.current = startedInContainer;
-      isSelectingRef.current = startedInContainer;
+      isSelectingRef.current = startedInContainer && isPrimaryButton;
+      setIsSelecting(startedInContainer && isPrimaryButton);
       clearSelectionUi();
     };
 
     const handleMouseUp = () => {
       const shouldFinalizeSelection = startedInContainerRef.current || isSelectingRef.current;
-      isSelectingRef.current = false;
-      startedInContainerRef.current = false;
+      resetSelectingState();
 
       if (!shouldFinalizeSelection) return;
       showMenuFromCurrentSelection();
     };
 
+    const handlePointerCancelLike = () => {
+      if (!startedInContainerRef.current && !isSelectingRef.current) return;
+      resetSelectingState();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handlePointerCancelLike();
+      }
+    };
+
     document.addEventListener("selectionchange", handleSelectionChange);
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("blur", handlePointerCancelLike);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("scroll", hideMenu, true);
 
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("blur", handlePointerCancelLike);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("scroll", hideMenu, true);
+      resetSelectingState();
     };
-  }, [containerRef, documentId, hideMenu, setSelection, showMenu]);
+  }, [containerRef, documentId, hideMenu, setIsSelecting, setSelection, showMenu]);
 }

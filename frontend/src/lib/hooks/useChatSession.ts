@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ApiError } from "@/lib/api/client";
+import { chatOnce } from "@/lib/api/chat";
 import { ApiListResponse, ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
@@ -12,6 +13,7 @@ import { ChatMessage, useChatStore } from "@/stores/chat-store";
 
 const SESSION_QUERY_KEY = (notebookId: string) => ["sessions", notebookId] as const;
 const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] as const;
+const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
@@ -36,6 +38,65 @@ function generateDefaultSessionTitle(sessions: Session[]): string {
   }
 
   return `会话 ${nextIndex}`;
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof DOMException) {
+    return error.name === "AbortError";
+  }
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function shouldAttemptStreamFallback(error: unknown): boolean {
+  if (isAbortLikeError(error)) return false;
+
+  if (error instanceof ApiError) {
+    // Backend HTTP errors are already explicit responses and usually indicate
+    // business/provider failures. Fallback should target transport/protocol
+    // failures after a stream request starts, not retry every server error.
+    return error.errorCode === "E_STREAM_BODY";
+  }
+
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  return true;
+}
+
+async function findRecentPersistedAssistantReply(
+  sessionId: string,
+  mode: MessageMode,
+  userContent: string,
+  startedAtMs: number
+): Promise<SessionMessage | null> {
+  const response = await listSessionMessages(sessionId, {
+    mode,
+    limit: 20,
+    offset: 0,
+  });
+  const messages = response.data;
+  const normalizedUserContent = userContent.trim();
+
+  for (let idx = messages.length - 1; idx >= 1; idx -= 1) {
+    const assistant = messages[idx];
+    const user = messages[idx - 1];
+    if (!assistant || !user) continue;
+    if (assistant.role !== "assistant" || user.role !== "user") continue;
+    if (assistant.mode !== mode || user.mode !== mode) continue;
+    if (user.content.trim() !== normalizedUserContent) continue;
+
+    const assistantMs = Date.parse(assistant.created_at);
+    if (Number.isFinite(assistantMs)) {
+      if (assistantMs + STREAM_FALLBACK_RECENT_WINDOW_MS < startedAtMs) {
+        continue;
+      }
+    }
+    return assistant;
+  }
+
+  return null;
 }
 
 export function useChatSession(notebookId: string) {
@@ -214,6 +275,9 @@ export function useChatSession(notebookId: string) {
       }
       const createdAt = new Date().toISOString();
       const userMessageId = `local-user-${Date.now()}`;
+      const streamStartedAtMs = Date.now();
+      let streamReceivedDone = false;
+      let streamReceivedErrorEvent = false;
 
       if (mode === "chat" || mode === "ask") {
         addMessage({
@@ -269,6 +333,7 @@ export function useChatSession(notebookId: string) {
                 return;
               }
               if (event.type === "done") {
+                streamReceivedDone = true;
                 if (activeAssistantIdRef.current) {
                   updateMessage(activeAssistantIdRef.current, { status: "done" });
                 }
@@ -277,6 +342,7 @@ export function useChatSession(notebookId: string) {
                 return;
               }
               if (event.type === "error") {
+                streamReceivedErrorEvent = true;
                 if (activeAssistantIdRef.current) {
                   updateMessage(activeAssistantIdRef.current, {
                     status: "error",
@@ -288,15 +354,71 @@ export function useChatSession(notebookId: string) {
               }
             },
             onError: (error) => {
-              const err = error as ApiError;
-              if (activeAssistantIdRef.current) {
-                updateMessage(activeAssistantIdRef.current, {
-                  status: "error",
-                  content: `[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`,
-                });
+              if (streamReceivedDone || streamReceivedErrorEvent) {
+                setStreaming(false, null);
+                return;
               }
-              setStreaming(false, null);
-              activeAssistantIdRef.current = null;
+
+              const assistantLocalId = activeAssistantIdRef.current;
+              const err = error as ApiError;
+              if (!assistantLocalId || !shouldAttemptStreamFallback(error)) {
+                if (assistantLocalId) {
+                  updateMessage(assistantLocalId, {
+                    status: "error",
+                    content: `[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`,
+                  });
+                }
+                setStreaming(false, null);
+                activeAssistantIdRef.current = null;
+                return;
+              }
+
+              setStreaming(true, null);
+              void (async () => {
+                try {
+                  const persistedReply = await findRecentPersistedAssistantReply(
+                    sessionId,
+                    mode,
+                    message,
+                    streamStartedAtMs
+                  );
+
+                  if (persistedReply) {
+                    updateMessage(assistantLocalId, {
+                      content: persistedReply.content,
+                      status: "done",
+                      messageId: persistedReply.message_id,
+                    });
+                    return;
+                  }
+
+                  const fallback = await chatOnce(notebookId, {
+                    message,
+                    mode,
+                    session_id: sessionId,
+                    context: context || null,
+                  });
+
+                  updateMessage(assistantLocalId, {
+                    content: fallback.content,
+                    status: "done",
+                    messageId: fallback.message_id,
+                    sources: normalizeSources(fallback.sources),
+                  });
+                } catch (fallbackError) {
+                  const fallbackApiError = fallbackError as ApiError;
+                  updateMessage(assistantLocalId, {
+                    status: "error",
+                    content: `[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
+                      fallbackApiError.message || "Fallback error"
+                    }`,
+                  });
+                } finally {
+                  setStreaming(false, null);
+                  activeAssistantIdRef.current = null;
+                  queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
+                }
+              })();
             },
             onDone: () => {
               queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
@@ -330,6 +452,7 @@ export function useChatSession(notebookId: string) {
               return;
             }
             if (event.type === "done") {
+              streamReceivedDone = true;
               setExplainCard((prev) =>
                 prev
                   ? {
@@ -348,6 +471,7 @@ export function useChatSession(notebookId: string) {
               return;
             }
             if (event.type === "error") {
+              streamReceivedErrorEvent = true;
               appendExplainContent(`\n\n[${event.error_code}] ${event.message}`);
               setExplainCard((prev) =>
                 prev
@@ -361,17 +485,98 @@ export function useChatSession(notebookId: string) {
             }
           },
           onError: (error) => {
+            if (streamReceivedDone || streamReceivedErrorEvent) {
+              setStreaming(false, null);
+              setExplainCard((prev) => (prev ? { ...prev, isStreaming: false } : prev));
+              return;
+            }
+
             const err = error as ApiError;
-            appendExplainContent(`\n\n[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`);
-            setExplainCard((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    isStreaming: false,
-                  }
-                : prev
-            );
-            setStreaming(false, null);
+            if (!shouldAttemptStreamFallback(error)) {
+              appendExplainContent(`\n\n[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`);
+              setExplainCard((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      isStreaming: false,
+                    }
+                  : prev
+              );
+              setStreaming(false, null);
+              return;
+            }
+
+            setStreaming(true, null);
+            void (async () => {
+              try {
+                const persistedReply = await findRecentPersistedAssistantReply(
+                  sessionId,
+                  mode,
+                  message,
+                  streamStartedAtMs
+                );
+
+                if (persistedReply) {
+                  setExplainCard((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          content: persistedReply.content,
+                          isStreaming: false,
+                        }
+                      : {
+                          visible: true,
+                          mode: explainMode,
+                          selectedText: context?.selected_text || "",
+                          content: persistedReply.content,
+                          isStreaming: false,
+                        }
+                  );
+                  return;
+                }
+
+                const fallback = await chatOnce(notebookId, {
+                  message,
+                  mode,
+                  session_id: sessionId,
+                  context: context || null,
+                });
+
+                setExplainCard((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        content: fallback.content,
+                        isStreaming: false,
+                      }
+                    : {
+                        visible: true,
+                        mode: explainMode,
+                        selectedText: context?.selected_text || "",
+                        content: fallback.content,
+                        isStreaming: false,
+                      }
+                );
+              } catch (fallbackError) {
+                const fallbackApiError = fallbackError as ApiError;
+                appendExplainContent(
+                  `\n\n[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
+                    fallbackApiError.message || "Fallback error"
+                  }`
+                );
+                setExplainCard((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        isStreaming: false,
+                      }
+                    : prev
+                );
+              } finally {
+                setStreaming(false, null);
+                queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
+              }
+            })();
           },
           onDone: () => {
             queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });

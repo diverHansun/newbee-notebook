@@ -1,13 +1,13 @@
 "use client";
 
-import { RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { memo, RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { renderMarkdownToHtml } from "@/components/reader/markdown-pipeline";
 
 const LARGE_DOC_THRESHOLD_CHARS = 120_000;
 const TARGET_CHUNK_CHARS = 24_000;
-const CHUNK_LOAD_STEP = 1;
-const MIN_ROOT_MARGIN_PX = 360;
+const CHUNK_LOAD_STEP = 2;
+const MIN_ROOT_MARGIN_PX = 900;
 const MAX_ROOT_MARGIN_PX = 1800;
 
 type MarkdownViewerProps = {
@@ -15,6 +15,8 @@ type MarkdownViewerProps = {
   documentId?: string;
   className?: string;
   containerRef?: RefObject<HTMLDivElement | null>;
+  scrollRootRef?: RefObject<HTMLElement | null>;
+  freezeLazyLoad?: boolean;
 };
 
 function splitMarkdownIntoChunks(content: string): string[] {
@@ -79,7 +81,14 @@ function getDynamicRootMargin(contentChars: number, totalChunks: number): string
   return `${marginPx}px 0px`;
 }
 
-export function MarkdownViewer({ content, documentId, className, containerRef }: MarkdownViewerProps) {
+export const MarkdownViewer = memo(function MarkdownViewer({
+  content,
+  documentId,
+  className,
+  containerRef,
+  scrollRootRef,
+  freezeLazyLoad = false,
+}: MarkdownViewerProps) {
   const fallbackRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const htmlCacheRef = useRef<Map<number, string>>(new Map());
@@ -108,13 +117,14 @@ export function MarkdownViewer({ content, documentId, className, containerRef }:
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (freezeLazyLoad) return;
         setVisibleChunkCount((prev) => Math.min(prev + CHUNK_LOAD_STEP, chunks.length));
       },
-      { root: null, rootMargin }
+      { root: scrollRootRef?.current ?? null, rootMargin }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [chunks.length, hasMoreChunks, rootMargin]);
+  }, [chunks.length, freezeLazyLoad, hasMoreChunks, rootMargin, scrollRootRef]);
 
   const htmlChunks = useMemo(() => {
     const output: string[] = [];
@@ -135,7 +145,11 @@ export function MarkdownViewer({ content, documentId, className, containerRef }:
   return (
     <div ref={ref} className={`markdown-content ${className || ""}`}>
       {htmlChunks.map((html, idx) => (
-        <section key={idx} className="markdown-chunk" dangerouslySetInnerHTML={{ __html: html }} />
+        <section
+          key={`chunk-${documentId ?? "doc"}-${idx}`}
+          className="markdown-chunk"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       ))}
       {hasMoreChunks ? (
         <div ref={sentinelRef} className="markdown-load-more">
@@ -144,4 +158,4 @@ export function MarkdownViewer({ content, documentId, className, containerRef }:
       ) : null}
     </div>
   );
-}
+});
