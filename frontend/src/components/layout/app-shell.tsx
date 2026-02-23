@@ -4,6 +4,10 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { Panel, Group, Separator } from "react-resizable-panels";
 
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
+
 type AppShellProps = {
   title: string;
   left: ReactNode;
@@ -13,6 +17,8 @@ type AppShellProps = {
 };
 
 export function AppShell({ title, left, main, right, mainOverlay }: AppShellProps) {
+  const { lang, setLang, t } = useLang();
+
   return (
     <div className="page-shell">
       {/* Header */}
@@ -32,9 +38,19 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
           <span className="muted">/</span>
           <span className="text-sm font-medium">{title}</span>
         </div>
-        <Link href="/notebooks" className="btn btn-ghost btn-sm">
-          返回列表
-        </Link>
+        <div className="row" style={{ gap: 8 }}>
+          <SegmentedControl
+            value={lang}
+            options={[
+              { value: "zh", label: "中文" },
+              { value: "en", label: "EN" },
+            ]}
+            onChange={(next) => setLang(next as "zh" | "en")}
+          />
+          <Link href="/notebooks" className="btn btn-ghost btn-sm">
+            {t(uiStrings.layout.backToList)}
+          </Link>
+        </div>
       </header>
 
       {/* Three-column resizable workspace */}
@@ -58,7 +74,7 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
               }}
             >
               <div className="panel-head">
-                <span>Sources</span>
+                <span>{t(uiStrings.layout.sourcesPanel)}</span>
               </div>
               <div className="panel-body" style={{ flex: 1, overflow: "auto" }}>
                 {left}
@@ -84,7 +100,7 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
               }}
             >
               <div className="panel-head">
-                <span>Main</span>
+                <span>{t(uiStrings.layout.mainPanel)}</span>
               </div>
               <div className="panel-body" style={{ flex: 1, overflow: "hidden", padding: 0 }}>
                 {main}
@@ -109,7 +125,7 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
               }}
             >
               <div className="panel-head">
-                <span>Studio</span>
+                <span>{t(uiStrings.layout.studioPanel)}</span>
               </div>
               <div className="panel-body" style={{ flex: 1, overflow: "auto" }}>
                 {right}
