@@ -91,6 +91,18 @@
   border-color: hsl(var(--bee-yellow) / 0.6);
 }
 
+.dark .explain-card-pill {
+  border-color: hsl(var(--border));
+  background: hsl(220 28% 18% / 0.94);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.dark .explain-card-pill:hover {
+  border-color: hsl(var(--ring));
+  background: hsl(220 28% 20% / 0.98);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
 .explain-card-pill-hint {
   font-size: 11px;
   color: hsl(var(--muted-foreground));
@@ -178,6 +190,15 @@
   display: inline-block;
   background: hsl(var(--bee-yellow));
   animation: bee-pulse 1.2s ease-in-out infinite;
+}
+
+.dark .explain-card-titlebar {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--bee-yellow) / 0.14),
+    hsl(var(--card))
+  );
+  border-left-color: hsl(var(--bee-yellow) / 0.45);
 }
 
 

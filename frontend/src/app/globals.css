@@ -81,6 +81,9 @@
   --bee-yellow: 45 93% 52%;
   --bee-yellow-light: 48 60% 20%;
   --bee-amber: 38 92% 55%;
+
+  --user-bubble-bg: 217 33% 22%;
+  --user-bubble-fg: 210 40% 96%;
 }
 
 /* ================================================================
@@ -98,6 +101,7 @@
 @import "../styles/reader.css";
 @import "../styles/thinking-indicator.css";
 @import "../styles/animations.css";
+@import "../styles/control-panel.css";
 @import "../styles/responsive.css";
 @import "../styles/markdown-content.css";
 

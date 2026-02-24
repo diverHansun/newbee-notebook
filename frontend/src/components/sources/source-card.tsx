@@ -110,9 +110,8 @@ export function SourceCard({ document, onView, onRemove }: SourceCardProps) {
           {t(uiStrings.common.view)}
         </button>
         <button
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-danger-ghost btn-sm"
           type="button"
-          style={{ color: "hsl(var(--destructive))" }}
           onClick={() => onRemove(document)}
         >
           {t(uiStrings.common.remove)}

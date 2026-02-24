@@ -59,6 +59,29 @@
   border-color: transparent;
 }
 
+.btn-danger-ghost {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: hsl(var(--destructive));
+}
+
+.btn-danger-ghost:hover {
+  background: hsl(var(--destructive) / 0.08);
+  border-color: hsl(var(--destructive) / 0.22);
+  color: hsl(var(--destructive));
+}
+
+.dark .btn-danger-ghost {
+  color: hsl(351 89% 76%);
+}
+
+.dark .btn-danger-ghost:hover {
+  background: hsl(351 89% 76% / 0.12);
+  border-color: hsl(351 89% 76% / 0.26);
+  color: hsl(351 95% 84%);
+}
+
 .btn-destructive {
   background: hsl(var(--destructive));
   color: hsl(var(--destructive-foreground));

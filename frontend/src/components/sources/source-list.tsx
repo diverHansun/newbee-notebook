@@ -102,7 +102,7 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
             {t(uiStrings.sourceList.add)}
           </button>
           <button
-            className="btn btn-ghost btn-sm"
+            className="btn btn-sm"
             type="button"
             onClick={() => notebookDocumentsQuery.refetch()}
           >

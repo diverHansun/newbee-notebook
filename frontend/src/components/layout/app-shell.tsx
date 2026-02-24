@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { Panel, Group, Separator } from "react-resizable-panels";
 
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
@@ -17,7 +16,7 @@ type AppShellProps = {
 };
 
 export function AppShell({ title, left, main, right, mainOverlay }: AppShellProps) {
-  const { lang, setLang, t } = useLang();
+  const { t } = useLang();
 
   return (
     <div className="page-shell">
@@ -39,14 +38,6 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
           <span className="text-sm font-medium">{title}</span>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <SegmentedControl
-            value={lang}
-            options={[
-              { value: "zh", label: "中文" },
-              { value: "en", label: "EN" },
-            ]}
-            onChange={(next) => setLang(next as "zh" | "en")}
-          />
           <Link href="/notebooks" className="btn btn-ghost btn-sm">
             {t(uiStrings.layout.backToList)}
           </Link>

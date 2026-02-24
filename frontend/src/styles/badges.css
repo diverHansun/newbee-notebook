@@ -94,4 +94,22 @@
   border-color: hsl(var(--bee-yellow) / 0.5);
 }
 
+.dark .badge-explain {
+  background: hsl(var(--bee-yellow) / 0.12);
+  color: hsl(44 92% 74%);
+  border-color: hsl(var(--bee-yellow) / 0.26);
+}
+
+.dark .badge-conclude {
+  background: hsl(var(--bee-amber) / 0.12);
+  color: hsl(36 92% 74%);
+  border-color: hsl(var(--bee-amber) / 0.24);
+}
+
+.dark .badge-bee {
+  background: hsl(var(--bee-yellow) / 0.12);
+  color: hsl(44 92% 74%);
+  border-color: hsl(var(--bee-yellow) / 0.24);
+}
+
 

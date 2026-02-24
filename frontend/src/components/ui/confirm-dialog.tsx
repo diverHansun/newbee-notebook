@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
+
 type ConfirmDialogProps = {
   open: boolean;
   title: string;
@@ -18,13 +21,14 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "\u786e\u8ba4",
-  cancelLabel = "\u53d6\u6d88",
+  confirmLabel,
+  cancelLabel,
   variant = "danger",
   confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useLang();
   const [submitting, setSubmitting] = useState(false);
 
   const handleConfirm = useCallback(async () => {
@@ -58,6 +62,9 @@ export function ConfirmDialog({
   }, [confirmDisabled, handleConfirm, onCancel, open, submitting]);
 
   if (!open) return null;
+
+  const resolvedConfirmLabel = confirmLabel ?? t(uiStrings.common.confirm);
+  const resolvedCancelLabel = cancelLabel ?? t(uiStrings.common.cancel);
 
   const confirmStyle =
     variant === "warning"
@@ -103,7 +110,7 @@ export function ConfirmDialog({
               type="button"
               disabled={submitting}
               onClick={onCancel}
-              aria-label="\u5173\u95ed\u786e\u8ba4\u6846"
+              aria-label={t(uiStrings.common.closeDialog)}
             >
               x
             </button>
@@ -113,7 +120,7 @@ export function ConfirmDialog({
           </p>
           <div className="row" style={{ justifyContent: "flex-end" }}>
             <button className="btn" type="button" disabled={submitting} onClick={onCancel}>
-              {cancelLabel}
+              {resolvedCancelLabel}
             </button>
             <button
               className="btn"
@@ -124,7 +131,7 @@ export function ConfirmDialog({
                 void handleConfirm();
               }}
             >
-              {submitting ? "\u5904\u7406\u4e2d..." : confirmLabel}
+              {submitting ? t(uiStrings.common.processing) : resolvedConfirmLabel}
             </button>
           </div>
         </div>

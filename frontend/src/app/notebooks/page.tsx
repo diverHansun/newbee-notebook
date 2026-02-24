@@ -1,14 +1,16 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createNotebook, deleteNotebook, listNotebooks } from "@/lib/api/notebooks";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+
+const PAGE_SIZE = 12;
 
 function formatRelativeTime(
   dateString: string,
@@ -49,6 +51,7 @@ export default function NotebooksPage() {
   const { lang, t, ti } = useLang();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [currentPage, setCurrentPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,8 +61,9 @@ export default function NotebooksPage() {
   } | null>(null);
 
   const notebooksQuery = useQuery({
-    queryKey: ["notebooks"],
-    queryFn: () => listNotebooks(100, 0),
+    queryKey: ["notebooks", currentPage, PAGE_SIZE],
+    queryFn: () => listNotebooks(PAGE_SIZE, (currentPage - 1) * PAGE_SIZE),
+    placeholderData: keepPreviousData,
   });
 
   const createMutation = useMutation({
@@ -81,6 +85,16 @@ export default function NotebooksPage() {
   });
 
   const notebooks = notebooksQuery.data?.data || [];
+  const pagination = notebooksQuery.data?.pagination;
+  const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / PAGE_SIZE)) : 0;
+
+  useEffect(() => {
+    if (currentPage <= 1) return;
+    if (notebooksQuery.isLoading || notebooksQuery.isFetching) return;
+    if (notebooks.length === 0) {
+      setCurrentPage((prev) => Math.max(1, prev - 1));
+    }
+  }, [currentPage, notebooks.length, notebooksQuery.isFetching, notebooksQuery.isLoading]);
 
   return (
     <div className="page-shell">
@@ -137,18 +151,18 @@ export default function NotebooksPage() {
         {notebooks.length > 0 && (
           <div className="notebook-grid">
             {notebooks.map((notebook) => (
-              <div key={notebook.notebook_id} className="card card-interactive" style={{ padding: 0 }}>
+              <div key={notebook.notebook_id} className="card card-interactive notebook-card">
                 <Link
                   href={`/notebooks/${notebook.notebook_id}`}
-                  className="stack-sm"
-                  style={{ padding: 20, textDecoration: "none", color: "inherit", flex: 1 }}
+                  className="stack-sm notebook-card-link"
+                  style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <strong className="text-sm font-medium" style={{ lineHeight: 1.4 }}>
+                  <strong className="text-sm font-medium notebook-card-title" style={{ lineHeight: 1.4 }}>
                     {notebook.title}
                   </strong>
                   {notebook.description && (
                     <span
-                      className="muted"
+                      className="muted notebook-card-description"
                       style={{
                         fontSize: 12,
                         display: "-webkit-box",
@@ -160,7 +174,7 @@ export default function NotebooksPage() {
                       {notebook.description}
                     </span>
                   )}
-                  <div className="row" style={{ marginTop: "auto" }}>
+                  <div className="row notebook-card-stats" style={{ marginTop: "auto" }}>
                     <span className="badge badge-default">
                       {ti(uiStrings.notebooksPage.documentsCount, { n: notebook.document_count })}
                     </span>
@@ -168,20 +182,13 @@ export default function NotebooksPage() {
                       {ti(uiStrings.notebooksPage.sessionsCount, { n: notebook.session_count })}
                     </span>
                   </div>
-                  <span className="muted" style={{ fontSize: 11 }}>
+                  <span className="muted notebook-card-updated" style={{ fontSize: 11 }}>
                     {ti(uiStrings.notebooksPage.updatedAt, {
                       value: formatRelativeTime(notebook.updated_at, lang, t, ti),
                     })}
                   </span>
                 </Link>
-                <div
-                  style={{
-                    borderTop: "1px solid hsl(var(--border))",
-                    padding: "8px 12px",
-                    display: "flex",
-                    justifyContent: "flex-end",
-                  }}
-                >
+                <div className="notebook-card-footer">
                   <button
                     className="btn btn-ghost btn-sm"
                     type="button"
@@ -199,6 +206,30 @@ export default function NotebooksPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {!notebooksQuery.isLoading && totalPages > 1 && pagination && (
+          <div className="notebook-pagination" role="navigation" aria-label={t(uiStrings.notebooksPage.pageInfo)}>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={!pagination.has_prev || notebooksQuery.isFetching}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            >
+              ← {t(uiStrings.notebooksPage.prevPage)}
+            </button>
+            <span className="muted notebook-pagination-info">
+              {ti(uiStrings.notebooksPage.pageInfo, { current: currentPage, total: totalPages })}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={!pagination.has_next || notebooksQuery.isFetching}
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+            >
+              {t(uiStrings.notebooksPage.nextPage)} →
+            </button>
           </div>
         )}
 

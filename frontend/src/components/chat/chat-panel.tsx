@@ -152,9 +152,8 @@ export function ChatPanel({
           </select>
           {currentSession && (
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-danger-ghost btn-sm"
               type="button"
-              style={{ color: "hsl(var(--destructive))" }}
               onClick={() => setPendingDeleteSession(currentSession)}
             >
               {t(uiStrings.chat.deleteSession)}

@@ -18,6 +18,43 @@
   transform: translateY(-1px);
 }
 
+.notebook-card {
+  display: flex;
+  min-height: 176px;
+  flex-direction: column;
+}
+
+.notebook-card-link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.notebook-card-title {
+  font-size: 15px;
+}
+
+.notebook-card-description {
+  line-height: 1.45;
+}
+
+.notebook-card-stats {
+  gap: 6px;
+  margin-top: auto;
+}
+
+.notebook-card-updated {
+  margin-top: 8px;
+}
+
+.notebook-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid hsl(var(--border));
+  padding: 8px 12px;
+}
+
 .message-bubble-assistant {
   border-left: 2px solid hsl(var(--bee-yellow) / 0.6);
 }
