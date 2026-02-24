@@ -9,7 +9,7 @@ llm:
   zhipu:
     model: glm-4.7-flash
     temperature: 0.7
-    max_tokens: 8192
+    max_tokens: 32768
     top_p: 0.8
     api_base: https://open.bigmodel.cn/api/paas/v4
     request_timeout: 60.0
@@ -28,7 +28,7 @@ llm:
     max_retries: 3
     streaming: false
     enable_search: false
-    enable_thinking: false
+    enable_thinking: true
     system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
 
   # Native OpenAI models
