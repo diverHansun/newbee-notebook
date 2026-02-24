@@ -287,9 +287,8 @@ export default function LibraryPage() {
                     <td>
                       <div className="row">
                         <button
-                          className="btn btn-ghost btn-sm"
+                          className="btn btn-ghost btn-danger-ghost btn-sm"
                           type="button"
-                          style={{ color: "hsl(var(--destructive))" }}
                           onClick={() => {
                             setPendingDeleteAction({
                               kind: "soft",
@@ -301,9 +300,8 @@ export default function LibraryPage() {
                           {t(uiStrings.common.delete)}
                         </button>
                         <button
-                          className="btn btn-ghost btn-sm"
+                          className="btn btn-ghost btn-danger-ghost btn-sm"
                           type="button"
-                          style={{ color: "hsl(var(--destructive))" }}
                           onClick={() => {
                             setPendingDeleteAction({
                               kind: "hard",
@@ -330,9 +328,8 @@ export default function LibraryPage() {
               {ti(uiStrings.libraryPage.selectedCount, { n: selectedIds.size })}
             </span>
             <button
-              className="btn btn-sm"
+              className="btn btn-danger-ghost btn-sm"
               type="button"
-              style={{ color: "hsl(var(--destructive))" }}
               onClick={() => {
                 const documentIds = Array.from(selectedIds);
                 if (documentIds.length === 0) return;

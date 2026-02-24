@@ -66,6 +66,20 @@
   height: 60px;
 }
 
+.dark .resize-handle {
+  box-shadow:
+    inset 1px 0 0 hsl(var(--background) / 0.45),
+    inset -1px 0 0 hsl(var(--background) / 0.45);
+}
+
+.dark .resize-handle:hover {
+  background: hsl(var(--border));
+}
+
+.dark .resize-handle:hover::after {
+  background: hsl(var(--ring));
+}
+
 /* ================================================================
    21. Explain / Conclude floating card
    ================================================================ */

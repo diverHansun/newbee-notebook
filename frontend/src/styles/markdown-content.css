@@ -313,3 +313,84 @@
   font-size: 0.875em;
   color: hsl(var(--muted-foreground));
 }
+
+/* ---- Dark mode overrides for markdown surfaces ---- */
+
+.dark .markdown-content code:not(pre code) {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .markdown-content pre {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.dark .markdown-content blockquote {
+  background: hsl(var(--secondary));
+  border-left-color: hsl(var(--ring));
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .markdown-content th {
+  background: hsl(var(--secondary));
+}
+
+/* ---- Dark mode syntax highlighting (highlight.js overrides) ---- */
+
+.dark .markdown-content .hljs {
+  color: #e6edf3;
+  background: transparent;
+}
+
+.dark .markdown-content .hljs-comment,
+.dark .markdown-content .hljs-quote {
+  color: #8b949e;
+}
+
+.dark .markdown-content .hljs-keyword,
+.dark .markdown-content .hljs-selector-tag,
+.dark .markdown-content .hljs-literal,
+.dark .markdown-content .hljs-name,
+.dark .markdown-content .hljs-variable.language_ {
+  color: #ff7b72;
+}
+
+.dark .markdown-content .hljs-title,
+.dark .markdown-content .hljs-title.function_,
+.dark .markdown-content .hljs-title.class_,
+.dark .markdown-content .hljs-section {
+  color: #d2a8ff;
+}
+
+.dark .markdown-content .hljs-string,
+.dark .markdown-content .hljs-attr,
+.dark .markdown-content .hljs-template-tag,
+.dark .markdown-content .hljs-template-variable {
+  color: #a5d6ff;
+}
+
+.dark .markdown-content .hljs-number,
+.dark .markdown-content .hljs-symbol,
+.dark .markdown-content .hljs-bullet,
+.dark .markdown-content .hljs-type,
+.dark .markdown-content .hljs-built_in,
+.dark .markdown-content .hljs-class,
+.dark .markdown-content .hljs-doctag {
+  color: #ffa657;
+}
+
+.dark .markdown-content .hljs-property,
+.dark .markdown-content .hljs-params,
+.dark .markdown-content .hljs-function,
+.dark .markdown-content .hljs-subst,
+.dark .markdown-content .hljs-operator {
+  color: #e6edf3;
+}
+
+.dark .markdown-content .hljs-meta,
+.dark .markdown-content .hljs-meta-keyword {
+  color: #79c0ff;
+}

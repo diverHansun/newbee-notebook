@@ -62,21 +62,21 @@
   --primary: 210 40% 98%;
   --primary-foreground: 222 47% 11%;
 
-  --secondary: 217 33% 17%;
+  --secondary: 217 28% 20%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217 33% 17%;
+  --muted: 217 28% 20%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 217 33% 17%;
+  --accent: 217 28% 22%;
   --accent-foreground: 210 40% 98%;
 
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 216 34% 17%;
+  --border: 217 22% 28%;
+  --input: 217 22% 24%;
+  --ring: 215 25% 58%;
 
   --bee-yellow: 45 93% 52%;
   --bee-yellow-light: 48 60% 20%;

@@ -145,6 +145,47 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.chat-message-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat-message-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-message-list::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.chat-message-list::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--ring));
+  background-clip: padding-box;
+}
+
+.dark .chat-message-list {
+  scrollbar-color: hsl(var(--ring) / 0.7) hsl(var(--secondary) / 0.25);
+}
+
+.dark .chat-message-list::-webkit-scrollbar-track {
+  background: hsl(var(--secondary) / 0.2);
+  border-radius: 999px;
+}
+
+.dark .chat-message-list::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-color: hsl(var(--secondary) / 0.55);
+}
+
+.dark .chat-message-list::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--ring));
+  border-color: hsl(var(--secondary) / 0.45);
 }
 
 
