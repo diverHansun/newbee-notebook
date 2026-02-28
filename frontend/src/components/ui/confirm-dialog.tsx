@@ -66,18 +66,8 @@ export function ConfirmDialog({
   const resolvedConfirmLabel = confirmLabel ?? t(uiStrings.common.confirm);
   const resolvedCancelLabel = cancelLabel ?? t(uiStrings.common.cancel);
 
-  const confirmStyle =
-    variant === "warning"
-      ? {
-          background: "hsl(var(--bee-yellow-light))",
-          color: "#92400E",
-          borderColor: "hsl(var(--bee-yellow) / 0.5)",
-        }
-      : {
-          background: "hsl(var(--destructive))",
-          color: "hsl(var(--destructive-foreground))",
-          borderColor: "hsl(var(--destructive))",
-        };
+  const confirmBtnClass =
+    variant === "warning" ? "btn btn-destructive-outline" : "btn btn-destructive";
 
   return (
     <div
@@ -123,10 +113,9 @@ export function ConfirmDialog({
               {resolvedCancelLabel}
             </button>
             <button
-              className="btn"
+              className={confirmBtnClass}
               type="button"
               disabled={submitting || confirmDisabled}
-              style={confirmStyle}
               onClick={() => {
                 void handleConfirm();
               }}

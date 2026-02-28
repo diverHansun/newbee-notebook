@@ -71,8 +71,10 @@
   --accent: 217 28% 22%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 63% 31%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-text: 0 90% 72%;
+  --destructive-text-hover: 0 90% 80%;
 
   --border: 217 22% 28%;
   --input: 217 22% 24%;

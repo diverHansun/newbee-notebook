@@ -81,13 +81,13 @@
 }
 
 .dark .btn-danger-ghost {
-  color: hsl(351 89% 76%);
+  color: hsl(var(--destructive-text));
 }
 
 .dark .btn-danger-ghost:hover {
-  background: hsl(351 89% 76% / 0.12);
-  border-color: hsl(351 89% 76% / 0.26);
-  color: hsl(351 95% 84%);
+  background: hsl(var(--destructive-text) / 0.12);
+  border-color: hsl(var(--destructive-text) / 0.26);
+  color: hsl(var(--destructive-text-hover));
 }
 
 .btn-destructive {
@@ -98,6 +98,31 @@
 
 .btn-destructive:hover {
   opacity: 0.9;
+}
+
+.dark .btn-destructive {
+  box-shadow: 0 0 0 1px hsl(var(--destructive) / 0.3);
+}
+
+.btn-destructive-outline {
+  background: transparent;
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive));
+}
+
+.btn-destructive-outline:hover {
+  background: hsl(var(--destructive) / 0.08);
+}
+
+.dark .btn-destructive-outline {
+  color: hsl(var(--destructive-text));
+  border-color: hsl(var(--destructive-text) / 0.5);
+}
+
+.dark .btn-destructive-outline:hover {
+  background: hsl(var(--destructive-text) / 0.1);
+  color: hsl(var(--destructive-text-hover));
+  border-color: hsl(var(--destructive-text) / 0.6);
 }
 
 .btn-sm {

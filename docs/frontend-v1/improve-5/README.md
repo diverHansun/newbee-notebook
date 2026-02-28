@@ -13,6 +13,7 @@
 | P1 | 语言切换仅在 Notebook 详情页，其他页面无入口，体验不一致 | 全局交互 | 中高 | P0 |
 | P2 | Notebook 卡片过小，无分页管理 | 页面布局 | 中 | P1 |
 | P3 | Sources 面板"刷新"按钮缺少 hover/active 交互反馈 | 交互细节 | 低 | P2 |
+| P4 | 删除按钮样式不统一，Dark Mode 下红色/琥珀色混用且对比度不足 | 视觉一致性 | 中 | P1 |
 
 ## 实施顺序
 
@@ -67,6 +68,7 @@ P3 (刷新按钮交互修复)  ←── 独立，随时可做
 | [P1-global-control-panel.md](P1-global-control-panel.md) | 全局控制面板（Split Popover）设计方案：ThemeProvider 架构、占位菜单；含 backend-v2 阶段的模型/RAG 确认保存 UX 设计参考 |
 | [P2-notebook-cards-pagination.md](P2-notebook-cards-pagination.md) | Notebook 卡片尺寸增大与分页管理 |
 | [P3-refresh-button-fix.md](P3-refresh-button-fix.md) | Sources 面板刷新按钮交互修复 |
+| [P4-delete-button-style-fix.md](P4-delete-button-style-fix.md) | 删除按钮样式统一与 Dark Mode 适配 |
 
 ## 涉及的主要文件
 
