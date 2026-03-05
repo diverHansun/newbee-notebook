@@ -2123,6 +2123,177 @@
                               ]
                  },
                  {
+                     "name":  "Config",
+                     "description":  "Runtime model switching configuration endpoints.",
+                     "item":  [
+                                  {
+                                      "name":  "Get Models Config",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/models",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "models"
+                                                                           ]
+                                                              },
+                                                      "description":  "Get active LLM/Embedding runtime configuration."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Get Available Models",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/models/available",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "models",
+                                                                               "available"
+                                                                           ]
+                                                              },
+                                                      "description":  "Get available providers and preset models for model switching UI."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Update LLM Config",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"provider\": \"zhipu\",\n  \"model\": \"glm-4.7-flash\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 32768,\n  \"top_p\": 0.8\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/llm",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "llm"
+                                                                           ]
+                                                              },
+                                                      "description":  "Update runtime LLM provider/model and generation parameters."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Update Embedding Config",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"provider\": \"qwen3-embedding\",\n  \"mode\": \"api\",\n  \"api_model\": \"text-embedding-v4\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/embedding",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "embedding"
+                                                                           ]
+                                                              },
+                                                      "description":  "Update runtime embedding provider/mode/model."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Reset LLM Config",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/llm/reset",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "llm",
+                                                                               "reset"
+                                                                           ]
+                                                              },
+                                                      "description":  "Reset LLM runtime config to system defaults."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Reset Embedding Config",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{api_base}}/config/embedding/reset",
+                                                                  "host":  [
+                                                                               "{{api_base}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "config",
+                                                                               "embedding",
+                                                                               "reset"
+                                                                           ]
+                                                              },
+                                                      "description":  "Reset embedding runtime config to system defaults."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ]
+                 },
+                 {
                      "name":  "Admin",
                      "description":  "Admin utilities: reprocess pending docs, reindex single doc, index stats.",
                      "item":  [

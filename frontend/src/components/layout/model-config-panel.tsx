@@ -45,6 +45,11 @@ function inferProviderByPreset(name: string, label: string): string {
   }
   return "qwen";
 }
+function getDefaultLLMModel(provider: string, presets: Array<{ name: string; label: string }>): string {
+  const fallback = provider === "zhipu" ? "glm-4.7-flash" : "qwen3.5-plus";
+  const matchedPreset = presets.find((item) => inferProviderByPreset(item.name, item.label) === provider);
+  return matchedPreset?.name ?? fallback;
+}
 
 function toLLMDraft(config: LLMConfig): LLMDraft {
   return {
@@ -250,9 +255,12 @@ export function ModelConfigPanel() {
               value={llmDraft.provider}
               options={llmProviders.map((provider) => ({ value: provider, label: provider }))}
               onChange={(provider) => {
+                if (provider === llmDraft.provider) return;
+                const llmPresets = availableQuery.data?.llm.presets ?? [];
                 const next = {
                   ...llmDraft,
                   provider,
+                  model: getDefaultLLMModel(provider, llmPresets),
                 };
                 setLlmDraft(next);
                 commitLLM(next);

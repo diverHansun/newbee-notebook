@@ -1,4 +1,4 @@
--- PostgreSQL initialization script for Newbee Notebook
+﻿-- PostgreSQL initialization script for Newbee Notebook
 -- This script runs automatically when the PostgreSQL container starts for the first time
 
 -- Enable pgvector extension for vector similarity search
@@ -91,50 +91,6 @@ CREATE INDEX IF NOT EXISTS idx_documents_notebook_id ON documents(notebook_id);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at ON documents(stage_updated_at);
-
--- Backfill additive columns for existing volumes where table already exists
-ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64);
-ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP;
-ALTER TABLE IF EXISTS documents ADD COLUMN IF NOT EXISTS processing_meta TEXT;
-
--- Migrate status CHECK constraint to include 'converted' (improve-8)
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'documents_status_check' AND conrelid = 'documents'::regclass
-    ) THEN
-        ALTER TABLE documents DROP CONSTRAINT documents_status_check;
-        ALTER TABLE documents ADD CONSTRAINT documents_status_check
-            CHECK (status IN ('uploaded', 'pending', 'processing', 'converted', 'completed', 'failed'));
-    END IF;
-END $$;
-
--- Notebook document references (soft links to library docs)
-CREATE TABLE IF NOT EXISTS notebook_document_refs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
-    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE (notebook_id, document_id)
-);
-CREATE INDEX IF NOT EXISTS idx_refs_notebook_id ON notebook_document_refs(notebook_id);
-CREATE INDEX IF NOT EXISTS idx_refs_document_id ON notebook_document_refs(document_id);
-
--- Sessions (max 20 per notebook enforced in application layer)
-CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
-    title VARCHAR(500),
-    message_count INTEGER DEFAULT 0,
-    context_summary TEXT,
-    include_ec_context BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_notebook_id ON sessions(notebook_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
 -- Backfill additive columns for existing volumes where table already exists
 ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE;
