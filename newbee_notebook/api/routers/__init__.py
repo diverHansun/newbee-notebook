@@ -1,5 +1,5 @@
-"""
-Newbee Notebook - API Routers Package
-"""
+﻿"""Newbee Notebook - API Routers Package"""
 
+from . import config
 
+__all__ = ["config"]

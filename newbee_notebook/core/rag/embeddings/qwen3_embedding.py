@@ -1,4 +1,4 @@
-"""Qwen3 embedding provider (local/API text embedding)."""
+﻿"""Qwen3 embedding provider (local/API text embedding)."""
 
 import logging
 import os
@@ -212,7 +212,7 @@ def _get_int_env(name: str, default: int) -> int:
 def build_qwen3_embedding(mode: Optional[str] = None) -> BaseEmbeddingModel:
     """Build qwen3 embedding model from config."""
     cfg = _get_qwen3_embedding_config()
-    final_mode = (os.getenv(ENV_QWEN3_MODE) or mode or cfg.get("mode", "local")).strip().lower()
+    final_mode = (mode or os.getenv(ENV_QWEN3_MODE) or cfg.get("mode", "local")).strip().lower()
     dim = _get_int_env(ENV_QWEN3_DIM, int(cfg.get("dim", 1024)))
     embed_batch_size = _get_int_env(ENV_QWEN3_BATCH_SIZE, int(cfg.get("embed_batch_size", 32)))
 

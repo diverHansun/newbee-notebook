@@ -1,0 +1,95 @@
+﻿import { apiFetch } from "@/lib/api/client";
+
+export interface LLMConfig {
+  provider: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  top_p: number;
+  source: string;
+}
+
+export interface EmbeddingConfig {
+  provider: string;
+  mode: string | null;
+  model: string;
+  dim: number;
+  source: string;
+}
+
+export interface ModelsConfig {
+  llm: LLMConfig;
+  embedding: EmbeddingConfig;
+}
+
+export interface PresetModel {
+  name: string;
+  label: string;
+}
+
+export interface AvailableModels {
+  llm: {
+    providers: string[];
+    presets: PresetModel[];
+    custom_input: boolean;
+  };
+  embedding: {
+    providers: string[];
+    modes: string[];
+    api_models: PresetModel[];
+    local_models: string[];
+  };
+}
+
+export interface UpdateLLMPayload {
+  provider: string;
+  model: string;
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+}
+
+export interface UpdateEmbeddingPayload {
+  provider: string;
+  mode?: string;
+  api_model?: string;
+}
+
+export interface ResetResponse {
+  message: string;
+  defaults: Record<string, unknown>;
+}
+
+export function getModelsConfig() {
+  return apiFetch<ModelsConfig>("/config/models");
+}
+
+export function getAvailableModels() {
+  return apiFetch<AvailableModels>("/config/models/available");
+}
+
+export function updateLLMConfig(payload: UpdateLLMPayload) {
+  return apiFetch<LLMConfig>("/config/llm", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export function updateEmbeddingConfig(payload: UpdateEmbeddingPayload) {
+  return apiFetch<EmbeddingConfig>("/config/embedding", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export function resetLLMConfig() {
+  return apiFetch<ResetResponse>("/config/llm/reset", {
+    method: "POST",
+  });
+}
+
+export function resetEmbeddingConfig() {
+  return apiFetch<ResetResponse>("/config/embedding/reset", {
+    method: "POST",
+  });
+}

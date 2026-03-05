@@ -1,4 +1,4 @@
-"""
+﻿"""
 Newbee Notebook - Database Connection Module
 
 Provides async database connection using SQLAlchemy.
@@ -116,6 +116,17 @@ class Database:
                     """
                     ALTER TABLE IF EXISTS sessions
                     ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        key         VARCHAR(128) PRIMARY KEY,
+                        value       TEXT NOT NULL,
+                        updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
                     """
                 )
             )

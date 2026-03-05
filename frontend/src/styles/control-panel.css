@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    24. Global control panel (improve-5)
    ================================================================ */
 
@@ -243,6 +243,91 @@
   background: #ef4444;
 }
 
+.control-panel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.control-panel-reset-btn {
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.control-panel-reset-btn:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent));
+}
+
+.control-panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-panel-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.control-panel-field-label {
+  font-size: 12px;
+  color: hsl(var(--foreground));
+}
+
+.control-panel-field-note {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.control-panel-slider {
+  width: 100%;
+}
+
+.control-panel-slider-value {
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.control-panel-readonly-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.control-panel-readonly-label {
+  color: hsl(var(--muted-foreground));
+}
+
+.control-panel-warning {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: hsl(var(--accent));
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.control-panel-error {
+  border: 1px solid hsl(var(--destructive) / 0.35);
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
 @keyframes control-panel-pop-in {
   from {
     opacity: 0;

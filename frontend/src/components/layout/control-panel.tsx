@@ -1,18 +1,18 @@
-"use client";
+﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
 
+import { ModelConfigPanel } from "@/components/layout/model-config-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getHealthStatus, getSystemInfo } from "@/lib/api/system";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { useTheme } from "@/lib/theme/theme-context";
 
-export type ControlPanelTab = "language" | "theme" | "about";
+export type ControlPanelTab = "language" | "theme" | "model" | "about";
 
 type ControlPanelNavIconName =
   | ControlPanelTab
-  | "model"
   | "rag"
   | "mcp"
   | "skills";
@@ -24,21 +24,20 @@ type ControlPanelProps = {
 };
 
 type ActiveNavItem = {
-  key: ControlPanelTab;
+  key: Exclude<ControlPanelTab, "about">;
 };
 
 type DisabledNavItem = {
-  key: "model" | "rag" | "mcp" | "skills";
+  key: "rag" | "mcp" | "skills";
 };
 
 const ACTIVE_ITEMS: ActiveNavItem[] = [
   { key: "language" },
   { key: "theme" },
-  { key: "about" },
+  { key: "model" },
 ];
 
 const DISABLED_ITEMS: DisabledNavItem[] = [
-  { key: "model" },
   { key: "rag" },
   { key: "mcp" },
   { key: "skills" },
@@ -149,7 +148,7 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
       <div className="control-panel-shell">
         <aside className="control-panel-nav" aria-label={t(uiStrings.controlPanel.title)}>
           <div className="control-panel-nav-group">
-            {ACTIVE_ITEMS.slice(0, 2).map((item) => (
+            {ACTIVE_ITEMS.map((item) => (
               <button
                 key={item.key}
                 type="button"
@@ -222,6 +221,8 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
               </div>
             </div>
           )}
+
+          {activeTab === "model" && <ModelConfigPanel />}
 
           {activeTab === "about" && (
             <div className="control-panel-stack">

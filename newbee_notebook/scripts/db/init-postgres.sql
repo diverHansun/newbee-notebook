@@ -139,6 +139,13 @@ CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 -- Backfill additive columns for existing volumes where table already exists
 ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Application settings (runtime key-value overrides for model/config switches)
+CREATE TABLE IF NOT EXISTS app_settings (
+    key VARCHAR(128) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- References (source tracing; chunk_id stored as LlamaIndex node id text)
 CREATE TABLE IF NOT EXISTS "references" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,7 +220,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Newbee Notebook database initialized successfully';
     RAISE NOTICE 'Extensions enabled: vector, uuid-ossp, pgcrypto';
-    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references';
+    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings';
     RAISE NOTICE 'Legacy tables: chat_sessions, chat_messages';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';

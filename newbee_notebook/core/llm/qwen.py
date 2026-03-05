@@ -1,4 +1,4 @@
-"""Qwen models via OpenAI-compatible DashScope interface."""
+﻿"""Qwen models via OpenAI-compatible DashScope interface."""
 
 from typing import Optional, Dict, Any
 import os
@@ -36,6 +36,34 @@ def _get_api_key() -> Optional[str]:
         or os.getenv("QWEN_API_KEY")
         or os.getenv("OPENAI_API_KEY")
     )
+
+
+def _env_or_none(name: str) -> Optional[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    value = raw.strip()
+    return value if value else None
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = _env_or_none(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env_or_none(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 class QwenOpenAI(OpenAI):
@@ -76,15 +104,27 @@ def build_qwen_llm(
     """Build and return a Qwen LLM via DashScope OpenAI-compatible endpoint."""
     cfg = _get_qwen_config()
 
-    final_model = model or cfg.get("model", "qwen-plus")
+    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "qwen3.5-plus")
     final_temperature = (
-        temperature if temperature is not None else float(cfg.get("temperature", 0.7))
+        temperature
+        if temperature is not None
+        else _env_float("LLM_TEMPERATURE", float(cfg.get("temperature", 0.7)))
     )
     final_max_tokens = (
-        max_tokens if max_tokens is not None else int(cfg.get("max_tokens", 8192))
+        max_tokens
+        if max_tokens is not None
+        else _env_int("LLM_MAX_TOKENS", int(cfg.get("max_tokens", 32768)))
     )
-    final_top_p = top_p if top_p is not None else cfg.get("top_p", 0.8)
-    final_system_prompt = system_prompt or cfg.get("system_prompt", "")
+    final_top_p = (
+        top_p
+        if top_p is not None
+        else _env_float("LLM_TOP_P", float(cfg.get("top_p", 0.8)))
+    )
+    final_system_prompt = (
+        system_prompt
+        or _env_or_none("LLM_SYSTEM_PROMPT")
+        or cfg.get("system_prompt", "")
+    )
 
     resolved_api_key = api_key or _get_api_key()
     if not resolved_api_key:

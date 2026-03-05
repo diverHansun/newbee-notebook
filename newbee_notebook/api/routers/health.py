@@ -1,4 +1,4 @@
-"""
+﻿"""
 Newbee Notebook - Health Check Router
 """
 
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 
 from newbee_notebook.infrastructure.persistence.database import get_database, Database
+from newbee_notebook.core.common.config_db import is_model_switch_enabled
 
 
 router = APIRouter()
@@ -81,7 +82,7 @@ async def system_info() -> Dict[str, Any]:
             "notebooks": True,
             "sessions": True,
             "chat_modes": ["chat", "ask", "explain", "conclude"],
+            "model_switch": is_model_switch_enabled(),
         }
     }
-
 

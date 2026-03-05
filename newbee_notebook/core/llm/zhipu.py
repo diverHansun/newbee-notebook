@@ -1,4 +1,4 @@
-"""Zhipu models via OpenAI-compatible interface.
+﻿"""Zhipu models via OpenAI-compatible interface.
 
 This wraps llama-index's OpenAI adapter but targets Zhipu's OpenAI-compatible
 endpoint, keeping the config shape of llm.yaml (zhipu section).
@@ -36,6 +36,34 @@ def _get_zhipu_config() -> Dict[str, Any]:
 def _get_api_key() -> Optional[str]:
     """Get API key, preferring OpenAI key but falling back to Zhipu."""
     return os.getenv("OPENAI_API_KEY") or get_zhipu_api_key()
+
+
+def _env_or_none(name: str) -> Optional[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    value = raw.strip()
+    return value if value else None
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = _env_or_none(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env_or_none(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def _get_api_base() -> str:
@@ -105,16 +133,26 @@ def build_llm(
     """Build and return an OpenAI-compatible LLM targeting Zhipu models."""
     cfg = _get_zhipu_config()
 
-    final_model = model if model is not None else cfg.get("model", "glm-4.7-flash")
+    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "glm-4.7-flash")
     final_temperature = (
-        temperature if temperature is not None else float(cfg.get("temperature", 0.7))
+        temperature
+        if temperature is not None
+        else _env_float("LLM_TEMPERATURE", float(cfg.get("temperature", 0.7)))
     )
     final_max_tokens = (
-        max_tokens if max_tokens is not None else int(cfg.get("max_tokens", 8192))
+        max_tokens
+        if max_tokens is not None
+        else _env_int("LLM_MAX_TOKENS", int(cfg.get("max_tokens", 32768)))
     )
-    final_top_p = top_p if top_p is not None else cfg.get("top_p", 0.8)
+    final_top_p = (
+        top_p
+        if top_p is not None
+        else _env_float("LLM_TOP_P", float(cfg.get("top_p", 0.8)))
+    )
     final_system_prompt = (
-        system_prompt if system_prompt is not None else cfg.get("system_prompt")
+        system_prompt
+        or _env_or_none("LLM_SYSTEM_PROMPT")
+        or cfg.get("system_prompt")
     )
 
     resolved_api_key = api_key or _get_api_key()
@@ -150,5 +188,3 @@ def build_llm(
 
 # Backward-compatible naming style
 build_zhipu_llm = build_llm
-
-

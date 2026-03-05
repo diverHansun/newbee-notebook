@@ -1,10 +1,11 @@
-"""
+﻿"""
 Newbee Notebook - API Dependencies
 
 FastAPI dependency injection configuration.
 """
 
 from typing import AsyncGenerator
+import logging
 from fastapi import Depends
 
 from newbee_notebook.infrastructure.persistence.database import Database, get_database
@@ -31,6 +32,8 @@ from newbee_notebook.core.common.config import (
 )
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
+
+logger = logging.getLogger(__name__)
 
 
 async def get_db_session():
@@ -155,6 +158,21 @@ def get_embedding_singleton():
         _embed_model = build_embedding()
     return _embed_model
 
+def reset_llm_singleton() -> None:
+    """Reset cached LLM singleton for runtime config changes."""
+    global _llm
+    _llm = None
+    logger.info("LLM singleton reset")
+
+
+def reset_embedding_singleton() -> None:
+    """Reset cached embedding, pgvector, and ES singletons for config changes."""
+    global _embed_model, _pgvector_index, _es_index
+    _embed_model = None
+    _pgvector_index = None
+    _es_index = None
+    logger.info("Embedding and pgvector singletons reset")
+
 
 async def get_pg_index_singleton():
     global _pgvector_index
@@ -271,5 +289,4 @@ async def get_notebook_document_service(
         document_repo=document_repo,
         ref_repo=ref_repo,
     )
-
 

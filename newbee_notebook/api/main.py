@@ -1,4 +1,4 @@
-"""
+﻿"""
 Newbee Notebook - FastAPI Application Entry Point
 """
 
@@ -12,8 +12,13 @@ from newbee_notebook.api.middleware.error_handler import (
     newbee_notebook_exception_handler,
     generic_exception_handler,
 )
+from newbee_notebook.core.common.config_db import (
+    is_model_switch_enabled,
+    sync_runtime_env_from_db,
+)
 
 # Import routers
+from newbee_notebook.api.routers import config
 from newbee_notebook.api.routers import (
     library,
     notebooks,
@@ -43,6 +48,9 @@ async def lifespan(app: FastAPI):
 
         db = await get_database()
         async with db.session() as session:
+            if is_model_switch_enabled():
+                await sync_runtime_env_from_db(session)
+
             doc_repo = DocumentRepositoryImpl(session)
             await detect_orphan_documents(
                 documents_dir=get_documents_directory(),
@@ -63,7 +71,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
-    
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -76,7 +84,7 @@ def create_app() -> FastAPI:
     # Register global exception handlers.
     app.add_exception_handler(NewbeeNotebookException, newbee_notebook_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
-    
+
     # Include routers
     app.include_router(health.router, prefix="/api/v1", tags=["Health"])
     app.include_router(library.router, prefix="/api/v1", tags=["Library"])
@@ -86,7 +94,10 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
-    
+
+    if is_model_switch_enabled():
+        app.include_router(config.router, prefix="/api/v1", tags=["Config"])
+
     return app
 
 
@@ -96,6 +107,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("newbee_notebook.api.main:app", host="0.0.0.0", port=8000, reload=True)
-
-

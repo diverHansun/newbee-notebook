@@ -1,4 +1,4 @@
-"""Configuration management for Newbee Notebook.
+﻿"""Configuration management for Newbee Notebook.
 
 Handles environment variables, YAML configuration files, and runtime configuration.
 """
@@ -208,7 +208,7 @@ def get_llm_provider() -> str:
         if provider and str(provider).strip():
             return str(provider).strip().lower()
 
-    return "zhipu"
+    return "qwen"
 
 
 def _get_llm_provider_config(provider: str | None = None) -> dict:
@@ -527,5 +527,4 @@ def get_config():
         "zhipu_tools": get_zhipu_tools_config(),
         "document_processing": get_document_processing_config(),
     }
-
 

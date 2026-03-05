@@ -1,4 +1,4 @@
-export type LocalizedString = {
+﻿export type LocalizedString = {
   zh: string;
   en: string;
 };
@@ -147,6 +147,35 @@ export const uiStrings = {
     themeSwitchHint: { zh: "切换界面配色方案", en: "Switch the interface color scheme" },
     themeLight: { zh: "浅色", en: "Light" },
     themeDark: { zh: "深色", en: "Dark" },
+    llmConfig: { zh: "LLM 配置", en: "LLM Configuration" },
+    llmProvider: { zh: "Provider", en: "Provider" },
+    llmModel: { zh: "模型", en: "Model" },
+    llmModelHint: { zh: "从预设中选择，或输入自定义模型名称", en: "Select a preset or enter a custom model name" },
+    temperature: { zh: "Temperature", en: "Temperature" },
+    maxTokens: { zh: "Max Tokens", en: "Max Tokens" },
+    topP: { zh: "Top-p", en: "Top-p" },
+    embeddingConfig: { zh: "Embedding 配置", en: "Embedding Configuration" },
+    embeddingProvider: { zh: "Provider", en: "Provider" },
+    embeddingMode: { zh: "模式", en: "Mode" },
+    embeddingModeLocal: { zh: "本地", en: "Local" },
+    embeddingModeApi: { zh: "API", en: "API" },
+    embeddingModel: { zh: "模型", en: "Model" },
+    embeddingDim: { zh: "维度", en: "Dimension" },
+    embeddingSwitchWarning: {
+      zh: "切换 Embedding 仅影响后续新文档的索引。已索引文档需通过重新索引才能迁移。",
+      en: "Switching Embedding only affects future document indexing. Re-index is required to migrate existing documents.",
+    },
+    restoreDefaults: { zh: "恢复默认", en: "Restore Defaults" },
+    restoreDefaultsConfirm: { zh: "确定恢复为系统默认配置?", en: "Restore to system defaults?" },
+    embeddingSwitchConfirm: {
+      zh: "切换将影响后续文档索引，确定继续?",
+      en: "This will affect future document indexing. Continue?",
+    },
+    modelFeatureDisabled: {
+      zh: "模型热切换功能未启用。请在后端设置 FEATURE_MODEL_SWITCH=true 后重试。",
+      en: "Model switching is disabled. Set FEATURE_MODEL_SWITCH=true on backend and retry.",
+    },
+    configSaveFailed: { zh: "配置保存失败", en: "Failed to save configuration" },
     appInfo: { zh: "应用信息", en: "App info" },
     appName: { zh: "名称", en: "Name" },
     version: { zh: "版本", en: "Version" },
