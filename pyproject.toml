@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "Apache-2.0"
 dependencies = [
     "asyncpg>=0.31.0",
     "celery>=5.6.2",
@@ -19,7 +20,6 @@ dependencies = [
     "llama-index-vector-stores-faiss==0.5.1",
     "llama-index-vector-stores-postgres>=0.7.2",
     "markitdown[all,pdf]==0.1.4",
-    "mineru-kie-sdk==0.1.1",
     "numpy==2.2.6",
     "openpyxl==3.1.5",
     "pandas<2.3.0",
