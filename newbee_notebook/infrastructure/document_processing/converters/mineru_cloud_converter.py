@@ -26,10 +26,11 @@ class MinerUCloudTransientError(RuntimeError):
 
 
 class MinerUCloudConverter(Converter):
-    """Converter for PDF files via MinerU v4 Smart Parsing API."""
+    """Converter for PDF/DOC/DOCX files via MinerU v4 Smart Parsing API."""
 
     DONE_STATES = {"done"}
     RUNNING_STATES = {"waiting-file", "pending", "running", "converting"}
+    SUPPORTED_EXTENSIONS = frozenset({".pdf", ".doc", ".docx"})
 
     def __init__(
         self,
@@ -63,7 +64,7 @@ class MinerUCloudConverter(Converter):
         self._curl_insecure = bool(curl_insecure)
 
     def can_handle(self, ext: str) -> bool:
-        return ext.lower() == ".pdf"
+        return ext.lower() in self.SUPPORTED_EXTENSIONS
 
     async def convert(self, file_path: str) -> ConversionResult:
         path = Path(file_path)

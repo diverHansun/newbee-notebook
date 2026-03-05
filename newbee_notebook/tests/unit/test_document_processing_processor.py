@@ -129,14 +129,24 @@ def test_processor_invalid_mode_disables_mineru():
     assert isinstance(pdf_converters[0], MarkItDownConverter)
 
 
-def test_processor_non_pdf_uses_markitdown():
+@pytest.mark.parametrize("ext", [".doc", ".docx"])
+def test_processor_cloud_mode_office_prefers_mineru_then_markitdown(ext: str):
     cfg = _base_config()
     processor = DocumentProcessor(config=cfg)
 
-    docx_converters = processor._get_converters_for_ext(".docx")
-    assert len(docx_converters) == 1
-    assert isinstance(docx_converters[0], MarkItDownConverter)
+    converters = processor._get_converters_for_ext(ext)
+    assert len(converters) == 2
+    assert isinstance(converters[0], MinerUCloudConverter)
+    assert isinstance(converters[1], MarkItDownConverter)
 
+
+def test_processor_cloud_mode_pptx_uses_markitdown_only():
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(".pptx")
+    assert len(converters) == 1
+    assert isinstance(converters[0], MarkItDownConverter)
 
 def test_processor_trips_cooldown_after_five_consecutive_mineru_failures(monkeypatch):
     cfg = _base_config()
