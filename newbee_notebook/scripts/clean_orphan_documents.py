@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import shutil
 from pathlib import Path
 
 from newbee_notebook.infrastructure.persistence.database import get_database, close_database
@@ -12,6 +11,8 @@ from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl 
     DocumentRepositoryImpl,
 )
 from newbee_notebook.scripts.detect_orphans import detect_orphan_documents
+from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
 
 
 def _dir_size_mb(path: Path) -> float:
@@ -27,28 +28,39 @@ def _dir_size_mb(path: Path) -> float:
 
 async def run_cleanup(documents_dir: str, assume_yes: bool = False) -> int:
     root = Path(documents_dir)
+    storage = get_storage_backend()
     db = await get_database()
 
     async with db.session() as session:
         repo = DocumentRepositoryImpl(session)
-        orphan_ids = await detect_orphan_documents(str(root), repo)
+        orphan_ids = await detect_orphan_documents(
+            str(root),
+            repo,
+            storage_backend=storage,
+        )
 
     if not orphan_ids:
         print("No orphan document directories found.")
         return 0
 
-    print(f"Found {len(orphan_ids)} orphan document directories:")
-    total_mb = 0.0
-    for oid in orphan_ids:
-        path = root / oid
-        size_mb = _dir_size_mb(path)
-        total_mb += size_mb
-        print(f"  - {oid} ({size_mb:.1f} MB)")
-    print(f"Total: {total_mb:.1f} MB")
+    if isinstance(storage, LocalStorageBackend):
+        print(f"Found {len(orphan_ids)} orphan document directories:")
+        total_mb = 0.0
+        for oid in orphan_ids:
+            path = root / oid
+            size_mb = _dir_size_mb(path)
+            total_mb += size_mb
+            print(f"  - {oid} ({size_mb:.1f} MB)")
+        print(f"Total: {total_mb:.1f} MB")
+    else:
+        print(f"Found {len(orphan_ids)} orphan document prefixes in storage backend:")
+        for oid in orphan_ids:
+            objects = await storage.list_objects(f"{oid}/")
+            print(f"  - {oid} ({len(objects)} object(s))")
 
     confirmed = assume_yes
     if not assume_yes:
-        answer = input("Delete all listed directories? [y/N] ").strip().lower()
+        answer = input("Delete all listed entries? [y/N] ").strip().lower()
         confirmed = answer == "y"
     if not confirmed:
         print("Canceled.")
@@ -56,10 +68,9 @@ async def run_cleanup(documents_dir: str, assume_yes: bool = False) -> int:
 
     deleted = 0
     for oid in orphan_ids:
-        target = root / oid
-        if target.exists():
-            shutil.rmtree(target, ignore_errors=True)
-            print(f"Deleted: {target}")
+        deleted_count = await storage.delete_prefix(f"{oid}/")
+        if deleted_count > 0:
+            print(f"Deleted: {oid}/ ({deleted_count} object(s))")
             deleted += 1
     return deleted
 

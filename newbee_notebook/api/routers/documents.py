@@ -8,7 +8,7 @@ from typing import Optional, List
 import mimetypes
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from newbee_notebook.api.models.responses import (
     DocumentResponse,
@@ -148,6 +148,10 @@ async def download_document(
 ):
     """Download original uploaded file."""
     try:
+        download_url = await service.get_download_url(document_id)
+        if download_url:
+            return RedirectResponse(url=download_url, status_code=307)
+
         file_path, filename = await service.get_download_path(document_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -165,6 +169,10 @@ async def get_document_asset(
 ):
     """Serve generated document assets (images/json) for frontend rendering."""
     try:
+        asset_url = await service.get_asset_url(document_id, asset_path)
+        if asset_url:
+            return RedirectResponse(url=asset_url, status_code=307)
+
         file_path = await service.get_asset_path(document_id, asset_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

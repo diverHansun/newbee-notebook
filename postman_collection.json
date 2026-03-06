@@ -1046,7 +1046,7 @@
                                                                                "download"
                                                                            ]
                                                               },
-                                                      "description":  "Download the original uploaded file."
+                                                      "description":  "Download the original uploaded file.\n\n- local backend: returns 200 + attachment body.\n- minio backend: returns 307 redirect to presigned URL."
                                                   },
                                       "response":  [
 
@@ -1056,12 +1056,16 @@
                                                         "listen":  "test",
                                                         "script":  {
                                                                        "exec":  [
-                                                                                    "pm.test(\"Status code is 200\", function () {",
-                                                                                    "    pm.response.to.have.status(200);",
+                                                                                    "pm.test(\"Status code is 200 or 307\", function () {",
+                                                                                    "    pm.expect([200, 307]).to.include(pm.response.code);",
                                                                                     "});",
                                                                                     "",
-                                                                                    "pm.test(\"Response has attachment header\", function () {",
-                                                                                    "    pm.response.to.have.header(\"Content-Disposition\");",
+                                                                                    "pm.test(\"Response has expected delivery header\", function () {",
+                                                                                    "    if (pm.response.code === 307) {",
+                                                                                    "        pm.response.to.have.header(\"Location\");",
+                                                                                    "    } else {",
+                                                                                    "        pm.response.to.have.header(\"Content-Disposition\");",
+                                                                                    "    }",
                                                                                     "});"
                                                                                 ],
                                                                        "type":  "text/javascript"

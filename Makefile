@@ -7,18 +7,7 @@ ifndef ID
 	@echo "Error: missing ID. Usage: make clean-doc ID=<uuid>"
 	@exit 1
 endif
-	@if echo "$(ID)" | grep -qiE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$$'; then \
-		if [ -d "$(DOCUMENTS_DIR)/$(ID)" ]; then \
-			echo "Deleting $(DOCUMENTS_DIR)/$(ID)"; \
-			rm -rf "$(DOCUMENTS_DIR)/$(ID)"; \
-			echo "Done."; \
-		else \
-			echo "Directory not found: $(DOCUMENTS_DIR)/$(ID)"; \
-		fi; \
-	else \
-		echo "Error: invalid UUID format"; \
-		exit 1; \
-	fi
+	@python -m newbee_notebook.scripts.clean_document --id "$(ID)" --yes
 
 clean-orphans: ## Detect and interactively clean orphan directories
 	@python -m newbee_notebook.scripts.clean_orphan_documents --documents-dir $(DOCUMENTS_DIR)

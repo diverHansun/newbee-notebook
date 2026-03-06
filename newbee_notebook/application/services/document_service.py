@@ -12,6 +12,7 @@ import logging
 import os
 import asyncio
 import shutil
+import re
 from pathlib import Path
 from pathlib import PurePosixPath
 
@@ -29,6 +30,9 @@ from newbee_notebook.domain.repositories.reference_repository import (
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
+from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
 from newbee_notebook.infrastructure.tasks.document_tasks import process_document_task
 from newbee_notebook.infrastructure.storage.local_storage import (
     save_upload_file_with_storage,
@@ -39,6 +43,9 @@ from newbee_notebook.exceptions import DocumentProcessingError
 
 
 logger = logging.getLogger(__name__)
+ASSET_API_URL_PATTERN = re.compile(
+    r"/api/v1/documents/(?P<doc_id>[^/\s)]+)/assets/(?P<asset_path>[^)\s\"'>]+)"
+)
 
 
 class DocumentOwnershipError(Exception):
@@ -263,11 +270,18 @@ class DocumentService:
         if doc.status not in {DocumentStatus.CONVERTED, DocumentStatus.COMPLETED}:
             raise RuntimeError("Document not processed yet")
 
-        resolved_content_path, absolute_content_path = self._resolve_content_path(doc)
-        if not absolute_content_path.exists():
-            raise FileNotFoundError("Content file not found on disk")
+        storage = get_storage_backend()
+        if isinstance(storage, LocalStorageBackend):
+            resolved_content_path, absolute_content_path = self._resolve_content_path(doc)
+            if not absolute_content_path.exists():
+                raise FileNotFoundError("Content file not found on disk")
+            content = absolute_content_path.read_text(encoding="utf-8")
+        else:
+            resolved_content_path = await self._resolve_content_storage_key(doc, storage)
+            content = await storage.get_text(resolved_content_path)
+            content = await self._rewrite_asset_urls_for_remote(content, storage)
 
-        # Self-heal legacy rows where content file exists but content_path was not persisted.
+        # Self-heal legacy rows where content key/path exists but content_path was not persisted.
         if doc.content_path != resolved_content_path:
             await self._document_repo.update_status(
                 document_id=document_id,
@@ -278,12 +292,27 @@ class DocumentService:
             await self._document_repo.commit()
             doc.content_path = resolved_content_path
 
-        content = absolute_content_path.read_text(encoding="utf-8")
         if format == "markdown":
             return doc, content
         if format == "text":
             return doc, _markdown_to_text(content)
         raise ValueError("Unsupported format")
+
+    async def get_download_url(self, document_id: str) -> Optional[str]:
+        """Get presigned download URL when remote storage backend is active."""
+        doc = await self._document_repo.get(document_id)
+        if not doc:
+            raise ValueError("Document not found")
+
+        storage = get_storage_backend()
+        if isinstance(storage, LocalStorageBackend):
+            return None
+
+        candidates = self._build_storage_key_candidates(doc.file_path)
+        object_key = await self._resolve_existing_storage_key(storage, candidates)
+        if not object_key:
+            raise FileNotFoundError("Original file not found in storage")
+        return await storage.get_file_url(object_key)
 
     async def get_download_path(self, document_id: str) -> tuple[Path, str]:
         """Get original file path for download."""
@@ -298,20 +327,40 @@ class DocumentService:
 
         return file_path, file_path.name
 
+    async def get_asset_url(self, document_id: str, asset_path: str) -> Optional[str]:
+        """Get presigned asset URL when remote storage backend is active."""
+        doc = await self._document_repo.get(document_id)
+        if not doc:
+            raise ValueError("Document not found")
+
+        storage = get_storage_backend()
+        if isinstance(storage, LocalStorageBackend):
+            return None
+
+        normalized = self._validate_asset_path(asset_path)
+        object_key = f"{document_id}/assets/{normalized.as_posix()}"
+        if not await storage.exists(object_key):
+            raise FileNotFoundError("Asset file not found in storage")
+        return await storage.get_file_url(object_key)
+
     async def get_asset_path(self, document_id: str, asset_path: str) -> Path:
         """Get generated asset file path under data/documents/{document_id}/assets/."""
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError("Document not found")
 
-        normalized = PurePosixPath((asset_path or "").replace("\\", "/"))
-        if normalized.is_absolute() or ".." in normalized.parts:
-            raise ValueError("Invalid asset path")
+        normalized = self._validate_asset_path(asset_path)
 
         candidate = Path(get_documents_directory()) / document_id / "assets" / Path(*normalized.parts)
         if not candidate.exists() or not candidate.is_file():
             raise FileNotFoundError("Asset file not found on disk")
         return candidate
+
+    def _validate_asset_path(self, asset_path: str) -> PurePosixPath:
+        normalized = PurePosixPath((asset_path or "").replace("\\", "/"))
+        if normalized.is_absolute() or ".." in normalized.parts:
+            raise ValueError("Invalid asset path")
+        return normalized
 
     def _resolve_content_path(self, doc: Document) -> tuple[str, Path]:
         """Resolve and normalize content.md path with legacy fallbacks."""
@@ -336,6 +385,91 @@ class DocumentService:
                 return normalized_rel, absolute
 
         raise RuntimeError("Content not available for this document")
+
+    async def _resolve_content_storage_key(self, doc: Document, storage: StorageBackend) -> str:
+        candidates = self._build_storage_key_candidates(
+            raw_path=doc.content_path,
+            default_key=f"{doc.document_id}/markdown/content.md",
+        )
+        object_key = await self._resolve_existing_storage_key(storage, candidates)
+        if object_key:
+            return object_key
+        raise FileNotFoundError("Content file not found in storage")
+
+    async def _resolve_existing_storage_key(
+        self,
+        storage: StorageBackend,
+        candidates: list[str],
+    ) -> Optional[str]:
+        for candidate in candidates:
+            if await storage.exists(candidate):
+                return candidate
+        return None
+
+    def _build_storage_key_candidates(
+        self,
+        raw_path: Optional[str],
+        default_key: Optional[str] = None,
+    ) -> list[str]:
+        root = Path(get_documents_directory()).resolve()
+        candidates: list[str] = []
+
+        def _append(value: Optional[str]) -> None:
+            if not value:
+                return
+            normalized = value.strip().replace("\\", "/").lstrip("/")
+            if not normalized:
+                return
+            if normalized not in candidates:
+                candidates.append(normalized)
+            if normalized.startswith("documents/"):
+                trimmed = normalized[len("documents/"):]
+                if trimmed and trimmed not in candidates:
+                    candidates.append(trimmed)
+
+        _append(raw_path)
+        if raw_path:
+            maybe_abs = Path(raw_path)
+            if maybe_abs.is_absolute():
+                try:
+                    rel = maybe_abs.resolve().relative_to(root).as_posix()
+                    _append(rel)
+                except Exception:
+                    pass
+
+        _append(default_key)
+        return candidates
+
+    async def _rewrite_asset_urls_for_remote(self, content: str, storage: StorageBackend) -> str:
+        matches = list(ASSET_API_URL_PATTERN.finditer(content))
+        if not matches:
+            return content
+
+        signed_urls: dict[str, str] = {}
+        for match in matches:
+            doc_id = match.group("doc_id")
+            asset_path = match.group("asset_path").lstrip("/")
+            object_key = f"{doc_id}/assets/{asset_path}"
+            if object_key in signed_urls:
+                continue
+
+            if not await storage.exists(object_key):
+                continue
+            try:
+                signed_urls[object_key] = await storage.get_file_url(object_key)
+            except FileNotFoundError:
+                continue
+
+        if not signed_urls:
+            return content
+
+        def _replace(match: re.Match[str]) -> str:
+            doc_id = match.group("doc_id")
+            asset_path = match.group("asset_path").lstrip("/")
+            object_key = f"{doc_id}/assets/{asset_path}"
+            return signed_urls.get(object_key, match.group(0))
+
+        return ASSET_API_URL_PATTERN.sub(_replace, content)
 
 
 def _markdown_to_text(markdown: str) -> str:
