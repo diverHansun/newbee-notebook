@@ -23,7 +23,7 @@ from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
     MinerULocalConverter,
 )
-from newbee_notebook.infrastructure.document_processing.store import save_markdown
+from newbee_notebook.infrastructure.document_processing.store import save_markdown_with_storage
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +262,7 @@ class DocumentProcessor:
             (conversion_result, relative_content_path, content_size_bytes)
         """
         result = await self.convert(file_path)
-        content_path, content_size = save_markdown(
+        content_path, content_size = await save_markdown_with_storage(
             document_id=document_id,
             markdown=result.markdown,
             image_assets=result.image_assets,

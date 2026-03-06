@@ -2,8 +2,11 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 import re
+import mimetypes
 
 from newbee_notebook.core.common.config import get_documents_directory
+from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
 
 
 def _ensure_dir(path: Path) -> None:
@@ -148,3 +151,48 @@ def save_markdown(
     # Return POSIX-style relative path for portability
     rel_path = content_path.relative_to(root).as_posix()
     return rel_path, len(content_bytes)
+
+
+async def save_markdown_with_storage(
+    document_id: str,
+    markdown: str,
+    *,
+    image_assets: Optional[dict[str, bytes]] = None,
+    metadata_assets: Optional[dict[str, bytes]] = None,
+    base_root: Optional[str] = None,
+) -> tuple[str, int]:
+    """Persist markdown locally and mirror generated artifacts to storage backend."""
+    rel_path, content_size = save_markdown(
+        document_id=document_id,
+        markdown=markdown,
+        image_assets=image_assets,
+        metadata_assets=metadata_assets,
+        base_root=base_root,
+    )
+
+    backend = get_storage_backend()
+    if isinstance(backend, LocalStorageBackend):
+        return rel_path, content_size
+
+    root = Path(base_root or get_documents_directory())
+    doc_root = root / document_id
+    paths_to_sync: list[Path] = []
+
+    markdown_dir = doc_root / "markdown"
+    if markdown_dir.exists():
+        paths_to_sync.extend([p for p in markdown_dir.rglob("*") if p.is_file()])
+
+    assets_dir = doc_root / "assets"
+    if assets_dir.exists():
+        paths_to_sync.extend([p for p in assets_dir.rglob("*") if p.is_file()])
+
+    for file_path in paths_to_sync:
+        object_key = file_path.relative_to(root).as_posix()
+        content_type, _ = mimetypes.guess_type(str(file_path))
+        await backend.save_from_path(
+            object_key=object_key,
+            local_path=str(file_path),
+            content_type=content_type or "application/octet-stream",
+        )
+
+    return rel_path, content_size

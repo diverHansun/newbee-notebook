@@ -3,6 +3,7 @@ Local file storage utilities.
 """
 
 import os
+import mimetypes
 import shutil
 import uuid
 from pathlib import Path
@@ -12,6 +13,8 @@ from urllib.parse import unquote
 from fastapi import UploadFile
 
 from newbee_notebook.core.common.config import get_documents_directory
+from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
 
 
 def ensure_dir(path: str) -> None:
@@ -151,4 +154,47 @@ def save_upload_file(
 
     size = dest_path.stat().st_size
     rel_path = dest_path.relative_to(Path(base_root)).as_posix()
+    return rel_path, size, ext
+
+
+def _guess_upload_content_type(upload: UploadFile, ext: str, filename: str) -> str:
+    if upload.content_type:
+        return upload.content_type
+    guessed, _ = mimetypes.guess_type(filename)
+    if guessed:
+        return guessed
+    # Keep a minimal safe fallback when extension-based MIME guess misses.
+    if ext == "md" or ext == "markdown":
+        return "text/markdown"
+    return "application/octet-stream"
+
+
+async def save_upload_file_with_storage(
+    upload: UploadFile,
+    document_id: str,
+    base_root: Optional[str] = None,
+) -> Tuple[str, int, str]:
+    """Save upload locally and mirror to active storage backend when needed."""
+    rel_path, size, ext = save_upload_file(
+        upload=upload,
+        document_id=document_id,
+        base_root=base_root,
+    )
+
+    backend = get_storage_backend()
+    if isinstance(backend, LocalStorageBackend):
+        return rel_path, size, ext
+
+    root = Path(base_root or get_documents_directory())
+    absolute_path = root / rel_path
+    content_type = _guess_upload_content_type(
+        upload=upload,
+        ext=ext,
+        filename=absolute_path.name,
+    )
+    await backend.save_from_path(
+        object_key=rel_path,
+        local_path=str(absolute_path),
+        content_type=content_type,
+    )
     return rel_path, size, ext

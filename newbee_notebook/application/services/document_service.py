@@ -30,7 +30,10 @@ from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.tasks.document_tasks import process_document_task
-from newbee_notebook.infrastructure.storage.local_storage import save_upload_file, _decode_filename
+from newbee_notebook.infrastructure.storage.local_storage import (
+    save_upload_file_with_storage,
+    _decode_filename,
+)
 from newbee_notebook.core.common.config import get_documents_directory
 from newbee_notebook.exceptions import DocumentProcessingError
 
@@ -117,7 +120,7 @@ class DocumentService:
         for upload in files:
             try:
                 document_id = generate_uuid()
-                file_path, size, ext = save_upload_file(
+                file_path, size, ext = await save_upload_file_with_storage(
                     upload,
                     document_id=document_id,
                     base_root=base_root,
