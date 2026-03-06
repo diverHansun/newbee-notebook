@@ -1,14 +1,66 @@
 "use client";
 
-import { memo, RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { memo, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { renderMarkdownToHtml } from "@/components/reader/markdown-pipeline";
+import {
+  getInitialVisibleChunkCount,
+  LARGE_DOC_THRESHOLD_CHARS,
+  splitMarkdownIntoChunks,
+} from "@/lib/reader/markdown-chunking";
 
-const LARGE_DOC_THRESHOLD_CHARS = 120_000;
-const TARGET_CHUNK_CHARS = 24_000;
-const CHUNK_LOAD_STEP = 2;
-const MIN_ROOT_MARGIN_PX = 900;
-const MAX_ROOT_MARGIN_PX = 1800;
+const CHUNK_LOAD_STEP = 1;
+const MIN_ROOT_MARGIN_PX = 640;
+const MAX_ROOT_MARGIN_PX = 1400;
+const PREFETCH_AHEAD_CHUNKS = 2;
+const IDLE_TASK_TIMEOUT_MS = 180;
+
+type IdleDeadlineLike = {
+  didTimeout: boolean;
+  timeRemaining: () => number;
+};
+
+type IdleRequestWindow = Window &
+  typeof globalThis & {
+    requestIdleCallback?: (
+      callback: (deadline: IdleDeadlineLike) => void,
+      options?: { timeout?: number }
+    ) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+
+type ScheduledTask = {
+  kind: "idle" | "timeout";
+  id: number;
+};
+
+function scheduleDeferredTask(fn: () => void, timeout = IDLE_TASK_TIMEOUT_MS): ScheduledTask | null {
+  if (typeof window === "undefined") return null;
+  const idleWindow = window as IdleRequestWindow;
+  if (typeof idleWindow.requestIdleCallback === "function") {
+    return {
+      kind: "idle",
+      id: idleWindow.requestIdleCallback(() => fn(), { timeout }),
+    };
+  }
+
+  return {
+    kind: "timeout",
+    id: window.setTimeout(fn, 24),
+  };
+}
+
+function cancelDeferredTask(task: ScheduledTask | null): void {
+  if (!task || typeof window === "undefined") return;
+  if (task.kind === "timeout") {
+    window.clearTimeout(task.id);
+    return;
+  }
+  const idleWindow = window as IdleRequestWindow;
+  if (typeof idleWindow.cancelIdleCallback === "function") {
+    idleWindow.cancelIdleCallback(task.id);
+  }
+}
 
 type MarkdownViewerProps = {
   content: string;
@@ -17,50 +69,9 @@ type MarkdownViewerProps = {
   containerRef?: RefObject<HTMLDivElement | null>;
   scrollRootRef?: RefObject<HTMLElement | null>;
   freezeLazyLoad?: boolean;
+  visibleChunkCount?: number;
+  onVisibleChunkCountChange?: (count: number) => void;
 };
-
-function splitMarkdownIntoChunks(content: string): string[] {
-  if (!content) return [""];
-  if (content.length <= LARGE_DOC_THRESHOLD_CHARS) {
-    return [content];
-  }
-
-  const lines = content.split(/\r?\n/);
-  const chunks: string[] = [];
-  let current: string[] = [];
-  let currentSize = 0;
-
-  const flush = () => {
-    if (!current.length) return;
-    chunks.push(current.join("\n"));
-    current = [];
-    currentSize = 0;
-  };
-
-  for (const line of lines) {
-    const size = line.length + 1;
-    const boundary = /^#{1,6}\s/.test(line) || line.trim() === "";
-    if (currentSize >= TARGET_CHUNK_CHARS && boundary) {
-      flush();
-    }
-    current.push(line);
-    currentSize += size;
-
-    // Avoid an oversized chunk when no heading/blank-line boundary appears for a long time.
-    if (currentSize >= TARGET_CHUNK_CHARS * 1.6) {
-      flush();
-    }
-  }
-  flush();
-
-  return chunks.length ? chunks : [content];
-}
-
-function getInitialVisibleChunkCount(totalChunks: number): number {
-  if (totalChunks <= 1) return 1;
-  if (totalChunks <= 3) return 2;
-  return 3;
-}
 
 function getDynamicRootMargin(contentChars: number, totalChunks: number): string {
   if (contentChars <= LARGE_DOC_THRESHOLD_CHARS || totalChunks <= 1) {
@@ -88,26 +99,89 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   containerRef,
   scrollRootRef,
   freezeLazyLoad = false,
+  visibleChunkCount,
+  onVisibleChunkCountChange,
 }: MarkdownViewerProps) {
   const fallbackRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const htmlCacheRef = useRef<Map<number, string>>(new Map());
+  const visibleChunkCountRef = useRef(1);
+  const expandTaskRef = useRef<ScheduledTask | null>(null);
+  const prefetchTaskRef = useRef<ScheduledTask | null>(null);
   const ref = containerRef || fallbackRef;
   const chunks = useMemo(() => splitMarkdownIntoChunks(content), [content]);
   const rootMargin = useMemo(
     () => getDynamicRootMargin(content.length, chunks.length),
     [chunks.length, content.length]
   );
-  const [visibleChunkCount, setVisibleChunkCount] = useState(() =>
+  const [internalVisibleChunkCount, setInternalVisibleChunkCount] = useState(() =>
     getInitialVisibleChunkCount(chunks.length)
+  );
+  const isControlledVisibleChunkCount = typeof visibleChunkCount === "number";
+  const resolvedVisibleChunkCount = isControlledVisibleChunkCount
+    ? Math.max(1, Math.min(chunks.length, visibleChunkCount || 1))
+    : internalVisibleChunkCount;
+
+  const setVisibleChunkCount = useCallback(
+    (next: number) => {
+      const normalized = Math.max(1, Math.min(chunks.length, next));
+      if (!isControlledVisibleChunkCount) {
+        setInternalVisibleChunkCount(normalized);
+      }
+      onVisibleChunkCountChange?.(normalized);
+    },
+    [chunks.length, isControlledVisibleChunkCount, onVisibleChunkCountChange]
   );
 
   useEffect(() => {
-    htmlCacheRef.current.clear();
-    setVisibleChunkCount(getInitialVisibleChunkCount(chunks.length));
-  }, [chunks.length, content, documentId]);
+    visibleChunkCountRef.current = resolvedVisibleChunkCount;
+  }, [resolvedVisibleChunkCount]);
 
-  const hasMoreChunks = visibleChunkCount < chunks.length;
+  useEffect(() => {
+    cancelDeferredTask(expandTaskRef.current);
+    expandTaskRef.current = null;
+    cancelDeferredTask(prefetchTaskRef.current);
+    prefetchTaskRef.current = null;
+    htmlCacheRef.current.clear();
+    const initialVisibleChunkCount = getInitialVisibleChunkCount(chunks.length);
+    if (isControlledVisibleChunkCount) {
+      onVisibleChunkCountChange?.(initialVisibleChunkCount);
+    } else {
+      setInternalVisibleChunkCount(initialVisibleChunkCount);
+    }
+  }, [chunks.length, content, documentId, isControlledVisibleChunkCount, onVisibleChunkCountChange]);
+
+  const hasMoreChunks = resolvedVisibleChunkCount < chunks.length;
+
+  const scheduleChunkExpand = useCallback(() => {
+    if (expandTaskRef.current) return;
+    expandTaskRef.current = scheduleDeferredTask(() => {
+      expandTaskRef.current = null;
+      if (freezeLazyLoad) return;
+      setVisibleChunkCount(visibleChunkCountRef.current + CHUNK_LOAD_STEP);
+    });
+  }, [freezeLazyLoad, setVisibleChunkCount]);
+
+  useEffect(() => {
+    if (!hasMoreChunks) return;
+    const cache = htmlCacheRef.current;
+    const start = resolvedVisibleChunkCount;
+    const end = Math.min(chunks.length, resolvedVisibleChunkCount + PREFETCH_AHEAD_CHUNKS);
+
+    cancelDeferredTask(prefetchTaskRef.current);
+    prefetchTaskRef.current = scheduleDeferredTask(() => {
+      prefetchTaskRef.current = null;
+      for (let idx = start; idx < end; idx += 1) {
+        if (cache.has(idx)) continue;
+        cache.set(idx, renderMarkdownToHtml(chunks[idx] || "", { documentId }));
+      }
+    });
+
+    return () => {
+      cancelDeferredTask(prefetchTaskRef.current);
+      prefetchTaskRef.current = null;
+    };
+  }, [chunks, documentId, hasMoreChunks, resolvedVisibleChunkCount]);
 
   useEffect(() => {
     if (!hasMoreChunks) return;
@@ -117,20 +191,33 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
-        if (freezeLazyLoad) return;
-        setVisibleChunkCount((prev) => Math.min(prev + CHUNK_LOAD_STEP, chunks.length));
+        scheduleChunkExpand();
       },
       { root: scrollRootRef?.current ?? null, rootMargin }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [chunks.length, freezeLazyLoad, hasMoreChunks, rootMargin, scrollRootRef]);
+  }, [
+    hasMoreChunks,
+    rootMargin,
+    scheduleChunkExpand,
+    scrollRootRef,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      cancelDeferredTask(expandTaskRef.current);
+      expandTaskRef.current = null;
+      cancelDeferredTask(prefetchTaskRef.current);
+      prefetchTaskRef.current = null;
+    };
+  }, []);
 
   const htmlChunks = useMemo(() => {
     const output: string[] = [];
     const cache = htmlCacheRef.current;
 
-    for (let idx = 0; idx < visibleChunkCount; idx += 1) {
+    for (let idx = 0; idx < resolvedVisibleChunkCount; idx += 1) {
       const chunk = chunks[idx] || "";
       let html = cache.get(idx);
       if (!html) {
@@ -140,7 +227,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
       output.push(html);
     }
     return output;
-  }, [chunks, documentId, visibleChunkCount]);
+  }, [chunks, documentId, resolvedVisibleChunkCount]);
 
   return (
     <div ref={ref} className={`markdown-content ${className || ""}`}>

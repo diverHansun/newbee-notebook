@@ -106,6 +106,8 @@ export const uiStrings = {
     retry: { zh: "重试", en: "Retry" },
     backToChat: { zh: "← 返回聊天", en: "Back to chat" },
     documentFallbackTitle: { zh: "文档", en: "Document" },
+    tocToggle: { zh: "目录", en: "TOC" },
+    tocTitle: { zh: "目录", en: "Table of Contents" },
     processing: { zh: "文档正在处理中，请稍后再试。", en: "Document is processing. Please try again later." },
     pending: { zh: "文档等待处理，请稍后再试。", en: "Document is waiting for processing. Please try again later." },
     failed: { zh: "文档处理失败，请检查文档格式或重新上传。", en: "Document processing failed. Check format or re-upload." },

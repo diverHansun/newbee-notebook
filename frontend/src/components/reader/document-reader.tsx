@@ -1,14 +1,24 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { SelectionMenu } from "@/components/reader/selection-menu";
+import { TocSidebar } from "@/components/reader/toc-sidebar";
 import { getDocument, getDocumentContent } from "@/lib/api/documents";
 import { ApiError } from "@/lib/api/client";
+import {
+  extractTocItems,
+  getCompactReaderWidthThreshold,
+  type TocItem,
+} from "@/lib/hooks/use-toc";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+import {
+  getInitialVisibleChunkCount,
+  splitMarkdownIntoChunks,
+} from "@/lib/reader/markdown-chunking";
 import { useTextSelection } from "@/lib/hooks/useTextSelection";
 import { useReaderStore } from "@/stores/reader-store";
 
@@ -28,7 +38,13 @@ export function DocumentReader({
   const { t, ti } = useLang();
   const viewerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const readerBodyRef = useRef<HTMLDivElement>(null);
   const isSelecting = useReaderStore((state) => state.isSelecting);
+  const isTocOpen = useReaderStore((state) => state.isTocOpen);
+  const setTocOpen = useReaderStore((state) => state.setTocOpen);
+  const toggleToc = useReaderStore((state) => state.toggleToc);
+  const [isCompactReader, setIsCompactReader] = useState(false);
+  const [visibleChunkCount, setVisibleChunkCount] = useState(1);
 
   const documentQuery = useQuery({
     queryKey: ["document", documentId],
@@ -59,6 +75,68 @@ export function DocumentReader({
     containerRef: viewerRef,
     documentId,
   });
+
+  const markdownContent = contentQuery.data?.content || "";
+  const tocItems = useMemo(() => extractTocItems(markdownContent), [markdownContent]);
+  const shouldShowToc = tocItems.length > 0;
+  const effectiveTocOpen = shouldShowToc && isTocOpen && !isCompactReader;
+  const markdownChunks = useMemo(() => splitMarkdownIntoChunks(markdownContent), [markdownContent]);
+  const totalChunkCount = markdownChunks.length;
+  const initialVisibleChunkCount = useMemo(
+    () => getInitialVisibleChunkCount(totalChunkCount),
+    [totalChunkCount]
+  );
+
+  useEffect(() => {
+    setVisibleChunkCount(initialVisibleChunkCount);
+  }, [documentId, markdownContent, initialVisibleChunkCount]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const target = readerBodyRef.current;
+    if (!target) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width || 0;
+      setIsCompactReader(width > 0 && width < getCompactReaderWidthThreshold());
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (isCompactReader && isTocOpen) {
+      setTocOpen(false);
+    }
+  }, [isCompactReader, isTocOpen, setTocOpen]);
+
+  const scrollToHeadingByOrder = (order: number) => {
+    const attemptScroll = (attempt = 0) => {
+      const headings = viewerRef.current?.querySelectorAll<HTMLElement>("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]");
+      const target = headings?.[order] || null;
+
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      if (attempt < 10) {
+        window.requestAnimationFrame(() => attemptScroll(attempt + 1));
+      }
+    };
+
+    attemptScroll();
+  };
+
+  const onTocItemClick = (item: TocItem) => {
+    const neededChunkCount = Math.min(totalChunkCount, item.chunkIndex + 1);
+    setVisibleChunkCount((prev) => (prev < neededChunkCount ? neededChunkCount : prev));
+    scrollToHeadingByOrder(item.order);
+  };
+
+  const onVisibleChunkCountChange = useCallback((next: number) => {
+    setVisibleChunkCount((prev) => (prev === next ? prev : next));
+  }, []);
 
   const renderBody = () => {
     if (documentQuery.isLoading) {
@@ -123,11 +201,13 @@ export function DocumentReader({
     return (
       <div style={{ padding: "8px 24px 24px" }}>
         <MarkdownViewer
-          content={contentQuery.data?.content || ""}
+          content={markdownContent}
           documentId={documentId}
           containerRef={viewerRef}
           scrollRootRef={scrollContainerRef}
           freezeLazyLoad={isSelecting}
+          visibleChunkCount={visibleChunkCount}
+          onVisibleChunkCountChange={onVisibleChunkCountChange}
         />
       </div>
     );
@@ -152,16 +232,34 @@ export function DocumentReader({
             {documentQuery.data?.title || t(uiStrings.reader.documentFallbackTitle)}
           </strong>
         </div>
-        {status && (
-          <span className={`badge ${statusBadgeClass(status)}`}>
-            {status}
-          </span>
-        )}
+        {shouldShowToc ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            aria-pressed={effectiveTocOpen}
+            onClick={toggleToc}
+          >
+            {t(uiStrings.reader.tocToggle)}
+          </button>
+        ) : null}
       </div>
 
       {/* Content */}
-      <div ref={scrollContainerRef} style={{ flex: 1, overflow: "auto" }}>
-        {renderBody()}
+      <div ref={readerBodyRef} className="reader-body-layout" style={{ flex: 1 }}>
+        {shouldShowToc ? (
+          <TocSidebar
+            items={tocItems}
+            isOpen={effectiveTocOpen}
+            title={t(uiStrings.reader.tocTitle)}
+            scrollContainerRef={scrollContainerRef}
+            activeTrackingEnabled={effectiveTocOpen}
+            refreshKey={visibleChunkCount}
+            onItemClick={onTocItemClick}
+          />
+        ) : null}
+        <div ref={scrollContainerRef} className="reader-content-scroll">
+          {renderBody()}
+        </div>
       </div>
 
       <SelectionMenu onExplain={onExplain} onConclude={onConclude} />
