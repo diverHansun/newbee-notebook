@@ -119,7 +119,11 @@ docker-compose logs -f
 ### 本地 CPU 模式（启用 mineru-api）
 
 ```bash
+# 仅本地 MinerU
 docker-compose --profile mineru-local up -d --build
+
+# 本地 MinerU + MinIO（backend-v2 batch-1 MinIO）
+docker-compose --profile mineru-local --profile minio up -d --build
 ```
 
 ### 本地 GPU 模式（需要 NVIDIA GPU + nvidia-container-toolkit）
@@ -127,6 +131,9 @@ docker-compose --profile mineru-local up -d --build
 ```bash
 # 使用 GPU 配置 + local profile 启动
 docker-compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local up -d --build
+
+# 使用 GPU 配置 + local profile + MinIO
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local --profile minio up -d --build
 
 # 或使用便捷脚本（自动检测 GPU）
 .\scripts\up-mineru.ps1
@@ -175,6 +182,12 @@ curl http://localhost:9200
 
 ```bash
 curl http://localhost:8001/docs
+```
+
+如果你启用了 MinIO profile，再额外验证：
+
+```bash
+curl http://localhost:9000/minio/health/live
 ```
 
 ### 2. 测试 FastAPI

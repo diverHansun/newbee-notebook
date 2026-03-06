@@ -1,6 +1,7 @@
 param(
     [switch]$Build = $true,
-    [switch]$Detach = $true
+    [switch]$Detach = $true,
+    [switch]$WithMinio = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,7 +28,14 @@ if (Test-HostGpu) {
 $upArgs = @("up")
 if ($Detach) { $upArgs += "-d" }
 if ($Build) { $upArgs += "--build" }
-$upArgs += "mineru-api"
+$upArgs += @("--profile", "mineru-local")
+if ($WithMinio) {
+    Write-Host "Including MinIO profile and service"
+    $upArgs += @("--profile", "minio")
+    $upArgs += @("mineru-api", "minio")
+} else {
+    $upArgs += "mineru-api"
+}
 
 docker compose @composeFiles @upArgs
 

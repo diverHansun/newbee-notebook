@@ -24,6 +24,7 @@ services:
   # GPU override for MinerU API service.
   # Use together with the base compose file:
   #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local up -d --build
+  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local --profile minio up -d --build
   mineru-api:
     build:
       context: ./docker/mineru
