@@ -32,15 +32,15 @@ from newbee_notebook.core.common.config import (
 )
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
-from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
 
 
 def get_storage() -> StorageBackend:
-    """Get the active storage backend (local or minio)."""
-    return get_storage_backend()
+    """Get the runtime storage backend."""
+    return get_runtime_storage_backend()
 
 
 async def get_db_session():

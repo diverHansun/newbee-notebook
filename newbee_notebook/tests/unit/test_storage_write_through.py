@@ -20,8 +20,9 @@ class _FakeRemoteStorageBackend:
 def test_upload_file_syncs_original_file_to_remote_storage(tmp_path: Path, monkeypatch):
     backend = _FakeRemoteStorageBackend()
     monkeypatch.setattr(
-        "newbee_notebook.infrastructure.storage.local_storage.get_storage_backend",
+        "newbee_notebook.infrastructure.storage.local_storage.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     upload = UploadFile(filename="demo.pdf", file=BytesIO(b"%PDF-sample"))
@@ -50,8 +51,9 @@ def test_upload_file_syncs_original_file_to_remote_storage(tmp_path: Path, monke
 def test_save_markdown_syncs_markdown_and_assets_to_remote_storage(tmp_path: Path, monkeypatch):
     backend = _FakeRemoteStorageBackend()
     monkeypatch.setattr(
-        "newbee_notebook.infrastructure.document_processing.store.get_storage_backend",
+        "newbee_notebook.infrastructure.document_processing.store.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     async def _run():

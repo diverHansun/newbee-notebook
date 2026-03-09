@@ -30,9 +30,8 @@ from newbee_notebook.domain.repositories.reference_repository import (
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
-from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
-from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
 from newbee_notebook.infrastructure.tasks.document_tasks import process_document_task
 from newbee_notebook.infrastructure.storage.local_storage import (
     save_upload_file_with_storage,
@@ -270,16 +269,10 @@ class DocumentService:
         if doc.status not in {DocumentStatus.CONVERTED, DocumentStatus.COMPLETED}:
             raise RuntimeError("Document not processed yet")
 
-        storage = get_storage_backend()
-        if isinstance(storage, LocalStorageBackend):
-            resolved_content_path, absolute_content_path = self._resolve_content_path(doc)
-            if not absolute_content_path.exists():
-                raise FileNotFoundError("Content file not found on disk")
-            content = absolute_content_path.read_text(encoding="utf-8")
-        else:
-            resolved_content_path = await self._resolve_content_storage_key(doc, storage)
-            content = await storage.get_text(resolved_content_path)
-            content = await self._rewrite_asset_urls_for_remote(content, storage)
+        storage = get_runtime_storage_backend()
+        resolved_content_path = await self._resolve_content_storage_key(doc, storage)
+        content = await storage.get_text(resolved_content_path)
+        content = await self._rewrite_asset_urls_for_remote(content, storage)
 
         # Self-heal legacy rows where content key/path exists but content_path was not persisted.
         if doc.content_path != resolved_content_path:
@@ -299,15 +292,12 @@ class DocumentService:
         raise ValueError("Unsupported format")
 
     async def get_download_url(self, document_id: str) -> Optional[str]:
-        """Get presigned download URL when remote storage backend is active."""
+        """Get presigned download URL from runtime storage."""
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError("Document not found")
 
-        storage = get_storage_backend()
-        if isinstance(storage, LocalStorageBackend):
-            return None
-
+        storage = get_runtime_storage_backend()
         candidates = self._build_storage_key_candidates(doc.file_path)
         object_key = await self._resolve_existing_storage_key(storage, candidates)
         if not object_key:
@@ -328,15 +318,12 @@ class DocumentService:
         return file_path, file_path.name
 
     async def get_asset_url(self, document_id: str, asset_path: str) -> Optional[str]:
-        """Get presigned asset URL when remote storage backend is active."""
+        """Get presigned asset URL from runtime storage."""
         doc = await self._document_repo.get(document_id)
         if not doc:
             raise ValueError("Document not found")
 
-        storage = get_storage_backend()
-        if isinstance(storage, LocalStorageBackend):
-            return None
-
+        storage = get_runtime_storage_backend()
         normalized = self._validate_asset_path(asset_path)
         object_key = f"{document_id}/assets/{normalized.as_posix()}"
         if not await storage.exists(object_key):

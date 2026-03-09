@@ -19,6 +19,7 @@ from newbee_notebook.domain.repositories.document_repository import DocumentRepo
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.reference_repository import NotebookDocumentRefRepository
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
+from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.tasks.document_tasks import (
     index_document_task,
     process_document_task,
@@ -102,6 +103,20 @@ class NotebookDocumentService:
 
             action, task_name, force = self._determine_processing_action(document)
             if task_name is not None:
+                queued_status = self._get_queued_status_for_task(task_name)
+                await self._document_repo.update_status(
+                    document_id=document_id,
+                    status=queued_status,
+                    error_message=None,
+                    processing_stage=ProcessingStage.QUEUED.value,
+                    processing_meta={
+                        "queued_by": "notebook_add",
+                        "action": action,
+                        "task_name": task_name,
+                        "force": force,
+                    },
+                )
+                await self._document_repo.commit()
                 self._enqueue_processing(document_id=document_id, task_name=task_name, force=force)
 
             # Return latest status from DB if it changed.
@@ -173,6 +188,12 @@ class NotebookDocumentService:
             return "index_only", "index_document", True
 
         return "full_pipeline", "process_document", False
+
+    @staticmethod
+    def _get_queued_status_for_task(task_name: str) -> DocumentStatus:
+        if task_name == "index_document":
+            return DocumentStatus.CONVERTED
+        return DocumentStatus.PENDING
 
     def _enqueue_processing(self, document_id: str, task_name: str, force: bool = False) -> None:
         """Dispatch processing task with sync fallback for local development."""

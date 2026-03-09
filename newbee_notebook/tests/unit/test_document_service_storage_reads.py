@@ -59,8 +59,9 @@ def test_get_document_content_reads_from_remote_storage(monkeypatch):
         urls={},
     )
     monkeypatch.setattr(
-        "newbee_notebook.application.services.document_service.get_storage_backend",
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     service = _build_service(doc_repo)
@@ -92,8 +93,9 @@ def test_get_document_content_repairs_legacy_documents_prefix_for_remote(monkeyp
         urls={},
     )
     monkeypatch.setattr(
-        "newbee_notebook.application.services.document_service.get_storage_backend",
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     service = _build_service(doc_repo)
@@ -140,8 +142,9 @@ def test_get_document_content_rewrites_asset_urls_for_remote_storage(monkeypatch
         },
     )
     monkeypatch.setattr(
-        "newbee_notebook.application.services.document_service.get_storage_backend",
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     service = _build_service(doc_repo)
@@ -174,8 +177,9 @@ def test_get_download_url_returns_presigned_url_for_remote_storage(monkeypatch):
         urls={"doc-r-3/original/demo.pdf": "http://localhost:9000/download-signed"},
     )
     monkeypatch.setattr(
-        "newbee_notebook.application.services.document_service.get_storage_backend",
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
 
     service = _build_service(doc_repo)
@@ -199,8 +203,9 @@ def test_get_asset_url_rejects_path_traversal_for_remote_storage(monkeypatch):
 
     backend = _FakeRemoteStorageBackend(existing=set(), texts={}, urls={})
     monkeypatch.setattr(
-        "newbee_notebook.application.services.document_service.get_storage_backend",
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
         lambda: backend,
+        raising=False,
     )
     service = _build_service(doc_repo)
 

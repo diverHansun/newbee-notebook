@@ -5,8 +5,7 @@ import re
 import mimetypes
 
 from newbee_notebook.core.common.config import get_documents_directory
-from newbee_notebook.infrastructure.storage import get_storage_backend
-from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 
 
 def _ensure_dir(path: Path) -> None:
@@ -161,7 +160,7 @@ async def save_markdown_with_storage(
     metadata_assets: Optional[dict[str, bytes]] = None,
     base_root: Optional[str] = None,
 ) -> tuple[str, int]:
-    """Persist markdown locally and mirror generated artifacts to storage backend."""
+    """Persist markdown locally and mirror generated artifacts to runtime storage."""
     rel_path, content_size = save_markdown(
         document_id=document_id,
         markdown=markdown,
@@ -170,10 +169,7 @@ async def save_markdown_with_storage(
         base_root=base_root,
     )
 
-    backend = get_storage_backend()
-    if isinstance(backend, LocalStorageBackend):
-        return rel_path, content_size
-
+    backend = get_runtime_storage_backend()
     root = Path(base_root or get_documents_directory())
     doc_root = root / document_id
     paths_to_sync: list[Path] = []

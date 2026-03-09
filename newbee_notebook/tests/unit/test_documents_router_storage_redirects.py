@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
@@ -22,20 +21,17 @@ def _build_client(service: AsyncMock) -> TestClient:
 def test_download_document_redirects_to_presigned_url():
     service = AsyncMock()
     service.get_download_url = AsyncMock(return_value="http://localhost:9000/presigned-download")
-    service.get_download_path = AsyncMock()
 
     client = _build_client(service)
     response = client.get("/api/v1/documents/11111111-1111-1111-1111-111111111111/download", follow_redirects=False)
 
     assert response.status_code == 307
     assert response.headers["location"] == "http://localhost:9000/presigned-download"
-    service.get_download_path.assert_not_awaited()
 
 
 def test_asset_document_redirects_to_presigned_url():
     service = AsyncMock()
     service.get_asset_url = AsyncMock(return_value="http://localhost:9000/presigned-asset")
-    service.get_asset_path = AsyncMock()
 
     client = _build_client(service)
     response = client.get(
@@ -45,19 +41,14 @@ def test_asset_document_redirects_to_presigned_url():
 
     assert response.status_code == 307
     assert response.headers["location"] == "http://localhost:9000/presigned-asset"
-    service.get_asset_path.assert_not_awaited()
 
 
-def test_download_document_falls_back_to_file_response_when_no_presigned_url(tmp_path: Path):
-    file_path = tmp_path / "demo.pdf"
-    file_path.write_bytes(b"%PDF")
-
+def test_download_document_returns_503_when_runtime_storage_is_misconfigured():
     service = AsyncMock()
-    service.get_download_url = AsyncMock(return_value=None)
-    service.get_download_path = AsyncMock(return_value=(file_path, "demo.pdf"))
+    service.get_download_url = AsyncMock(side_effect=RuntimeError("Runtime storage backend requires MinIO"))
 
     client = _build_client(service)
     response = client.get("/api/v1/documents/11111111-1111-1111-1111-111111111111/download")
 
-    assert response.status_code == 200
-    assert response.content == b"%PDF"
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Runtime storage backend requires MinIO"

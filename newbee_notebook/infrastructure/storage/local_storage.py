@@ -13,8 +13,7 @@ from urllib.parse import unquote
 from fastapi import UploadFile
 
 from newbee_notebook.core.common.config import get_documents_directory
-from newbee_notebook.infrastructure.storage import get_storage_backend
-from newbee_notebook.infrastructure.storage.local_storage_backend import LocalStorageBackend
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 
 
 def ensure_dir(path: str) -> None:
@@ -174,17 +173,14 @@ async def save_upload_file_with_storage(
     document_id: str,
     base_root: Optional[str] = None,
 ) -> Tuple[str, int, str]:
-    """Save upload locally and mirror to active storage backend when needed."""
+    """Save upload locally and mirror to the runtime storage backend."""
     rel_path, size, ext = save_upload_file(
         upload=upload,
         document_id=document_id,
         base_root=base_root,
     )
 
-    backend = get_storage_backend()
-    if isinstance(backend, LocalStorageBackend):
-        return rel_path, size, ext
-
+    backend = get_runtime_storage_backend()
     root = Path(base_root or get_documents_directory())
     absolute_path = root / rel_path
     content_type = _guess_upload_content_type(

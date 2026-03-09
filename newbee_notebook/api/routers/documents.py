@@ -5,10 +5,9 @@ Library-first document APIs.
 """
 
 from typing import Optional, List
-import mimetypes
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 
 from newbee_notebook.api.models.responses import (
     DocumentResponse,
@@ -149,16 +148,14 @@ async def download_document(
     """Download original uploaded file."""
     try:
         download_url = await service.get_download_url(document_id)
-        if download_url:
-            return RedirectResponse(url=download_url, status_code=307)
-
-        file_path, filename = await service.get_download_path(document_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
-    return FileResponse(path=file_path, filename=filename, media_type="application/octet-stream")
+    return RedirectResponse(url=download_url, status_code=307)
 
 
 @router.get("/{document_id}/assets/{asset_path:path}")
@@ -170,17 +167,14 @@ async def get_document_asset(
     """Serve generated document assets (images/json) for frontend rendering."""
     try:
         asset_url = await service.get_asset_url(document_id, asset_path)
-        if asset_url:
-            return RedirectResponse(url=asset_url, status_code=307)
-
-        file_path = await service.get_asset_path(document_id, asset_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
-    media_type, _ = mimetypes.guess_type(str(file_path))
-    return FileResponse(path=file_path, media_type=media_type or "application/octet-stream")
+    return RedirectResponse(url=asset_url, status_code=307)
 
 
 @router.get("/library", response_model=DocumentListResponse)
