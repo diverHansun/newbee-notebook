@@ -58,6 +58,18 @@ def test_get_document_processing_config_resolves_nested_env(monkeypatch):
     assert dp_cfg["mineru_local"]["api_url"] == "http://mineru-api:8000"
 
 
+def test_get_document_processing_config_resolves_mineru_local_stability_env(monkeypatch):
+    monkeypatch.setenv("MINERU_LOCAL_MAX_PAGES_PER_BATCH", "50")
+    monkeypatch.setenv("MINERU_LOCAL_REQUEST_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("MINERU_LOCAL_RETRY_BACKOFF_SECONDS", "10")
+
+    cfg = get_document_processing_config()
+    local_cfg = cfg["document_processing"]["mineru_local"]
+    assert local_cfg["max_pages_per_batch"] == "50"
+    assert local_cfg["request_retry_attempts"] == "2"
+    assert local_cfg["retry_backoff_seconds"] == "10"
+
+
 def test_get_document_processing_config_supports_empty_default(monkeypatch):
     monkeypatch.delenv("MINERU_API_KEY", raising=False)
     cfg = get_document_processing_config()
@@ -93,6 +105,28 @@ def test_processor_local_mode_uses_local_converter():
     assert len(pdf_converters) == 2
     assert isinstance(pdf_converters[0], MinerULocalConverter)
     assert isinstance(pdf_converters[1], MarkItDownConverter)
+
+
+def test_processor_local_mode_uses_batch_size_50_by_default():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    cfg["document_processing"]["mineru_local"].pop("max_pages_per_batch", None)
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_local = next(c for c in processor._converters if isinstance(c, MinerULocalConverter))
+    assert mineru_local._max_pages_per_batch == 50
+
+
+def test_processor_local_mode_wires_retry_settings_from_config():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    cfg["document_processing"]["mineru_local"]["request_retry_attempts"] = "4"
+    cfg["document_processing"]["mineru_local"]["retry_backoff_seconds"] = "1.5"
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_local = next(c for c in processor._converters if isinstance(c, MinerULocalConverter))
+    assert mineru_local._request_retry_attempts == 4
+    assert mineru_local._retry_backoff_seconds == 1.5
 
 
 def test_processor_local_mode_enables_metadata_by_default():
@@ -258,3 +292,32 @@ def test_processor_error_chain_preserves_root_cause(monkeypatch):
     assert "MinerU CDN download failed after 3 retries" in text
     assert "Last error (MarkItDownConverter)" in text
     assert "MarkItDown produced empty markdown" in text
+
+
+def test_local_converter_retries_transient_batch_failure(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+
+    converter = MinerULocalConverter(request_retry_attempts=2, retry_backoff_seconds=0.0)
+
+    async def _count_pages(_path):
+        return 1
+
+    calls = {"count": 0}
+
+    async def _convert_range(_path, *, start_page, end_page, total_pages):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            response = requests.Response()
+            response.status_code = 500
+            response.url = "http://mineru-api:8000/file_parse"
+            raise requests.HTTPError(response=response)
+        return ConversionResult(markdown="# recovered", page_count=1)
+
+    monkeypatch.setattr(converter, "_count_pages", _count_pages)
+    monkeypatch.setattr(converter, "_convert_range", _convert_range)
+
+    result = asyncio.run(converter.convert(str(pdf_path)))
+
+    assert result.markdown == "# recovered"
+    assert calls["count"] == 2

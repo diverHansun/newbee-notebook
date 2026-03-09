@@ -19,11 +19,13 @@ logger = logging.getLogger(__name__)
 # MinerU worker process pool.  Each batch is sent as a separate API request
 # with ``start_page_id`` / ``end_page_id``; results are merged afterwards.
 #
-# 60 pages at 200 DPI = 640 MB image RAM per batch.  Combined with model
-# weights (~4 GB) and overhead, this fits comfortably in 16 GB WSL2 VM
+# 50 pages at 200 DPI ~= 533 MB image RAM per batch. Combined with model
+# weights (~4 GB) and overhead, this leaves more headroom for vLLM restarts
 # provided inter-batch memory cleanup is performed (gc.collect between
 # batches on the client side, MINERU_VIRTUAL_VRAM_SIZE=8 on the server side).
-_DEFAULT_MAX_PAGES_PER_BATCH = 60
+_DEFAULT_MAX_PAGES_PER_BATCH = 50
+_DEFAULT_REQUEST_RETRY_ATTEMPTS = 2
+_DEFAULT_RETRY_BACKOFF_SECONDS = 10.0
 
 
 class MinerULocalConverter(Converter):
@@ -39,6 +41,8 @@ class MinerULocalConverter(Converter):
         return_content_list: bool = True,
         return_model_output: bool = True,
         max_pages_per_batch: int = _DEFAULT_MAX_PAGES_PER_BATCH,
+        request_retry_attempts: int = _DEFAULT_REQUEST_RETRY_ATTEMPTS,
+        retry_backoff_seconds: float = _DEFAULT_RETRY_BACKOFF_SECONDS,
     ) -> None:
         self._base_url = (base_url or "http://mineru-api:8000").rstrip("/")
         self._timeout = timeout_seconds
@@ -48,6 +52,8 @@ class MinerULocalConverter(Converter):
         self._return_content_list = return_content_list
         self._return_model_output = return_model_output
         self._max_pages_per_batch = max(1, max_pages_per_batch)
+        self._request_retry_attempts = max(0, request_retry_attempts)
+        self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
 
     @staticmethod
     def _normalize_lang_list(value: object) -> list[str]:
@@ -87,7 +93,12 @@ class MinerULocalConverter(Converter):
 
         if total_pages <= self._max_pages_per_batch:
             # Small PDF – single request, no batching.
-            return await self._convert_range(path, start_page=0, end_page=total_pages - 1, total_pages=total_pages)
+            return await self._convert_range_with_retry(
+                path,
+                start_page=0,
+                end_page=total_pages - 1,
+                total_pages=total_pages,
+            )
 
         # ---- Large PDF: split into batches ----
         logger.info(
@@ -107,7 +118,12 @@ class MinerULocalConverter(Converter):
                 "  Batch %d/%d: pages %d–%d (%d pages)",
                 batch_num, num_batches, batch_start, batch_end, batch_end - batch_start + 1,
             )
-            result = await self._convert_range(path, start_page=batch_start, end_page=batch_end, total_pages=total_pages)
+            result = await self._convert_range_with_retry(
+                path,
+                start_page=batch_start,
+                end_page=batch_end,
+                total_pages=total_pages,
+            )
 
             all_markdown.append(result.markdown)
             accumulated_page_count += result.page_count
@@ -144,6 +160,57 @@ class MinerULocalConverter(Converter):
             image_assets=all_images or None,
             metadata_assets=all_metadata or None,
         )
+
+    @staticmethod
+    def _should_retry_request(error: Exception) -> bool:
+        if isinstance(error, requests.Timeout):
+            return True
+        if isinstance(error, requests.ConnectionError):
+            return True
+        if isinstance(error, requests.HTTPError):
+            response = getattr(error, "response", None)
+            return response is None or response.status_code >= 500
+        return False
+
+    def _retry_delay_seconds(self, attempt: int) -> float:
+        if self._retry_backoff_seconds <= 0:
+            return 0.0
+        return self._retry_backoff_seconds * (2 ** max(0, attempt - 1))
+
+    async def _convert_range_with_retry(
+        self,
+        path: Path,
+        *,
+        start_page: int,
+        end_page: int,
+        total_pages: int,
+    ) -> ConversionResult:
+        attempts = self._request_retry_attempts + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                return await self._convert_range(
+                    path,
+                    start_page=start_page,
+                    end_page=end_page,
+                    total_pages=total_pages,
+                )
+            except Exception as exc:
+                if attempt >= attempts or not self._should_retry_request(exc):
+                    raise
+                delay = self._retry_delay_seconds(attempt)
+                logger.warning(
+                    "MinerU local batch pages %d-%d failed attempt %d/%d for %s: %s. Retrying in %.1fs",
+                    start_page,
+                    end_page,
+                    attempt,
+                    attempts,
+                    path,
+                    exc,
+                    delay,
+                )
+                gc.collect()
+                if delay > 0:
+                    await asyncio.sleep(delay)
 
     # ------------------------------------------------------------------
     # Internal: convert a page range via MinerU API

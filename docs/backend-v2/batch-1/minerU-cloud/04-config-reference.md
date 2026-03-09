@@ -31,7 +31,9 @@
 | `MINERU_BACKEND` | `document_processing.mineru_local.backend` | `pipeline` | string | 解析后端（`pipeline` / `vlm-auto-engine` / `hybrid-auto-engine` 等） |
 | `MINERU_LANG_LIST` | `document_processing.mineru_local.lang_list` | `ch,en` | string | OCR 语言列表，逗号分隔 |
 | `MINERU_LOCAL_TIMEOUT` | `document_processing.mineru_local.timeout_seconds` | `0` | int | 请求读取超时（秒）；`0` 表示无超时 |
-| `MINERU_LOCAL_MAX_PAGES_PER_BATCH` | `document_processing.mineru_local.max_pages_per_batch` | `60` | int | 大 PDF 分批处理时每批最大页数（基于 16 GB WSL2 内存限制） |
+| `MINERU_LOCAL_MAX_PAGES_PER_BATCH` | `document_processing.mineru_local.max_pages_per_batch` | `50` | int | 大 PDF 分批处理时每批最大页数；默认值下调以给 GPU/WSL2 留出更多波动余量 |
+| `MINERU_LOCAL_REQUEST_RETRY_ATTEMPTS` | `document_processing.mineru_local.request_retry_attempts` | `2` | int | 本地 API 瞬时失败时的重试次数；总尝试次数 = 1 次首次请求 + 重试次数 |
+| `MINERU_LOCAL_RETRY_BACKOFF_SECONDS` | `document_processing.mineru_local.retry_backoff_seconds` | `10` | float | 本地 API 重试的指数退避基数（秒） |
 | `MINERU_LOCAL_RETURN_IMAGES` | `document_processing.mineru_local.return_images` | `true` | bool | 是否请求本地服务返回提取的图像 |
 | `MINERU_LOCAL_RETURN_CONTENT_LIST` | `document_processing.mineru_local.return_content_list` | `true` | bool | 是否返回结构化内容列表（`content_list_v2.json`） |
 | `MINERU_LOCAL_RETURN_MODEL_OUTPUT` | `document_processing.mineru_local.return_model_output` | `true` | bool | 是否返回模型原始输出（`*_model.json`） |
@@ -70,7 +72,9 @@ MINERU_LOCAL_API_URL=http://mineru-api:8000
 MINERU_BACKEND=hybrid-auto-engine
 MINERU_LANG_LIST=ch,en
 MINERU_LOCAL_TIMEOUT=0
-MINERU_LOCAL_MAX_PAGES_PER_BATCH=60
+MINERU_LOCAL_MAX_PAGES_PER_BATCH=50
+MINERU_LOCAL_REQUEST_RETRY_ATTEMPTS=2
+MINERU_LOCAL_RETRY_BACKOFF_SECONDS=10
 ```
 
 **仅使用 MarkItDown（禁用 MinerU）**
@@ -87,4 +91,7 @@ MINERU_ENABLED=false
 | `MINERU_MODE` 为非法值 | MinerU 转换器静默禁用，仅使用 MarkItDown，打印 warning 日志 |
 | `MINERU_FAIL_THRESHOLD` < 1 | 自动修正为 1 |
 | `MINERU_COOLDOWN_SECONDS` < 1 | 自动修正为 1 |
+| `MINERU_LOCAL_MAX_PAGES_PER_BATCH` < 1 | 自动修正为 1 |
+| `MINERU_LOCAL_REQUEST_RETRY_ATTEMPTS` < 0 | 自动修正为 0 |
+| `MINERU_LOCAL_RETRY_BACKOFF_SECONDS` < 0 | 自动修正为 0 |
 | `MINERU_V4_POLL_INTERVAL` <= 0 | `MinerUCloudConverter.__init__` 抛出 `ValueError` |

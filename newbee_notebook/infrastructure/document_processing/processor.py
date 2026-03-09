@@ -126,7 +126,15 @@ class DocumentProcessor:
                         return_images=_parse_bool(local_cfg.get("return_images"), True),
                         return_content_list=_parse_bool(local_cfg.get("return_content_list"), True),
                         return_model_output=_parse_bool(local_cfg.get("return_model_output"), True),
-                        max_pages_per_batch=_parse_int(local_cfg.get("max_pages_per_batch"), 60),
+                        max_pages_per_batch=_parse_int(local_cfg.get("max_pages_per_batch"), 50),
+                        request_retry_attempts=_parse_int(
+                            local_cfg.get("request_retry_attempts"),
+                            2,
+                        ),
+                        retry_backoff_seconds=_parse_float(
+                            local_cfg.get("retry_backoff_seconds"),
+                            10.0,
+                        ),
                     )
                 )
             else:

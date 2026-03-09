@@ -26,7 +26,10 @@ document_processing:
     lang_list: ${MINERU_LANG_LIST:ch,en}
     timeout_seconds: ${MINERU_LOCAL_TIMEOUT:0}
     # Split large PDFs into smaller requests to avoid burst memory peaks.
-    max_pages_per_batch: ${MINERU_LOCAL_MAX_PAGES_PER_BATCH:60}
+    max_pages_per_batch: ${MINERU_LOCAL_MAX_PAGES_PER_BATCH:50}
+    # Retry transient local API failures (timeouts, connection errors, HTTP 5xx).
+    request_retry_attempts: ${MINERU_LOCAL_REQUEST_RETRY_ATTEMPTS:2}
+    retry_backoff_seconds: ${MINERU_LOCAL_RETRY_BACKOFF_SECONDS:10}
     # Keep image extraction enabled so markdown image links can be rewritten.
     return_images: ${MINERU_LOCAL_RETURN_IMAGES:true}
     # Keep MinerU structured metadata by default (used by viewer/debug/recovery flows).
