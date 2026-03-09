@@ -25,7 +25,7 @@ ENV/
 .idea/
 .vscode/
 .cursor/
-
+.codex-monitor/
 # Builds
 build/
 dist/
