@@ -1,38 +1,31 @@
 #!/usr/bin/env python3
-"""Rebuild pgvector index from documents.
+"""Rebuild pgvector tables from converted markdown stored in runtime storage."""
 
-This script:
-1. Loads documents from data/documents/
-2. Clears existing pgvector data
-3. Builds a new index with the selected embedding provider
+from __future__ import annotations
 
-Usage:
-    python -m newbee_notebook.scripts.rebuild_pgvector
-    python -m newbee_notebook.scripts.rebuild_pgvector --documents-dir /path/to/docs
-    python -m newbee_notebook.scripts.rebuild_pgvector --provider qwen3-embedding
-    python -m newbee_notebook.scripts.rebuild_pgvector --clear-only
-"""
-
-import sys
-import os
 import argparse
 import asyncio
+import os
+import sys
+
+from llama_index.core import VectorStoreIndex
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from newbee_notebook.core.common.config import (
-    get_documents_directory,
-    get_storage_config,
     get_embedding_provider,
     get_embeddings_config,
     get_pgvector_config_for_provider,
+    get_storage_config,
 )
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.rag.embeddings.registry import get_builder, get_registered_providers
-from newbee_notebook.infrastructure.pgvector import PGVectorStore, PGVectorConfig
-from newbee_notebook.core.engine.index_builder import IndexBuilder
-from llama_index.core import StorageContext, VectorStoreIndex
+from newbee_notebook.infrastructure.pgvector import PGVectorConfig, PGVectorStore
+from newbee_notebook.scripts.rebuild_common import (
+    get_rebuildable_documents,
+    load_document_nodes,
+)
 
 
 def _build_embedding_for_provider(provider: str | None):
@@ -58,22 +51,14 @@ def _get_enabled_embedding_providers() -> list[str]:
 
 
 async def rebuild_pgvector_index(
-    documents_dir: str,
+    *,
     clear_only: bool = False,
     chunk_size: int = 512,
     chunk_overlap: int = 50,
-    provider: str = None,
+    provider: str | None = None,
+    document_ids: list[str] | None = None,
 ) -> None:
-    """Rebuild pgvector index from documents.
-
-    Args:
-        documents_dir: Directory containing documents
-        clear_only: If True, only clear existing data
-        chunk_size: Text chunk size
-        chunk_overlap: Overlap between chunks
-        provider: Embedding provider (for example: 'qwen3-embedding', 'zhipu').
-            If None, uses current configuration.
-    """
+    """Rebuild pgvector from DB-tracked converted markdown content."""
     print("=" * 60)
     print("Rebuild pgvector Index")
     print("=" * 60)
@@ -113,64 +98,65 @@ async def rebuild_pgvector_index(
     print("\n[2/4] Initializing pgvector store...")
     store = PGVectorStore(config)
     await store.initialize()
-    print("Connected to PostgreSQL")
-
-    if clear_only:
-        print("\n[3/4] Clearing existing data...")
-        await store.clear()
-        print("Data cleared successfully")
-        print("\n" + "=" * 60)
-        print("Done! (clear only mode)")
-        return
-
-    print(f"\n[3/4] Loading documents from {documents_dir}...")
-    builder = IndexBuilder(
-        embed_model=embed_model,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-    )
-
     try:
-        nodes = builder.load_and_parse_documents(
-            documents_dir=documents_dir,
-            show_progress=True,
+        print("Connected to PostgreSQL")
+
+        if clear_only:
+            print("\n[3/4] Clearing existing data...")
+            await store.clear()
+            print("Data cleared successfully")
+            print("\n" + "=" * 60)
+            print("Done! (clear only mode)")
+            return
+
+        print("\n[3/4] Loading rebuildable documents from database...")
+        docs = await get_rebuildable_documents(document_ids=document_ids)
+        print(f"Found {len(docs)} document(s) with conversion artifacts")
+
+        print("\n[4/4] Building pgvector index...")
+        print("Clearing existing data...")
+        await store.clear()
+
+        index = VectorStoreIndex.from_vector_store(
+            vector_store=store.store,
+            embed_model=embed_model,
         )
-    except FileNotFoundError as exc:
-        print(f"\nError: {exc}")
-        print(f"Please add documents to: {documents_dir}")
-        sys.exit(1)
 
-    print("\n[4/4] Building pgvector index...")
-    print("Clearing existing data...")
-    await store.clear()
+        indexed_chunks = 0
+        for idx, doc in enumerate(docs, start=1):
+            nodes = await load_document_nodes(
+                doc,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            if not nodes:
+                print(f"Skipping {doc.document_id}: no nodes generated")
+                continue
+            index.insert_nodes(nodes)
+            indexed_chunks += len(nodes)
+            print(
+                f"[{idx}/{len(docs)}] Indexed {doc.document_id} "
+                f"({len(nodes)} chunk(s))"
+            )
 
-    print("Adding nodes to index...")
-    storage_context = StorageContext.from_defaults(
-        vector_store=store.get_llamaindex_store()
-    )
-    VectorStoreIndex(
-        nodes=nodes,
-        storage_context=storage_context,
-        embed_model=embed_model,
-        show_progress=True,
-    )
-
-    print("\n" + "=" * 60)
-    print(f"Success! Indexed {len(nodes)} chunks to pgvector")
-    print("=" * 60)
+        print("\n" + "=" * 60)
+        print(f"Success! Indexed {indexed_chunks} chunks from {len(docs)} document(s)")
+        print("=" * 60)
+    finally:
+        await store.close()
 
 
 def main():
     available_providers = _get_enabled_embedding_providers()
 
     parser = argparse.ArgumentParser(
-        description="Rebuild pgvector index from documents",
+        description="Rebuild pgvector index from DB-tracked markdown content",
     )
     parser.add_argument(
-        "--documents-dir",
-        type=str,
+        "--document-id",
+        action="append",
         default=None,
-        help="Directory containing documents (default: from config)",
+        help="Restrict rebuild to one or more document IDs",
     )
     parser.add_argument(
         "--clear-only",
@@ -202,15 +188,13 @@ def main():
 
     args = parser.parse_args()
 
-    documents_dir = args.documents_dir or get_documents_directory()
-
     asyncio.run(
         rebuild_pgvector_index(
-            documents_dir=documents_dir,
             clear_only=args.clear_only,
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
             provider=args.provider,
+            document_ids=args.document_id,
         )
     )
 

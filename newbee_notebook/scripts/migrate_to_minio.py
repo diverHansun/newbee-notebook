@@ -1,4 +1,4 @@
-"""Migrate local document files into MinIO object storage."""
+"""Migrate legacy local document files into MinIO object storage."""
 
 from __future__ import annotations
 
@@ -112,7 +112,9 @@ async def verify_migration(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Migrate local document files to MinIO.")
+    parser = argparse.ArgumentParser(
+        description="Migrate legacy local document files to MinIO."
+    )
     parser.add_argument(
         "--documents-dir",
         default="data/documents",

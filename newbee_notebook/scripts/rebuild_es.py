@@ -1,121 +1,115 @@
 #!/usr/bin/env python3
-"""Rebuild Elasticsearch index from documents.
+"""Rebuild the Elasticsearch index from converted markdown stored in runtime storage."""
 
-This script:
-1. Loads documents from data/documents/
-2. Clears existing Elasticsearch index
-3. Builds new index with BM25 text search
+from __future__ import annotations
 
-Usage:
-    python -m newbee_notebook.scripts.rebuild_es
-    python -m newbee_notebook.scripts.rebuild_es --documents-dir /path/to/docs
-    python -m newbee_notebook.scripts.rebuild_es --clear-only
-"""
-
-import sys
-import os
 import argparse
 import asyncio
+import os
+import sys
+
+from llama_index.core import VectorStoreIndex
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from newbee_notebook.core.common.config import get_documents_directory, get_storage_config
+from newbee_notebook.core.common.config import get_storage_config
 from newbee_notebook.core.rag.embeddings import build_embedding
-from newbee_notebook.infrastructure.elasticsearch import ElasticsearchStore, ElasticsearchConfig
-from newbee_notebook.core.engine.index_builder import IndexBuilder
+from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig, ElasticsearchStore
+from newbee_notebook.scripts.rebuild_common import (
+    get_rebuildable_documents,
+    load_document_nodes,
+)
 
 
 async def rebuild_es_index(
-    documents_dir: str,
+    *,
     clear_only: bool = False,
     chunk_size: int = 512,
     chunk_overlap: int = 50,
+    document_ids: list[str] | None = None,
 ) -> None:
-    """Rebuild Elasticsearch index from documents.
-    
-    Args:
-        documents_dir: Directory containing documents
-        clear_only: If True, only clear existing data
-        chunk_size: Text chunk size
-        chunk_overlap: Overlap between chunks
-    """
+    """Rebuild Elasticsearch from DB-tracked converted markdown content."""
     print("=" * 60)
     print("Rebuild Elasticsearch Index")
     print("=" * 60)
-    
-    # Load storage config
+
     storage_config = get_storage_config()
     es_config = storage_config.get("elasticsearch", {})
-    
-    # Create ES config
     config = ElasticsearchConfig(
         url=es_config.get("url", "http://localhost:9200"),
         index_name=es_config.get("index_name", "newbee_notebook_docs"),
+        api_key=es_config.get("api_key"),
+        cloud_id=es_config.get("cloud_id"),
     )
-    
+
     print(f"\nElasticsearch: {config.url}")
     print(f"Index: {config.index_name}")
-    
-    # Initialize store
+
     print("\n[1/4] Initializing Elasticsearch store...")
     store = ElasticsearchStore(config)
     await store.initialize()
-    print("Connected to Elasticsearch")
-    
-    if clear_only:
-        print("\n[2/4] Clearing existing data...")
-        await store.clear()
-        print("Data cleared successfully")
-        print("\n" + "=" * 60)
-        print("Done! (clear only mode)")
-        return
-    
-    # Initialize embedding model (needed for IndexBuilder)
-    print("\n[2/4] Initializing embedding model...")
-    embed_model = build_embedding()
-    print(f"Embedding model loaded (dimension: {embed_model.dimensions})")
-    
-    # Load and parse documents
-    print(f"\n[3/4] Loading documents from {documents_dir}...")
-    builder = IndexBuilder(
-        embed_model=embed_model,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-    )
-    
     try:
-        nodes = builder.load_and_parse_documents(
-            documents_dir=documents_dir,
-            show_progress=True,
+        print("Connected to Elasticsearch")
+
+        if clear_only:
+            print("\n[2/4] Clearing existing data...")
+            await store.clear()
+            print("Data cleared successfully")
+            print("\n" + "=" * 60)
+            print("Done! (clear only mode)")
+            return
+
+        print("\n[2/4] Initializing embedding model...")
+        embed_model = build_embedding()
+        print(f"Embedding model loaded (dimension: {getattr(embed_model, 'dimensions', 'unknown')})")
+
+        print("\n[3/4] Loading rebuildable documents from database...")
+        docs = await get_rebuildable_documents(document_ids=document_ids)
+        print(f"Found {len(docs)} document(s) with conversion artifacts")
+
+        print("\n[4/4] Building Elasticsearch index...")
+        print("Clearing existing data...")
+        await store.clear()
+
+        index = VectorStoreIndex.from_vector_store(
+            vector_store=store.store,
+            embed_model=embed_model,
         )
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
-        print(f"Please add documents to: {documents_dir}")
-        sys.exit(1)
-    
-    # Clear existing data and build index
-    print("\n[4/4] Building Elasticsearch index...")
-    print("Clearing existing data...")
-    await store.clear()
-    
-    print("Adding nodes to index...")
-    await store.add_nodes(nodes)
-    
-    print("\n" + "=" * 60)
-    print(f"Success! Indexed {len(nodes)} chunks to Elasticsearch")
-    print("=" * 60)
+
+        indexed_chunks = 0
+        for idx, doc in enumerate(docs, start=1):
+            nodes = await load_document_nodes(
+                doc,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+            if not nodes:
+                print(f"Skipping {doc.document_id}: no nodes generated")
+                continue
+            index.insert_nodes(nodes)
+            indexed_chunks += len(nodes)
+            print(
+                f"[{idx}/{len(docs)}] Indexed {doc.document_id} "
+                f"({len(nodes)} chunk(s))"
+            )
+
+        print("\n" + "=" * 60)
+        print(f"Success! Indexed {indexed_chunks} chunks from {len(docs)} document(s)")
+        print("=" * 60)
+    finally:
+        await store.close()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Rebuild Elasticsearch index from documents",
+        description="Rebuild Elasticsearch index from DB-tracked markdown content",
     )
     parser.add_argument(
-        "--documents-dir",
-        type=str,
+        "--document-id",
+        action="append",
         default=None,
-        help="Directory containing documents (default: from config)",
+        help="Restrict rebuild to one or more document IDs",
     )
     parser.add_argument(
         "--clear-only",
@@ -134,22 +128,18 @@ def main():
         default=50,
         help="Overlap between chunks (default: 50)",
     )
-    
+
     args = parser.parse_args()
-    
-    # Get documents directory
-    documents_dir = args.documents_dir or get_documents_directory()
-    
-    # Run rebuild
-    asyncio.run(rebuild_es_index(
-        documents_dir=documents_dir,
-        clear_only=args.clear_only,
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
-    ))
+
+    asyncio.run(
+        rebuild_es_index(
+            clear_only=args.clear_only,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            document_ids=args.document_id,
+        )
+    )
 
 
 if __name__ == "__main__":
     main()
-
-

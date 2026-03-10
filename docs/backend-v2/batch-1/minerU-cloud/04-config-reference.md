@@ -8,7 +8,7 @@
 |----------|-----------|--------|------|------|
 | `MINERU_ENABLED` | `document_processing.mineru_enabled` | `true` | bool | 全局启用/禁用 MinerU。`false` 时仅使用 MarkItDown |
 | `MINERU_MODE` | `document_processing.mineru_mode` | `cloud` | string | `cloud`（云端）或 `local`（本地 Docker） |
-| `DOCUMENTS_DIR` | `document_processing.documents_dir` | `data/documents` | string | Markdown 及资源文件的输出根目录 |
+| `DOCUMENTS_DIR` | `document_processing.documents_dir` | `data/documents` | string | 仅用于本地离线/测试后端或临时工作目录的基础路径；MinIO 运行时不再将其作为持久真源 |
 
 ## 2. 云端模式配置（MINERU_MODE=cloud）
 

@@ -1,4 +1,4 @@
-"""Interactive cleaner for orphan document directories."""
+"""Interactive cleaner for orphan document storage entries."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ async def run_cleanup(documents_dir: str, assume_yes: bool = False) -> int:
         )
 
     if not orphan_ids:
-        print("No orphan document directories found.")
+        print("No orphan document storage entries found.")
         return 0
 
     if isinstance(storage, LocalStorageBackend):
@@ -76,11 +76,14 @@ async def run_cleanup(documents_dir: str, assume_yes: bool = False) -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Clean orphan document directories.")
+    parser = argparse.ArgumentParser(description="Clean orphan document entries from active storage.")
     parser.add_argument(
         "--documents-dir",
         default="data/documents",
-        help="Root documents directory (default: data/documents).",
+        help=(
+            "Local documents root for LocalStorageBackend mode "
+            "(default: data/documents). Ignored when STORAGE_BACKEND=minio."
+        ),
     )
     parser.add_argument(
         "--yes",
@@ -94,7 +97,9 @@ async def _main_async() -> int:
     args = _parse_args()
     try:
         deleted = await run_cleanup(args.documents_dir, assume_yes=args.yes)
-        print(f"Cleanup complete. Deleted {deleted} directory(ies).")
+        storage = get_storage_backend()
+        deleted_label = "directory(ies)" if isinstance(storage, LocalStorageBackend) else "storage prefix(es)"
+        print(f"Cleanup complete. Deleted {deleted} {deleted_label}.")
         return 0
     finally:
         await close_database()

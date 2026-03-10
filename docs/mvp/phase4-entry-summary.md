@@ -161,12 +161,12 @@ docker-compose up -d
 ```
 
 ### 2. Add Documents
-Place documents in `data/documents/`
+Upload documents through the UI or API. `data/documents/` is legacy local-storage guidance and is no longer the runtime source of truth.
 
 ### 3. Build Indexes
 ```bash
-python scripts/rebuild_pgvector.py
-python scripts/rebuild_es.py
+python -m newbee_notebook.scripts.rebuild_pgvector
+python -m newbee_notebook.scripts.rebuild_es
 ```
 
 ### 4. Run Application

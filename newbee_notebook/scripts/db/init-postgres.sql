@@ -93,7 +93,35 @@ CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at ON documents(stage_updated_at);
 
 -- Backfill additive columns for existing volumes where table already exists
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    title VARCHAR(500),
+    message_count INTEGER NOT NULL DEFAULT 0,
+    context_summary TEXT,
+    include_ec_context BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_notebook_id ON sessions(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
+
+-- Backfill additive columns for existing volumes where table already exists
 ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Notebook-document soft references
+CREATE TABLE IF NOT EXISTS notebook_document_refs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_notebook_document UNIQUE (notebook_id, document_id)
+);
+CREATE INDEX IF NOT EXISTS idx_notebook_document_refs_notebook_id
+    ON notebook_document_refs(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_notebook_document_refs_document_id
+    ON notebook_document_refs(document_id);
 
 -- Application settings (runtime key-value overrides for model/config switches)
 CREATE TABLE IF NOT EXISTS app_settings (

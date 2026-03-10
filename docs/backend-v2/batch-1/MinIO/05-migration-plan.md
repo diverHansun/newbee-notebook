@@ -2,6 +2,8 @@
 
 本文档定义从 Bind Mount 到 MinIO 的分阶段迁移路径，包括任务拆分、依赖关系、验收标准和回滚策略。
 
+> 注: 本文档保留迁移设计时的历史语境。文中 `data/documents` 表示迁移前的 legacy 本地源目录，不代表当前运行时的持久真源。
+
 ---
 
 ## 1. 迁移前提条件
@@ -144,7 +146,7 @@ Phase 4: 数据迁移 + 全面切换
 
 **Celery Worker 中的文件写入路径**:
 
-当前 MinerU 转换后，文件直接写入 `data/documents/{id}/` 目录。改造后:
+迁移前 MinerU 转换后，文件直接写入 `data/documents/{id}/` 目录。改造后:
 
 ```python
 # 改造前 (document_tasks.py)

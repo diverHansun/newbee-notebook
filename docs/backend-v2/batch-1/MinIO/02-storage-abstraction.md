@@ -183,7 +183,7 @@ class StorageBackend(ABC):
 ```
 
 这样设计确保:
-- 与现有 `data/documents/{document_id}/` 目录结构一一对应
+- 与 legacy `data/documents/{document_id}/` 目录结构一一对应，便于迁移和对象键推导
 - `delete_prefix("{document_id}/")` 可以清理某个文档的全部文件
 - MinIO 桶中的对象路径直观可读
 
@@ -499,6 +499,8 @@ class MinIOStorageBackend(StorageBackend):
 
 ### 5.1 存储后端工厂
 
+> 说明: 当前实现已区分 `get_storage_backend()`（离线/测试允许 local）与 `get_runtime_storage_backend()`（运行时强制 MinIO）。下面示例以当前代码为准。
+
 ```python
 # newbee_notebook/infrastructure/storage/__init__.py
 
@@ -510,21 +512,7 @@ from .local_storage_backend import LocalStorageBackend
 from .minio_storage_backend import MinIOStorageBackend
 
 
-@lru_cache(maxsize=1)
-def get_storage_backend() -> StorageBackend:
-    """根据环境变量创建存储后端实例。
-
-    环境变量:
-        STORAGE_BACKEND: "local" (默认) 或 "minio"
-
-    当 STORAGE_BACKEND=minio 时，需要额外环境变量:
-        MINIO_ENDPOINT: MinIO 服务地址 (默认 localhost:9000)
-        MINIO_ACCESS_KEY: 访问密钥 (默认 minioadmin)
-        MINIO_SECRET_KEY: 秘密密钥 (默认 minioadmin123)
-        MINIO_BUCKET: 桶名称 (默认 documents)
-        MINIO_SECURE: 是否 HTTPS (默认 false)
-        MINIO_PUBLIC_ENDPOINT: 浏览器可达地址 (默认同 MINIO_ENDPOINT)
-    """
+def _build_storage_backend(*, allow_local: bool) -> StorageBackend:
     backend_type = os.getenv("STORAGE_BACKEND", "local").lower()
 
     if backend_type == "minio":
@@ -536,9 +524,23 @@ def get_storage_backend() -> StorageBackend:
             secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
             public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT"),
         )
-    else:
+    if backend_type == "local":
+        if not allow_local:
+            raise RuntimeError("Runtime storage backend requires MinIO (STORAGE_BACKEND=minio)")
         documents_dir = os.getenv("DOCUMENTS_DIR", "data/documents")
         return LocalStorageBackend(base_dir=documents_dir)
+
+    raise ValueError(f"Unsupported STORAGE_BACKEND={backend_type!r}")
+
+
+@lru_cache(maxsize=1)
+def get_storage_backend() -> StorageBackend:
+    return _build_storage_backend(allow_local=True)
+
+
+@lru_cache(maxsize=1)
+def get_runtime_storage_backend() -> StorageBackend:
+    return _build_storage_backend(allow_local=False)
 ```
 
 ### 5.2 FastAPI 依赖注入
@@ -546,22 +548,18 @@ def get_storage_backend() -> StorageBackend:
 ```python
 # newbee_notebook/api/dependencies.py (新增)
 
-from newbee_notebook.infrastructure.storage import get_storage_backend
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 
 def get_storage() -> StorageBackend:
-    return get_storage_backend()
+    return get_runtime_storage_backend()
 ```
 
 ### 5.3 环境变量配置示例
 
 ```bash
-# .env - 开发环境 (默认，使用本地文件系统)
-STORAGE_BACKEND=local
-DOCUMENTS_DIR=data/documents
-
-# .env.production - 生产环境 (使用 MinIO)
+# .env / .env.production - 运行时统一使用 MinIO
 STORAGE_BACKEND=minio
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
@@ -569,6 +567,9 @@ MINIO_SECRET_KEY=your-secure-password
 MINIO_BUCKET=documents
 MINIO_SECURE=false
 MINIO_PUBLIC_ENDPOINT=localhost:9000
+
+# DOCUMENTS_DIR 仅供离线脚本 / LocalStorageBackend / legacy 迁移使用
+DOCUMENTS_DIR=data/documents
 ```
 
 ---
@@ -582,7 +583,7 @@ MINIO_PUBLIC_ENDPOINT=localhost:9000
 | `local_storage.save_upload_file()` | 直接 `Path.write_bytes()` | 调用 `storage.save_file()` |
 | `document_service.get_document_content()` | `Path.read_text()` | 调用 `storage.get_text()` |
 | `document_service.get_asset_path()` | 返回 `Path` 供 `FileResponse` | 返回 URL (本地模式仍可返回路径) |
-| `document_tasks.py` (Celery) | 直接写入 `data/documents/` | 调用 `storage.save_from_path()` |
+| `document_tasks.py` (Celery) | 历史上直接写入 `data/documents/` | 调用 `storage.save_from_path()` |
 | `document_service.delete_document()` | `shutil.rmtree()` | 调用 `storage.delete_prefix()` |
 | `detect_orphans.py` | 扫描文件系统目录 | 调用 `storage.list_objects()` |
 

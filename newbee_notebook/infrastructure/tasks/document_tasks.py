@@ -595,7 +595,13 @@ async def _materialize_document_content(document: Document, content_path: str) -
         yield local_path
 
 
-async def _load_markdown_nodes(document: Document, content_path: str):
+async def _load_markdown_nodes(
+    document: Document,
+    content_path: str,
+    *,
+    chunk_size: int = 512,
+    chunk_overlap: int = 50,
+):
     """Load markdown file and split into nodes with metadata."""
     async with _materialize_document_content(document, content_path) as content_abs_path:
         reader = MarkdownReader(remove_hyperlinks=False, remove_images=False)
@@ -611,7 +617,7 @@ async def _load_markdown_nodes(document: Document, content_path: str):
             },
         )
 
-    nodes = split_documents(docs, chunk_size=512, chunk_overlap=50)
+    nodes = split_documents(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     for idx, node in enumerate(nodes):
         meta = getattr(node, "metadata", {}) or {}
         meta["chunk_index"] = idx

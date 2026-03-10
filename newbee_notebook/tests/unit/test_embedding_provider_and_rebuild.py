@@ -1,6 +1,11 @@
 import asyncio
+from unittest.mock import AsyncMock
 
 from newbee_notebook.core.rag.embeddings import qwen3_embedding
+from newbee_notebook.domain.entities.document import Document
+from newbee_notebook.domain.value_objects.document_status import DocumentStatus
+from newbee_notebook.domain.value_objects.document_type import DocumentType
+from newbee_notebook.scripts import rebuild_es
 from newbee_notebook.scripts import rebuild_pgvector
 
 
@@ -74,6 +79,16 @@ def test_build_qwen3_embedding_api_uses_env_overrides(monkeypatch):
 
 def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
     call_args = {}
+    docs = [
+        Document(
+            document_id="doc-123",
+            title="Doc 123",
+            content_type=DocumentType.PDF,
+            library_id="lib-1",
+            status=DocumentStatus.COMPLETED,
+            content_path="doc-123/markdown/content.md",
+        )
+    ]
 
     class DummyEmbed:
         dimensions = 1024
@@ -84,17 +99,19 @@ def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
             return None
 
         async def clear(self):
+            call_args["cleared"] = True
             return None
 
-        def get_llamaindex_store(self):
+        async def close(self):
+            call_args["closed"] = True
+
+        @property
+        def store(self):
             return object()
 
-    class DummyBuilder:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def load_and_parse_documents(self, *args, **kwargs):
-            return []
+    class DummyIndex:
+        def insert_nodes(self, nodes):
+            call_args.setdefault("inserted_nodes", []).append(list(nodes))
 
     def fake_get_builder(provider):
         call_args["provider"] = provider
@@ -111,20 +128,96 @@ def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
         },
     )
     monkeypatch.setattr(rebuild_pgvector, "PGVectorStore", lambda _config: DummyStore())
-    monkeypatch.setattr(rebuild_pgvector, "IndexBuilder", DummyBuilder)
-    monkeypatch.setattr(rebuild_pgvector, "VectorStoreIndex", lambda *args, **kwargs: object())
     monkeypatch.setattr(
-        rebuild_pgvector.StorageContext,
-        "from_defaults",
-        lambda **kwargs: object(),
+        rebuild_pgvector,
+        "get_rebuildable_documents",
+        AsyncMock(return_value=docs),
+    )
+    monkeypatch.setattr(
+        rebuild_pgvector,
+        "load_document_nodes",
+        AsyncMock(return_value=["node-1", "node-2"]),
+    )
+    monkeypatch.setattr(
+        rebuild_pgvector.VectorStoreIndex,
+        "from_vector_store",
+        lambda *args, **kwargs: DummyIndex(),
     )
 
     asyncio.run(
         rebuild_pgvector.rebuild_pgvector_index(
-            documents_dir="data/documents",
             clear_only=False,
             provider="qwen3-embedding",
         )
     )
 
     assert call_args["provider"] == "qwen3-embedding"
+    assert call_args["cleared"] is True
+    assert call_args["closed"] is True
+    assert call_args["inserted_nodes"] == [["node-1", "node-2"]]
+    rebuild_pgvector.get_rebuildable_documents.assert_awaited_once()
+    rebuild_pgvector.load_document_nodes.assert_awaited_once_with(docs[0], chunk_size=512, chunk_overlap=50)
+
+
+def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
+    call_args = {}
+    docs = [
+        Document(
+            document_id="doc-es-1",
+            title="Doc ES",
+            content_type=DocumentType.PDF,
+            library_id="lib-1",
+            status=DocumentStatus.CONVERTED,
+            content_path="doc-es-1/markdown/content.md",
+        )
+    ]
+
+    class DummyEmbed:
+        dimensions = 1024
+        model_name = "embed-model"
+
+    class DummyStore:
+        async def initialize(self):
+            call_args["initialized"] = True
+
+        async def clear(self):
+            call_args["cleared"] = True
+
+        async def close(self):
+            call_args["closed"] = True
+
+        @property
+        def store(self):
+            return object()
+
+    class DummyIndex:
+        def insert_nodes(self, nodes):
+            call_args.setdefault("inserted_nodes", []).append(list(nodes))
+
+    monkeypatch.setattr(rebuild_es, "build_embedding", lambda: DummyEmbed())
+    monkeypatch.setattr(rebuild_es, "get_storage_config", lambda: {"elasticsearch": {}})
+    monkeypatch.setattr(rebuild_es, "ElasticsearchStore", lambda _config: DummyStore())
+    monkeypatch.setattr(
+        rebuild_es,
+        "get_rebuildable_documents",
+        AsyncMock(return_value=docs),
+    )
+    monkeypatch.setattr(
+        rebuild_es,
+        "load_document_nodes",
+        AsyncMock(return_value=["node-es-1"]),
+    )
+    monkeypatch.setattr(
+        rebuild_es.VectorStoreIndex,
+        "from_vector_store",
+        lambda *args, **kwargs: DummyIndex(),
+    )
+
+    asyncio.run(rebuild_es.rebuild_es_index(clear_only=False))
+
+    assert call_args["initialized"] is True
+    assert call_args["cleared"] is True
+    assert call_args["closed"] is True
+    assert call_args["inserted_nodes"] == [["node-es-1"]]
+    rebuild_es.get_rebuildable_documents.assert_awaited_once()
+    rebuild_es.load_document_nodes.assert_awaited_once_with(docs[0], chunk_size=512, chunk_overlap=50)
