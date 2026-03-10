@@ -2,6 +2,7 @@ import asyncio
 import importlib.util
 import os
 from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -48,6 +49,13 @@ def test_minio_storage_backend_roundtrip_and_delete_prefix():
         assert await backend.exists(md_key) is True
         assert await backend.get_text(md_key) == "# title"
         assert await backend.get_file(image_key) == b"img"
+
+        temp_download = Path("tmp-minio-download.md")
+        try:
+            await backend.download_to_path(md_key, str(temp_download))
+            assert temp_download.read_text(encoding="utf-8") == "# title"
+        finally:
+            temp_download.unlink(missing_ok=True)
 
         listed = sorted(await backend.list_objects(f"{prefix}/"))
         assert listed == [image_key, md_key]

@@ -1,13 +1,26 @@
 """Tests for document content guard behavior."""
 
 import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.exceptions import DocumentProcessingError
+
+
+class _FakeRemoteStorageBackend:
+    def __init__(self, *, existing: set[str], texts: dict[str, str]) -> None:
+        self._existing = existing
+        self._texts = texts
+
+    async def exists(self, object_key: str) -> bool:
+        return object_key in self._existing
+
+    async def get_text(self, object_key: str, encoding: str = "utf-8") -> str:
+        if object_key not in self._texts:
+            raise FileNotFoundError(object_key)
+        return self._texts[object_key]
 
 
 def test_get_document_content_raises_structured_processing_error():
@@ -42,12 +55,8 @@ def test_get_document_content_raises_structured_processing_error():
     asyncio.run(_run())
 
 
-def test_get_document_content_allows_converted_with_markdown_content(tmp_path: Path):
+def test_get_document_content_allows_converted_with_markdown_content(monkeypatch):
     doc_id = "doc-2"
-    markdown_dir = tmp_path / doc_id / "markdown"
-    markdown_dir.mkdir(parents=True, exist_ok=True)
-    content_file = markdown_dir / "content.md"
-    content_file.write_text("# Converted\n\nhello", encoding="utf-8")
 
     doc_repo = AsyncMock()
     doc_repo.get = AsyncMock(
@@ -67,20 +76,25 @@ def test_get_document_content_allows_converted_with_markdown_content(tmp_path: P
         ref_repo=AsyncMock(),
         reference_repo=AsyncMock(),
     )
+    backend = _FakeRemoteStorageBackend(
+        existing={f"{doc_id}/markdown/content.md"},
+        texts={f"{doc_id}/markdown/content.md": "# Converted\n\nhello"},
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
+        lambda: backend,
+        raising=False,
+    )
 
     async def _run():
-        with patch("newbee_notebook.application.services.document_service.get_documents_directory", return_value=str(tmp_path)):
-            _, content = await service.get_document_content(doc_id, format="markdown")
-            assert "# Converted" in content
+        _, content = await service.get_document_content(doc_id, format="markdown")
+        assert "# Converted" in content
 
     asyncio.run(_run())
 
 
-def test_get_document_content_repairs_missing_content_path_from_fallback(tmp_path: Path):
+def test_get_document_content_repairs_missing_content_path_from_fallback(monkeypatch):
     doc_id = "doc-3"
-    markdown_dir = tmp_path / doc_id / "markdown"
-    markdown_dir.mkdir(parents=True, exist_ok=True)
-    (markdown_dir / "content.md").write_text("# Recovered", encoding="utf-8")
 
     doc_repo = AsyncMock()
     doc_repo.get = AsyncMock(
@@ -102,11 +116,19 @@ def test_get_document_content_repairs_missing_content_path_from_fallback(tmp_pat
         ref_repo=AsyncMock(),
         reference_repo=AsyncMock(),
     )
+    backend = _FakeRemoteStorageBackend(
+        existing={f"{doc_id}/markdown/content.md"},
+        texts={f"{doc_id}/markdown/content.md": "# Recovered"},
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
+        lambda: backend,
+        raising=False,
+    )
 
     async def _run():
-        with patch("newbee_notebook.application.services.document_service.get_documents_directory", return_value=str(tmp_path)):
-            _, content = await service.get_document_content(doc_id, format="markdown")
-            assert "Recovered" in content
+        _, content = await service.get_document_content(doc_id, format="markdown")
+        assert "Recovered" in content
 
     asyncio.run(_run())
 

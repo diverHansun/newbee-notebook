@@ -4,6 +4,9 @@ import asyncio
 import gc
 import logging
 import os
+import shutil
+import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable
 from uuid import uuid4
@@ -29,6 +32,9 @@ from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl 
     DocumentRepositoryImpl,
 )
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
+from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.infrastructure.storage.object_keys import build_storage_key_candidates
 from newbee_notebook.infrastructure.tasks.celery_app import app
 from newbee_notebook.infrastructure.tasks.pipeline_context import PipelineContext
 
@@ -367,13 +373,12 @@ async def _convert_document_async(document_id: str, force: bool = False) -> None
                     cleanup_exc,
                 )
 
-        source_path = _resolve_source_path(ctx.document)
-
         await ctx.set_stage(ProcessingStage.CONVERTING)
-        result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
-            document_id=ctx.document_id,
-            file_path=str(source_path),
-        )
+        async with _materialize_document_source(ctx.document) as source_path:
+            result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+                document_id=ctx.document_id,
+                file_path=str(source_path),
+            )
 
         await ctx.set_stage(ProcessingStage.FINALIZING)
         await ctx.set_terminal_status(
@@ -420,7 +425,7 @@ async def _index_document_async(document_id: str, force: bool = False) -> None:
             raise RuntimeError(f"Document {ctx.document_id} has no content_path, cannot index")
 
         await ctx.set_stage(ProcessingStage.SPLITTING)
-        nodes = _load_markdown_nodes(ctx.document, content_path)
+        nodes = await _load_markdown_nodes(ctx.document, content_path)
 
         await _index_to_stores(nodes, ctx)
 
@@ -461,13 +466,12 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
         skip_conversion = ctx.original_status == DocumentStatus.CONVERTED
 
         if not skip_conversion:
-            source_path = _resolve_source_path(ctx.document)
-
             await ctx.set_stage(ProcessingStage.CONVERTING)
-            result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
-                document_id=ctx.document_id,
-                file_path=str(source_path),
-            )
+            async with _materialize_document_source(ctx.document) as source_path:
+                result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+                    document_id=ctx.document_id,
+                    file_path=str(source_path),
+                )
 
             # Persist conversion artifacts for subsequent stages and retries.
             await ctx.doc_repo.update_status(
@@ -493,7 +497,7 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
             )
 
         await ctx.set_stage(ProcessingStage.SPLITTING)
-        nodes = _load_markdown_nodes(ctx.document, content_path)
+        nodes = await _load_markdown_nodes(ctx.document, content_path)
 
         await _index_to_stores(nodes, ctx)
 
@@ -522,42 +526,89 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
     )
 
 
-def _resolve_source_path(document: Document) -> Path:
-    """Resolve source file path from document metadata."""
-    source_path = Path(document.file_path)
-    if not source_path.is_absolute():
-        source_path = Path(get_documents_directory()) / source_path
-    if not source_path.exists():
-        raise FileNotFoundError(f"Original file not found: {source_path}")
-    return source_path
+async def _resolve_existing_storage_key(
+    storage: StorageBackend,
+    candidates: list[str],
+) -> str:
+    for candidate in candidates:
+        if await storage.exists(candidate):
+            return candidate
+    raise FileNotFoundError(f"Object not found in storage. candidates={candidates}")
 
 
-def _resolve_content_path(content_path: str) -> Path:
-    """Resolve stored markdown content path to absolute path."""
-    content = Path(content_path)
-    if not content.is_absolute():
-        content = Path(get_documents_directory()) / content
-    if not content.exists():
-        raise FileNotFoundError(f"Converted content not found: {content}")
-    return content
-
-
-def _load_markdown_nodes(document: Document, content_path: str):
-    """Load markdown file and split into nodes with metadata."""
-    content_abs_path = _resolve_content_path(content_path)
-
-    reader = MarkdownReader(remove_hyperlinks=False, remove_images=False)
-    docs = reader.load_data(
-        file=str(content_abs_path),
-        extra_info={
-            "ref_doc_id": document.document_id,
-            "doc_id": document.document_id,
-            "document_id": document.document_id,
-            "library_id": document.library_id,
-            "notebook_id": document.notebook_id,
-            "title": document.title,
-        },
+def _build_storage_candidates(raw_path: str | None, default_key: str | None) -> list[str]:
+    return build_storage_key_candidates(
+        raw_path=raw_path,
+        default_key=default_key,
+        documents_root=get_documents_directory(),
     )
+
+
+async def _resolve_source_storage_key(document: Document, storage: StorageBackend) -> str:
+    candidates = _build_storage_candidates(
+        raw_path=document.file_path,
+        default_key=f"{document.document_id}/original/{Path(document.file_path).name}",
+    )
+    return await _resolve_existing_storage_key(storage, candidates)
+
+
+async def _resolve_content_storage_key(
+    document: Document,
+    content_path: str,
+    storage: StorageBackend,
+) -> str:
+    candidates = _build_storage_candidates(
+        raw_path=content_path,
+        default_key=f"{document.document_id}/markdown/content.md",
+    )
+    return await _resolve_existing_storage_key(storage, candidates)
+
+
+@asynccontextmanager
+async def _materialize_storage_object(
+    storage: StorageBackend,
+    object_key: str,
+) -> Path:
+    temp_dir = Path(tempfile.mkdtemp(prefix="newbee-storage-"))
+    local_path = temp_dir / Path(object_key).name
+    try:
+        await storage.download_to_path(object_key, str(local_path))
+        yield local_path
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@asynccontextmanager
+async def _materialize_document_source(document: Document) -> Path:
+    storage = get_runtime_storage_backend()
+    object_key = await _resolve_source_storage_key(document, storage)
+    async with _materialize_storage_object(storage, object_key) as local_path:
+        yield local_path
+
+
+@asynccontextmanager
+async def _materialize_document_content(document: Document, content_path: str) -> Path:
+    storage = get_runtime_storage_backend()
+    object_key = await _resolve_content_storage_key(document, content_path, storage)
+    async with _materialize_storage_object(storage, object_key) as local_path:
+        yield local_path
+
+
+async def _load_markdown_nodes(document: Document, content_path: str):
+    """Load markdown file and split into nodes with metadata."""
+    async with _materialize_document_content(document, content_path) as content_abs_path:
+        reader = MarkdownReader(remove_hyperlinks=False, remove_images=False)
+        docs = reader.load_data(
+            file=str(content_abs_path),
+            extra_info={
+                "ref_doc_id": document.document_id,
+                "doc_id": document.document_id,
+                "document_id": document.document_id,
+                "library_id": document.library_id,
+                "notebook_id": document.notebook_id,
+                "title": document.title,
+            },
+        )
 
     nodes = split_documents(docs, chunk_size=512, chunk_overlap=50)
     for idx, node in enumerate(nodes):

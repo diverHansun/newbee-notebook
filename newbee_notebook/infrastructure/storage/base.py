@@ -58,6 +58,14 @@ class StorageBackend(ABC):
         """
 
     @abstractmethod
+    async def download_to_path(self, object_key: str, local_path: str) -> None:
+        """Download an object to a local filesystem path.
+
+        Raises:
+            FileNotFoundError: Object does not exist.
+        """
+
+    @abstractmethod
     async def get_file_url(
         self,
         object_key: str,

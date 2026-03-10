@@ -14,6 +14,7 @@ class _FakeRemoteStorageBackend:
         self._texts = texts
         self._urls = urls
         self.url_calls: list[str] = []
+        self.deleted_prefixes: list[str] = []
 
     async def exists(self, object_key: str) -> bool:
         return object_key in self._existing
@@ -28,6 +29,10 @@ class _FakeRemoteStorageBackend:
         if object_key not in self._urls:
             raise FileNotFoundError(object_key)
         return self._urls[object_key]
+
+    async def delete_prefix(self, prefix: str) -> int:
+        self.deleted_prefixes.append(prefix)
+        return 3
 
 
 def _build_service(doc_repo: AsyncMock) -> DocumentService:
@@ -214,3 +219,24 @@ def test_get_asset_url_rejects_path_traversal_for_remote_storage(monkeypatch):
             await service.get_asset_url("doc-r-4", "../images/demo.jpg")
 
     asyncio.run(_run())
+
+
+def test_force_delete_document_deletes_runtime_storage_prefix(monkeypatch):
+    doc_repo = AsyncMock()
+    backend = _FakeRemoteStorageBackend(existing=set(), texts={}, urls={})
+    monkeypatch.setattr(
+        "newbee_notebook.application.services.document_service.get_runtime_storage_backend",
+        lambda: backend,
+        raising=False,
+    )
+
+    service = _build_service(doc_repo)
+    service.delete_document = AsyncMock(return_value=True)
+
+    async def _run():
+        deleted = await service.force_delete_document("doc-r-6")
+        assert deleted is True
+
+    asyncio.run(_run())
+    service.delete_document.assert_awaited_once_with("doc-r-6")
+    assert backend.deleted_prefixes == ["doc-r-6/"]

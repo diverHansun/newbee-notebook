@@ -3,6 +3,7 @@ from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 import re
 import mimetypes
+from io import BytesIO
 
 from newbee_notebook.core.common.config import get_documents_directory
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
@@ -78,6 +79,60 @@ def _rewrite_markdown_image_links(markdown: str, image_map: dict[str, str]) -> s
     return markdown
 
 
+def _build_storage_payloads(
+    document_id: str,
+    markdown: str,
+    *,
+    image_assets: Optional[dict[str, bytes]] = None,
+    metadata_assets: Optional[dict[str, bytes]] = None,
+) -> tuple[str, bytes, dict[str, bytes], dict[str, bytes]]:
+    image_link_map: dict[str, str] = {}
+    normalized_images: dict[str, bytes] = {}
+    normalized_metadata: dict[str, bytes] = {}
+
+    if image_assets:
+        for source_ref, image_bytes in image_assets.items():
+            if not isinstance(image_bytes, (bytes, bytearray)):
+                continue
+
+            source_norm = _normalize_ref(source_ref)
+            safe_source = _safe_posix_path(source_norm)
+            if not safe_source:
+                continue
+
+            if safe_source.startswith("images/"):
+                rel_image_path = safe_source[len("images/"):]
+            else:
+                rel_image_path = safe_source
+            rel_image_path = _safe_posix_path(rel_image_path)
+            if not rel_image_path:
+                continue
+
+            normalized_images[rel_image_path] = bytes(image_bytes)
+
+            markdown_target = f"/api/v1/documents/{document_id}/assets/images/{rel_image_path}"
+            image_link_map[safe_source] = markdown_target
+            image_link_map.setdefault(Path(safe_source).name, markdown_target)
+            image_link_map.setdefault(f"images/{Path(safe_source).name}", markdown_target)
+
+    if metadata_assets:
+        for name, data in metadata_assets.items():
+            if not isinstance(data, (bytes, bytearray)):
+                continue
+            safe_name = _safe_posix_path(name)
+            if not safe_name:
+                continue
+            normalized_metadata[safe_name] = bytes(data)
+
+    normalized_markdown = _rewrite_markdown_image_links(markdown, image_link_map)
+    return (
+        f"{document_id}/markdown/content.md",
+        normalized_markdown.encode("utf-8"),
+        normalized_images,
+        normalized_metadata,
+    )
+
+
 def save_markdown(
     document_id: str,
     markdown: str,
@@ -97,58 +152,33 @@ def save_markdown(
     markdown_dir = root / document_id / "markdown"
     _ensure_dir(markdown_dir)
 
-    image_link_map: dict[str, str] = {}
-    if image_assets:
+    rel_path, content_bytes, normalized_images, normalized_metadata = _build_storage_payloads(
+        document_id=document_id,
+        markdown=markdown,
+        image_assets=image_assets,
+        metadata_assets=metadata_assets,
+    )
+
+    if normalized_images:
         images_dir = doc_root / "assets" / "images"
         _ensure_dir(images_dir)
-        for source_ref, image_bytes in image_assets.items():
-            if not isinstance(image_bytes, (bytes, bytearray)):
-                continue
-
-            source_norm = _normalize_ref(source_ref)
-            safe_source = _safe_posix_path(source_norm)
-            if not safe_source:
-                continue
-
-            if safe_source.startswith("images/"):
-                rel_image_path = safe_source[len("images/"):]
-            else:
-                rel_image_path = safe_source
-            rel_image_path = _safe_posix_path(rel_image_path)
-            if not rel_image_path:
-                continue
-
+        for rel_image_path, image_bytes in normalized_images.items():
             target_path = images_dir / Path(rel_image_path)
             _ensure_dir(target_path.parent)
-            target_path.write_bytes(bytes(image_bytes))
-
-            rel_image_posix = rel_image_path.replace("\\", "/")
-            markdown_target = f"/api/v1/documents/{document_id}/assets/images/{rel_image_posix}"
-            image_link_map[safe_source] = markdown_target
-            image_link_map.setdefault(Path(safe_source).name, markdown_target)
-            image_link_map.setdefault(f"images/{Path(safe_source).name}", markdown_target)
-
-    normalized_markdown = _rewrite_markdown_image_links(markdown, image_link_map)
+            target_path.write_bytes(image_bytes)
 
     content_path = markdown_dir / "content.md"
-    content_bytes = normalized_markdown.encode("utf-8")
     content_path.write_bytes(content_bytes)
 
-    if metadata_assets:
+    if normalized_metadata:
         meta_dir = doc_root / "assets" / "meta"
         _ensure_dir(meta_dir)
-        for name, data in metadata_assets.items():
-            if not isinstance(data, (bytes, bytearray)):
-                continue
-            safe_name = _safe_posix_path(name)
-            if not safe_name:
-                continue
+        for safe_name, data in normalized_metadata.items():
             target_path = meta_dir / Path(safe_name)
             _ensure_dir(target_path.parent)
-            target_path.write_bytes(bytes(data))
+            target_path.write_bytes(data)
 
     # Return POSIX-style relative path for portability
-    rel_path = content_path.relative_to(root).as_posix()
     return rel_path, len(content_bytes)
 
 
@@ -160,35 +190,39 @@ async def save_markdown_with_storage(
     metadata_assets: Optional[dict[str, bytes]] = None,
     base_root: Optional[str] = None,
 ) -> tuple[str, int]:
-    """Persist markdown locally and mirror generated artifacts to runtime storage."""
-    rel_path, content_size = save_markdown(
+    """Persist markdown and generated artifacts directly to runtime storage."""
+    del base_root
+
+    rel_path, content_bytes, normalized_images, normalized_metadata = _build_storage_payloads(
         document_id=document_id,
         markdown=markdown,
         image_assets=image_assets,
         metadata_assets=metadata_assets,
-        base_root=base_root,
+    )
+    backend = get_runtime_storage_backend()
+
+    await backend.save_file(
+        object_key=rel_path,
+        data=BytesIO(content_bytes),
+        content_type="text/markdown",
     )
 
-    backend = get_runtime_storage_backend()
-    root = Path(base_root or get_documents_directory())
-    doc_root = root / document_id
-    paths_to_sync: list[Path] = []
-
-    markdown_dir = doc_root / "markdown"
-    if markdown_dir.exists():
-        paths_to_sync.extend([p for p in markdown_dir.rglob("*") if p.is_file()])
-
-    assets_dir = doc_root / "assets"
-    if assets_dir.exists():
-        paths_to_sync.extend([p for p in assets_dir.rglob("*") if p.is_file()])
-
-    for file_path in paths_to_sync:
-        object_key = file_path.relative_to(root).as_posix()
-        content_type, _ = mimetypes.guess_type(str(file_path))
-        await backend.save_from_path(
+    for rel_image_path, image_bytes in normalized_images.items():
+        object_key = f"{document_id}/assets/images/{rel_image_path}"
+        content_type, _ = mimetypes.guess_type(rel_image_path)
+        await backend.save_file(
             object_key=object_key,
-            local_path=str(file_path),
+            data=BytesIO(image_bytes),
             content_type=content_type or "application/octet-stream",
         )
 
-    return rel_path, content_size
+    for meta_name, data in normalized_metadata.items():
+        object_key = f"{document_id}/assets/meta/{meta_name}"
+        content_type, _ = mimetypes.guess_type(meta_name)
+        await backend.save_file(
+            object_key=object_key,
+            data=BytesIO(data),
+            content_type=content_type or "application/octet-stream",
+        )
+
+    return rel_path, len(content_bytes)

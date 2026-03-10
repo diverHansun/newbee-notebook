@@ -71,6 +71,15 @@ class LocalStorageBackend(StorageBackend):
             raise FileNotFoundError(f"Object not found: {object_key}")
         return path.read_text(encoding=encoding)
 
+    async def download_to_path(self, object_key: str, local_path: str) -> None:
+        source = self._resolve_path(object_key)
+        if not source.exists():
+            raise FileNotFoundError(f"Object not found: {object_key}")
+
+        target = Path(local_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
     async def get_file_url(
         self,
         object_key: str,

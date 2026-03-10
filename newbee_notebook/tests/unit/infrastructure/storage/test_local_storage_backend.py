@@ -1,5 +1,6 @@
 import asyncio
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +22,10 @@ def test_local_storage_backend_roundtrip_and_prefix_delete(tmp_path):
         assert await backend.exists(image_key) is True
         assert await backend.get_text(md_key) == "# title\n\nhello"
         assert await backend.get_file(image_key) == b"img"
+
+        download_path = tmp_path / "downloads" / "content.md"
+        await backend.download_to_path(md_key, str(download_path))
+        assert download_path.read_text(encoding="utf-8") == "# title\n\nhello"
 
         listed = sorted(await backend.list_objects("doc-1/"))
         assert listed == [image_key, md_key]

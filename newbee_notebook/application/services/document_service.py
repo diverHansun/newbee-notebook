@@ -11,9 +11,7 @@ from typing import Optional, Tuple, List
 import logging
 import os
 import asyncio
-import shutil
 import re
-from pathlib import Path
 from pathlib import PurePosixPath
 
 from fastapi import UploadFile
@@ -32,6 +30,7 @@ from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.infrastructure.storage.object_keys import build_storage_key_candidates
 from newbee_notebook.infrastructure.tasks.document_tasks import process_document_task
 from newbee_notebook.infrastructure.storage.local_storage import (
     save_upload_file_with_storage,
@@ -224,19 +223,12 @@ class DocumentService:
         return await self._document_repo.delete(document_id)
 
     async def force_delete_document(self, document_id: str) -> bool:
-        """Hard delete: soft delete plus file-system cleanup."""
+        """Hard delete: soft delete plus runtime storage cleanup."""
         deleted = await self.delete_document(document_id)
         if deleted:
-            await self._delete_document_files(document_id)
+            storage = get_runtime_storage_backend()
+            await storage.delete_prefix(f"{document_id}/")
         return deleted
-
-    async def _delete_document_files(self, document_id: str) -> bool:
-        """Delete all files under data/documents/{document_id}."""
-        doc_dir = Path(get_documents_directory()) / document_id
-        if doc_dir.exists() and doc_dir.is_dir():
-            shutil.rmtree(doc_dir, ignore_errors=True)
-            return True
-        return False
 
     # ------------------------------------------------------------------ #
     # Content retrieval
@@ -304,19 +296,6 @@ class DocumentService:
             raise FileNotFoundError("Original file not found in storage")
         return await storage.get_file_url(object_key)
 
-    async def get_download_path(self, document_id: str) -> tuple[Path, str]:
-        """Get original file path for download."""
-        doc = await self._document_repo.get(document_id)
-        if not doc:
-            raise ValueError("Document not found")
-
-        raw_path = Path(doc.file_path)
-        file_path = raw_path if raw_path.is_absolute() else (Path(get_documents_directory()) / raw_path)
-        if not file_path.exists():
-            raise FileNotFoundError("Original file not found on disk")
-
-        return file_path, file_path.name
-
     async def get_asset_url(self, document_id: str, asset_path: str) -> Optional[str]:
         """Get presigned asset URL from runtime storage."""
         doc = await self._document_repo.get(document_id)
@@ -330,48 +309,11 @@ class DocumentService:
             raise FileNotFoundError("Asset file not found in storage")
         return await storage.get_file_url(object_key)
 
-    async def get_asset_path(self, document_id: str, asset_path: str) -> Path:
-        """Get generated asset file path under data/documents/{document_id}/assets/."""
-        doc = await self._document_repo.get(document_id)
-        if not doc:
-            raise ValueError("Document not found")
-
-        normalized = self._validate_asset_path(asset_path)
-
-        candidate = Path(get_documents_directory()) / document_id / "assets" / Path(*normalized.parts)
-        if not candidate.exists() or not candidate.is_file():
-            raise FileNotFoundError("Asset file not found on disk")
-        return candidate
-
     def _validate_asset_path(self, asset_path: str) -> PurePosixPath:
         normalized = PurePosixPath((asset_path or "").replace("\\", "/"))
         if normalized.is_absolute() or ".." in normalized.parts:
             raise ValueError("Invalid asset path")
         return normalized
-
-    def _resolve_content_path(self, doc: Document) -> tuple[str, Path]:
-        """Resolve and normalize content.md path with legacy fallbacks."""
-        root = Path(get_documents_directory())
-        candidates: list[str] = []
-        if doc.content_path:
-            candidates.append(doc.content_path)
-            if doc.content_path.startswith("documents/"):
-                candidates.append(doc.content_path[len("documents/"):])
-        candidates.append(f"{doc.document_id}/markdown/content.md")
-
-        seen: set[str] = set()
-        for rel in candidates:
-            if not rel or rel in seen:
-                continue
-            seen.add(rel)
-
-            path_obj = Path(rel)
-            absolute = path_obj if path_obj.is_absolute() else root / path_obj
-            if absolute.exists():
-                normalized_rel = rel if path_obj.is_absolute() else path_obj.as_posix()
-                return normalized_rel, absolute
-
-        raise RuntimeError("Content not available for this document")
 
     async def _resolve_content_storage_key(self, doc: Document, storage: StorageBackend) -> str:
         candidates = self._build_storage_key_candidates(
@@ -398,34 +340,11 @@ class DocumentService:
         raw_path: Optional[str],
         default_key: Optional[str] = None,
     ) -> list[str]:
-        root = Path(get_documents_directory()).resolve()
-        candidates: list[str] = []
-
-        def _append(value: Optional[str]) -> None:
-            if not value:
-                return
-            normalized = value.strip().replace("\\", "/").lstrip("/")
-            if not normalized:
-                return
-            if normalized not in candidates:
-                candidates.append(normalized)
-            if normalized.startswith("documents/"):
-                trimmed = normalized[len("documents/"):]
-                if trimmed and trimmed not in candidates:
-                    candidates.append(trimmed)
-
-        _append(raw_path)
-        if raw_path:
-            maybe_abs = Path(raw_path)
-            if maybe_abs.is_absolute():
-                try:
-                    rel = maybe_abs.resolve().relative_to(root).as_posix()
-                    _append(rel)
-                except Exception:
-                    pass
-
-        _append(default_key)
-        return candidates
+        return build_storage_key_candidates(
+            raw_path=raw_path,
+            default_key=default_key,
+            documents_root=get_documents_directory(),
+        )
 
     async def _rewrite_asset_urls_for_remote(self, content: str, storage: StorageBackend) -> str:
         matches = list(ASSET_API_URL_PATTERN.finditer(content))

@@ -4,7 +4,7 @@ import asyncio
 import mimetypes
 from datetime import timedelta
 from io import BytesIO
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 from urllib.parse import urlsplit
 
@@ -163,6 +163,20 @@ class MinIOStorageBackend(StorageBackend):
     async def get_text(self, object_key: str, encoding: str = "utf-8") -> str:
         data = await self.get_file(object_key)
         return data.decode(encoding)
+
+    async def download_to_path(self, object_key: str, local_path: str) -> None:
+        key = _normalize_object_key(object_key)
+        await asyncio.to_thread(self._download_to_path_sync, key, local_path)
+
+    def _download_to_path_sync(self, object_key: str, local_path: str) -> None:
+        target = Path(local_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._client.fget_object(self._bucket, object_key, str(target))
+        except S3Error as exc:
+            if exc.code in {"NoSuchKey", "NoSuchObject"}:
+                raise FileNotFoundError(f"Object not found: {object_key}") from exc
+            raise
 
     async def get_file_url(
         self,

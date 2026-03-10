@@ -173,24 +173,35 @@ async def save_upload_file_with_storage(
     document_id: str,
     base_root: Optional[str] = None,
 ) -> Tuple[str, int, str]:
-    """Save upload locally and mirror to the runtime storage backend."""
-    rel_path, size, ext = save_upload_file(
-        upload=upload,
-        document_id=document_id,
-        base_root=base_root,
-    )
+    """Save upload directly to the runtime storage backend."""
+    del base_root
 
+    raw_name = upload.filename or "upload.bin"
+    filename = _decode_filename(raw_name)
+    stem, suffix = os.path.splitext(filename)
+    ext = suffix.lower().lstrip(".")
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise ValueError(f"Unsupported file type: .{ext}")
+
+    filename = f"{stem}{suffix}"
+    rel_path = f"{document_id}/original/{filename}"
     backend = get_runtime_storage_backend()
-    root = Path(base_root or get_documents_directory())
-    absolute_path = root / rel_path
     content_type = _guess_upload_content_type(
         upload=upload,
         ext=ext,
-        filename=absolute_path.name,
+        filename=filename,
     )
-    await backend.save_from_path(
+
+    upload.file.seek(0)
+    size = upload.file.seek(0, os.SEEK_END)
+    upload.file.seek(0)
+
+    await backend.save_file(
         object_key=rel_path,
-        local_path=str(absolute_path),
+        data=upload.file,
         content_type=content_type,
     )
+
+    # Reset to a readable state for any downstream callers/tests that inspect the stream.
+    upload.file.seek(0)
     return rel_path, size, ext
