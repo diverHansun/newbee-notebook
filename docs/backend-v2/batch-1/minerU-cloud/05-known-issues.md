@@ -1,42 +1,34 @@
 # Known Issues
 
-## 1. `Unclosed client session` appears after successful full pipeline runs
+## 1. Historical: `Unclosed client session` after successful full pipeline runs
 
-### Current status
+### Root cause
 
-Observed in `celery-worker` logs after a document finishes `process_document_task` successfully:
+This warning was reproduced on `2026-03-09` and traced to the worker indexing path:
+
+- `document_tasks.py` loaded temporary pgvector / Elasticsearch indexes per task
+- the underlying vector store clients were not closed after insert/delete operations
+- Elasticsearch's async client surfaced the leak as:
 
 ```text
 Unclosed client session
 Unclosed connector
 ```
 
-This was reproduced during a successful end-to-end run on `2026-03-09`:
-- MinerU local conversion completed
-- pgvector / Elasticsearch indexing completed
-- document status reached `completed`
+### Resolution
 
-So this is currently a resource cleanup issue, not a functional blocker for batch-1 acceptance.
+Fixed on `2026-03-10` by adding explicit best-effort close handling for loaded vector-store indexes in the Celery document task pipeline:
 
-### Scope
+1. close nested async vector-store clients when present
+2. close direct async vector stores otherwise
+3. run cleanup after both indexing and delete-node flows
 
-The warning appears after the indexing phase, not during MinIO read/write or MinerU conversion request retries.
+### Verification
 
-Current evidence points to an async client lifecycle issue in downstream indexing/storage integrations rather than the MinerU local retry wrapper itself.
+Verified with:
 
-### Why not fixed in this batch
+1. focused unit tests covering ES/pgvector index cleanup
+2. worker regression tests for document task flows
+3. real end-to-end reprocessing of `test.pdf`
 
-Batch-1 priority was:
-1. make runtime storage MinIO-only
-2. make failed documents re-queue correctly
-3. stabilize MinerU local conversion with batch size + retry controls
-
-The `Unclosed client session` warning does not block those goals and should be handled as a follow-up cleanup task with focused tracing.
-
-### Follow-up plan
-
-Recommended next debugging steps:
-
-1. Trace all `aiohttp.ClientSession` creation sites in the document processing and indexing path
-2. Confirm ownership and close semantics for shared clients vs per-task clients
-3. Add a focused regression test or log assertion once the leaking component is isolated
+In the post-fix worker log window, the document finished successfully and the previous `Unclosed connector` warning did not reappear.

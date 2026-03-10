@@ -2,6 +2,7 @@
 
 import asyncio
 import gc
+import inspect
 import logging
 import os
 import shutil
@@ -767,7 +768,10 @@ async def _index_pg_nodes(nodes):
         embedding_dimension=pgvector_provider_cfg["embedding_dimension"],
     )
     pg_index = await load_pgvector_index(embed_model, pg_config)
-    pg_index.insert_nodes(nodes)
+    try:
+        pg_index.insert_nodes(nodes)
+    finally:
+        await _close_vector_index(pg_index)
 
 
 async def _index_es_nodes(nodes):
@@ -783,7 +787,39 @@ async def _index_es_nodes(nodes):
         cloud_id=es_cfg.get("cloud_id", None),
     )
     es_index = await load_es_index(embed_model, es_config)
-    es_index.insert_nodes(nodes)
+    try:
+        es_index.insert_nodes(nodes)
+    finally:
+        await _close_vector_index(es_index)
+
+
+async def _close_closeable(resource) -> bool:
+    """Best-effort close for resources exposing sync or async close()."""
+    if resource is None:
+        return False
+
+    close = getattr(resource, "close", None)
+    if not callable(close):
+        return False
+
+    try:
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to close resource %s: %s", type(resource).__name__, exc)
+        return False
+
+
+async def _close_vector_index(index) -> None:
+    """Close resources held by a VectorStoreIndex without leaking clients."""
+    vector_store = getattr(index, "vector_store", None)
+    nested_store = getattr(vector_store, "_store", None) if vector_store is not None else None
+
+    closed = await _close_closeable(nested_store)
+    if not closed:
+        await _close_closeable(vector_store)
 
 
 async def _delete_document_nodes_async(document_id: str):
@@ -809,7 +845,10 @@ async def _delete_document_nodes_async(document_id: str):
         )
         try:
             pg_index = await load_pgvector_index(embed_model, pg_config)
-            pg_index.delete_ref_doc(document_id)
+            try:
+                pg_index.delete_ref_doc(document_id)
+            finally:
+                await _close_vector_index(pg_index)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete pgvector nodes failed for %s: %s", document_id, exc)
 
@@ -822,7 +861,10 @@ async def _delete_document_nodes_async(document_id: str):
         )
         try:
             es_index = await load_es_index(embed_model, es_config)
-            es_index.delete_ref_doc(document_id)
+            try:
+                es_index.delete_ref_doc(document_id)
+            finally:
+                await _close_vector_index(es_index)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
     except Exception as exc:  # noqa: BLE001
