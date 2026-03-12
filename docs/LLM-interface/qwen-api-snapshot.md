@@ -1,0 +1,875 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - alert [ref=e5]:
+      - img "exclamation-circle" [ref=e6]:
+        - img [ref=e7]
+      - generic [ref=e11]:
+        - generic [ref=e12]: "Reminder: Your service will transition to paid billing once the free quota is used up. Please set up your payment method in advance to maintain uninterrupted service."
+        - link "More Info" [ref=e13] [cursor=pointer]:
+          - /url: https://www.alibabacloud.com/help/en/model-studio/new-free-quota
+      - button "close" [ref=e14] [cursor=pointer]:
+        - img "close" [ref=e15]:
+          - img [ref=e16]
+    - generic [ref=e18]:
+      - img "logo" [ref=e21] [cursor=pointer]
+      - generic [ref=e22]:
+        - generic [ref=e24] [cursor=pointer]: Dashboard
+        - generic [ref=e25] [cursor=pointer]:
+          - generic [ref=e26]: Coding Plan
+          - generic [ref=e27]: 🔥
+        - generic [ref=e29] [cursor=pointer]: Docs
+        - generic [ref=e31] [cursor=pointer]: API References
+      - generic [ref=e32]:
+        - generic [ref=e34] [cursor=pointer]: Singapore
+        - generic [ref=e36] [cursor=pointer]: 
+        - generic [ref=e37] [cursor=pointer]:
+          - text: Log In
+          - generic [ref=e38]: 
+    - generic [ref=e43]:
+      - generic [ref=e45]:
+        - generic [ref=e46]: Preparations
+        - generic [ref=e49] [cursor=pointer]: Get an API key
+        - generic [ref=e52] [cursor=pointer]: Export API key as an environment variable
+        - generic [ref=e55] [cursor=pointer]: Install the SDK
+        - generic [ref=e56]: Chat
+        - generic [ref=e58] [cursor=pointer]:
+          - generic [ref=e59]: Qwen
+          - img "spark-up-line" [ref=e60]:
+            - img [ref=e61]
+        - generic [ref=e65] [cursor=pointer]: OpenAI Chat
+        - generic [ref=e68] [cursor=pointer]: OpenAI Responses
+        - generic [ref=e71] [cursor=pointer]: DashScope
+        - generic [ref=e74] [cursor=pointer]: GLM
+        - generic [ref=e77] [cursor=pointer]: MiniMax – Alibaba Cloud
+        - generic [ref=e78]: Image generation
+        - generic [ref=e81] [cursor=pointer]: Qwen - text-to-image
+        - generic [ref=e84] [cursor=pointer]: Qwen - image editing
+        - generic [ref=e87] [cursor=pointer]: Z-Image
+        - generic [ref=e90] [cursor=pointer]: Wan - text-to-image V2
+        - generic [ref=e93] [cursor=pointer]: Wan2.6 - image generation and editing
+        - generic [ref=e96] [cursor=pointer]: Wan2.5 - general image editing
+        - generic [ref=e99] [cursor=pointer]: FAQ
+        - generic [ref=e100]: Video generation
+        - generic [ref=e103] [cursor=pointer]: Wan - image-to-video - first frame
+        - generic [ref=e106] [cursor=pointer]: Wan - image-to-video - first and last frames
+        - generic [ref=e109] [cursor=pointer]: Wan - reference-to-video
+        - generic [ref=e112] [cursor=pointer]: Wan - text-to-video
+        - generic [ref=e115] [cursor=pointer]: Wan - general video editing
+        - generic [ref=e118] [cursor=pointer]: Wan - image-to-action
+        - generic [ref=e121] [cursor=pointer]: Wan - video character swap
+        - generic [ref=e122]: Specialized models
+        - generic [ref=e125] [cursor=pointer]: Qwen-MT translation model
+        - generic [ref=e128] [cursor=pointer]: Qwen-Deep-Research deep research model
+        - generic [ref=e131] [cursor=pointer]: Qwen-OCR text extraction model
+        - generic [ref=e132]: Real-time multimodal
+        - generic [ref=e135] [cursor=pointer]: Client events
+        - generic [ref=e138] [cursor=pointer]: Server events
+        - generic [ref=e141] [cursor=pointer]: Python SDK
+        - generic [ref=e144] [cursor=pointer]: Java SDK
+        - generic [ref=e147] [cursor=pointer]: Real-time multimodal interaction flow
+        - generic [ref=e148]: Speech recognition
+        - generic [ref=e150] [cursor=pointer]:
+          - generic [ref=e151]: Real-time speech recognition (Fun-ASR)
+          - img "spark-down-line" [ref=e152]:
+            - img [ref=e153]
+        - generic [ref=e156] [cursor=pointer]:
+          - generic [ref=e157]: Real-time speech recognition (Qwen-ASR-Realtime)
+          - img "spark-down-line" [ref=e158]:
+            - img [ref=e159]
+        - generic [ref=e162] [cursor=pointer]:
+          - generic [ref=e163]: Recording file recognition (Fun-ASR)
+          - img "spark-down-line" [ref=e164]:
+            - img [ref=e165]
+        - generic [ref=e169] [cursor=pointer]: Audio file recognition (Qwen-ASR)
+        - generic [ref=e170]: Speech translation
+        - generic [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: Real-time audio and video translation (Qwen-Livetranslate-Realtime)
+          - img "spark-down-line" [ref=e174]:
+            - img [ref=e175]
+        - generic [ref=e179] [cursor=pointer]: Audio and video translation - Qwen
+        - generic [ref=e180]: Text embedding
+        - generic [ref=e183] [cursor=pointer]: Synchronous API details
+        - generic [ref=e184]: Toolkit/framework
+        - generic [ref=e187] [cursor=pointer]: OpenAI compatible - Chat
+        - generic [ref=e190] [cursor=pointer]: OpenAI compatible - Responses
+        - generic [ref=e193] [cursor=pointer]: OpenAI compatible - Vision
+        - generic [ref=e196] [cursor=pointer]: OpenAI compatible - File
+        - generic [ref=e199] [cursor=pointer]: OpenAI compatible - Batch (file input)
+        - generic [ref=e202] [cursor=pointer]: OpenAI compatible - Batch Chat
+        - generic [ref=e205] [cursor=pointer]: OpenAI compatible - Embedding
+        - generic [ref=e208] [cursor=pointer]: OpenAI compatible - Conversations
+        - generic [ref=e211] [cursor=pointer]: Anthropic compatible
+        - generic [ref=e212]: Fine-tuning (training)
+        - generic [ref=e215] [cursor=pointer]: Video generation model fine-tuning API reference
+        - generic [ref=e216]: More
+        - generic [ref=e219] [cursor=pointer]: Error messages
+        - generic [ref=e222] [cursor=pointer]: Generate a temporary API key
+        - generic [ref=e225] [cursor=pointer]: Manage asynchronous tasks
+        - generic [ref=e228] [cursor=pointer]: Call a model in a sub-workspace
+        - generic [ref=e231] [cursor=pointer]: Configure connection reuse for DashScope SDK
+      - generic [ref=e232]:
+        - generic [ref=e234]: OpenAI Responses
+        - iframe [ref=e238]:
+          - generic [active] [ref=f15e1]:
+            - text:               
+            - main [ref=f15e8]:
+              - paragraph [ref=f15e9]: Call the Qwen model using the OpenAI-compatible Responses API.
+              - generic [ref=f15e10]:
+                - generic [ref=f15e11]:
+                  - paragraph [ref=f15e12]: "Advantages over the OpenAI Chat Completions API:"
+                  - list [ref=f15e13]:
+                    - listitem [ref=f15e14]:
+                      - paragraph [ref=f15e15]:
+                        - text: "Built-in tools: Includes web search, web scraping, code interpreter, text-to-image search, image-to-image search, and knowledge base search. These tools deliver better results for complex tasks. For more information, see"
+                        - link "Tool calling" [ref=f15e16] [cursor=pointer]:
+                          - /url: /help/en/model-studio/tool-calls/
+                        - text: .
+                    - listitem [ref=f15e17]:
+                      - paragraph [ref=f15e18]: "More flexible input: Supports passing a string directly as model input and is also compatible with message arrays in Chat format."
+                    - listitem [ref=f15e19]:
+                      - paragraph [ref=f15e20]:
+                        - text: "Simplified context management: Pass the"
+                        - code [ref=f15e21]: previous_response_id
+                        - text: from the previous response instead of manually constructing the complete message history array.
+                - generic [ref=f15e22]:
+                  - heading "Compatibility notes and limitations" [level=2] [ref=f15e23]
+                  - paragraph [ref=f15e24]: This API is designed to be compatible with OpenAI to reduce migration costs. However, differences exist in parameters, features, and specific behaviors.
+                  - paragraph [ref=f15e25]: "Core principle: Requests process only the parameters explicitly listed in this document. Any OpenAI parameters not mentioned are ignored."
+                  - paragraph [ref=f15e26]: "The following are key differences to help you adapt quickly:"
+                  - list [ref=f15e27]:
+                    - listitem [ref=f15e28]:
+                      - paragraph [ref=f15e29]:
+                        - text: "Unsupported parameters: Some OpenAI Responses API parameters are not supported, such as"
+                        - code [ref=f15e30]: background
+                        - text: . Currently, only synchronous calls are supported.
+                    - listitem [ref=f15e31]:
+                      - paragraph [ref=f15e32]:
+                        - text: "Additional parameters: This API supports extra parameters, such as"
+                        - code [ref=f15e33]: enable_thinking
+                        - text: . For specific usage, see the description of the corresponding parameter.
+                - generic [ref=f15e34]:
+                  - generic [ref=f15e36]:
+                    - generic [ref=f15e38]:
+                      - generic [ref=f15e39] [cursor=pointer]: Singapore
+                      - generic [ref=f15e40] [cursor=pointer]: China (Beijing)
+                    - generic [ref=f15e41]:
+                      - paragraph [ref=f15e42]:
+                        - code [ref=f15e43]: base_url
+                        - text: "for SDK:"
+                        - code [ref=f15e44]: https://dashscope-intl.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1
+                      - paragraph [ref=f15e45]:
+                        - text: "HTTP endpoint:"
+                        - code [ref=f15e46]: POST https://dashscope-intl.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1/responses
+                  - paragraph
+                  - table [ref=f15e48]:
+                    - rowgroup [ref=f15e51]:
+                      - 'row "Request body Basic call Streaming output Multi-turn conversation Call built-in tools Python Node.js curl   import os from openai import OpenAI client = OpenAI( # If environment variable is not set, replace with: api_key=\"sk-xxx\" api_key=os.getenv(\"DASHSCOPE_API_KEY\"), base_url=\"https://dashscope-intl.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1\", ) response = client.responses.create( model=\"qwen3.5-plus\", input=\"What can you do?\" ) # Get model response print(response.output_text)" [ref=f15e52]':
+                        - cell "Request body" [ref=f15e53]:
+                          - heading "Request body" [level=2] [ref=f15e54]
+                        - 'cell "Basic call Streaming output Multi-turn conversation Call built-in tools Python Node.js curl   import os from openai import OpenAI client = OpenAI( # If environment variable is not set, replace with: api_key=\"sk-xxx\" api_key=os.getenv(\"DASHSCOPE_API_KEY\"), base_url=\"https://dashscope-intl.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1\", ) response = client.responses.create( model=\"qwen3.5-plus\", input=\"What can you do?\" ) # Get model response print(response.output_text)" [ref=f15e55]':
+                          - generic [ref=f15e57]:
+                            - generic [ref=f15e59]:
+                              - generic [ref=f15e60] [cursor=pointer]: Basic call
+                              - generic [ref=f15e61] [cursor=pointer]: Streaming output
+                              - generic [ref=f15e62] [cursor=pointer]: Multi-turn conversation
+                              - generic [ref=f15e63] [cursor=pointer]: Call built-in tools
+                            - generic [ref=f15e65]:
+                              - generic [ref=f15e67]:
+                                - generic [ref=f15e68] [cursor=pointer]: Python
+                                - generic [ref=f15e69] [cursor=pointer]: Node.js
+                                - generic [ref=f15e70] [cursor=pointer]: curl
+                              - generic [ref=f15e72]:
+                                - generic [ref=f15e74]:
+                                  - generic "Change code theme" [ref=f15e75] [cursor=pointer]: 
+                                  - generic "Copy Code" [ref=f15e76] [cursor=pointer]: 
+                                - code [ref=f15e78]: "import os from openai import OpenAI client = OpenAI( # If environment variable is not set, replace with: api_key=\"sk-xxx\" api_key=os.getenv(\"DASHSCOPE_API_KEY\"), base_url=\"https://dashscope-intl.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1\", ) response = client.responses.create( model=\"qwen3.5-plus\", input=\"What can you do?\" ) # Get model response print(response.output_text)"
+                              - text:    
+                            - text:                
+                      - row "model string (Required) The model name. Supported models include qwen3-max , qwen3-max-2026-01-23 , qwen3.5-plus , qwen3.5-plus-2026-02-15 , qwen3.5-flash , qwen3.5-flash-2026-02-23 , qwen3.5-397b-a17b , qwen3.5-122b-a10b , qwen3.5-27b , qwen3.5-35b-a3b , qwen-plus , qwen-flash , qwen3-coder-plus , qwen3-coder-flash ." [ref=f15e79]:
+                        - cell "model string (Required) The model name. Supported models include qwen3-max , qwen3-max-2026-01-23 , qwen3.5-plus , qwen3.5-plus-2026-02-15 , qwen3.5-flash , qwen3.5-flash-2026-02-23 , qwen3.5-397b-a17b , qwen3.5-122b-a10b , qwen3.5-27b , qwen3.5-35b-a3b , qwen-plus , qwen-flash , qwen3-coder-plus , qwen3-coder-flash ." [ref=f15e80]:
+                          - generic [ref=f15e81]:
+                            - paragraph [ref=f15e82]:
+                              - text: model
+                              - code [ref=f15e83]: string
+                              - text: (Required)
+                            - paragraph [ref=f15e84]:
+                              - text: The model name. Supported models include
+                              - code [ref=f15e85]: qwen3-max
+                              - text: ","
+                              - code [ref=f15e86]: qwen3-max-2026-01-23
+                              - text: ","
+                              - code [ref=f15e87]: qwen3.5-plus
+                              - text: ","
+                              - code [ref=f15e88]: qwen3.5-plus-2026-02-15
+                              - text: ","
+                              - code [ref=f15e89]: qwen3.5-flash
+                              - text: ","
+                              - code [ref=f15e90]: qwen3.5-flash-2026-02-23
+                              - text: ","
+                              - code [ref=f15e91]: qwen3.5-397b-a17b
+                              - text: ","
+                              - code [ref=f15e92]: qwen3.5-122b-a10b
+                              - text: ","
+                              - code [ref=f15e93]: qwen3.5-27b
+                              - text: ","
+                              - code [ref=f15e94]: qwen3.5-35b-a3b
+                              - text: ","
+                              - code [ref=f15e95]: qwen-plus
+                              - text: ","
+                              - code [ref=f15e96]: qwen-flash
+                              - text: ","
+                              - code [ref=f15e97]: qwen3-coder-plus
+                              - text: ","
+                              - code [ref=f15e98]: qwen3-coder-flash
+                              - text: .
+                      - 'row "input string or array (Required) The model input. The following formats are supported: string : Plain text input, such as \"Hello\" . array : A message array arranged in conversational order. Array message types " [ref=f15e99]':
+                        - 'cell "input string or array (Required) The model input. The following formats are supported: string : Plain text input, such as \"Hello\" . array : A message array arranged in conversational order. Array message types " [ref=f15e100]':
+                          - generic [ref=f15e101]:
+                            - paragraph [ref=f15e102]:
+                              - text: input
+                              - code [ref=f15e103]: string or array
+                              - text: (Required)
+                            - paragraph [ref=f15e104]: "The model input. The following formats are supported:"
+                            - list [ref=f15e105]:
+                              - listitem [ref=f15e106]:
+                                - paragraph [ref=f15e107]:
+                                  - code [ref=f15e108]: string
+                                  - text: ": Plain text input, such as"
+                                  - code [ref=f15e109]: "\"Hello\""
+                                  - text: .
+                              - listitem [ref=f15e110]:
+                                - paragraph [ref=f15e111]:
+                                  - code [ref=f15e112]: array
+                                  - text: ": A message array arranged in conversational order."
+                            - generic [ref=f15e113]:
+                              - generic [ref=f15e114]:
+                                - paragraph [ref=f15e116]: Array message types
+                                - generic [ref=f15e117]: 
+                              - text:     
+                      - row "instructions string (Optional) A system instruction inserted at the beginning of the context. When previous_response_id is used, the instructions specified in the previous turn are not carried over to the current context." [ref=f15e118]:
+                        - cell "instructions string (Optional) A system instruction inserted at the beginning of the context. When previous_response_id is used, the instructions specified in the previous turn are not carried over to the current context." [ref=f15e119]:
+                          - generic [ref=f15e120]:
+                            - paragraph [ref=f15e121]:
+                              - text: instructions
+                              - code [ref=f15e122]: string
+                              - text: (Optional)
+                            - paragraph [ref=f15e123]:
+                              - text: A system instruction inserted at the beginning of the context. When
+                              - code [ref=f15e124]: previous_response_id
+                              - text: is used, the
+                              - code [ref=f15e125]: instructions
+                              - text: specified in the previous turn are not carried over to the current context.
+                      - row "previous_response_id string (Optional) The unique ID of the previous response. The current response id is valid for 7 days. You can use this parameter to create a multi-turn conversation. The server automatically retrieves and combines the input and output of that turn as context. If both an input message array and previous_response_id are provided, the new messages in input are appended to the historical context. Cannot be used together with conversation ." [ref=f15e126]:
+                        - cell "previous_response_id string (Optional) The unique ID of the previous response. The current response id is valid for 7 days. You can use this parameter to create a multi-turn conversation. The server automatically retrieves and combines the input and output of that turn as context. If both an input message array and previous_response_id are provided, the new messages in input are appended to the historical context. Cannot be used together with conversation ." [ref=f15e127]:
+                          - generic [ref=f15e128]:
+                            - paragraph [ref=f15e129]:
+                              - text: previous_response_id
+                              - code [ref=f15e130]: string
+                              - text: (Optional)
+                            - paragraph [ref=f15e131]:
+                              - text: The unique ID of the previous response. The current response
+                              - code [ref=f15e132]: id
+                              - text: is valid for 7 days. You can use this parameter to create a multi-turn conversation. The server automatically retrieves and combines the input and output of that turn as context. If both an
+                              - code [ref=f15e133]: input
+                              - text: message array and
+                              - code [ref=f15e134]: previous_response_id
+                              - text: are provided, the new messages in
+                              - code [ref=f15e135]: input
+                              - text: are appended to the historical context. Cannot be used together with
+                              - code [ref=f15e136]: conversation
+                              - text: .
+                      - row "conversation string (Optional) The conversation to which the current response belongs. Historical items in the conversation are automatically passed as context to the current request. The input and output of the current request are also automatically added to the conversation after the response completes. Cannot be used together with previous_response_id ." [ref=f15e137]:
+                        - cell "conversation string (Optional) The conversation to which the current response belongs. Historical items in the conversation are automatically passed as context to the current request. The input and output of the current request are also automatically added to the conversation after the response completes. Cannot be used together with previous_response_id ." [ref=f15e138]:
+                          - generic [ref=f15e139]:
+                            - paragraph [ref=f15e140]:
+                              - text: conversation
+                              - code [ref=f15e141]: string
+                              - text: (Optional)
+                            - paragraph [ref=f15e142]:
+                              - text: The conversation to which the current response belongs. Historical items in the conversation are automatically passed as context to the current request. The input and output of the current request are also automatically added to the conversation after the response completes. Cannot be used together with
+                              - code [ref=f15e143]: previous_response_id
+                              - text: .
+                      - row "stream boolean (Optional) Defaults to false Specifies whether to enable streaming output. If this parameter is set to true , the model response data is streamed back to the client in real time." [ref=f15e144]:
+                        - cell "stream boolean (Optional) Defaults to false Specifies whether to enable streaming output. If this parameter is set to true , the model response data is streamed back to the client in real time." [ref=f15e145]:
+                          - generic [ref=f15e146]:
+                            - paragraph [ref=f15e147]:
+                              - text: stream
+                              - code [ref=f15e148]: boolean
+                              - text: (Optional) Defaults to
+                              - code [ref=f15e149]: "false"
+                            - paragraph [ref=f15e150]:
+                              - text: Specifies whether to enable streaming output. If this parameter is set to
+                              - code [ref=f15e151]: "true"
+                              - text: ", the model response data is streamed back to the client in real time."
+                      - row "tools array (Optional) An array of tools the model can call when generating a response. It supports a mix of built-in tools and user-defined function tools. Properties " [ref=f15e152]:
+                        - cell "tools array (Optional) An array of tools the model can call when generating a response. It supports a mix of built-in tools and user-defined function tools. Properties " [ref=f15e153]:
+                          - generic [ref=f15e154]:
+                            - paragraph [ref=f15e155]:
+                              - text: tools
+                              - code [ref=f15e156]: array
+                              - text: (Optional)
+                            - paragraph [ref=f15e157]: An array of tools the model can call when generating a response. It supports a mix of built-in tools and user-defined function tools.
+                            - blockquote [ref=f15e158]:
+                              - text: For the best response, we recommend enabling the
+                              - code [ref=f15e159]: code_interpreter
+                              - text: ","
+                              - code [ref=f15e160]: web_search
+                              - text: ", and"
+                              - code [ref=f15e161]: web_extractor
+                              - text: tools together.
+                            - generic [ref=f15e162]:
+                              - generic [ref=f15e163]:
+                                - paragraph [ref=f15e165]: Properties
+                                - generic [ref=f15e166]: 
+                              - text:            
+                      - 'row "tool_choice string or object (Optional) Defaults to auto Controls how the model selects and calls tools. This parameter supports two formats: string format and object format. String pattern auto : The model automatically decides whether to call a tool. none : Prevents the model from calling any tool. required : Forces the model to call a tool. Available only when there is a single tool in the tools list. Object format Specifies the range of available tools for the model. The model can select and call tools only from the predefined list. Properties " [ref=f15e167]':
+                        - 'cell "tool_choice string or object (Optional) Defaults to auto Controls how the model selects and calls tools. This parameter supports two formats: string format and object format. String pattern auto : The model automatically decides whether to call a tool. none : Prevents the model from calling any tool. required : Forces the model to call a tool. Available only when there is a single tool in the tools list. Object format Specifies the range of available tools for the model. The model can select and call tools only from the predefined list. Properties " [ref=f15e168]':
+                          - generic [ref=f15e169]:
+                            - paragraph [ref=f15e170]:
+                              - text: tool_choice
+                              - code [ref=f15e171]: string or object
+                              - text: (Optional) Defaults to
+                              - code [ref=f15e172]: auto
+                            - paragraph [ref=f15e173]: "Controls how the model selects and calls tools. This parameter supports two formats: string format and object format."
+                            - generic [ref=f15e174]:
+                              - paragraph [ref=f15e175]: String pattern
+                              - list [ref=f15e176]:
+                                - listitem [ref=f15e177]:
+                                  - paragraph [ref=f15e178]:
+                                    - code [ref=f15e179]: auto
+                                    - text: ": The model automatically decides whether to call a tool."
+                                - listitem [ref=f15e180]:
+                                  - paragraph [ref=f15e181]:
+                                    - code [ref=f15e182]: none
+                                    - text: ": Prevents the model from calling any tool."
+                                - listitem [ref=f15e183]:
+                                  - paragraph [ref=f15e184]:
+                                    - code [ref=f15e185]: required
+                                    - text: ": Forces the model to call a tool. Available only when there is a single tool in the"
+                                    - code [ref=f15e186]: tools
+                                    - text: list.
+                            - generic [ref=f15e187]:
+                              - paragraph [ref=f15e188]: Object format
+                              - paragraph [ref=f15e189]: Specifies the range of available tools for the model. The model can select and call tools only from the predefined list.
+                              - generic [ref=f15e190]:
+                                - generic [ref=f15e191]:
+                                  - paragraph [ref=f15e193]: Properties
+                                  - generic [ref=f15e194]: 
+                                - text:  
+                      - 'row "temperature float (Optional) The sampling temperature that controls the diversity of the generated text. A higher temperature results in more diverse text. A lower temperature results in more deterministic text. Value range: [0, 2) Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see Text generation model overview." [ref=f15e195]':
+                        - 'cell "temperature float (Optional) The sampling temperature that controls the diversity of the generated text. A higher temperature results in more diverse text. A lower temperature results in more deterministic text. Value range: [0, 2) Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see Text generation model overview." [ref=f15e196]':
+                          - generic [ref=f15e197]:
+                            - paragraph [ref=f15e198]:
+                              - text: temperature
+                              - code [ref=f15e199]: float
+                              - text: (Optional)
+                            - paragraph [ref=f15e200]: The sampling temperature that controls the diversity of the generated text.
+                            - paragraph [ref=f15e201]: A higher temperature results in more diverse text. A lower temperature results in more deterministic text.
+                            - paragraph [ref=f15e202]: "Value range: [0, 2)"
+                            - paragraph [ref=f15e203]:
+                              - text: Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see
+                              - link "Text generation model overview" [ref=f15e204] [cursor=pointer]:
+                                - /url: /help/en/model-studio/text-generation#ad7b336bec5fw
+                              - text: .
+                      - 'row "top_p float (Optional) The probability threshold for nucleus sampling that controls the diversity of the generated text. A higher top_p value results in more diverse text. A lower top_p value results in more deterministic text. Value range: (0, 1.0] Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see Text generation model overview." [ref=f15e205]':
+                        - 'cell "top_p float (Optional) The probability threshold for nucleus sampling that controls the diversity of the generated text. A higher top_p value results in more diverse text. A lower top_p value results in more deterministic text. Value range: (0, 1.0] Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see Text generation model overview." [ref=f15e206]':
+                          - generic [ref=f15e207]:
+                            - paragraph [ref=f15e208]:
+                              - text: top_p
+                              - code [ref=f15e209]: float
+                              - text: (Optional)
+                            - paragraph [ref=f15e210]: The probability threshold for nucleus sampling that controls the diversity of the generated text.
+                            - paragraph [ref=f15e211]: A higher top_p value results in more diverse text. A lower top_p value results in more deterministic text.
+                            - paragraph [ref=f15e212]: "Value range: (0, 1.0]"
+                            - paragraph [ref=f15e213]:
+                              - text: Both temperature and top_p control the diversity of the generated text. We recommend that you set only one of them. For more information, see
+                              - link "Text generation model overview" [ref=f15e214] [cursor=pointer]:
+                                - /url: /help/en/model-studio/text-generation#ad7b336bec5fw
+                              - text: .
+                      - 'row "enable_thinking boolean (Optional) Specifies whether to enable thinking mode. If set to true , the model thinks before replying. The thinking content is returned through an output item of the reasoning type. When thinking mode is enabled, we recommend enabling the built-in tools to achieve the best model performance on complex tasks. Valid values: true false Default values by model: Supported models" [ref=f15e215]':
+                        - 'cell "enable_thinking boolean (Optional) Specifies whether to enable thinking mode. If set to true , the model thinks before replying. The thinking content is returned through an output item of the reasoning type. When thinking mode is enabled, we recommend enabling the built-in tools to achieve the best model performance on complex tasks. Valid values: true false Default values by model: Supported models" [ref=f15e216]':
+                          - generic [ref=f15e217]:
+                            - paragraph [ref=f15e218]:
+                              - text: enable_thinking
+                              - code [ref=f15e219]: boolean
+                              - text: (Optional)
+                            - paragraph [ref=f15e220]:
+                              - text: Specifies whether to enable thinking mode. If set to
+                              - code [ref=f15e221]: "true"
+                              - text: ", the model thinks before replying. The thinking content is returned through an output item of the"
+                              - code [ref=f15e222]: reasoning
+                              - text: type. When thinking mode is enabled, we recommend enabling the built-in tools to achieve the best model performance on complex tasks.
+                            - paragraph [ref=f15e223]: "Valid values:"
+                            - list [ref=f15e224]:
+                              - listitem [ref=f15e225]:
+                                - paragraph [ref=f15e226]:
+                                  - code [ref=f15e227]: "true"
+                              - listitem [ref=f15e228]:
+                                - paragraph [ref=f15e229]:
+                                  - code [ref=f15e230]: "false"
+                            - paragraph [ref=f15e231]:
+                              - text: "Default values by model:"
+                              - link "Supported models" [ref=f15e232] [cursor=pointer]:
+                                - /url: /help/en/model-studio/deep-thinking#78286fdc35hlw
+                            - blockquote [ref=f15e233]:
+                              - text: This parameter is not a standard OpenAI parameter. The Python SDK passes it using
+                              - code [ref=f15e234]: "extra_body={\"enable_thinking\": True}"
+                              - text: . The Node.js SDK and curl use
+                              - code [ref=f15e235]: "enable_thinking: true"
+                              - text: directly as a top-level parameter.
+                  - table [ref=f15e237]:
+                    - rowgroup [ref=f15e240]:
+                      - row [ref=f15e241]:
+                        - cell "Response object (non-streaming output)" [ref=f15e242]:
+                          - heading "Response object (non-streaming output)" [level=2] [ref=f15e243]
+                        - cell [ref=f15e244]:
+                          - generic [ref=f15e245]:
+                            - generic [ref=f15e247]:
+                              - generic "Change code theme" [ref=f15e248] [cursor=pointer]: 
+                              - generic "Copy Code" [ref=f15e249] [cursor=pointer]: 
+                            - code [ref=f15e251]:
+                              - text: "{ \"created_at\": 1771165900.0, \"id\": \"f75c28fb-4064-48ed-90da-4d2cc4362xxx\", \"model\": \"qwen3.5-plus\", \"object\": \"response\", \"output\": [ { \"content\": [ { \"annotations\": [], \"text\": \"Hello! I am Qwen3.5, a large language model developed by Alibaba Cloud with knowledge up to 2026, designed to assist you with complex reasoning, creative tasks, and multilingual conversations.\", \"type\": \"output_text\" } ], \"id\": \"msg_89ad23e6-f128-4d4c-b7a1-a786e7880xxx\", \"role\": \"assistant\", \"status\": \"completed\", \"type\": \"message\" } ], \"parallel_tool_calls\":"
+                              - generic [ref=f15e252]: "false"
+                              - text: ", \"status\": \"completed\", \"tool_choice\": \"auto\", \"tools\": [], \"usage\": { \"input_tokens\": 57, \"input_tokens_details\": { \"cached_tokens\": 0 }, \"output_tokens\": 44, \"output_tokens_details\": { \"reasoning_tokens\": 0 }, \"total_tokens\": 101, \"x_details\": [ { \"input_tokens\": 57, \"output_tokens\": 44, \"total_tokens\": 101, \"x_billing_type\": \"response_api\" } ] } }"
+                      - row "id string The unique ID for this response. It is valid for 7 days. You can use this parameter in the previous_response_id parameter to create a multi-turn conversation." [ref=f15e253]:
+                        - cell "id string The unique ID for this response. It is valid for 7 days. You can use this parameter in the previous_response_id parameter to create a multi-turn conversation." [ref=f15e254]:
+                          - generic [ref=f15e255]:
+                            - paragraph [ref=f15e256]:
+                              - text: id
+                              - code [ref=f15e257]: string
+                            - paragraph [ref=f15e258]:
+                              - text: The unique ID for this response. It is valid for 7 days. You can use this parameter in the
+                              - code [ref=f15e259]: previous_response_id
+                              - text: parameter to create a multi-turn conversation.
+                      - row "created_at integer The Unix timestamp in seconds for this request." [ref=f15e260]:
+                        - cell "created_at integer The Unix timestamp in seconds for this request." [ref=f15e261]:
+                          - generic [ref=f15e262]:
+                            - paragraph [ref=f15e263]:
+                              - text: created_at
+                              - code [ref=f15e264]: integer
+                            - paragraph [ref=f15e265]: The Unix timestamp in seconds for this request.
+                      - row "object string The object type. The value is response ." [ref=f15e266]:
+                        - cell "object string The object type. The value is response ." [ref=f15e267]:
+                          - generic [ref=f15e268]:
+                            - paragraph [ref=f15e269]:
+                              - text: object
+                              - code [ref=f15e270]: string
+                            - paragraph [ref=f15e271]:
+                              - text: The object type. The value is
+                              - code [ref=f15e272]: response
+                              - text: .
+                      - 'row "status string The status of the response generation. Valid values: completed failed in_progress cancelled queued incomplete" [ref=f15e273]':
+                        - 'cell "status string The status of the response generation. Valid values: completed failed in_progress cancelled queued incomplete" [ref=f15e274]':
+                          - generic [ref=f15e275]:
+                            - paragraph [ref=f15e276]:
+                              - text: status
+                              - code [ref=f15e277]: string
+                            - paragraph [ref=f15e278]: "The status of the response generation. Valid values:"
+                            - list [ref=f15e279]:
+                              - listitem [ref=f15e280]:
+                                - paragraph [ref=f15e281]:
+                                  - code [ref=f15e282]: completed
+                              - listitem [ref=f15e283]:
+                                - paragraph [ref=f15e284]:
+                                  - code [ref=f15e285]: failed
+                              - listitem [ref=f15e286]:
+                                - paragraph [ref=f15e287]:
+                                  - code [ref=f15e288]: in_progress
+                              - listitem [ref=f15e289]:
+                                - paragraph [ref=f15e290]:
+                                  - code [ref=f15e291]: cancelled
+                              - listitem [ref=f15e292]:
+                                - paragraph [ref=f15e293]:
+                                  - code [ref=f15e294]: queued
+                              - listitem [ref=f15e295]:
+                                - paragraph [ref=f15e296]:
+                                  - code [ref=f15e297]: incomplete
+                      - row "model string The ID of the model that is used to generate the response." [ref=f15e298]:
+                        - cell "model string The ID of the model that is used to generate the response." [ref=f15e299]:
+                          - generic [ref=f15e300]:
+                            - paragraph [ref=f15e301]:
+                              - text: model
+                              - code [ref=f15e302]: string
+                            - paragraph [ref=f15e303]: The ID of the model that is used to generate the response.
+                      - row "output array An array of output items generated by the model. The type and order of elements in the array depend on the model's response. Array element properties " [ref=f15e304]:
+                        - cell "output array An array of output items generated by the model. The type and order of elements in the array depend on the model's response. Array element properties " [ref=f15e305]:
+                          - generic [ref=f15e306]:
+                            - paragraph [ref=f15e307]:
+                              - text: output
+                              - code [ref=f15e308]: array
+                            - paragraph [ref=f15e309]: An array of output items generated by the model. The type and order of elements in the array depend on the model's response.
+                            - generic [ref=f15e310]:
+                              - generic [ref=f15e311]:
+                                - paragraph [ref=f15e313]: Array element properties
+                                - generic [ref=f15e314]: 
+                              - text:   
+                      - row "usage object The token consumption information for this request. Properties " [ref=f15e315]:
+                        - cell "usage object The token consumption information for this request. Properties " [ref=f15e316]:
+                          - generic [ref=f15e317]:
+                            - paragraph [ref=f15e318]:
+                              - text: usage
+                              - code [ref=f15e319]: object
+                            - paragraph [ref=f15e320]: The token consumption information for this request.
+                            - generic [ref=f15e321]:
+                              - generic [ref=f15e322]:
+                                - paragraph [ref=f15e324]: Properties
+                                - generic [ref=f15e325]: 
+                              - text:   
+                      - row "error object The error object that is returned when the model fails to generate a response. This field is null on success." [ref=f15e326]:
+                        - cell "error object The error object that is returned when the model fails to generate a response. This field is null on success." [ref=f15e327]:
+                          - generic [ref=f15e328]:
+                            - paragraph [ref=f15e329]:
+                              - text: error
+                              - code [ref=f15e330]: object
+                            - paragraph [ref=f15e331]:
+                              - text: The error object that is returned when the model fails to generate a response. This field is
+                              - code [ref=f15e332]: "null"
+                              - text: on success.
+                      - row "tools array The complete content of the tools parameter from the echo request. The structure is the same as the tools parameter in the request body." [ref=f15e333]:
+                        - cell "tools array The complete content of the tools parameter from the echo request. The structure is the same as the tools parameter in the request body." [ref=f15e334]:
+                          - generic [ref=f15e335]:
+                            - paragraph [ref=f15e336]:
+                              - text: tools
+                              - code [ref=f15e337]: array
+                            - paragraph [ref=f15e338]:
+                              - text: The complete content of the
+                              - code [ref=f15e339]: tools
+                              - text: parameter from the echo request. The structure is the same as the
+                              - code [ref=f15e340]: tools
+                              - text: parameter in the request body.
+                      - row "tool_choice string The value of the tool_choice parameter from the echo request. Valid values are auto , none , and required ." [ref=f15e341]:
+                        - cell "tool_choice string The value of the tool_choice parameter from the echo request. Valid values are auto , none , and required ." [ref=f15e342]:
+                          - generic [ref=f15e343]:
+                            - paragraph [ref=f15e344]:
+                              - text: tool_choice
+                              - code [ref=f15e345]: string
+                            - paragraph [ref=f15e346]:
+                              - text: The value of the
+                              - code [ref=f15e347]: tool_choice
+                              - text: parameter from the echo request. Valid values are
+                              - code [ref=f15e348]: auto
+                              - text: ","
+                              - code [ref=f15e349]: none
+                              - text: ", and"
+                              - code [ref=f15e350]: required
+                              - text: .
+                  - table [ref=f15e352]:
+                    - rowgroup [ref=f15e355]:
+                      - row [ref=f15e356]:
+                        - cell "Response chunk object (streaming output)" [ref=f15e357]:
+                          - heading "Response chunk object (streaming output)" [level=2] [ref=f15e358]
+                        - cell [ref=f15e359]:
+                          - generic [ref=f15e361]:
+                            - generic [ref=f15e363]:
+                              - generic [ref=f15e364] [cursor=pointer]: Basic call
+                              - generic [ref=f15e365] [cursor=pointer]: Web scraping
+                              - generic [ref=f15e366] [cursor=pointer]: Text-to-image search
+                              - generic [ref=f15e367] [cursor=pointer]: Image search
+                              - generic [ref=f15e368] [cursor=pointer]: MCP
+                              - generic [ref=f15e369] [cursor=pointer]: Knowledge base search
+                            - generic [ref=f15e371]:
+                              - generic [ref=f15e373]:
+                                - generic "Change code theme" [ref=f15e374] [cursor=pointer]: 
+                                - generic "Copy Code" [ref=f15e375] [cursor=pointer]: 
+                              - code [ref=f15e377]:
+                                - text: "// response.created - Response created {\"response\":{\"id\":\"428c90e9-9cd6-90a6-9726-c02b08ebexxx\",\"created_at\":1769082930,\"object\":\"response\",\"status\":\"queued\",...},\"sequence_number\":0,\"type\":\"response.created\"} // response.in_progress - Response in progress {\"response\":{\"id\":\"428c90e9-9cd6-90a6-9726-c02b08ebexxx\",\"status\":\"in_progress\",...},\"sequence_number\":1,\"type\":\"response.in_progress\"} // response.output_item.added - New output item added {\"item\":{\"id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"content\":[],\"role\":\"assistant\",\"status\":\"in_progress\",\"type\":\"message\"},\"output_index\":0,\"sequence_number\":2,\"type\":\"response.output_item.added\"} // response.content_part.added - New content block added {\"content_index\":0,\"item_id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"output_index\":0,\"part\":{\"annotations\":[],\"text\":\"\",\"type\":\"output_text\",\"logprobs\":"
+                                - generic [ref=f15e378]: "null"
+                                - text: "},\"sequence_number\":3,\"type\":\"response.content_part.added\"} // response.output_text.delta - Incremental text (triggered multiple times) {\"content_index\":0,\"delta\":\"Artificial intelligence\",\"item_id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":4,\"type\":\"response.output_text.delta\"} {\"content_index\":0,\"delta\":\"(AI) refers to the technology and science\",\"item_id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":6,\"type\":\"response.output_text.delta\"} // response.output_text.done - Text completed {\"content_index\":0,\"item_id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":53,\"text\":\"Artificial intelligence (AI) refers to the technology and science that simulates human intelligent behavior by computer systems...\",\"type\":\"response.output_text.done\"} // response.content_part.done - Content block completed {\"content_index\":0,\"item_id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"output_index\":0,\"part\":{\"annotations\":[],\"text\":\"...full text...\",\"type\":\"output_text\",\"logprobs\":"
+                                - generic [ref=f15e379]: "null"
+                                - text: "},\"sequence_number\":54,\"type\":\"response.content_part.done\"} // response.output_item.done - Output item completed {\"item\":{\"id\":\"msg_bcb45d66-fc34-46a2-bb56-714a51e8exxx\",\"content\":[{\"annotations\":[],\"text\":\"...full text...\",\"type\":\"output_text\",\"logprobs\":"
+                                - generic [ref=f15e380]: "null"
+                                - text: "}],\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"},\"output_index\":0,\"sequence_number\":55,\"type\":\"response.output_item.done\"} // response.completed - Response completed (includes full response and usage) {\"response\":{\"id\":\"428c90e9-9cd6-90a6-9726-c02b08ebexxx\",\"created_at\":1769082930,\"model\":\"qwen3-max-2026-01-23\",\"object\":\"response\",\"output\":[...],\"status\":\"completed\",\"usage\":{\"input_tokens\":37,\"output_tokens\":243,\"total_tokens\":280,...}},\"sequence_number\":56,\"type\":\"response.completed\"}"
+                            - text:          
+                      - row "Streaming output returns a series of JSON objects. Each object includes a type field to identify the event type and a sequence_number field to indicate the event order. The response.completed event marks the end of the stream." [ref=f15e381]:
+                        - cell "Streaming output returns a series of JSON objects. Each object includes a type field to identify the event type and a sequence_number field to indicate the event order. The response.completed event marks the end of the stream." [ref=f15e382]:
+                          - paragraph [ref=f15e384]:
+                            - text: Streaming output returns a series of JSON objects. Each object includes a
+                            - code [ref=f15e385]: type
+                            - text: field to identify the event type and a
+                            - code [ref=f15e386]: sequence_number
+                            - text: field to indicate the event order. The
+                            - code [ref=f15e387]: response.completed
+                            - text: event marks the end of the stream.
+                      - row [ref=f15e388]:
+                        - cell [ref=f15e389]:
+                          - generic [ref=f15e390]:
+                            - paragraph [ref=f15e391]:
+                              - text: type
+                              - code [ref=f15e392]: string
+                            - paragraph [ref=f15e393]: "The event type identifier. Valid values:"
+                            - list [ref=f15e394]:
+                              - listitem [ref=f15e395]:
+                                - paragraph [ref=f15e396]:
+                                  - code [ref=f15e397]: response.created
+                                  - text: ": Triggered when the response is created. The status is"
+                                  - code [ref=f15e398]: queued
+                                  - text: .
+                              - listitem [ref=f15e399]:
+                                - paragraph [ref=f15e400]:
+                                  - code [ref=f15e401]: response.in_progress
+                                  - text: ": Triggered when response processing begins. The status changes to"
+                                  - code [ref=f15e402]: in_progress
+                                  - text: .
+                              - listitem [ref=f15e403]:
+                                - paragraph [ref=f15e404]:
+                                  - code [ref=f15e405]: response.output_item.added
+                                  - text: ": Triggered when a new output item, such as a message or a"
+                                  - code [ref=f15e406]: web_extractor_call
+                                  - text: ", is added to the output array. If the"
+                                  - code [ref=f15e407]: item.type
+                                  - text: is
+                                  - code [ref=f15e408]: web_extractor_call
+                                  - text: ", this indicates that the web extractor tool call has started."
+                              - listitem [ref=f15e409]:
+                                - paragraph [ref=f15e410]:
+                                  - code [ref=f15e411]: response.content_part.added
+                                  - text: ": Triggered when a new content block is added to the content array of an output item."
+                              - listitem [ref=f15e412]:
+                                - paragraph [ref=f15e413]:
+                                  - code [ref=f15e414]: response.output_text.delta
+                                  - text: ": Triggered for incremental text generation. This event is triggered multiple times, and the"
+                                  - code [ref=f15e415]: delta
+                                  - text: field contains the new text fragment.
+                              - listitem [ref=f15e416]:
+                                - paragraph [ref=f15e417]:
+                                  - code [ref=f15e418]: response.output_text.done
+                                  - text: ": Triggered when text generation is complete. The"
+                                  - code [ref=f15e419]: text
+                                  - text: field contains the complete text.
+                              - listitem [ref=f15e420]:
+                                - paragraph [ref=f15e421]:
+                                  - code [ref=f15e422]: response.content_part.done
+                                  - text: ": Triggered when a content block is complete. The"
+                                  - code [ref=f15e423]: part
+                                  - text: object contains the complete content block.
+                              - listitem [ref=f15e424]:
+                                - paragraph [ref=f15e425]:
+                                  - code [ref=f15e426]: response.output_item.done
+                                  - text: ": Triggered when an output item is completely generated. The"
+                                  - code [ref=f15e427]: item
+                                  - text: object contains the complete output item. If the
+                                  - code [ref=f15e428]: item.type
+                                  - text: is
+                                  - code [ref=f15e429]: web_extractor_call
+                                  - text: ", this indicates that the web extractor tool call is complete."
+                              - listitem [ref=f15e430]:
+                                - paragraph [ref=f15e431]:
+                                  - code [ref=f15e432]: response.reasoning_summary_text.delta
+                                  - text: ": (If the thinking mode is enabled) Incremental text for the reasoning summary. The"
+                                  - code [ref=f15e433]: delta
+                                  - text: field contains the new summary fragment.
+                              - listitem [ref=f15e434]:
+                                - paragraph [ref=f15e435]:
+                                  - code [ref=f15e436]: response.reasoning_summary_text.done
+                                  - text: ": (If the thinking mode is enabled) The reasoning summary is complete. The"
+                                  - code [ref=f15e437]: text
+                                  - text: field contains the complete summary.
+                              - listitem [ref=f15e438]:
+                                - paragraph [ref=f15e439]:
+                                  - code [ref=f15e440]: response.web_search_call.in_progress
+                                  - text: /
+                                  - code [ref=f15e441]: searching
+                                  - text: /
+                                  - code [ref=f15e442]: completed
+                                  - text: ": (If you use the web_search tool) Search status change events."
+                              - listitem [ref=f15e443]:
+                                - paragraph [ref=f15e444]:
+                                  - code [ref=f15e445]: response.code_interpreter_call.in_progress
+                                  - text: /
+                                  - code [ref=f15e446]: interpreting
+                                  - text: /
+                                  - code [ref=f15e447]: completed
+                                  - text: ": (If you use the code_interpreter tool) Code execution status change events."
+                              - listitem [ref=f15e448]:
+                                - paragraph [ref=f15e449]:
+                                  - text: "Note: If you use the"
+                                  - code [ref=f15e450]: web_extractor
+                                  - text: tool, there is no dedicated event type identifier. The web extractor tool call is communicated through the general
+                                  - code [ref=f15e451]: response.output_item.added
+                                  - text: and
+                                  - code [ref=f15e452]: response.output_item.done
+                                  - text: events. It is identified by the
+                                  - code [ref=f15e453]: item.type
+                                  - text: field, which has a value of
+                                  - code [ref=f15e454]: web_extractor_call
+                                  - text: .
+                              - listitem [ref=f15e455]:
+                                - paragraph [ref=f15e456]:
+                                  - code [ref=f15e457]: response.mcp_call_arguments.delta
+                                  - text: /
+                                  - code [ref=f15e458]: response.mcp_call_arguments.done
+                                  - text: ": (If you use the mcp tool) Incremental and completion events for MCP call arguments."
+                              - listitem [ref=f15e459]:
+                                - paragraph [ref=f15e460]:
+                                  - code [ref=f15e461]: response.mcp_call.completed
+                                  - text: ": (If you use the mcp tool) MCP service call completed."
+                              - listitem [ref=f15e462]:
+                                - paragraph [ref=f15e463]:
+                                  - code [ref=f15e464]: response.file_search_call.in_progress
+                                  - text: /
+                                  - code [ref=f15e465]: searching
+                                  - text: /
+                                  - code [ref=f15e466]: completed
+                                  - text: ": (If you use the file_search tool) Knowledge base search status change events."
+                              - listitem [ref=f15e467]:
+                                - paragraph [ref=f15e468]:
+                                  - text: "Note: If you use the"
+                                  - code [ref=f15e469]: web_search_image
+                                  - text: or
+                                  - code [ref=f15e470]: image_search
+                                  - text: tools, there are no dedicated intermediate state events. Tool calls are communicated through the
+                                  - code [ref=f15e471]: response.output_item.added
+                                  - text: (call start) and
+                                  - code [ref=f15e472]: response.output_item.done
+                                  - text: (call completion) events.
+                              - listitem [ref=f15e473]:
+                                - paragraph [ref=f15e474]:
+                                  - code [ref=f15e475]: response.completed
+                                  - text: ": Triggered when response generation is complete. The"
+                                  - code [ref=f15e476]: response
+                                  - text: object contains the complete response, including usage information. This event marks the end of the stream.
+                      - row "sequence_number integer The event serial number. It starts from 0 and increments. You can use it to ensure that the client processes events in the correct order." [ref=f15e477]:
+                        - cell "sequence_number integer The event serial number. It starts from 0 and increments. You can use it to ensure that the client processes events in the correct order." [ref=f15e478]:
+                          - generic [ref=f15e479]:
+                            - paragraph [ref=f15e480]:
+                              - text: sequence_number
+                              - code [ref=f15e481]: integer
+                            - paragraph [ref=f15e482]: The event serial number. It starts from 0 and increments. You can use it to ensure that the client processes events in the correct order.
+                      - row "response object The response object. It appears in the response.created , response.in_progress , and response.completed events. In the response.completed event, it contains the complete response data, including output and usage . Its structure is consistent with the response object of a non-streaming response." [ref=f15e483]:
+                        - cell "response object The response object. It appears in the response.created , response.in_progress , and response.completed events. In the response.completed event, it contains the complete response data, including output and usage . Its structure is consistent with the response object of a non-streaming response." [ref=f15e484]:
+                          - generic [ref=f15e485]:
+                            - paragraph [ref=f15e486]:
+                              - text: response
+                              - code [ref=f15e487]: object
+                            - paragraph [ref=f15e488]:
+                              - text: The response object. It appears in the
+                              - code [ref=f15e489]: response.created
+                              - text: ","
+                              - code [ref=f15e490]: response.in_progress
+                              - text: ", and"
+                              - code [ref=f15e491]: response.completed
+                              - text: events. In the
+                              - code [ref=f15e492]: response.completed
+                              - text: event, it contains the complete response data, including
+                              - code [ref=f15e493]: output
+                              - text: and
+                              - code [ref=f15e494]: usage
+                              - text: . Its structure is consistent with the response object of a non-streaming response.
+                      - row "item object The output item object. It appears in the response.output_item.added and response.output_item.done events. In an added event, it is an initial skeleton where the content is an empty array. In a done event, it is a complete object. Properties " [ref=f15e495]:
+                        - cell "item object The output item object. It appears in the response.output_item.added and response.output_item.done events. In an added event, it is an initial skeleton where the content is an empty array. In a done event, it is a complete object. Properties " [ref=f15e496]:
+                          - generic [ref=f15e497]:
+                            - paragraph [ref=f15e498]:
+                              - text: item
+                              - code [ref=f15e499]: object
+                            - paragraph [ref=f15e500]:
+                              - text: The output item object. It appears in the
+                              - code [ref=f15e501]: response.output_item.added
+                              - text: and
+                              - code [ref=f15e502]: response.output_item.done
+                              - text: events. In an
+                              - code [ref=f15e503]: added
+                              - text: event, it is an initial skeleton where the content is an empty array. In a
+                              - code [ref=f15e504]: done
+                              - text: event, it is a complete object.
+                            - generic [ref=f15e506]:
+                              - paragraph [ref=f15e508]: Properties
+                              - generic [ref=f15e509]: 
+                      - row "part object The content block object. It appears in the response.content_part.added and response.content_part.done events. Properties " [ref=f15e510]:
+                        - cell "part object The content block object. It appears in the response.content_part.added and response.content_part.done events. Properties " [ref=f15e511]:
+                          - generic [ref=f15e512]:
+                            - paragraph [ref=f15e513]:
+                              - text: part
+                              - code [ref=f15e514]: object
+                            - paragraph [ref=f15e515]:
+                              - text: The content block object. It appears in the
+                              - code [ref=f15e516]: response.content_part.added
+                              - text: and
+                              - code [ref=f15e517]: response.content_part.done
+                              - text: events.
+                            - generic [ref=f15e519]:
+                              - paragraph [ref=f15e521]: Properties
+                              - generic [ref=f15e522]: 
+                      - row "delta string The incremental text content. It appears in the response.output_text.delta event and contains the new text fragment. The client should concatenate all delta fragments to obtain the complete text." [ref=f15e523]:
+                        - cell "delta string The incremental text content. It appears in the response.output_text.delta event and contains the new text fragment. The client should concatenate all delta fragments to obtain the complete text." [ref=f15e524]:
+                          - generic [ref=f15e525]:
+                            - paragraph [ref=f15e526]:
+                              - text: delta
+                              - code [ref=f15e527]: string
+                            - paragraph [ref=f15e528]:
+                              - text: The incremental text content. It appears in the
+                              - code [ref=f15e529]: response.output_text.delta
+                              - text: event and contains the new text fragment. The client should concatenate all
+                              - code [ref=f15e530]: delta
+                              - text: fragments to obtain the complete text.
+                      - row "text string The complete text content. It appears in the response.output_text.done event and contains the complete text of the content block. You can use it to verify the concatenated delta result." [ref=f15e531]:
+                        - cell "text string The complete text content. It appears in the response.output_text.done event and contains the complete text of the content block. You can use it to verify the concatenated delta result." [ref=f15e532]:
+                          - generic [ref=f15e533]:
+                            - paragraph [ref=f15e534]:
+                              - text: text
+                              - code [ref=f15e535]: string
+                            - paragraph [ref=f15e536]:
+                              - text: The complete text content. It appears in the
+                              - code [ref=f15e537]: response.output_text.done
+                              - text: event and contains the complete text of the content block. You can use it to verify the concatenated
+                              - code [ref=f15e538]: delta
+                              - text: result.
+                      - row "item_id string The unique identifier for the output item. It is used to associate related events for the same output item." [ref=f15e539]:
+                        - cell "item_id string The unique identifier for the output item. It is used to associate related events for the same output item." [ref=f15e540]:
+                          - generic [ref=f15e541]:
+                            - paragraph [ref=f15e542]:
+                              - text: item_id
+                              - code [ref=f15e543]: string
+                            - paragraph [ref=f15e544]: The unique identifier for the output item. It is used to associate related events for the same output item.
+                      - row "output_index integer The index position of the output item in the output array." [ref=f15e545]:
+                        - cell "output_index integer The index position of the output item in the output array." [ref=f15e546]:
+                          - generic [ref=f15e547]:
+                            - paragraph [ref=f15e548]:
+                              - text: output_index
+                              - code [ref=f15e549]: integer
+                            - paragraph [ref=f15e550]:
+                              - text: The index position of the output item in the
+                              - code [ref=f15e551]: output
+                              - text: array.
+                      - row "content_index integer The index position of the content block in the content array." [ref=f15e552]:
+                        - cell "content_index integer The index position of the content block in the content array." [ref=f15e553]:
+                          - generic [ref=f15e554]:
+                            - paragraph [ref=f15e555]:
+                              - text: content_index
+                              - code [ref=f15e556]: integer
+                            - paragraph [ref=f15e557]:
+                              - text: The index position of the content block in the
+                              - code [ref=f15e558]: content
+                              - text: array.
+                      - row "summary_index integer The index of the summary array. It appears in the response.reasoning_summary_text.delta and response.reasoning_summary_text.done events." [ref=f15e559]:
+                        - cell "summary_index integer The index of the summary array. It appears in the response.reasoning_summary_text.delta and response.reasoning_summary_text.done events." [ref=f15e560]:
+                          - generic [ref=f15e561]:
+                            - paragraph [ref=f15e562]:
+                              - text: summary_index
+                              - code [ref=f15e563]: integer
+                            - paragraph [ref=f15e564]:
+                              - text: The index of the summary array. It appears in the
+                              - code [ref=f15e565]: response.reasoning_summary_text.delta
+                              - text: and
+                              - code [ref=f15e566]: response.reasoning_summary_text.done
+                              - text: events.
+                - generic [ref=f15e567]:
+                  - heading "FAQ" [level=2] [ref=f15e568]
+                  - paragraph [ref=f15e569]: "Q: How to pass context for a multi-turn conversation?"
+                  - paragraph [ref=f15e570]:
+                    - text: "A: To start a new turn in the conversation, pass the"
+                    - code [ref=f15e571]: id
+                    - text: from the previous model response as the
+                    - code [ref=f15e572]: previous_response_id
+                    - text: parameter.
+                  - paragraph [ref=f15e573]: "Q: Why are some fields in the response examples not described in this document?"
+                  - paragraph [ref=f15e574]:
+                    - text: "A: If you use the official OpenAI SDK, it may output additional fields, usually"
+                    - code [ref=f15e575]: "null"
+                    - text: ", based on its own model structure. These fields are defined by the OpenAI protocol but are not currently supported by our service. Focus only on the fields described in this document."
+            - iframe [ref=f15e576]:
+              
+            - text:        
+  - iframe [ref=e239]:
+    
+  - iframe [ref=e240]:
+    

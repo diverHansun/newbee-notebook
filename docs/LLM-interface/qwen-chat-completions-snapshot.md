@@ -1,0 +1,1177 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - alert [ref=e5]:
+      - img "exclamation-circle" [ref=e6]:
+        - img [ref=e7]
+      - generic [ref=e11]:
+        - generic [ref=e12]: "Reminder: Your service will transition to paid billing once the free quota is used up. Please set up your payment method in advance to maintain uninterrupted service."
+        - link "More Info" [ref=e13] [cursor=pointer]:
+          - /url: https://www.alibabacloud.com/help/en/model-studio/new-free-quota
+      - button "close" [ref=e14] [cursor=pointer]:
+        - img "close" [ref=e15]:
+          - img [ref=e16]
+    - generic [ref=e18]:
+      - img "logo" [ref=e21] [cursor=pointer]
+      - generic [ref=e22]:
+        - generic [ref=e24] [cursor=pointer]: Dashboard
+        - generic [ref=e25] [cursor=pointer]:
+          - generic [ref=e26]: Coding Plan
+          - generic [ref=e27]: 🔥
+        - generic [ref=e29] [cursor=pointer]: Docs
+        - generic [ref=e31] [cursor=pointer]: API References
+      - generic [ref=e32]:
+        - generic [ref=e34] [cursor=pointer]: Singapore
+        - generic [ref=e36] [cursor=pointer]: 
+        - generic [ref=e37] [cursor=pointer]:
+          - text: Log In
+          - generic [ref=e38]: 
+    - generic [ref=e43]:
+      - generic [ref=e45]:
+        - generic [ref=e46]: Preparations
+        - generic [ref=e49] [cursor=pointer]: Get an API key
+        - generic [ref=e52] [cursor=pointer]: Export API key as an environment variable
+        - generic [ref=e55] [cursor=pointer]: Install the SDK
+        - generic [ref=e56]: Chat
+        - generic [ref=e58] [cursor=pointer]:
+          - generic [ref=e59]: Qwen
+          - img "spark-up-line" [ref=e60]:
+            - img [ref=e61]
+        - generic [ref=e65] [cursor=pointer]: OpenAI Chat
+        - generic [ref=e68] [cursor=pointer]: OpenAI Responses
+        - generic [ref=e71] [cursor=pointer]: DashScope
+        - generic [ref=e74] [cursor=pointer]: GLM
+        - generic [ref=e77] [cursor=pointer]: MiniMax – Alibaba Cloud
+        - generic [ref=e78]: Image generation
+        - generic [ref=e81] [cursor=pointer]: Qwen - text-to-image
+        - generic [ref=e84] [cursor=pointer]: Qwen - image editing
+        - generic [ref=e87] [cursor=pointer]: Z-Image
+        - generic [ref=e90] [cursor=pointer]: Wan - text-to-image V2
+        - generic [ref=e93] [cursor=pointer]: Wan2.6 - image generation and editing
+        - generic [ref=e96] [cursor=pointer]: Wan2.5 - general image editing
+        - generic [ref=e99] [cursor=pointer]: FAQ
+        - generic [ref=e100]: Video generation
+        - generic [ref=e103] [cursor=pointer]: Wan - image-to-video - first frame
+        - generic [ref=e106] [cursor=pointer]: Wan - image-to-video - first and last frames
+        - generic [ref=e109] [cursor=pointer]: Wan - reference-to-video
+        - generic [ref=e112] [cursor=pointer]: Wan - text-to-video
+        - generic [ref=e115] [cursor=pointer]: Wan - general video editing
+        - generic [ref=e118] [cursor=pointer]: Wan - image-to-action
+        - generic [ref=e121] [cursor=pointer]: Wan - video character swap
+        - generic [ref=e122]: Specialized models
+        - generic [ref=e125] [cursor=pointer]: Qwen-MT translation model
+        - generic [ref=e128] [cursor=pointer]: Qwen-Deep-Research deep research model
+        - generic [ref=e131] [cursor=pointer]: Qwen-OCR text extraction model
+        - generic [ref=e132]: Real-time multimodal
+        - generic [ref=e135] [cursor=pointer]: Client events
+        - generic [ref=e138] [cursor=pointer]: Server events
+        - generic [ref=e141] [cursor=pointer]: Python SDK
+        - generic [ref=e144] [cursor=pointer]: Java SDK
+        - generic [ref=e147] [cursor=pointer]: Real-time multimodal interaction flow
+        - generic [ref=e148]: Speech recognition
+        - generic [ref=e150] [cursor=pointer]:
+          - generic [ref=e151]: Real-time speech recognition (Fun-ASR)
+          - img "spark-down-line" [ref=e152]:
+            - img [ref=e153]
+        - generic [ref=e156] [cursor=pointer]:
+          - generic [ref=e157]: Real-time speech recognition (Qwen-ASR-Realtime)
+          - img "spark-down-line" [ref=e158]:
+            - img [ref=e159]
+        - generic [ref=e162] [cursor=pointer]:
+          - generic [ref=e163]: Recording file recognition (Fun-ASR)
+          - img "spark-down-line" [ref=e164]:
+            - img [ref=e165]
+        - generic [ref=e169] [cursor=pointer]: Audio file recognition (Qwen-ASR)
+        - generic [ref=e170]: Speech translation
+        - generic [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: Real-time audio and video translation (Qwen-Livetranslate-Realtime)
+          - img "spark-down-line" [ref=e174]:
+            - img [ref=e175]
+        - generic [ref=e179] [cursor=pointer]: Audio and video translation - Qwen
+        - generic [ref=e180]: Text embedding
+        - generic [ref=e183] [cursor=pointer]: Synchronous API details
+        - generic [ref=e184]: Toolkit/framework
+        - generic [ref=e187] [cursor=pointer]: OpenAI compatible - Chat
+        - generic [ref=e190] [cursor=pointer]: OpenAI compatible - Responses
+        - generic [ref=e193] [cursor=pointer]: OpenAI compatible - Vision
+        - generic [ref=e196] [cursor=pointer]: OpenAI compatible - File
+        - generic [ref=e199] [cursor=pointer]: OpenAI compatible - Batch (file input)
+        - generic [ref=e202] [cursor=pointer]: OpenAI compatible - Batch Chat
+        - generic [ref=e205] [cursor=pointer]: OpenAI compatible - Embedding
+        - generic [ref=e208] [cursor=pointer]: OpenAI compatible - Conversations
+        - generic [ref=e211] [cursor=pointer]: Anthropic compatible
+        - generic [ref=e212]: Fine-tuning (training)
+        - generic [ref=e215] [cursor=pointer]: Video generation model fine-tuning API reference
+        - generic [ref=e216]: More
+        - generic [ref=e219] [cursor=pointer]: Error messages
+        - generic [ref=e222] [cursor=pointer]: Generate a temporary API key
+        - generic [ref=e225] [cursor=pointer]: Manage asynchronous tasks
+        - generic [ref=e228] [cursor=pointer]: Call a model in a sub-workspace
+        - generic [ref=e231] [cursor=pointer]: Configure connection reuse for DashScope SDK
+      - generic [ref=e232]:
+        - generic [ref=e234]: OpenAI Chat
+        - iframe [ref=e244]:
+          - generic [active] [ref=f18e1]:
+            - text:               
+            - main [ref=f18e8]:
+              - paragraph [ref=f18e9]: Describes how to call Qwen models using the OpenAI-compatible Chat API, including input and output parameter descriptions and code examples.
+              - generic [ref=f18e11]:
+                - generic [ref=f18e13]:
+                  - generic [ref=f18e15]:
+                    - generic [ref=f18e16] [cursor=pointer]: Singapore
+                    - generic [ref=f18e17] [cursor=pointer]: US (Virginia)
+                    - generic [ref=f18e18] [cursor=pointer]: China (Beijing)
+                  - generic [ref=f18e19]:
+                    - paragraph [ref=f18e20]:
+                      - text: "HTTP endpoint:"
+                      - code [ref=f18e21]: POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+                    - paragraph [ref=f18e22]:
+                      - code [ref=f18e23]: base_url
+                      - text: "for SDK:"
+                      - code [ref=f18e24]: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+                - blockquote [ref=f18e25]:
+                  - text: Before you begin, you must get an
+                  - link "API key" [ref=f18e26] [cursor=pointer]:
+                    - /url: /help/en/model-studio/get-api-key
+                  - text: and
+                  - link "set it as an environment variable" [ref=f18e27] [cursor=pointer]:
+                    - /url: /help/en/model-studio/configure-api-key-through-environment-variables
+                  - text: . If you use the OpenAI SDK,
+                  - link "install the SDK" [ref=f18e28] [cursor=pointer]:
+                    - /url: /help/en/model-studio/install-sdk
+                  - text: .
+                - table [ref=f18e30]:
+                  - rowgroup [ref=f18e33]:
+                    - row [ref=f18e34]:
+                      - cell "Request body" [ref=f18e35]:
+                        - heading "Request body" [level=2] [ref=f18e36]
+                      - cell [ref=f18e37]:
+                        - generic [ref=f18e38]:
+                          - generic [ref=f18e40]:
+                            - generic [ref=f18e41]: POST
+                            - generic [ref=f18e42]: /chat/completions
+                            - button "Debug" [ref=f18e43] [cursor=pointer]:
+                              - img [ref=f18e44]
+                              - text: Debug
+                          - generic [ref=f18e46]:
+                            - generic [ref=f18e48]:
+                              - generic [ref=f18e49] [cursor=pointer]: Text input
+                              - generic [ref=f18e50] [cursor=pointer]: Streaming output
+                              - generic [ref=f18e51] [cursor=pointer]: Image input
+                              - generic [ref=f18e52] [cursor=pointer]: Video input
+                              - generic [ref=f18e53] [cursor=pointer]: Tool calling
+                              - generic [ref=f18e54] [cursor=pointer]: Asynchronous invocation
+                            - generic [ref=f18e56]:
+                              - generic [ref=f18e58]:
+                                - generic [ref=f18e59] [cursor=pointer]: Python
+                                - generic [ref=f18e60] [cursor=pointer]: Java
+                                - generic [ref=f18e61] [cursor=pointer]: Node.js
+                                - generic [ref=f18e62] [cursor=pointer]: Go
+                                - generic [ref=f18e63] [cursor=pointer]: C# (HTTP)
+                                - generic [ref=f18e64] [cursor=pointer]: PHP (HTTP)
+                                - generic [ref=f18e65] [cursor=pointer]: curl
+                              - generic [ref=f18e67]:
+                                - generic [ref=f18e69]:
+                                  - generic "Change code theme" [ref=f18e70] [cursor=pointer]: 
+                                  - generic "Copy Code" [ref=f18e71] [cursor=pointer]: 
+                                - code [ref=f18e73]: "import os from openai import OpenAI client = OpenAI( # If the environment variable is not set, replace the following line with: api_key=\"sk-xxx\" # API keys for the Singapore/Virginia and Beijing regions are different. To get an API key, see https://www.alibabacloud.com/help/en/model-studio/get-api-key api_key=os.getenv(\"DASHSCOPE_API_KEY\"), # The following is the base_url for the Singapore region. base_url=\"https://dashscope-intl.aliyuncs.com/compatible-mode/v1\", ) completion = client.chat.completions.create( model=\"qwen-plus\", # Model list: https://www.alibabacloud.com/help/en/model-studio/getting-started/models messages=[ {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"}, {\"role\": \"user\", \"content\": \"Who are you?\"}, ], # extra_body={\"enable_thinking\": False}, ) print(completion.model_dump_json())"
+                              - text:            
+                            - text:                          
+                    - row "model string (Required) The name of the model to use. Supported models include Qwen large language models (commercial and open source), Qwen-VL, Qwen-Coder, Qwen-Omni, and Qwen-Math. For specific model names and billing information, see Text Generation - Qwen." [ref=f18e74]:
+                      - cell "model string (Required) The name of the model to use. Supported models include Qwen large language models (commercial and open source), Qwen-VL, Qwen-Coder, Qwen-Omni, and Qwen-Math. For specific model names and billing information, see Text Generation - Qwen." [ref=f18e75]:
+                        - paragraph [ref=f18e76]:
+                          - text: model
+                          - code [ref=f18e77]: string
+                          - text: (Required)
+                        - paragraph [ref=f18e78]: The name of the model to use.
+                        - paragraph [ref=f18e79]: Supported models include Qwen large language models (commercial and open source), Qwen-VL, Qwen-Coder, Qwen-Omni, and Qwen-Math.
+                        - paragraph [ref=f18e80]:
+                          - text: For specific model names and billing information, see
+                          - link "Text Generation - Qwen" [ref=f18e81] [cursor=pointer]:
+                            - /url: /help/en/model-studio/models#9f8890ce29g5u
+                          - text: .
+                    - row "messages array (Required) The conversation history for the model, listed in chronological order. Message types  System Message object (Optional) A system message that defines the role, tone, task objectives, or constraints for the large language model. Place it at the beginning of the messages array. Properties  User Message object (Required) A user message that passes questions, instructions, or context to the model. Properties  Assistant Message object (Optional) The model’s reply. This is typically sent back to the model as context in a multi-turn conversation. Properties  Tool Message object (Optional) The output information of the tool. Properties " [ref=f18e82]:
+                      - cell "messages array (Required) The conversation history for the model, listed in chronological order. Message types  System Message object (Optional) A system message that defines the role, tone, task objectives, or constraints for the large language model. Place it at the beginning of the messages array. Properties  User Message object (Required) A user message that passes questions, instructions, or context to the model. Properties  Assistant Message object (Optional) The model’s reply. This is typically sent back to the model as context in a multi-turn conversation. Properties  Tool Message object (Optional) The output information of the tool. Properties " [ref=f18e83]:
+                        - paragraph [ref=f18e84]:
+                          - text: messages
+                          - code [ref=f18e85]: array
+                          - text: (Required)
+                        - paragraph [ref=f18e86]: The conversation history for the model, listed in chronological order.
+                        - generic [ref=f18e87]:
+                          - generic [ref=f18e88]:
+                            - paragraph [ref=f18e90]: Message types
+                            - generic [ref=f18e91]: 
+                          - generic [ref=f18e92]:
+                            - generic [ref=f18e93]:
+                              - paragraph [ref=f18e94]:
+                                - text: System Message
+                                - code [ref=f18e95]: object
+                                - text: (Optional)
+                              - paragraph [ref=f18e96]:
+                                - text: A system message that defines the role, tone, task objectives, or constraints for the large language model. Place it at the beginning of the
+                                - code [ref=f18e97]: messages
+                                - text: array.
+                              - blockquote [ref=f18e98]: Do not set a System Message for the QwQ model. A System Message has no effect on the QVQ model.
+                              - generic [ref=f18e100]:
+                                - paragraph [ref=f18e102]: Properties
+                                - generic [ref=f18e103]: 
+                            - generic [ref=f18e104]:
+                              - paragraph [ref=f18e105]:
+                                - text: User Message
+                                - code [ref=f18e106]: object
+                                - text: (Required)
+                              - paragraph [ref=f18e107]: A user message that passes questions, instructions, or context to the model.
+                              - generic [ref=f18e108]:
+                                - generic [ref=f18e109]:
+                                  - paragraph [ref=f18e111]: Properties
+                                  - generic [ref=f18e112]: 
+                                - text:               
+                            - generic [ref=f18e113]:
+                              - paragraph [ref=f18e114]:
+                                - text: Assistant Message
+                                - code [ref=f18e115]: object
+                                - text: (Optional)
+                              - paragraph [ref=f18e116]: The model’s reply. This is typically sent back to the model as context in a multi-turn conversation.
+                              - generic [ref=f18e117]:
+                                - generic [ref=f18e118]:
+                                  - paragraph [ref=f18e120]: Properties
+                                  - generic [ref=f18e121]: 
+                                - text:  
+                            - generic [ref=f18e122]:
+                              - paragraph [ref=f18e123]:
+                                - text: Tool Message
+                                - code [ref=f18e124]: object
+                                - text: (Optional)
+                              - paragraph [ref=f18e125]: The output information of the tool.
+                              - generic [ref=f18e127]:
+                                - paragraph [ref=f18e129]: Properties
+                                - generic [ref=f18e130]: 
+                    - 'row "stream boolean (Optional. Defaults to false .) Enables streaming output mode. For more information, see Streaming output. Valid values: false : The model returns the complete content at once after generation. true : The model generates and sends output incrementally. A data block (chunk) is returned as soon as part of the content is generated. You can read these chunks in real time to assemble the full reply. You can set this parameter to true to improve the reading experience and reduce the risk of timeouts." [ref=f18e131]':
+                      - 'cell "stream boolean (Optional. Defaults to false .) Enables streaming output mode. For more information, see Streaming output. Valid values: false : The model returns the complete content at once after generation. true : The model generates and sends output incrementally. A data block (chunk) is returned as soon as part of the content is generated. You can read these chunks in real time to assemble the full reply. You can set this parameter to true to improve the reading experience and reduce the risk of timeouts." [ref=f18e132]':
+                        - paragraph [ref=f18e133]:
+                          - text: stream
+                          - code [ref=f18e134]: boolean
+                          - text: (Optional. Defaults to
+                          - code [ref=f18e135]: "false"
+                          - text: .)
+                        - paragraph [ref=f18e136]:
+                          - text: Enables streaming output mode. For more information, see
+                          - link "Streaming output" [ref=f18e137] [cursor=pointer]:
+                            - /url: /help/en/model-studio/stream
+                          - text: .
+                        - paragraph [ref=f18e138]: "Valid values:"
+                        - list [ref=f18e139]:
+                          - listitem [ref=f18e140]:
+                            - paragraph [ref=f18e141]:
+                              - code [ref=f18e142]: "false"
+                              - text: ": The model returns the complete content at once after generation."
+                          - listitem [ref=f18e143]:
+                            - paragraph [ref=f18e144]:
+                              - code [ref=f18e145]: "true"
+                              - text: ": The model generates and sends output incrementally. A data block (chunk) is returned as soon as part of the content is generated. You can read these chunks in real time to assemble the full reply."
+                        - paragraph [ref=f18e146]:
+                          - text: You can set this parameter to
+                          - code [ref=f18e147]: "true"
+                          - text: to improve the reading experience and reduce the risk of timeouts.
+                    - 'row "stream_options object (Optional) Configuration options for streaming output. This parameter is effective only when stream is set to true . Properties  include_usage boolean (Optional. Defaults to false ) Specifies whether to include token consumption information in the last data block of the response. Valid values: true false" [ref=f18e148]':
+                      - 'cell "stream_options object (Optional) Configuration options for streaming output. This parameter is effective only when stream is set to true . Properties  include_usage boolean (Optional. Defaults to false ) Specifies whether to include token consumption information in the last data block of the response. Valid values: true false" [ref=f18e149]':
+                        - paragraph [ref=f18e150]:
+                          - text: stream_options
+                          - code [ref=f18e151]: object
+                          - text: (Optional)
+                        - paragraph [ref=f18e152]:
+                          - text: Configuration options for streaming output. This parameter is effective only when
+                          - code [ref=f18e153]: stream
+                          - text: is set to
+                          - code [ref=f18e154]: "true"
+                          - text: .
+                        - generic [ref=f18e155]:
+                          - generic [ref=f18e156]:
+                            - paragraph [ref=f18e158]: Properties
+                            - generic [ref=f18e159]: 
+                          - generic [ref=f18e161]:
+                            - paragraph [ref=f18e162]:
+                              - text: include_usage
+                              - code [ref=f18e163]: boolean
+                              - text: (Optional. Defaults to
+                              - code [ref=f18e164]: "false"
+                              - text: )
+                            - paragraph [ref=f18e165]: Specifies whether to include token consumption information in the last data block of the response.
+                            - paragraph [ref=f18e166]: "Valid values:"
+                            - list [ref=f18e167]:
+                              - listitem [ref=f18e168]:
+                                - paragraph [ref=f18e169]:
+                                  - code [ref=f18e170]: "true"
+                              - listitem [ref=f18e171]:
+                                - paragraph [ref=f18e172]:
+                                  - code [ref=f18e173]: "false"
+                            - blockquote [ref=f18e174]: For streaming output, token consumption information is included only in the last data block of the response.
+                    - 'row "modalities array (Optional) Default: [\"text\"] Specifies the modalities of the output data. This parameter applies only to Qwen-Omni models. For more information, see Non-real-time (Qwen-Omni). Valid values: [\"text\",\"audio\"] [\"text\"]" [ref=f18e175]':
+                      - 'cell "modalities array (Optional) Default: [\"text\"] Specifies the modalities of the output data. This parameter applies only to Qwen-Omni models. For more information, see Non-real-time (Qwen-Omni). Valid values: [\"text\",\"audio\"] [\"text\"]" [ref=f18e176]':
+                        - paragraph [ref=f18e177]:
+                          - text: modalities
+                          - code [ref=f18e178]: array
+                          - text: "(Optional) Default:"
+                          - code [ref=f18e179]: "[\"text\"]"
+                        - paragraph [ref=f18e180]:
+                          - text: Specifies the modalities of the output data. This parameter applies only to Qwen-Omni models. For more information, see
+                          - link "Non-real-time (Qwen-Omni)" [ref=f18e181] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-omni
+                          - text: .
+                        - paragraph [ref=f18e182]: "Valid values:"
+                        - list [ref=f18e183]:
+                          - listitem [ref=f18e184]:
+                            - paragraph [ref=f18e185]:
+                              - code [ref=f18e186]: "[\"text\",\"audio\"]"
+                          - listitem [ref=f18e187]:
+                            - paragraph [ref=f18e188]:
+                              - code [ref=f18e189]: "[\"text\"]"
+                    - row "audio object (Optional) The voice and format of the output audio. This parameter applies only to Qwen-Omni models, and you must set the modalities parameter to [\"text\",\"audio\"] . For more information, see Non-real-time (Qwen-Omni). Properties " [ref=f18e190]:
+                      - cell "audio object (Optional) The voice and format of the output audio. This parameter applies only to Qwen-Omni models, and you must set the modalities parameter to [\"text\",\"audio\"] . For more information, see Non-real-time (Qwen-Omni). Properties " [ref=f18e191]:
+                        - paragraph [ref=f18e192]:
+                          - text: audio
+                          - code [ref=f18e193]: object
+                          - text: (Optional)
+                        - paragraph [ref=f18e194]:
+                          - text: The voice and format of the output audio. This parameter applies only to Qwen-Omni models, and you must set the
+                          - code [ref=f18e195]: modalities
+                          - text: parameter to
+                          - code [ref=f18e196]: "[\"text\",\"audio\"]"
+                          - text: . For more information, see
+                          - link "Non-real-time (Qwen-Omni)" [ref=f18e197] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-omni
+                          - text: .
+                        - generic [ref=f18e199]:
+                          - paragraph [ref=f18e201]: Properties
+                          - generic [ref=f18e202]: 
+                    - row "temperature float (Optional) The sampling temperature controls the diversity of the generated text. Higher values increase diversity, while lower values make the output more deterministic. The value must be greater than or equal to 0 and less than 2. Both the temperature and top_p parameters control the diversity of the generated text. Set only one of them. For more information, see Text generation models overview." [ref=f18e203]:
+                      - cell "temperature float (Optional) The sampling temperature controls the diversity of the generated text. Higher values increase diversity, while lower values make the output more deterministic. The value must be greater than or equal to 0 and less than 2. Both the temperature and top_p parameters control the diversity of the generated text. Set only one of them. For more information, see Text generation models overview." [ref=f18e204]:
+                        - paragraph [ref=f18e205]:
+                          - text: temperature
+                          - code [ref=f18e206]: float
+                          - text: (Optional)
+                        - paragraph [ref=f18e207]: The sampling temperature controls the diversity of the generated text.
+                        - paragraph [ref=f18e208]: Higher values increase diversity, while lower values make the output more deterministic.
+                        - paragraph [ref=f18e209]: The value must be greater than or equal to 0 and less than 2.
+                        - paragraph [ref=f18e210]:
+                          - text: Both the temperature and top_p parameters control the diversity of the generated text. Set only one of them. For more information, see
+                          - link "Text generation models overview" [ref=f18e211] [cursor=pointer]:
+                            - /url: /help/en/model-studio/text-generation#ad7b336bec5fw
+                          - text: .
+                        - blockquote [ref=f18e212]: Do not modify the default temperature value for QVQ models.
+                    - 'row "top_p float (Optional) The probability threshold for nucleus sampling. This parameter controls the diversity of the text that the model generates. A higher `top_p` value produces more diverse text. A lower `top_p` value produces more deterministic text. Value range: (0, 1.0] Both `temperature` and `top_p` control the diversity of the generated text. Set only one of these parameters. For more information, see Text generation models overview." [ref=f18e213]':
+                      - 'cell "top_p float (Optional) The probability threshold for nucleus sampling. This parameter controls the diversity of the text that the model generates. A higher `top_p` value produces more diverse text. A lower `top_p` value produces more deterministic text. Value range: (0, 1.0] Both `temperature` and `top_p` control the diversity of the generated text. Set only one of these parameters. For more information, see Text generation models overview." [ref=f18e214]':
+                        - paragraph [ref=f18e215]:
+                          - text: top_p
+                          - code [ref=f18e216]: float
+                          - text: (Optional)
+                        - paragraph [ref=f18e217]: The probability threshold for nucleus sampling. This parameter controls the diversity of the text that the model generates.
+                        - paragraph [ref=f18e218]: "A higher `top_p` value produces more diverse text. A lower `top_p` value produces more deterministic text."
+                        - paragraph [ref=f18e219]: "Value range: (0, 1.0]"
+                        - paragraph [ref=f18e220]:
+                          - text: "Both `temperature` and `top_p` control the diversity of the generated text. Set only one of these parameters. For more information, see"
+                          - link "Text generation models overview" [ref=f18e221] [cursor=pointer]:
+                            - /url: /help/en/model-studio/text-generation#ad7b336bec5fw
+                          - text: .
+                        - blockquote [ref=f18e222]: "Do not modify the default `top_p` value for QVQ models."
+                    - row "top_k integer (Optional) Specifies the number of candidate tokens to use for sampling during generation. A larger value produces more random output, whereas a smaller value produces more deterministic output. If set to null or a value greater than 100, the top_k strategy is disabled and only the top_p strategy takes effect. The value must be an integer greater than or equal to 0. Default top_k values " [ref=f18e223]:
+                      - cell "top_k integer (Optional) Specifies the number of candidate tokens to use for sampling during generation. A larger value produces more random output, whereas a smaller value produces more deterministic output. If set to null or a value greater than 100, the top_k strategy is disabled and only the top_p strategy takes effect. The value must be an integer greater than or equal to 0. Default top_k values " [ref=f18e224]:
+                        - paragraph [ref=f18e225]:
+                          - text: top_k
+                          - code [ref=f18e226]: integer
+                          - text: (Optional)
+                        - paragraph [ref=f18e227]:
+                          - text: Specifies the number of candidate tokens to use for sampling during generation. A larger value produces more random output, whereas a smaller value produces more deterministic output. If set to
+                          - code [ref=f18e228]: "null"
+                          - text: or a value greater than 100, the
+                          - code [ref=f18e229]: top_k
+                          - text: strategy is disabled and only the
+                          - code [ref=f18e230]: top_p
+                          - text: strategy takes effect. The value must be an integer greater than or equal to 0.
+                        - generic [ref=f18e232]:
+                          - paragraph [ref=f18e234]: Default top_k values
+                          - generic [ref=f18e235]: 
+                        - blockquote [ref=f18e236]:
+                          - generic [ref=f18e237]: This parameter is not a standard OpenAI parameter. When using the Python SDK, include it in the extra_body object.
+                          - text: "Configure it as follows: extra_body={\"top_k\":xxx}."
+                        - blockquote [ref=f18e238]: You must not change the default top_k value for QVQ models.
+                    - 'row "presence_penalty float (Optional) Controls how strongly the model avoids repeating content. Valid values: -2.0 to 2.0. Positive values reduce repetition. Negative values increase it. For scenarios that require diversity and creativity, such as creative writing or brainstorming, increase this value. For scenarios that require consistency and terminological accuracy, such as technical documents or formal text, decrease this value. Default presence_penalty values  How it works  Example " [ref=f18e239]':
+                      - 'cell "presence_penalty float (Optional) Controls how strongly the model avoids repeating content. Valid values: -2.0 to 2.0. Positive values reduce repetition. Negative values increase it. For scenarios that require diversity and creativity, such as creative writing or brainstorming, increase this value. For scenarios that require consistency and terminological accuracy, such as technical documents or formal text, decrease this value. Default presence_penalty values  How it works  Example " [ref=f18e240]':
+                        - paragraph [ref=f18e241]:
+                          - text: presence_penalty
+                          - code [ref=f18e242]: float
+                          - text: (Optional)
+                        - generic [ref=f18e243]:
+                          - paragraph [ref=f18e244]: Controls how strongly the model avoids repeating content.
+                          - paragraph [ref=f18e245]: "Valid values: -2.0 to 2.0. Positive values reduce repetition. Negative values increase it."
+                          - paragraph [ref=f18e246]: For scenarios that require diversity and creativity, such as creative writing or brainstorming, increase this value. For scenarios that require consistency and terminological accuracy, such as technical documents or formal text, decrease this value.
+                          - generic [ref=f18e248]:
+                            - paragraph [ref=f18e250]: Default presence_penalty values
+                            - generic [ref=f18e251]: 
+                          - generic [ref=f18e253]:
+                            - paragraph [ref=f18e255]: How it works
+                            - generic [ref=f18e256]: 
+                          - generic [ref=f18e258]:
+                            - paragraph [ref=f18e260]: Example
+                            - generic [ref=f18e261]: 
+                          - blockquote [ref=f18e262]: When using the qwen-vl-plus-2025-01-25 model for text extraction, set presence_penalty to 1.5.
+                          - blockquote [ref=f18e263]: Do not modify the default presence_penalty value for QVQ models.
+                    - 'row "response_format object (Optional. Defaults to {\"type\": \"text\"} ) The format of the response content. Valid values: {\"type\": \"text\"} : Returns a plain text response. {\"type\": \"json_object\"} : Returns a JSON string that conforms to standard JSON syntax. {\"type\": \"json_schema\",\"json_schema\": {...}} : Returns a JSON string that conforms to a custom schema. Properties " [ref=f18e264]':
+                      - 'cell "response_format object (Optional. Defaults to {\"type\": \"text\"} ) The format of the response content. Valid values: {\"type\": \"text\"} : Returns a plain text response. {\"type\": \"json_object\"} : Returns a JSON string that conforms to standard JSON syntax. {\"type\": \"json_schema\",\"json_schema\": {...}} : Returns a JSON string that conforms to a custom schema. Properties " [ref=f18e265]':
+                        - paragraph [ref=f18e266]:
+                          - text: response_format
+                          - code [ref=f18e267]: object
+                          - text: (Optional. Defaults to
+                          - code [ref=f18e268]: "{\"type\": \"text\"}"
+                          - text: )
+                        - paragraph [ref=f18e269]: "The format of the response content. Valid values:"
+                        - list [ref=f18e270]:
+                          - listitem [ref=f18e271]:
+                            - paragraph [ref=f18e272]:
+                              - code [ref=f18e273]: "{\"type\": \"text\"}"
+                              - text: ": Returns a plain text response."
+                          - listitem [ref=f18e274]:
+                            - paragraph [ref=f18e275]:
+                              - code [ref=f18e276]: "{\"type\": \"json_object\"}"
+                              - text: ": Returns a JSON string that conforms to standard JSON syntax."
+                          - listitem [ref=f18e277]:
+                            - paragraph [ref=f18e278]:
+                              - code [ref=f18e279]: "{\"type\": \"json_schema\",\"json_schema\": {...}}"
+                              - text: ": Returns a JSON string that conforms to a custom schema."
+                        - blockquote [ref=f18e280]:
+                          - text: For more information, see
+                          - link "Structured output" [ref=f18e281] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-structured-output
+                          - text: .
+                        - blockquote [ref=f18e282]:
+                          - text: If you specify
+                          - code [ref=f18e283]: "{\"type\": \"json_object\"}"
+                          - text: ", explicitly instruct the model to output JSON in the prompt, such as by adding “Please output in JSON format.” Otherwise, an error occurs."
+                        - blockquote [ref=f18e284]:
+                          - text: For supported models, see
+                          - link "Structured output" [ref=f18e285] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-structured-output
+                          - text: .
+                        - generic [ref=f18e286]:
+                          - generic [ref=f18e287]:
+                            - paragraph [ref=f18e289]: Properties
+                            - generic [ref=f18e290]: 
+                          - text: 
+                    - row "max_tokens integer (Optional) The maximum number of tokens in the response. Generation stops when this limit is reached, and the finish_reason field in the response is set to length . The default and maximum values correspond to the model’s maximum output length. For more information, see Text Generation - Qwen. You can use this parameter to control output length in scenarios such as generating summaries or keywords, or to reduce costs and shorten response time. When max_tokens is triggered, the finish_reason field in the response is set to length ." [ref=f18e291]:
+                      - cell "max_tokens integer (Optional) The maximum number of tokens in the response. Generation stops when this limit is reached, and the finish_reason field in the response is set to length . The default and maximum values correspond to the model’s maximum output length. For more information, see Text Generation - Qwen. You can use this parameter to control output length in scenarios such as generating summaries or keywords, or to reduce costs and shorten response time. When max_tokens is triggered, the finish_reason field in the response is set to length ." [ref=f18e292]:
+                        - paragraph [ref=f18e293]:
+                          - text: max_tokens
+                          - code [ref=f18e294]: integer
+                          - text: (Optional)
+                        - generic [ref=f18e295]:
+                          - paragraph [ref=f18e296]:
+                            - text: The maximum number of tokens in the response. Generation stops when this limit is reached, and the
+                            - code [ref=f18e297]: finish_reason
+                            - text: field in the response is set to
+                            - code [ref=f18e298]: length
+                            - text: .
+                          - paragraph [ref=f18e299]:
+                            - text: The default and maximum values correspond to the model’s maximum output length. For more information, see
+                            - link "Text Generation - Qwen" [ref=f18e300] [cursor=pointer]:
+                              - /url: /help/en/model-studio/models#9f8890ce29g5u
+                            - text: .
+                          - paragraph [ref=f18e301]: You can use this parameter to control output length in scenarios such as generating summaries or keywords, or to reduce costs and shorten response time.
+                          - paragraph [ref=f18e302]:
+                            - text: When
+                            - code [ref=f18e303]: max_tokens
+                            - text: is triggered, the
+                            - code [ref=f18e304]: finish_reason
+                            - text: field in the response is set to
+                            - code [ref=f18e305]: length
+                            - text: .
+                          - blockquote [ref=f18e306]:
+                            - code [ref=f18e307]: max_tokens
+                            - text: does not limit the length of the chain-of-thought.
+                    - 'row "vl_high_resolution_images boolean (Optional. Defaults to false .) Increases the maximum pixel limit for input images to the pixel value corresponding to 16384 tokens. For more information, see Process high-resolution images. vl_high_resolution_images: true : Uses a fixed-resolution strategy and ignores the max_pixels setting. If an image exceeds this resolution, its total pixel count is downscaled to meet the limit. Click to view the pixel limits for each model  If vl_high_resolution_images is false , the actual pixel limit is determined by max_pixels . If an input image exceeds max_pixels , it is downscaled to fit within max_pixels . The default pixel limits for models match the default value of max_pixels ." [ref=f18e308]':
+                      - 'cell "vl_high_resolution_images boolean (Optional. Defaults to false .) Increases the maximum pixel limit for input images to the pixel value corresponding to 16384 tokens. For more information, see Process high-resolution images. vl_high_resolution_images: true : Uses a fixed-resolution strategy and ignores the max_pixels setting. If an image exceeds this resolution, its total pixel count is downscaled to meet the limit. Click to view the pixel limits for each model  If vl_high_resolution_images is false , the actual pixel limit is determined by max_pixels . If an input image exceeds max_pixels , it is downscaled to fit within max_pixels . The default pixel limits for models match the default value of max_pixels ." [ref=f18e309]':
+                        - generic [ref=f18e310]:
+                          - paragraph [ref=f18e311]:
+                            - text: vl_high_resolution_images
+                            - code [ref=f18e312]: boolean
+                            - text: (Optional. Defaults to
+                            - code [ref=f18e313]: "false"
+                            - text: .)
+                          - paragraph [ref=f18e314]:
+                            - text: Increases the maximum pixel limit for input images to the pixel value corresponding to 16384 tokens. For more information, see
+                            - link "Process high-resolution images" [ref=f18e315] [cursor=pointer]:
+                              - /url: /help/en/model-studio/vision#e7e2db755f9h7
+                            - text: .
+                          - list [ref=f18e316]:
+                            - listitem [ref=f18e317]:
+                              - paragraph [ref=f18e318]:
+                                - code [ref=f18e319]: "vl_high_resolution_images: true"
+                                - text: ": Uses a fixed-resolution strategy and ignores the"
+                                - code [ref=f18e320]: max_pixels
+                                - text: setting. If an image exceeds this resolution, its total pixel count is downscaled to meet the limit.
+                              - generic [ref=f18e322]:
+                                - paragraph [ref=f18e324]: Click to view the pixel limits for each model
+                                - generic [ref=f18e325]: 
+                            - listitem [ref=f18e326]:
+                              - paragraph [ref=f18e327]:
+                                - text: If
+                                - code [ref=f18e328]: vl_high_resolution_images
+                                - text: is
+                                - code [ref=f18e329]: "false"
+                                - text: ", the actual pixel limit is determined by"
+                                - code [ref=f18e330]: max_pixels
+                                - text: . If an input image exceeds
+                                - code [ref=f18e331]: max_pixels
+                                - text: ", it is downscaled to fit within"
+                                - code [ref=f18e332]: max_pixels
+                                - text: . The default pixel limits for models match the default value of
+                                - code [ref=f18e333]: max_pixels
+                                - text: .
+                        - blockquote [ref=f18e334]:
+                          - generic [ref=f18e335]: This parameter is not a standard OpenAI parameter. When making calls with the Python SDK, include this parameter in the extra_body object.
+                          - text: "The configuration is as follows: extra_body={\"vl_high_resolution_images\":xxx}."
+                    - row "n integer (Optional. Defaults to 1) The number of responses to generate must be an integer in the range of 1-4 . This is useful for scenarios that require multiple candidate responses, such as creative writing or ad copy." [ref=f18e336]:
+                      - cell "n integer (Optional. Defaults to 1) The number of responses to generate must be an integer in the range of 1-4 . This is useful for scenarios that require multiple candidate responses, such as creative writing or ad copy." [ref=f18e337]:
+                        - paragraph [ref=f18e338]:
+                          - text: "n"
+                          - code [ref=f18e339]: integer
+                          - text: (Optional. Defaults to 1)
+                        - paragraph [ref=f18e340]:
+                          - text: The number of responses to generate must be an integer in the range of
+                          - code [ref=f18e341]: 1-4
+                          - text: . This is useful for scenarios that require multiple candidate responses, such as creative writing or ad copy.
+                        - blockquote [ref=f18e342]:
+                          - text: This parameter is supported only by the
+                          - link "Qwen3 (non-thinking mode)" [ref=f18e343] [cursor=pointer]:
+                            - /url: /help/en/model-studio/deep-thinking#be9890136awsc
+                          - text: models.
+                        - blockquote [ref=f18e344]:
+                          - text: If you pass the
+                          - code [ref=f18e345]: tools
+                          - text: parameter, set
+                          - code [ref=f18e346]: "n"
+                          - text: to 1.
+                        - blockquote [ref=f18e347]: Increasing n increases output token consumption but does not affect input token consumption.
+                    - 'row "enable_thinking boolean (Optional) Enables the thinking mode for hybrid thinking models. This mode is available for the Qwen3.5, Qwen3, Qwen3-Omni-Flash, and Qwen3-VL models. For more information, see Deep thinking. Valid values: true false Default values for different models: Supported models" [ref=f18e348]':
+                      - 'cell "enable_thinking boolean (Optional) Enables the thinking mode for hybrid thinking models. This mode is available for the Qwen3.5, Qwen3, Qwen3-Omni-Flash, and Qwen3-VL models. For more information, see Deep thinking. Valid values: true false Default values for different models: Supported models" [ref=f18e349]':
+                        - paragraph [ref=f18e350]:
+                          - text: enable_thinking
+                          - code [ref=f18e351]: boolean
+                          - text: (Optional)
+                        - paragraph [ref=f18e352]:
+                          - text: Enables the thinking mode for hybrid thinking models. This mode is available for the Qwen3.5, Qwen3, Qwen3-Omni-Flash, and Qwen3-VL models. For more information, see
+                          - link "Deep thinking" [ref=f18e353] [cursor=pointer]:
+                            - /url: /help/en/model-studio/deep-thinking
+                          - text: .
+                        - paragraph [ref=f18e354]: "Valid values:"
+                        - list [ref=f18e355]:
+                          - listitem [ref=f18e356]:
+                            - paragraph [ref=f18e357]:
+                              - code [ref=f18e358]: "true"
+                            - blockquote [ref=f18e359]:
+                              - text: When enabled, the thinking content is returned in the
+                              - code [ref=f18e360]: reasoning_content
+                              - text: field.
+                          - listitem [ref=f18e361]:
+                            - paragraph [ref=f18e362]:
+                              - code [ref=f18e363]: "false"
+                        - paragraph [ref=f18e364]:
+                          - text: "Default values for different models:"
+                          - link "Supported models" [ref=f18e365] [cursor=pointer]:
+                            - /url: /help/en/model-studio/deep-thinking#78286fdc35hlw
+                        - blockquote [ref=f18e366]:
+                          - generic [ref=f18e367]: This parameter is not a standard OpenAI parameter. When you make a call using the Python SDK, place it in the extra_body object.
+                          - text: "It is configured as follows:"
+                          - code [ref=f18e368]: "extra_body={\"enable_thinking\": xxx}"
+                          - text: .
+                    - row "thinking_budget integer (Optional) The maximum number of tokens for the thinking process. This applies to Qwen3.5, Qwen3-VL, and the commercial and open source versions of Qwen3 models. For more information, see Limit the thinking process length. The default value is the model's maximum chain-of-thought length. For more information, see Model List" [ref=f18e369]:
+                      - cell "thinking_budget integer (Optional) The maximum number of tokens for the thinking process. This applies to Qwen3.5, Qwen3-VL, and the commercial and open source versions of Qwen3 models. For more information, see Limit the thinking process length. The default value is the model's maximum chain-of-thought length. For more information, see Model List" [ref=f18e370]:
+                        - paragraph [ref=f18e371]:
+                          - text: thinking_budget
+                          - code [ref=f18e372]: integer
+                          - text: (Optional)
+                        - paragraph [ref=f18e373]:
+                          - text: The maximum number of tokens for the thinking process. This applies to Qwen3.5, Qwen3-VL, and the commercial and open source versions of Qwen3 models. For more information, see
+                          - link "Limit the thinking process length" [ref=f18e374] [cursor=pointer]:
+                            - /url: /help/en/model-studio/deep-thinking#e7c0002fe4meu
+                          - text: .
+                        - paragraph [ref=f18e375]:
+                          - text: The default value is the model's maximum chain-of-thought length. For more information, see
+                          - link "Model List" [ref=f18e376] [cursor=pointer]:
+                            - /url: /help/en/model-studio/models
+                        - blockquote [ref=f18e377]:
+                          - generic [ref=f18e378]: This parameter is not a standard OpenAI parameter. When you use the Python SDK, place this parameter in the extra_body object.
+                          - text: "Configure the parameter as follows:"
+                          - code [ref=f18e379]: "extra_body={\"thinking_budget\": xxx}"
+                          - text: .
+                    - 'row "enable_code_interpreter boolean (Optional. Defaults to false .) Specifies whether to enable the code interpreter feature. For more information, see Code interpreter. Valid values: true false" [ref=f18e380]':
+                      - 'cell "enable_code_interpreter boolean (Optional. Defaults to false .) Specifies whether to enable the code interpreter feature. For more information, see Code interpreter. Valid values: true false" [ref=f18e381]':
+                        - paragraph [ref=f18e382]:
+                          - text: enable_code_interpreter
+                          - code [ref=f18e383]: boolean
+                          - text: (Optional. Defaults to
+                          - code [ref=f18e384]: "false"
+                          - text: .)
+                        - paragraph [ref=f18e385]:
+                          - text: Specifies whether to enable the code interpreter feature. For more information, see
+                          - link "Code interpreter" [ref=f18e386] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-code-interpreter
+                          - text: .
+                        - paragraph [ref=f18e387]: "Valid values:"
+                        - list [ref=f18e388]:
+                          - listitem [ref=f18e389]:
+                            - paragraph [ref=f18e390]:
+                              - code [ref=f18e391]: "true"
+                          - listitem [ref=f18e392]:
+                            - paragraph [ref=f18e393]:
+                              - code [ref=f18e394]: "false"
+                        - blockquote [ref=f18e395]:
+                          - generic [ref=f18e396]: This parameter is not a standard OpenAI parameter. When you make calls using the Python SDK, include this parameter in the extra_body object.
+                          - text: "The configuration is as follows:"
+                          - code [ref=f18e397]: "extra_body={\"enable_code_interpreter\": xxx}"
+                          - text: .
+                    - 'row "seed integer (Optional) The random number seed. This parameter ensures that results are reproducible. If you use the same seed value in a call and the other parameters remain unchanged, the model returns the same result whenever possible. Valid values: [0,231-1] ." [ref=f18e398]':
+                      - 'cell "seed integer (Optional) The random number seed. This parameter ensures that results are reproducible. If you use the same seed value in a call and the other parameters remain unchanged, the model returns the same result whenever possible. Valid values: [0,231-1] ." [ref=f18e399]':
+                        - paragraph [ref=f18e400]:
+                          - text: seed
+                          - code [ref=f18e401]: integer
+                          - text: (Optional)
+                        - generic [ref=f18e402]:
+                          - paragraph [ref=f18e403]:
+                            - text: The random number seed. This parameter ensures that results are reproducible. If you use the same
+                            - code [ref=f18e404]: seed
+                            - text: value in a call and the other parameters remain unchanged, the model returns the same result whenever possible.
+                          - paragraph [ref=f18e405]:
+                            - text: "Valid values:"
+                            - code [ref=f18e406]:
+                              - text: "[0,2"
+                              - superscript [ref=f18e407]: "31"
+                              - text: "-1]"
+                            - text: .
+                    - 'row "logprobs boolean (Optional) Defaults to false Specifies whether to return the log probabilities of the output tokens. Valid values: true false Supported models " [ref=f18e408]':
+                      - 'cell "logprobs boolean (Optional) Defaults to false Specifies whether to return the log probabilities of the output tokens. Valid values: true false Supported models " [ref=f18e409]':
+                        - paragraph [ref=f18e410]:
+                          - text: logprobs
+                          - code [ref=f18e411]: boolean
+                          - text: (Optional) Defaults to
+                          - code [ref=f18e412]: "false"
+                        - paragraph [ref=f18e413]: "Specifies whether to return the log probabilities of the output tokens. Valid values:"
+                        - list [ref=f18e414]:
+                          - listitem [ref=f18e415]:
+                            - paragraph [ref=f18e416]:
+                              - code [ref=f18e417]: "true"
+                          - listitem [ref=f18e418]:
+                            - paragraph [ref=f18e419]:
+                              - code [ref=f18e420]: "false"
+                        - blockquote [ref=f18e421]:
+                          - text: Content generated during the thinking phase (
+                          - code [ref=f18e422]: reasoning_content
+                          - text: ) does not include log probabilities.
+                        - generic [ref=f18e424]:
+                          - paragraph [ref=f18e426]: Supported models
+                          - generic [ref=f18e427]: 
+                    - 'row "top_logprobs integer (Optional. Defaults to 0) You can specify the number of most likely candidate tokens to return at each generation step. Valid values: 0 to 5 This parameter applies only if logprobs is set to true ." [ref=f18e428]':
+                      - 'cell "top_logprobs integer (Optional. Defaults to 0) You can specify the number of most likely candidate tokens to return at each generation step. Valid values: 0 to 5 This parameter applies only if logprobs is set to true ." [ref=f18e429]':
+                        - paragraph [ref=f18e430]:
+                          - text: top_logprobs
+                          - code [ref=f18e431]: integer
+                          - text: (Optional. Defaults to 0)
+                        - paragraph [ref=f18e432]: You can specify the number of most likely candidate tokens to return at each generation step.
+                        - paragraph [ref=f18e433]: "Valid values: 0 to 5"
+                        - paragraph [ref=f18e434]:
+                          - text: This parameter applies only if
+                          - code [ref=f18e435]: logprobs
+                          - text: is set to
+                          - code [ref=f18e436]: "true"
+                          - text: .
+                    - row "stop string or array (Optional) This parameter specifies stop words. If a string or token_id specified in stop appears in the text generated by the model, generation stops immediately. Pass sensitive words to control the model's output." [ref=f18e437]:
+                      - cell "stop string or array (Optional) This parameter specifies stop words. If a string or token_id specified in stop appears in the text generated by the model, generation stops immediately. Pass sensitive words to control the model's output." [ref=f18e438]:
+                        - paragraph [ref=f18e439]:
+                          - text: stop
+                          - code [ref=f18e440]: string or array
+                          - text: (Optional)
+                        - generic [ref=f18e441]:
+                          - paragraph [ref=f18e442]:
+                            - text: This parameter specifies stop words. If a string or
+                            - code [ref=f18e443]: token_id
+                            - text: specified in
+                            - code [ref=f18e444]: stop
+                            - text: appears in the text generated by the model, generation stops immediately.
+                          - paragraph [ref=f18e445]: Pass sensitive words to control the model's output.
+                          - blockquote [ref=f18e446]:
+                            - text: If stop is an array, do not use a
+                            - code [ref=f18e447]: token_id
+                            - text: or a string as elements simultaneously. For example,
+                            - code [ref=f18e448]: "[\"Hello\",104307]"
+                            - text: is not a valid value.
+                    - row "tools array (Optional) An array of one or more tool objects that the model can call in function calling. For more information, see Function Calling. When tools is set and the model determines that a tool needs to be called, the response returns tool information in the tool_calls field. Properties " [ref=f18e449]:
+                      - cell "tools array (Optional) An array of one or more tool objects that the model can call in function calling. For more information, see Function Calling. When tools is set and the model determines that a tool needs to be called, the response returns tool information in the tool_calls field. Properties " [ref=f18e450]:
+                        - paragraph [ref=f18e451]:
+                          - text: tools
+                          - code [ref=f18e452]: array
+                          - text: (Optional)
+                        - paragraph [ref=f18e453]:
+                          - text: An array of one or more tool objects that the model can call in function calling. For more information, see
+                          - link "Function Calling" [ref=f18e454] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-function-calling
+                          - text: .
+                        - paragraph [ref=f18e455]: When tools is set and the model determines that a tool needs to be called, the response returns tool information in the tool_calls field.
+                        - generic [ref=f18e456]:
+                          - generic [ref=f18e457]:
+                            - paragraph [ref=f18e459]: Properties
+                            - generic [ref=f18e460]: 
+                          - text: 
+                    - 'row "tool_choice string or object (Optional. Defaults to auto .) The tool selection policy. Use this parameter to force a tool call for certain types of questions, such as always using a specific tool or disabling all tools. Valid values: auto The model automatically selects a tool. none To disable tool calling, set the tool_choice parameter to none . {\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}} To force a call to a specific tool, set the tool_choice parameter to {\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}} , where the_function_to_call is the name of the specified tool function." [ref=f18e461]':
+                      - 'cell "tool_choice string or object (Optional. Defaults to auto .) The tool selection policy. Use this parameter to force a tool call for certain types of questions, such as always using a specific tool or disabling all tools. Valid values: auto The model automatically selects a tool. none To disable tool calling, set the tool_choice parameter to none . {\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}} To force a call to a specific tool, set the tool_choice parameter to {\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}} , where the_function_to_call is the name of the specified tool function." [ref=f18e462]':
+                        - paragraph [ref=f18e463]:
+                          - text: tool_choice
+                          - code [ref=f18e464]: string or object
+                          - text: (Optional. Defaults to
+                          - code [ref=f18e465]: auto
+                          - text: .)
+                        - paragraph [ref=f18e466]: The tool selection policy. Use this parameter to force a tool call for certain types of questions, such as always using a specific tool or disabling all tools.
+                        - paragraph [ref=f18e467]: "Valid values:"
+                        - list [ref=f18e468]:
+                          - listitem [ref=f18e469]:
+                            - paragraph [ref=f18e470]:
+                              - code [ref=f18e471]: auto
+                            - paragraph [ref=f18e472]: The model automatically selects a tool.
+                          - listitem [ref=f18e473]:
+                            - paragraph [ref=f18e474]:
+                              - code [ref=f18e475]: none
+                            - paragraph [ref=f18e476]:
+                              - text: To disable tool calling, set the
+                              - code [ref=f18e477]: tool_choice
+                              - text: parameter to
+                              - code [ref=f18e478]: none
+                              - text: .
+                          - listitem [ref=f18e479]:
+                            - paragraph [ref=f18e480]:
+                              - code [ref=f18e481]: "{\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}}"
+                            - paragraph [ref=f18e482]:
+                              - text: To force a call to a specific tool, set the
+                              - code [ref=f18e483]: tool_choice
+                              - text: parameter to
+                              - code [ref=f18e484]: "{\"type\": \"function\", \"function\": {\"name\": \"the_function_to_call\"}}"
+                              - text: ", where"
+                              - code [ref=f18e485]: the_function_to_call
+                              - text: is the name of the specified tool function.
+                            - blockquote [ref=f18e486]: Models in thinking mode do not support forcing a call to a specific tool.
+                    - 'row "parallel_tool_calls boolean (Optional. Defaults to false .) Specifies whether to enable parallel tool calling. For more information, see Parallel tool calling. Valid values: true false" [ref=f18e487]':
+                      - 'cell "parallel_tool_calls boolean (Optional. Defaults to false .) Specifies whether to enable parallel tool calling. For more information, see Parallel tool calling. Valid values: true false" [ref=f18e488]':
+                        - paragraph [ref=f18e489]:
+                          - text: parallel_tool_calls
+                          - code [ref=f18e490]: boolean
+                          - text: (Optional. Defaults to
+                          - code [ref=f18e491]: "false"
+                          - text: .)
+                        - paragraph [ref=f18e492]:
+                          - text: Specifies whether to enable parallel tool calling. For more information, see
+                          - link "Parallel tool calling" [ref=f18e493] [cursor=pointer]:
+                            - /url: /help/en/model-studio/qwen-function-calling#cb6b5c484bt4x
+                          - text: .
+                        - paragraph [ref=f18e494]: "Valid values:"
+                        - list [ref=f18e495]:
+                          - listitem [ref=f18e496]:
+                            - paragraph [ref=f18e497]:
+                              - code [ref=f18e498]: "true"
+                          - listitem [ref=f18e499]:
+                            - paragraph [ref=f18e500]:
+                              - code [ref=f18e501]: "false"
+                    - 'row "enable_search boolean (Optional) Defaults to: false Enables web search. For more information, see Web search. Valid values: true false" [ref=f18e502]':
+                      - 'cell "enable_search boolean (Optional) Defaults to: false Enables web search. For more information, see Web search. Valid values: true false" [ref=f18e503]':
+                        - paragraph [ref=f18e504]:
+                          - text: enable_search
+                          - code [ref=f18e505]: boolean
+                          - text: "(Optional) Defaults to:"
+                          - code [ref=f18e506]: "false"
+                        - paragraph [ref=f18e507]:
+                          - text: Enables web search. For more information, see
+                          - link "Web search" [ref=f18e508] [cursor=pointer]:
+                            - /url: /help/en/model-studio/web-search
+                          - text: .
+                        - paragraph [ref=f18e509]: "Valid values:"
+                        - list [ref=f18e510]:
+                          - listitem [ref=f18e511]:
+                            - paragraph [ref=f18e512]:
+                              - code [ref=f18e513]: "true"
+                            - blockquote [ref=f18e515]:
+                              - text: If web search is not triggered after enabling this parameter, optimize the prompt or set the
+                              - code [ref=f18e516]: forced_search
+                              - text: parameter in
+                              - code [ref=f18e517]: search_options
+                              - text: to enable forced search.
+                          - listitem [ref=f18e518]:
+                            - paragraph [ref=f18e519]:
+                              - code [ref=f18e520]: "false"
+                        - blockquote [ref=f18e521]: Enabling the web search feature may increase token consumption.
+                        - blockquote [ref=f18e522]:
+                          - generic [ref=f18e523]: This parameter is not a standard OpenAI parameter. When calling with the Python SDK, include it in the extra_body object.
+                          - text: "Configure it as follows:"
+                          - code [ref=f18e524]: "extra_body={\"enable_search\": True}"
+                          - text: .
+                    - row "search_options object (Optional) The web search strategy. For more information, see Web search. Properties " [ref=f18e525]:
+                      - cell "search_options object (Optional) The web search strategy. For more information, see Web search. Properties " [ref=f18e526]:
+                        - generic [ref=f18e527]:
+                          - paragraph [ref=f18e528]:
+                            - text: search_options
+                            - code [ref=f18e529]: object
+                            - text: (Optional)
+                          - paragraph [ref=f18e530]:
+                            - text: The web search strategy. For more information, see
+                            - link "Web search" [ref=f18e531] [cursor=pointer]:
+                              - /url: /help/en/model-studio/web-search
+                            - text: .
+                          - generic [ref=f18e533]:
+                            - paragraph [ref=f18e535]: Properties
+                            - generic [ref=f18e536]: 
+                          - blockquote [ref=f18e537]:
+                            - generic [ref=f18e538]: This parameter is not a standard OpenAI parameter. When you call it using the Python SDK, include it in the extra_body object.
+                            - text: "Configure it as follows:"
+                            - code [ref=f18e539]: "extra_body={\"search_options\": xxx}"
+                            - text: .
+                      - cell [ref=f18e540]:
+                        - paragraph
+                - table [ref=f18e542]:
+                  - rowgroup [ref=f18e545]:
+                    - 'row "Chat response object (non-streaming output)   { \"choices\": [ { \"message\": { \"role\": \"assistant\", \"content\": \"I am a large-scale language model developed by Alibaba Cloud. My name is Qwen.\" }, \"finish_reason\": \"stop\", \"index\": 0, \"logprobs\": null } ], \"object\": \"chat.completion\", \"usage\": { \"prompt_tokens\": 3019, \"completion_tokens\": 104, \"total_tokens\": 3123, \"prompt_tokens_details\": { \"cached_tokens\": 2048 } }, \"created\": 1735120033, \"system_fingerprint\": null, \"model\": \"qwen-plus\", \"id\": \"chatcmpl-6ada9ed2-7f33-9de2-8bb0-78bd4035025a\" }" [ref=f18e546]':
+                      - cell "Chat response object (non-streaming output)" [ref=f18e547]:
+                        - heading "Chat response object (non-streaming output)" [level=2] [ref=f18e548]
+                      - 'cell "  { \"choices\": [ { \"message\": { \"role\": \"assistant\", \"content\": \"I am a large-scale language model developed by Alibaba Cloud. My name is Qwen.\" }, \"finish_reason\": \"stop\", \"index\": 0, \"logprobs\": null } ], \"object\": \"chat.completion\", \"usage\": { \"prompt_tokens\": 3019, \"completion_tokens\": 104, \"total_tokens\": 3123, \"prompt_tokens_details\": { \"cached_tokens\": 2048 } }, \"created\": 1735120033, \"system_fingerprint\": null, \"model\": \"qwen-plus\", \"id\": \"chatcmpl-6ada9ed2-7f33-9de2-8bb0-78bd4035025a\" }" [ref=f18e549]':
+                        - generic [ref=f18e551]:
+                          - generic [ref=f18e553]:
+                            - generic "Change code theme" [ref=f18e554] [cursor=pointer]: 
+                            - generic "Copy Code" [ref=f18e555] [cursor=pointer]: 
+                          - code [ref=f18e557]:
+                            - text: "{ \"choices\": [ { \"message\": { \"role\": \"assistant\", \"content\": \"I am a large-scale language model developed by Alibaba Cloud. My name is Qwen.\" }, \"finish_reason\": \"stop\", \"index\": 0, \"logprobs\":"
+                            - generic [ref=f18e558]: "null"
+                            - text: "} ], \"object\": \"chat.completion\", \"usage\": { \"prompt_tokens\": 3019, \"completion_tokens\": 104, \"total_tokens\": 3123, \"prompt_tokens_details\": { \"cached_tokens\": 2048 } }, \"created\": 1735120033, \"system_fingerprint\":"
+                            - generic [ref=f18e559]: "null"
+                            - text: ", \"model\": \"qwen-plus\", \"id\": \"chatcmpl-6ada9ed2-7f33-9de2-8bb0-78bd4035025a\" }"
+                    - row "id string The unique identifier for this request." [ref=f18e560]:
+                      - cell "id string The unique identifier for this request." [ref=f18e561]:
+                        - generic [ref=f18e562]:
+                          - paragraph [ref=f18e563]:
+                            - text: id
+                            - code [ref=f18e564]: string
+                          - paragraph [ref=f18e565]: The unique identifier for this request.
+                    - row "choices array An array of generated content from the model. Properties " [ref=f18e566]:
+                      - cell "choices array An array of generated content from the model. Properties " [ref=f18e567]:
+                        - generic [ref=f18e568]:
+                          - paragraph [ref=f18e569]:
+                            - text: choices
+                            - code [ref=f18e570]: array
+                          - paragraph [ref=f18e571]: An array of generated content from the model.
+                          - generic [ref=f18e572]:
+                            - generic [ref=f18e573]:
+                              - paragraph [ref=f18e575]: Properties
+                              - generic [ref=f18e576]: 
+                            - text:      
+                    - row "created integer The Unix timestamp, in seconds, when the request was created." [ref=f18e577]:
+                      - cell "created integer The Unix timestamp, in seconds, when the request was created." [ref=f18e578]:
+                        - generic [ref=f18e579]:
+                          - paragraph [ref=f18e580]:
+                            - text: created
+                            - code [ref=f18e581]: integer
+                          - paragraph [ref=f18e582]: The Unix timestamp, in seconds, when the request was created.
+                    - row "model string The model used for this request." [ref=f18e583]:
+                      - cell "model string The model used for this request." [ref=f18e584]:
+                        - generic [ref=f18e585]:
+                          - paragraph [ref=f18e586]:
+                            - text: model
+                            - code [ref=f18e587]: string
+                          - paragraph [ref=f18e588]: The model used for this request.
+                    - row "object string The value is always chat.completion ." [ref=f18e589]:
+                      - cell "object string The value is always chat.completion ." [ref=f18e590]:
+                        - generic [ref=f18e591]:
+                          - paragraph [ref=f18e592]:
+                            - text: object
+                            - code [ref=f18e593]: string
+                          - paragraph [ref=f18e594]:
+                            - text: The value is always
+                            - code [ref=f18e595]: chat.completion
+                            - text: .
+                    - row "service_tier string This field is currently fixed as null ." [ref=f18e596]:
+                      - cell "service_tier string This field is currently fixed as null ." [ref=f18e597]:
+                        - generic [ref=f18e598]:
+                          - paragraph [ref=f18e599]:
+                            - text: service_tier
+                            - code [ref=f18e600]: string
+                          - paragraph [ref=f18e601]:
+                            - text: This field is currently fixed as
+                            - code [ref=f18e602]: "null"
+                            - text: .
+                    - row "system_fingerprint string This field is currently fixed as null ." [ref=f18e603]:
+                      - cell "system_fingerprint string This field is currently fixed as null ." [ref=f18e604]:
+                        - generic [ref=f18e605]:
+                          - paragraph [ref=f18e606]:
+                            - text: system_fingerprint
+                            - code [ref=f18e607]: string
+                          - paragraph [ref=f18e608]:
+                            - text: This field is currently fixed as
+                            - code [ref=f18e609]: "null"
+                            - text: .
+                    - row "usage object Token consumption details for this request. Properties " [ref=f18e610]:
+                      - cell "usage object Token consumption details for this request. Properties " [ref=f18e611]:
+                        - generic [ref=f18e612]:
+                          - paragraph [ref=f18e613]:
+                            - text: usage
+                            - code [ref=f18e614]: object
+                          - paragraph [ref=f18e615]: Token consumption details for this request.
+                          - generic [ref=f18e616]:
+                            - generic [ref=f18e617]:
+                              - paragraph [ref=f18e619]: Properties
+                              - generic [ref=f18e620]: 
+                            - text:   
+                - table [ref=f18e622]:
+                  - rowgroup [ref=f18e625]:
+                    - row [ref=f18e626]:
+                      - cell "Chat response chunk object (streaming output)" [ref=f18e627]:
+                        - heading "Chat response chunk object (streaming output)" [level=2] [ref=f18e628]
+                      - cell [ref=f18e629]:
+                        - generic [ref=f18e631]:
+                          - generic [ref=f18e633]:
+                            - generic "Change code theme" [ref=f18e634] [cursor=pointer]: 
+                            - generic "Copy Code" [ref=f18e635] [cursor=pointer]: 
+                          - code [ref=f18e637]:
+                            - text: "{\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"\",\"function_call\":"
+                            - generic [ref=f18e638]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e639]: "null"
+                            - text: ",\"role\":\"assistant\",\"tool_calls\":"
+                            - generic [ref=f18e640]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e641]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e642]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e643]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e644]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e645]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"I am a \",\"function_call\":"
+                            - generic [ref=f18e646]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e647]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e648]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e649]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e650]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e651]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e652]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e653]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e654]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"large-scale \",\"function_call\":"
+                            - generic [ref=f18e655]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e656]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e657]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e658]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e659]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e660]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e661]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e662]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e663]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"language model \",\"function_call\":"
+                            - generic [ref=f18e664]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e665]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e666]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e667]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e668]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e669]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e670]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e671]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e672]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"from Alibaba Cloud. My name \",\"function_call\":"
+                            - generic [ref=f18e673]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e674]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e675]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e676]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e677]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e678]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e679]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e680]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e681]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"is Qwen\",\"function_call\":"
+                            - generic [ref=f18e682]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e683]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e684]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e685]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e686]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e687]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e688]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e689]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e690]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\".\",\"function_call\":"
+                            - generic [ref=f18e691]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e692]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e693]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e694]: "null"
+                            - text: "},\"finish_reason\":"
+                            - generic [ref=f18e695]: "null"
+                            - text: ",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e696]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e697]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e698]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e699]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[{\"delta\":{\"content\":\"\",\"function_call\":"
+                            - generic [ref=f18e700]: "null"
+                            - text: ",\"refusal\":"
+                            - generic [ref=f18e701]: "null"
+                            - text: ",\"role\":"
+                            - generic [ref=f18e702]: "null"
+                            - text: ",\"tool_calls\":"
+                            - generic [ref=f18e703]: "null"
+                            - text: "},\"finish_reason\":\"stop\",\"index\":0,\"logprobs\":"
+                            - generic [ref=f18e704]: "null"
+                            - text: "}],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e705]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e706]: "null"
+                            - text: ",\"usage\":"
+                            - generic [ref=f18e707]: "null"
+                            - text: "} {\"id\":\"chatcmpl-e30f5ae7-3063-93c4-90fe-beb5f900bd57\",\"choices\":[],\"created\":1735113344,\"model\":\"qwen-plus\",\"object\":\"chat.completion.chunk\",\"service_tier\":"
+                            - generic [ref=f18e708]: "null"
+                            - text: ",\"system_fingerprint\":"
+                            - generic [ref=f18e709]: "null"
+                            - text: ",\"usage\":{\"completion_tokens\":17,\"prompt_tokens\":22,\"total_tokens\":39,\"completion_tokens_details\":"
+                            - generic [ref=f18e710]: "null"
+                            - text: ",\"prompt_tokens_details\":{\"audio_tokens\":"
+                            - generic [ref=f18e711]: "null"
+                            - text: ",\"cached_tokens\":0}}}"
+                    - row "id string The unique identifier for this request. All chunks in the same response share the same id." [ref=f18e712]:
+                      - cell "id string The unique identifier for this request. All chunks in the same response share the same id." [ref=f18e713]:
+                        - generic [ref=f18e714]:
+                          - paragraph [ref=f18e715]:
+                            - text: id
+                            - code [ref=f18e716]: string
+                          - paragraph [ref=f18e717]: The unique identifier for this request. All chunks in the same response share the same id.
+                    - row "choices array An array of generated content objects. This array contains one or more objects. If you set the include_usage parameter to true , the choices array is empty in the final chunk. Properties " [ref=f18e718]:
+                      - cell "choices array An array of generated content objects. This array contains one or more objects. If you set the include_usage parameter to true , the choices array is empty in the final chunk. Properties " [ref=f18e719]:
+                        - generic [ref=f18e720]:
+                          - paragraph [ref=f18e721]:
+                            - text: choices
+                            - code [ref=f18e722]: array
+                          - paragraph [ref=f18e723]:
+                            - text: An array of generated content objects. This array contains one or more objects. If you set the
+                            - code [ref=f18e724]: include_usage
+                            - text: parameter to
+                            - code [ref=f18e725]: "true"
+                            - text: ", the"
+                            - code [ref=f18e726]: choices
+                            - text: array is empty in the final chunk.
+                          - generic [ref=f18e727]:
+                            - generic [ref=f18e728]:
+                              - paragraph [ref=f18e730]: Properties
+                              - generic [ref=f18e731]: 
+                            - text:       
+                    - row "created integer The UNIX timestamp when this request was created. All chunks in the same response share the same created timestamp." [ref=f18e732]:
+                      - cell "created integer The UNIX timestamp when this request was created. All chunks in the same response share the same created timestamp." [ref=f18e733]:
+                        - generic [ref=f18e734]:
+                          - paragraph [ref=f18e735]:
+                            - text: created
+                            - code [ref=f18e736]: integer
+                          - paragraph [ref=f18e737]: The UNIX timestamp when this request was created. All chunks in the same response share the same created timestamp.
+                    - row "model string The model used for this request." [ref=f18e738]:
+                      - cell "model string The model used for this request." [ref=f18e739]:
+                        - generic [ref=f18e740]:
+                          - paragraph [ref=f18e741]:
+                            - text: model
+                            - code [ref=f18e742]: string
+                          - paragraph [ref=f18e743]: The model used for this request.
+                    - row "object string The value is always chat.completion.chunk ." [ref=f18e744]:
+                      - cell "object string The value is always chat.completion.chunk ." [ref=f18e745]:
+                        - generic [ref=f18e746]:
+                          - paragraph [ref=f18e747]:
+                            - text: object
+                            - code [ref=f18e748]: string
+                          - paragraph [ref=f18e749]:
+                            - text: The value is always
+                            - code [ref=f18e750]: chat.completion.chunk
+                            - text: .
+                    - row "service_tier string This parameter is currently fixed as null ." [ref=f18e751]:
+                      - cell "service_tier string This parameter is currently fixed as null ." [ref=f18e752]:
+                        - generic [ref=f18e753]:
+                          - paragraph [ref=f18e754]:
+                            - text: service_tier
+                            - code [ref=f18e755]: string
+                          - paragraph [ref=f18e756]:
+                            - text: This parameter is currently fixed as
+                            - code [ref=f18e757]: "null"
+                            - text: .
+                    - row "system_fingerprint string This parameter is currently fixed as null ." [ref=f18e758]:
+                      - cell "system_fingerprint string This parameter is currently fixed as null ." [ref=f18e759]:
+                        - generic [ref=f18e760]:
+                          - paragraph [ref=f18e761]:
+                            - text: system_fingerprint
+                            - code [ref=f18e762]: string
+                          - paragraph [ref=f18e763]:
+                            - text: This parameter is currently fixed as
+                            - code [ref=f18e764]: "null"
+                            - text: .
+                    - row "usage object Token usage statistics for this request. This object appears only in the final chunk when include_usage is true . Properties " [ref=f18e765]:
+                      - cell "usage object Token usage statistics for this request. This object appears only in the final chunk when include_usage is true . Properties " [ref=f18e766]:
+                        - generic [ref=f18e767]:
+                          - paragraph [ref=f18e768]:
+                            - text: usage
+                            - code [ref=f18e769]: object
+                          - paragraph [ref=f18e770]:
+                            - text: Token usage statistics for this request. This object appears only in the final chunk when
+                            - code [ref=f18e771]: include_usage
+                            - text: is
+                            - code [ref=f18e772]: "true"
+                            - text: .
+                          - generic [ref=f18e773]:
+                            - generic [ref=f18e774]:
+                              - paragraph [ref=f18e776]: Properties
+                              - generic [ref=f18e777]: 
+                            - text:   
+            - iframe [ref=f18e778]:
+              
+            - text:        
+  - iframe [ref=e239]:
+    
+  - iframe [ref=e240]:
+    
