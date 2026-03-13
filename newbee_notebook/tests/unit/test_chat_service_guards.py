@@ -6,8 +6,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from newbee_notebook.application.services.chat_service import ChatService
+from newbee_notebook.core.engine.stream_events import ContentEvent, DoneEvent, PhaseEvent, SourceEvent
+from newbee_notebook.core.session import SessionRunResult
+from newbee_notebook.core.tools.contracts import SourceItem
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
-from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
 from newbee_notebook.exceptions import DocumentProcessingError
 
 
@@ -108,6 +111,51 @@ class _DummyChatSessionManager(_DummySessionManager):
 
     def get_last_sources(self):
         return []
+
+
+class _DummyRuntimeSessionManager:
+    def __init__(self):
+        self.started_with: list[str] = []
+        self.chat_kwargs = None
+        self.stream_kwargs = None
+
+    async def start_session(self, session_id: str):
+        self.started_with.append(session_id)
+
+    async def chat(self, **kwargs):
+        self.chat_kwargs = kwargs
+        return SessionRunResult(
+            content="runtime answer",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Doc 1",
+                    text="runtime source",
+                    score=0.8,
+                    source_type="retrieval",
+                )
+            ],
+        )
+
+    async def chat_stream(self, **kwargs):
+        self.stream_kwargs = kwargs
+        yield PhaseEvent(stage="reasoning")
+        yield ContentEvent(delta="hello ")
+        yield ContentEvent(delta="agent")
+        yield SourceEvent(
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Doc 1",
+                    text="runtime source",
+                    score=0.8,
+                    source_type="retrieval",
+                )
+            ]
+        )
+        yield DoneEvent()
 
 
 def _build_service(ref_repo=None, document_repo=None):
@@ -535,3 +583,87 @@ def test_chat_falls_back_to_aggregated_stream_on_nonstream_transport_error():
     assert result.content == "hello fallback"
     assert message_repo.create_batch.await_count == 1
     assert session_repo.increment_message_count.await_count == 1
+
+
+def test_chat_routes_chat_alias_through_runtime_agent_and_persists_agent_mode():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+    runtime_session_manager = _DummyRuntimeSessionManager()
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummySessionManager(),
+        runtime_session_manager=runtime_session_manager,
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="chat"))
+
+    assert result.content == "runtime answer"
+    assert result.mode == ModeType.AGENT
+    assert runtime_session_manager.started_with == ["session-1"]
+    assert runtime_session_manager.chat_kwargs["mode_type"] == ModeType.AGENT
+    persisted = message_repo.create_batch.await_args.args[0]
+    assert persisted[0].mode == ModeType.AGENT
+    assert persisted[0].role == MessageRole.USER
+    assert persisted[1].mode == ModeType.AGENT
+    assert result.sources[0].document_id == "doc-1"
+
+
+def test_chat_stream_emits_phase_events_for_runtime_agent_mode():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    document_repo.get.return_value = SimpleNamespace(document_id="doc-1")
+    runtime_session_manager = _DummyRuntimeSessionManager()
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummySessionManager(),
+        runtime_session_manager=runtime_session_manager,
+    )
+
+    async def _collect():
+        observed = []
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="chat"):
+            observed.append(event)
+            if event["type"] == "done":
+                break
+        return observed
+
+    observed = asyncio.run(_collect())
+
+    assert observed[0] == {"type": "start", "message_id": 1}
+    assert observed[1] == {"type": "phase", "stage": "reasoning"}
+    assert observed[2] == {"type": "content", "delta": "hello "}
+    assert observed[3] == {"type": "content", "delta": "agent"}
+    assert observed[4]["type"] == "sources"
+    assert observed[4]["sources"][0]["source_type"] == "retrieval"
+    assert observed[5] == {"type": "done"}

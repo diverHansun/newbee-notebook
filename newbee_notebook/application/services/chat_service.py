@@ -8,9 +8,10 @@ from typing import Optional, List, AsyncGenerator, Dict, Any
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from dataclasses import asdict
 
 from newbee_notebook.domain.entities.session import Session
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
+from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole, normalize_runtime_mode
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.reference_repository import (
@@ -23,6 +24,16 @@ from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.core.engine import SessionManager
+from newbee_notebook.core.engine.stream_events import (
+    ContentEvent,
+    DoneEvent,
+    ErrorEvent,
+    PhaseEvent,
+    SourceEvent,
+    StartEvent,
+    WarningEvent,
+)
+from newbee_notebook.core.session import SessionManager as RuntimeSessionManager
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
 
@@ -76,6 +87,7 @@ class ChatService:
         ref_repo: NotebookDocumentRefRepository,
         message_repo: MessageRepository,
         session_manager: SessionManager,
+        runtime_session_manager: Optional[RuntimeSessionManager] = None,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
@@ -84,7 +96,22 @@ class ChatService:
         self._ref_repo = ref_repo
         self._message_repo = message_repo
         self._session_manager = session_manager
+        self._runtime_session_manager = runtime_session_manager
         self._vector_index = session_manager.vector_index
+
+    @staticmethod
+    def _should_use_runtime_manager(mode_enum: ModeType, runtime_session_manager: Optional[RuntimeSessionManager]) -> bool:
+        return runtime_session_manager is not None and normalize_runtime_mode(mode_enum) is ModeType.AGENT
+
+    @staticmethod
+    def _source_items_to_dicts(items: List[Any]) -> List[dict]:
+        normalized: List[dict] = []
+        for item in items or []:
+            if isinstance(item, dict):
+                normalized.append(item)
+            else:
+                normalized.append(asdict(item))
+        return normalized
 
     @staticmethod
     def _get_stream_chunk_timeout_seconds(mode: ModeType) -> int:
@@ -135,8 +162,12 @@ class ChatService:
             else bool(getattr(session, "include_ec_context", False))
         )
 
-        # Ensure session manager is aligned with this session (loads history)
-        await self._session_manager.start_session(session_id=session_id)
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
+        use_runtime = self._should_use_runtime_manager(mode_enum, self._runtime_session_manager)
+        if use_runtime:
+            await self._runtime_session_manager.start_session(session_id=session_id)
+        else:
+            await self._session_manager.start_session(session_id=session_id)
 
         # Notebook scope documents
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
@@ -172,15 +203,27 @@ class ChatService:
         # If the provider-specific non-stream path fails with a transport error,
         # fall back to aggregating the streaming path so /chat can still succeed.
         try:
-            response_content, sources = await self._session_manager.chat(
-                message=message,
-                mode_type=mode_enum,
-                allowed_document_ids=allowed_doc_ids,
-                context=mode_context,
-                include_ec_context=effective_include_ec_context,
-            )
+            if use_runtime:
+                runtime_result = await self._runtime_session_manager.chat(
+                    message=message,
+                    mode_type=runtime_mode_enum,
+                    allowed_document_ids=allowed_doc_ids,
+                    context=mode_context,
+                    include_ec_context=effective_include_ec_context,
+                )
+                response_content = runtime_result.content
+                sources = self._source_items_to_dicts(runtime_result.sources)
+                warnings.extend(runtime_result.warnings)
+            else:
+                response_content, sources = await self._session_manager.chat(
+                    message=message,
+                    mode_type=mode_enum,
+                    allowed_document_ids=allowed_doc_ids,
+                    context=mode_context,
+                    include_ec_context=effective_include_ec_context,
+                )
         except Exception as exc:
-            if not self._is_llm_transport_error(exc):
+            if use_runtime or not self._is_llm_transport_error(exc):
                 raise
 
             logger.warning(
@@ -206,13 +249,13 @@ class ChatService:
         # Persist messages
         user_msg = Message(
             session_id=session_id,
-            mode=mode_enum,
+            mode=runtime_mode_enum if use_runtime else mode_enum,
             role=MessageRole.USER,
             content=message,
         )
         assistant_msg = Message(
             session_id=session_id,
-            mode=mode_enum,
+            mode=runtime_mode_enum if use_runtime else mode_enum,
             role=MessageRole.ASSISTANT,
             content=response_content,
         )
@@ -250,7 +293,7 @@ class ChatService:
             session_id=session_id,
             message_id=message_id,
             content=response_content,
-            mode=mode_enum,
+            mode=runtime_mode_enum if use_runtime else mode_enum,
             sources=[
                 ChatSource(
                     document_id=s.get("document_id"),
@@ -362,12 +405,17 @@ class ChatService:
             raise ValueError(f"Session not found: {session_id}")
 
         mode_enum = ModeType(mode)
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
         effective_include_ec_context = (
             include_ec_context
             if include_ec_context is not None
             else bool(getattr(session, "include_ec_context", False))
         )
-        await self._session_manager.start_session(session_id=session_id)
+        use_runtime = self._should_use_runtime_manager(mode_enum, self._runtime_session_manager)
+        if use_runtime:
+            await self._runtime_session_manager.start_session(session_id=session_id)
+        else:
+            await self._session_manager.start_session(session_id=session_id)
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
         allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
         allowed_doc_id_set = set(allowed_doc_ids)
@@ -377,14 +425,15 @@ class ChatService:
             if doc_id in allowed_doc_id_set
         }
         mode_context = self._build_mode_context(context, filtered_doc_titles)
-        await self._validate_mode_guard(
-            mode_enum=mode_enum,
-            allowed_doc_ids=allowed_doc_ids,
-            context=context,
-            notebook_id=session.notebook_id,
-            documents_by_status=docs_by_status,
-            blocking_document_ids=blocking_doc_ids,
-        )
+        if not use_runtime:
+            await self._validate_mode_guard(
+                mode_enum=mode_enum,
+                allowed_doc_ids=allowed_doc_ids,
+                context=context,
+                notebook_id=session.notebook_id,
+                documents_by_status=docs_by_status,
+                blocking_document_ids=blocking_doc_ids,
+            )
 
         message_id = session.message_count + 1
 
@@ -394,9 +443,9 @@ class ChatService:
             allowed_doc_ids=allowed_doc_ids,
             docs_by_status=docs_by_status,
         )
-        if mode_enum != ModeType.CHAT and blocking_warning:
+        if mode_enum != ModeType.CHAT and not use_runtime and blocking_warning:
             yield blocking_warning
-        if mode_enum != ModeType.CHAT:
+        if mode_enum != ModeType.CHAT and not use_runtime:
             # Chat mode emits finer-grained phase markers from ChatMode._stream().
             yield {"type": "thinking", "stage": "retrieving"}
 
@@ -407,32 +456,74 @@ class ChatService:
         stream = None
 
         try:
-            stream = self._session_manager.chat_stream(
-                message=message,
-                mode_type=mode_enum,
-                allowed_document_ids=allowed_doc_ids,
-                context=mode_context,
-                include_ec_context=effective_include_ec_context,
-            )
-            chunk_timeout_seconds = self._get_stream_chunk_timeout_seconds(mode_enum)
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(
-                        stream.__anext__(),
-                        timeout=chunk_timeout_seconds,
-                    )
-                except StopAsyncIteration:
-                    break
-                phase_stage = self._parse_stream_phase_marker(chunk)
-                if phase_stage:
-                    yield {"type": "thinking", "stage": phase_stage}
-                    continue
-                full_response += chunk
-                yield {"type": "content", "delta": chunk}
+            if use_runtime:
+                stream = self._runtime_session_manager.chat_stream(
+                    message=message,
+                    mode_type=runtime_mode_enum,
+                    allowed_document_ids=allowed_doc_ids,
+                    context=mode_context,
+                    include_ec_context=effective_include_ec_context,
+                )
+                while True:
+                    try:
+                        event = await asyncio.wait_for(
+                            stream.__anext__(),
+                            timeout=self._get_stream_chunk_timeout_seconds(mode_enum),
+                        )
+                    except StopAsyncIteration:
+                        break
 
-            sources = self._merge_sources_with_context(
-                self._session_manager.get_last_sources(), context, context_chunks
-            )
+                    if isinstance(event, StartEvent):
+                        continue
+                    if isinstance(event, WarningEvent):
+                        yield {"type": "warning", "code": event.code, "message": event.message}
+                        continue
+                    if isinstance(event, PhaseEvent):
+                        yield {"type": "phase", "stage": event.stage}
+                        continue
+                    if isinstance(event, ContentEvent):
+                        full_response += event.delta
+                        yield {"type": "content", "delta": event.delta}
+                        continue
+                    if isinstance(event, SourceEvent):
+                        sources = self._source_items_to_dicts(event.sources)
+                        continue
+                    if isinstance(event, DoneEvent):
+                        break
+                    if isinstance(event, ErrorEvent):
+                        yield {
+                            "type": "error",
+                            "error_code": event.code,
+                            "message": event.message,
+                        }
+                        return
+            else:
+                stream = self._session_manager.chat_stream(
+                    message=message,
+                    mode_type=mode_enum,
+                    allowed_document_ids=allowed_doc_ids,
+                    context=mode_context,
+                    include_ec_context=effective_include_ec_context,
+                )
+                chunk_timeout_seconds = self._get_stream_chunk_timeout_seconds(mode_enum)
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(
+                            stream.__anext__(),
+                            timeout=chunk_timeout_seconds,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    phase_stage = self._parse_stream_phase_marker(chunk)
+                    if phase_stage:
+                        yield {"type": "thinking", "stage": phase_stage}
+                        continue
+                    full_response += chunk
+                    yield {"type": "content", "delta": chunk}
+
+                sources = self._merge_sources_with_context(
+                    self._session_manager.get_last_sources(), context, context_chunks
+                )
             sources_before_validation = list(sources)
             sources = await self._filter_valid_sources(sources)
             sources = self._filter_sources_by_mode_quality(sources, mode_enum)
@@ -453,13 +544,13 @@ class ChatService:
             # race with database writes and cause missing chat history.
             user_msg = Message(
                 session_id=session_id,
-                mode=mode_enum,
+                mode=runtime_mode_enum if use_runtime else mode_enum,
                 role=MessageRole.USER,
                 content=message,
             )
             assistant_msg = Message(
                 session_id=session_id,
-                mode=mode_enum,
+                mode=runtime_mode_enum if use_runtime else mode_enum,
                 role=MessageRole.ASSISTANT,
                 content=full_response,
             )

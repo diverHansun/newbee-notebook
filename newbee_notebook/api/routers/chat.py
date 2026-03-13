@@ -7,14 +7,14 @@ Handles chat-related API endpoints including streaming responses.
 import asyncio
 import json
 from contextlib import suppress
-from typing import Optional, AsyncGenerator, Literal
+from typing import Optional, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from newbee_notebook.api.dependencies import get_session_service, get_chat_service
-from newbee_notebook.api.models.requests import ChatContext
+from newbee_notebook.api.models.requests import ChatRequest
 from newbee_notebook.application.services.session_service import SessionService, SessionNotFoundError
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.domain.value_objects.mode_type import ModeType
@@ -23,28 +23,6 @@ from newbee_notebook.exceptions import DocumentProcessingError
 
 router = APIRouter(prefix="/chat")
 SSE_HEARTBEAT_INTERVAL_SECONDS = 10
-
-
-# =============================================================================
-# Request/Response Models
-# =============================================================================
-
-class ChatRequest(BaseModel):
-    """Request model for chat."""
-    message: str = Field(..., min_length=1, description="User message")
-    mode: Literal["chat", "ask", "explain", "conclude"] = Field(
-        "chat", description="Chat mode"
-    )
-    session_id: Optional[str] = Field(None, description="Session ID (optional)")
-    context: Optional[ChatContext] = Field(None, description="Selected text context")
-    include_ec_context: Optional[bool] = Field(
-        None,
-        description="Optional override for including recent explain/conclude context in chat/ask requests.",
-    )
-    source_document_ids: Optional[list[str]] = Field(
-        None,
-        description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
-    )
 
 
 class ChatResponse(BaseModel):
@@ -80,6 +58,10 @@ class SSEEvent:
     @staticmethod
     def thinking(stage: str = "thinking") -> str:
         return SSEEvent.format("thinking", {"stage": stage})
+
+    @staticmethod
+    def phase(stage: str) -> str:
+        return SSEEvent.format("phase", {"stage": stage})
 
     @staticmethod
     def warning(code: str, message: str, details: Optional[dict] = None) -> str:
@@ -241,7 +223,7 @@ async def chat(
             session_id=request.session_id,
             message=request.message,
             mode=request.mode,
-            context=request.context.dict() if request.context else None,
+            context=request.context.model_dump() if request.context else None,
             include_ec_context=request.include_ec_context,
             source_document_ids=request.source_document_ids,
         )
@@ -302,7 +284,7 @@ async def chat_stream(
         await chat_service.prevalidate_mode_requirements(
             session_id=request.session_id,
             mode=request.mode,
-            context=request.context.dict() if request.context else None,
+            context=request.context.model_dump() if request.context else None,
         )
     except DocumentProcessingError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message)
@@ -316,7 +298,7 @@ async def chat_stream(
         session_id=request.session_id,
         message=request.message,
         mode=request.mode,
-        context=request.context.dict() if request.context else None,
+        context=request.context.model_dump() if request.context else None,
         include_ec_context=request.include_ec_context,
         source_document_ids=request.source_document_ids,
     )
@@ -372,6 +354,11 @@ async def sse_adapter(
     async for event in stream:
         event_type = event.get("type")
         payload = {k: v for k, v in event.items() if k != "type"}
+        if event_type == "phase":
+            stage = str(payload.get("stage") or "thinking")
+            yield SSEEvent.phase(stage)
+            yield SSEEvent.thinking(stage)
+            continue
         yield SSEEvent.format(event_type, payload)
 
 

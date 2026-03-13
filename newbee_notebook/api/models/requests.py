@@ -2,7 +2,7 @@
 Newbee Notebook - API Request Models
 """
 
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -62,3 +62,22 @@ class ChatContext(BaseModel):
     chunk_id: Optional[str] = Field(None, description="Chunk identifier in vector store")
     document_id: Optional[str] = Field(None, description="Document id owning the selection")
     page_number: Optional[int] = Field(None, description="Page number if available")
+
+
+class ChatRequest(BaseModel):
+    """Request model for chat/chat-stream endpoints."""
+
+    message: str = Field(..., min_length=1, description="User message")
+    mode: Literal["chat", "agent", "ask", "explain", "conclude"] = Field(
+        "chat", description="Chat mode"
+    )
+    session_id: Optional[str] = Field(None, description="Session ID (optional)")
+    context: Optional[ChatContext] = Field(None, description="Selected text context")
+    include_ec_context: Optional[bool] = Field(
+        None,
+        description="Optional override for including recent explain/conclude context in chat/ask requests.",
+    )
+    source_document_ids: Optional[list[str]] = Field(
+        None,
+        description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
+    )

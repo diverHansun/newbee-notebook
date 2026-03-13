@@ -363,6 +363,7 @@ async def get_chat_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     session_manager: SessionManager = Depends(get_session_manager_dep),
+    runtime_session_manager: RuntimeSessionManager = Depends(get_runtime_session_manager_dep),
 ) -> ChatService:
     """Get ChatService instance."""
     return ChatService(
@@ -373,6 +374,7 @@ async def get_chat_service(
         ref_repo=ref_repo,
         message_repo=message_repo,
         session_manager=session_manager,
+        runtime_session_manager=runtime_session_manager,
     )
 
 

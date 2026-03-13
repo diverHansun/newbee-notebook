@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
@@ -12,6 +13,10 @@ from newbee_notebook.exceptions import DocumentProcessingError
 
 def test_sse_event_thinking_formats_stage():
     assert SSEEvent.thinking("searching") == 'data: {"type": "thinking", "stage": "searching"}\n\n'
+
+
+def test_sse_event_phase_formats_stage():
+    assert SSEEvent.format("phase", {"stage": "reasoning"}) == 'data: {"type": "phase", "stage": "reasoning"}\n\n'
 
 
 def test_sse_event_warning_formats_payload():
@@ -80,6 +85,54 @@ def test_chat_stream_endpoint_returns_409_for_document_processing_error():
 
     assert response.status_code == 409
     assert response.json()["detail"] == "该文档索引尚未构建完成，暂时无法进行解释/总结"
+
+
+def test_chat_endpoint_accepts_agent_mode():
+    chat_service = AsyncMock()
+    chat_service.chat = AsyncMock(
+        return_value=type(
+            "_Result",
+            (),
+            {
+                "session_id": "session-1",
+                "message_id": 1,
+                "content": "hello",
+                "mode": type("_Mode", (), {"value": "agent"})(),
+                "sources": [],
+                "warnings": [],
+            },
+        )()
+    )
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=object())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={"session_id": "session-1", "message": "hi", "mode": "agent"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "agent"
+
+
+def test_sse_adapter_emits_phase_and_thinking_compat_events():
+    async def _stream():
+        yield {"type": "phase", "stage": "reasoning"}
+
+    async def _collect():
+        items = []
+        async for payload in chat_router.sse_adapter(_stream()):
+            items.append(payload)
+        return items
+
+    events = asyncio.run(_collect())
+    parsed = [json.loads(item.removeprefix("data: ").strip()) for item in events]
+
+    assert parsed == [
+        {"type": "phase", "stage": "reasoning"},
+        {"type": "thinking", "stage": "reasoning"},
+    ]
 
 
 def test_heartbeat_generator_emits_heartbeat_while_waiting_for_first_event():
