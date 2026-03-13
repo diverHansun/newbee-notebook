@@ -22,7 +22,8 @@ from newbee_notebook.application.services.session_service import SessionService
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
-from newbee_notebook.core.llm import build_llm
+from newbee_notebook.core.llm import build_llm, LLMClientFactory
+from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
 from newbee_notebook.core.common.config import (
@@ -146,6 +147,7 @@ async def get_session_service(
 # =============================================================================
 
 _llm = None
+_llm_client_factory = None
 _embed_model = None
 _pgvector_index = None
 _es_index = None
@@ -159,6 +161,13 @@ def get_llm_singleton():
     return _llm
 
 
+def get_llm_client_factory_singleton() -> LLMClientFactory:
+    global _llm_client_factory
+    if _llm_client_factory is None:
+        _llm_client_factory = LLMClientFactory()
+    return _llm_client_factory
+
+
 def get_embedding_singleton():
     global _embed_model
     if _embed_model is None:
@@ -167,8 +176,10 @@ def get_embedding_singleton():
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
-    global _llm
+    global _llm, _llm_client_factory
     _llm = None
+    if _llm_client_factory is not None:
+        _llm_client_factory.reset()
     logger.info("LLM singleton reset")
 
 
@@ -241,6 +252,19 @@ async def get_session_manager_dep(
 ) -> SessionManager:
     """Get SessionManager instance for dependency injection."""
     return await get_session_manager_singleton(session_repo, message_repo)
+
+
+async def get_llm_runtime_config_dep(session=Depends(get_db_session)):
+    """Resolve the effective runtime LLM config for the current request."""
+    return await resolve_llm_runtime_config(session)
+
+
+async def get_llm_client_dep(
+    runtime_config=Depends(get_llm_runtime_config_dep),
+):
+    """Get the runtime LLM client for the current effective config."""
+    factory = get_llm_client_factory_singleton()
+    return factory.get_client(runtime_config)
 
 
 # =============================================================================
