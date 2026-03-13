@@ -81,7 +81,7 @@ async def system_info() -> Dict[str, Any]:
             "library": True,
             "notebooks": True,
             "sessions": True,
-            "chat_modes": ["chat", "ask", "explain", "conclude"],
+            "chat_modes": ["agent", "ask", "explain", "conclude"],
             "model_switch": is_model_switch_enabled(),
         }
     }

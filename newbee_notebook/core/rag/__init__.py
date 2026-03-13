@@ -7,7 +7,6 @@ Submodules:
     - document_loader: Load documents from various file formats
     - text_splitter: Split documents into chunks for indexing
     - retrieval: Hybrid retrieval strategies (pgvector + ES BM25)
-    - generation: Build query/chat engines for RAG
     - postprocessors: Filter and enhance retrieved nodes
 
 Note:
@@ -19,12 +18,6 @@ Note:
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.rag.document_loader import load_documents
 from newbee_notebook.core.rag.text_splitter import split_documents
-from newbee_notebook.core.rag.generation import (
-    build_query_engine,
-    build_simple_query_engine,
-    build_chat_engine,
-    build_simple_chat_engine,
-)
 from newbee_notebook.core.rag.postprocessors import (
     EvidenceConsistencyChecker,
     SourceFilterPostprocessor,
@@ -44,12 +37,6 @@ __all__ = [
     "load_documents",
     # Text splitting
     "split_documents",
-    # Query engine
-    "build_query_engine",
-    "build_simple_query_engine",
-    # Chat engine
-    "build_chat_engine",
-    "build_simple_chat_engine",
     # Postprocessors
     "EvidenceConsistencyChecker",
     "SourceFilterPostprocessor",

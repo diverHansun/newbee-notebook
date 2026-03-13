@@ -16,6 +16,10 @@ class LoopPolicy:
     max_retrieval_iterations: int = 0
     required_tool_name: str | None = None
     require_tool_every_iteration: bool = False
+    synthesis_quality_bands: tuple[str, ...] = ()
+    first_turn_tool_repair_name: str | None = None
+    first_turn_tool_repair_limit: int = 0
+    first_turn_tool_repair_force_choice: bool = False
     invalid_tool_repair_limit: int = 2
     allow_early_synthesis: bool = True
     force_synthesis_after_limit: bool = True
@@ -75,6 +79,9 @@ class ModeConfigFactory:
                 loop_policy=LoopPolicy(
                     execution_style="open_loop",
                     max_total_iterations=50,
+                    first_turn_tool_repair_name="knowledge_base",
+                    first_turn_tool_repair_limit=1,
+                    first_turn_tool_repair_force_choice=True,
                 ),
                 tool_policy=ToolPolicy(
                     allowed_tool_names=allowed_tool_names,
@@ -96,6 +103,7 @@ class ModeConfigFactory:
                     max_retrieval_iterations=3,
                     required_tool_name="knowledge_base",
                     require_tool_every_iteration=True,
+                    synthesis_quality_bands=("high",),
                 ),
                 tool_policy=ToolPolicy(
                     allowed_tool_names=allowed_tool_names,
@@ -119,6 +127,7 @@ class ModeConfigFactory:
                     max_retrieval_iterations=3,
                     required_tool_name="knowledge_base",
                     require_tool_every_iteration=True,
+                    synthesis_quality_bands=("high", "medium"),
                 ),
                 tool_policy=ToolPolicy(
                     allowed_tool_names=allowed_tool_names,

@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from newbee_notebook.core.prompts import load_prompt
+from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
 from newbee_notebook.core.session.session_manager import SessionManager
 from newbee_notebook.core.tools.contracts import SourceItem
@@ -229,3 +231,61 @@ async def test_explain_builds_runtime_message_and_document_scope_defaults():
     assert "explain the relation" in call.message
     assert call.tool_argument_defaults["knowledge_base"]["filter_document_id"] == "doc-1"
     assert call.tool_argument_defaults["knowledge_base"]["allowed_document_ids"] == ["doc-1", "doc-2"]
+
+
+@pytest.mark.anyio
+async def test_ask_builds_runtime_message_with_notebook_scope_hint():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_by_session.side_effect = [[], []]
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="这个文档主要讨论什么？",
+        mode_type=ModeType.ASK,
+        allowed_document_ids=["doc-1"],
+    )
+
+    call = RecordingLoop.instances[-1].calls[-1]
+    assert "current notebook already contains 1 completed document" in call.message
+    assert "knowledge_base" in call.message
+    assert "这个文档主要讨论什么？" in call.message
+
+
+def test_default_system_prompt_loads_mode_prompt_files(monkeypatch):
+    loaded_files: list[str] = []
+
+    def _fake_load_prompt(file_name: str) -> str:
+        loaded_files.append(file_name)
+        return f"prompt:{file_name}"
+
+    session_manager_module._load_mode_prompt.cache_clear()
+    monkeypatch.setattr(session_manager_module, "load_prompt", _fake_load_prompt)
+
+    assert SessionManager._default_system_prompt(ModeType.AGENT) == "prompt:chat.md"
+    assert SessionManager._default_system_prompt(ModeType.ASK) == "prompt:ask.md"
+    assert SessionManager._default_system_prompt(ModeType.EXPLAIN) == "prompt:explain.md"
+    assert SessionManager._default_system_prompt(ModeType.CONCLUDE) == "prompt:conclude.md"
+    assert loaded_files == ["chat.md", "ask.md", "explain.md", "conclude.md"]
+    session_manager_module._load_mode_prompt.cache_clear()
+
+
+def test_ask_prompt_matches_runtime_tool_contract():
+    prompt = load_prompt("ask.md")
+
+    assert "knowledge_base" in prompt
+    assert "time" in prompt
+    assert "Do not ask the user to upload a file" in prompt
+    assert "zhipu_web_search" not in prompt
+    assert "zhipu_web_crawl" not in prompt

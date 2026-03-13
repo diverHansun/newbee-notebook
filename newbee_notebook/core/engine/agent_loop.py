@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
@@ -83,8 +84,33 @@ class AgentLoop:
     def _extract_tool_calls(cls, response: Any) -> list[dict[str, Any]]:
         message = cls._extract_message(response)
         if isinstance(message, dict):
-            return list(message.get("tool_calls") or [])
-        return list(getattr(message, "tool_calls", []) or [])
+            tool_calls = list(message.get("tool_calls") or [])
+        else:
+            tool_calls = list(getattr(message, "tool_calls", []) or [])
+        return [cls._normalize_tool_call(item) for item in tool_calls]
+
+    @staticmethod
+    def _normalize_tool_call(tool_call: Any) -> dict[str, Any]:
+        if isinstance(tool_call, dict):
+            function_payload = tool_call.get("function") or {}
+            return {
+                "id": str(tool_call.get("id") or ""),
+                "type": str(tool_call.get("type") or "function"),
+                "function": {
+                    "name": str(function_payload.get("name") or ""),
+                    "arguments": str(function_payload.get("arguments") or "{}"),
+                },
+            }
+
+        function_payload = getattr(tool_call, "function", None)
+        return {
+            "id": str(getattr(tool_call, "id", "") or ""),
+            "type": str(getattr(tool_call, "type", "function") or "function"),
+            "function": {
+                "name": str(getattr(function_payload, "name", "") or ""),
+                "arguments": str(getattr(function_payload, "arguments", "{}") or "{}"),
+            },
+        }
 
     @classmethod
     def _extract_stream_delta(cls, chunk: Any) -> str:
@@ -155,6 +181,17 @@ class AgentLoop:
             ),
         }
 
+    def _first_turn_tool_repair_message(self) -> dict[str, str]:
+        tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name or "the relevant tool"
+        return {
+            "role": "system",
+            "content": (
+                f"The current notebook already has grounded context available. "
+                f"For this request, you should consider calling {tool_name} first so the answer is based on notebook evidence "
+                f"instead of a generic response."
+            ),
+        }
+
     def _should_enter_synthesis(
         self,
         result: ToolCallResult,
@@ -166,7 +203,8 @@ class AgentLoop:
         if retrieval_iterations >= self._mode_config.loop_policy.max_retrieval_iterations:
             return True
         quality_band = getattr(result.quality_meta, "quality_band", None)
-        return quality_band == "high"
+        accepted_bands = self._mode_config.loop_policy.synthesis_quality_bands
+        return bool(quality_band and quality_band in accepted_bands)
 
     async def stream(
         self,
@@ -184,7 +222,9 @@ class AgentLoop:
         iterations = 0
         retrieval_iterations = 0
         repair_attempts = 0
+        first_turn_repair_attempts = 0
         force_synthesis = False
+        forced_tool_choice: dict[str, Any] | None = None
 
         yield StartEvent(message_id="runtime")
 
@@ -204,7 +244,7 @@ class AgentLoop:
             response = await self._chat_with_retry(
                 messages=messages,
                 tools=tool_specs or None,
-                tool_choice=self._required_tool_choice(),
+                tool_choice=forced_tool_choice or self._required_tool_choice(),
             )
             iterations += 1
 
@@ -224,9 +264,24 @@ class AgentLoop:
                     repair_attempts += 1
                     messages.append(self._repair_message())
                     continue
+                first_turn_tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name
+                if (
+                    first_turn_tool_name
+                    and iterations == 1
+                    and first_turn_repair_attempts < self._mode_config.loop_policy.first_turn_tool_repair_limit
+                ):
+                    first_turn_repair_attempts += 1
+                    messages.append(self._first_turn_tool_repair_message())
+                    if self._mode_config.loop_policy.first_turn_tool_repair_force_choice:
+                        forced_tool_choice = {
+                            "type": "function",
+                            "function": {"name": first_turn_tool_name},
+                        }
+                    continue
                 break
 
             repair_attempts = 0
+            forced_tool_choice = None
             messages.append(self._assistant_tool_message(tool_calls))
             yield PhaseEvent(stage="retrieving")
 
@@ -289,11 +344,14 @@ class AgentLoop:
                 break
 
         yield PhaseEvent(stage="synthesizing")
-        async for chunk in self._llm_client.chat_stream(
-            messages=messages,
-            tools=None,
-            tool_choice=None,
-        ):
+        stream = await self._resolve_stream(
+            self._llm_client.chat_stream(
+                messages=messages,
+                tools=None,
+                tool_choice=None,
+            )
+        )
+        async for chunk in stream:
             delta = self._extract_stream_delta(chunk)
             if delta:
                 yield ContentEvent(delta=delta)
@@ -313,6 +371,12 @@ class AgentLoop:
             seen.add(key)
             deduped.append(item)
         return deduped
+
+    @staticmethod
+    async def _resolve_stream(stream_or_awaitable: Any) -> Any:
+        if inspect.isawaitable(stream_or_awaitable):
+            return await stream_or_awaitable
+        return stream_or_awaitable
 
     async def run(
         self,

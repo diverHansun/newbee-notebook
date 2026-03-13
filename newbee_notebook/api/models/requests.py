@@ -29,7 +29,7 @@ class CreateSessionRequest(BaseModel):
     title: Optional[str] = Field(None, max_length=500, description="Optional session title")
     include_ec_context: bool = Field(
         False,
-        description="Whether Chat/Ask requests should include recent Explain/Conclude context by default.",
+        description="Whether Agent/Ask requests should include recent Explain/Conclude context by default.",
     )
 
 
@@ -65,17 +65,18 @@ class ChatContext(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Request model for chat/chat-stream endpoints."""
+    """Request model for the /chat and /chat/stream endpoints."""
 
     message: str = Field(..., min_length=1, description="User message")
     mode: Literal["chat", "agent", "ask", "explain", "conclude"] = Field(
-        "chat", description="Chat mode"
+        "agent",
+        description="Interaction mode. 'chat' remains accepted as a compatibility alias for 'agent'.",
     )
     session_id: Optional[str] = Field(None, description="Session ID (optional)")
     context: Optional[ChatContext] = Field(None, description="Selected text context")
     include_ec_context: Optional[bool] = Field(
         None,
-        description="Optional override for including recent explain/conclude context in chat/ask requests.",
+        description="Optional override for including recent explain/conclude context in agent/ask requests.",
     )
     source_document_ids: Optional[list[str]] = Field(
         None,

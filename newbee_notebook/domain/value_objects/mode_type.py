@@ -8,7 +8,7 @@ from enum import Enum
 class ModeType(str, Enum):
     """Chat interaction modes."""
     AGENT = "agent"     # New runtime canonical mode
-    CHAT = "chat"       # General conversation
+    CHAT = "chat"       # Compatibility alias for agent
     ASK = "ask"         # Document-based Q&A
     EXPLAIN = "explain"  # Explain selected text
     CONCLUDE = "conclude"  # Summarize content

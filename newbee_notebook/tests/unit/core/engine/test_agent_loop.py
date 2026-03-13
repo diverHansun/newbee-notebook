@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +37,27 @@ class _FakeLLMClient:
             yield chunk
 
 
+class _AwaitableStream:
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    def __aiter__(self):
+        self._iter = iter(self._chunks)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iter)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
+class _RealShapedLLMClient(_FakeLLMClient):
+    async def chat_stream(self, **kwargs):
+        self.stream_calls.append(kwargs)
+        return _AwaitableStream(self.stream_chunks)
+
+
 def _tool_call(name: str, arguments: dict, tool_call_id: str = "call-1") -> dict:
     return {
         "id": tool_call_id,
@@ -63,6 +85,14 @@ def _chat_response(*, tool_calls=None, content=None, finish_reason=None) -> dict
 
 def _stream_chunk(delta: str) -> dict:
     return {"choices": [{"delta": {"content": delta}}]}
+
+
+def _object_tool_call(name: str, arguments: dict, tool_call_id: str = "call-1"):
+    return SimpleNamespace(
+        id=tool_call_id,
+        type="function",
+        function=SimpleNamespace(name=name, arguments=json.dumps(arguments)),
+    )
 
 
 def _quality(quality_band: str) -> ToolQualityMeta:
@@ -132,6 +162,42 @@ async def test_agent_loop_open_loop_executes_tool_then_streams_final_answer():
 
 
 @pytest.mark.anyio
+async def test_ask_loop_repairs_first_turn_without_tool_call_once():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(content="I need more information."),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})]),
+            _chat_response(content="Here is the grounded answer."),
+        ],
+        stream_chunks=[_stream_chunk("Grounded"), _stream_chunk(" answer")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.7)],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="ask", tools=[tool, _tool("time", ToolCallResult(content="now"))])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="ask", chat_history=[])
+
+    assert result.response == "Grounded answer"
+    assert result.tool_calls_made == ["knowledge_base"]
+    assert len(llm.chat_calls) == 3
+    assert llm.chat_calls[0]["tool_choice"] is None
+    assert llm.chat_calls[1]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "knowledge_base"},
+    }
+    assert llm.chat_calls[2]["tool_choice"] is None
+    repair_messages = [msg for msg in llm.chat_calls[1]["messages"] if msg.get("role") == "system" and "knowledge_base" in str(msg.get("content"))]
+    assert repair_messages
+
+
+@pytest.mark.anyio
 async def test_agent_loop_early_synthesizes_when_quality_gate_is_high():
     llm = _FakeLLMClient(
         chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],
@@ -186,6 +252,31 @@ async def test_agent_loop_forces_synthesis_at_retrieval_limit():
 
 
 @pytest.mark.anyio
+async def test_conclude_loop_can_early_synthesize_on_medium_quality():
+    llm = _FakeLLMClient(
+        chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],
+        stream_chunks=[_stream_chunk("Concluded")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="enough evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.45)],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="conclude", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="conclude", chat_history=[])
+
+    assert result.response == "Concluded"
+    assert result.iterations == 1
+    assert len(llm.chat_calls) == 1
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
 async def test_explain_loop_relaxes_scope_from_document_to_notebook_after_low_quality_result():
     llm = _FakeLLMClient(
         chat_responses=[
@@ -222,3 +313,48 @@ async def test_explain_loop_relaxes_scope_from_document_to_notebook_after_low_qu
     assert captured_payloads[0]["filter_document_id"] == "doc-1"
     assert captured_payloads[1]["allowed_document_ids"] == ["doc-1", "doc-2"]
     assert "filter_document_id" not in captured_payloads[1]
+
+
+@pytest.mark.anyio
+async def test_agent_loop_accepts_real_llm_client_stream_shape():
+    llm = _RealShapedLLMClient(
+        chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],
+        stream_chunks=[_stream_chunk("Real"), _stream_chunk(" stream")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.9)],
+            quality_meta=_quality("high"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="explain", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="explain", chat_history=[])
+
+    assert result.response == "Real stream"
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_normalizes_openai_tool_call_objects():
+    llm = _FakeLLMClient(
+        chat_responses=[_chat_response(tool_calls=[_object_tool_call("knowledge_base", {"query": "x"})])],
+        stream_chunks=[_stream_chunk("Normalized")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.9)],
+            quality_meta=_quality("high"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="explain", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="explain", chat_history=[])
+
+    assert result.response == "Normalized"

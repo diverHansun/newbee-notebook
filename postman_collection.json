@@ -1,8 +1,8 @@
-{
+﻿{
     "info":  {
-                 "name":  "Newbee Notebook API v2.3",
+                 "name":  "Newbee Notebook API v2.4",
                  "_postman_id":  "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-                 "description":  "Newbee Notebook API Postman Collection v2.3 (backend-v2 batch-1)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: chat, ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Notes\n- Storage backend switch (`STORAGE_BACKEND=local|minio`) is environment-driven in batch-1 MinIO Phase 0/1.\n- This collection keeps API paths stable; use existing document endpoints for local/minio modes.\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -\u003e Notebooks -\u003e Documents -\u003e Sessions -\u003e Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until \u0027completed\u0027 before chat\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"\u003cuuid\u003e\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+                 "description":  "Newbee Notebook API Postman Collection v2.4 (backend-v2 batch-2-core)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: agent (chat alias), ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Notes\n- Storage backend switch (`STORAGE_BACKEND=local|minio`) is environment-driven in batch-1 MinIO Phase 0/1.\n- This collection keeps API paths stable; use existing document endpoints for local/minio modes.\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -\u003e Notebooks -\u003e Documents -\u003e Sessions -\u003e Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until \u0027completed\u0027 before chat\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"\u003cuuid\u003e\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
              },
     "item":  [
@@ -159,7 +159,7 @@
                                                                                     "pm.test(\"Chat modes are available\", function () {",
                                                                                     "    var jsonData = pm.response.json();",
                                                                                     "    pm.expect(jsonData.features.chat_modes).to.be.an(\u0027array\u0027);",
-                                                                                    "    pm.expect(jsonData.features.chat_modes).to.include(\u0027chat\u0027);",
+                                                                                    "    pm.expect(jsonData.features.chat_modes).to.include(\u0027agent\u0027);",
                                                                                     "});"
                                                                                 ],
                                                                        "type":  "text/javascript"
@@ -1409,10 +1409,10 @@
                                                                                     "    pm.response.to.have.status(200);",
                                                                                     "});",
                                                                                     "",
-                                                                                    "pm.test(\"All messages are chat or ask mode\", function () {",
+                                                                                    "pm.test(\"All messages are agent or ask mode\", function () {",
                                                                                     "    var jsonData = pm.response.json();",
                                                                                     "    jsonData.data.forEach(function(msg) {",
-                                                                                    "        pm.expect([\u0027chat\u0027, \u0027ask\u0027]).to.include(msg.mode);",
+                                                                                    "        pm.expect([\u0027agent\u0027, \u0027ask\u0027]).to.include(msg.mode);",
                                                                                     "    });",
                                                                                     "});"
                                                                                 ],
@@ -1426,7 +1426,7 @@
 
                                                                  ],
                                                       "url":  {
-                                                                  "raw":  "{{api_base}}/sessions/{{session_id}}/messages?mode=chat,ask\u0026limit=50\u0026offset=0",
+                                                                  "raw":  "{{api_base}}/sessions/{{session_id}}/messages?mode=agent,ask\u0026limit=50\u0026offset=0",
                                                                   "host":  [
                                                                                "{{api_base}}"
                                                                            ],
@@ -1438,8 +1438,8 @@
                                                                   "query":  [
                                                                                 {
                                                                                     "key":  "mode",
-                                                                                    "value":  "chat,ask",
-                                                                                    "description":  "Comma-separated mode filter: chat, ask, explain, conclude"
+                                                                                    "value":  "agent,ask",
+                                                                                    "description":  "Comma-separated mode filter: agent, ask, explain, conclude. The legacy alias chat is also accepted."
                                                                                 },
                                                                                 {
                                                                                     "key":  "limit",
@@ -1451,7 +1451,7 @@
                                                                                 }
                                                                             ]
                                                               },
-                                                      "description":  "Get only Chat and Ask messages from a session. Filters out Explain/Conclude messages."
+                                                      "description":  "Get only Agent and Ask messages from a session. Filters out Explain/Conclude messages."
                                                   },
                                       "response":  [
 
@@ -1498,7 +1498,7 @@
                                                                                 {
                                                                                     "key":  "mode",
                                                                                     "value":  "explain,conclude",
-                                                                                    "description":  "Comma-separated mode filter: chat, ask, explain, conclude"
+                                                                                    "description":  "Comma-separated mode filter: agent, ask, explain, conclude. The legacy alias chat is also accepted."
                                                                                 },
                                                                                 {
                                                                                     "key":  "limit",
@@ -1643,7 +1643,7 @@
                                                                                     "",
                                                                                     "pm.test(\"Mode matches request\", function () {",
                                                                                     "    var jsonData = pm.response.json();",
-                                                                                    "    pm.expect(jsonData.mode).to.eql(\u0027chat\u0027);",
+                                                                                    "    pm.expect(jsonData.mode).to.eql(\u0027agent\u0027);",
                                                                                     "});",
                                                                                     "",
                                                                                     "pm.test(\"Save message_id to variable\", function () {",
@@ -1684,7 +1684,7 @@
                                                                                "chat"
                                                                            ]
                                                               },
-                                                      "description":  "Send a chat message in non-streaming mode. Supports modes: chat, ask, explain, conclude."
+                                                      "description":  "Send a chat message in non-streaming mode. Supports modes: agent, ask, explain, conclude. The legacy alias chat is still accepted."
                                                   },
                                       "response":  [
 
@@ -2751,3 +2751,5 @@
                      }
                  ]
 }
+
+

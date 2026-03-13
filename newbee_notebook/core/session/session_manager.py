@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, AsyncGenerator, Callable
 
 from newbee_notebook.core.context import (
@@ -21,12 +22,26 @@ from newbee_notebook.core.engine.stream_events import (
     SourceEvent,
     WarningEvent,
 )
+from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session.lock_manager import SessionLockManager
 from newbee_notebook.core.tools.contracts import SourceItem
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType, normalize_runtime_mode
+
+
+@lru_cache(maxsize=8)
+def _load_mode_prompt(mode: ModeType) -> str:
+    if mode in (ModeType.AGENT, ModeType.CHAT):
+        return load_prompt("chat.md")
+    if mode is ModeType.ASK:
+        return load_prompt("ask.md")
+    if mode is ModeType.EXPLAIN:
+        return load_prompt("explain.md")
+    if mode is ModeType.CONCLUDE:
+        return load_prompt("conclude.md")
+    return f"You are running in {mode.value} mode."
 
 
 @dataclass(frozen=True)
@@ -122,7 +137,7 @@ class SessionManager:
 
     @staticmethod
     def _default_system_prompt(mode: ModeType) -> str:
-        return f"You are running in {mode.value} mode."
+        return _load_mode_prompt(mode)
 
     def _build_chat_history(self, mode: ModeType) -> list[dict[str, str]]:
         builder = ContextBuilder(
@@ -152,11 +167,23 @@ class SessionManager:
         *,
         mode: ModeType,
         message: str,
+        allowed_document_ids: list[str] | None,
         context: dict | None,
     ) -> str:
         normalized_message = str(message or "").strip()
         if mode not in SessionManager.SIDE_TRACK_MODES:
-            return normalized_message
+            if not allowed_document_ids:
+                return normalized_message
+
+            document_count = len(allowed_document_ids)
+            return (
+                "Notebook context:\n"
+                f"- The current notebook already contains {document_count} completed document"
+                f"{'' if document_count == 1 else 's'} available through the knowledge_base tool.\n"
+                "- For notebook-specific questions, use the knowledge_base tool before answering.\n\n"
+                "User request:\n"
+                f"{normalized_message}"
+            )
 
         selected_text = str((context or {}).get("selected_text") or "").strip()
         if not selected_text:
@@ -243,6 +270,7 @@ class SessionManager:
         runtime_message = self._build_runtime_message(
             mode=mode,
             message=message,
+            allowed_document_ids=allowed_document_ids,
             context=context,
         )
 

@@ -22,7 +22,7 @@ from newbee_notebook.application.services.session_service import (
     SessionNotFoundError,
     SessionLimitExceededError,
 )
-from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.domain.value_objects.mode_type import ModeType, normalize_runtime_mode
 
 
 router = APIRouter()
@@ -51,13 +51,14 @@ def _parse_mode_filter(mode: Optional[str]) -> Optional[list[ModeType]]:
         if not candidate:
             continue
         try:
-            parsed.append(ModeType(candidate))
+            parsed.append(normalize_runtime_mode(candidate))
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Invalid mode value: '{candidate}'. "
-                    "Valid values are: chat, ask, explain, conclude."
+                    "Valid values are: agent, ask, explain, conclude. "
+                    "The legacy alias 'chat' is still accepted."
                 ),
             ) from exc
     return parsed if parsed else None
@@ -240,7 +241,10 @@ async def delete_session(
 @router.get("/sessions/{session_id}/messages", response_model=MessageListResponse)
 async def list_session_messages(
     session_id: str = Path(..., description="Session ID"),
-    mode: Optional[str] = Query(None, description="Comma-separated modes: chat,ask,explain,conclude"),
+    mode: Optional[str] = Query(
+        None,
+        description="Comma-separated modes: agent,ask,explain,conclude. The legacy alias 'chat' is accepted.",
+    ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     service: SessionService = Depends(get_session_service),

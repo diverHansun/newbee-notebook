@@ -455,6 +455,42 @@ def test_chat_returns_warnings_for_partial_documents_in_nonstream_mode():
     ]
 
 
+def test_agent_mode_matches_chat_alias_and_does_not_emit_partial_document_warning():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [
+        SimpleNamespace(document_id="doc-1"),
+        SimpleNamespace(document_id="doc-2"),
+    ]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+        SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING, title="Busy"),
+    ]
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="agent"))
+
+    assert result.mode == ModeType.AGENT
+    assert result.warnings == []
+
+
 def test_chat_stream_closes_upstream_generator_on_cancelled_error():
     session_repo = AsyncMock()
     session_repo.get.return_value = SimpleNamespace(

@@ -174,7 +174,7 @@ class ChatService:
             allowed_doc_ids=allowed_doc_ids,
             docs_by_status=docs_by_status,
         )
-        if mode_enum != ModeType.CHAT and blocking_warning:
+        if runtime_mode_enum is not ModeType.AGENT and blocking_warning:
             warnings.append(blocking_warning)
 
         # Fetch context-based chunks (used for sources/references)
@@ -322,7 +322,7 @@ class ChatService:
             allowed_doc_ids=allowed_doc_ids,
             docs_by_status=docs_by_status,
         )
-        if mode_enum != ModeType.CHAT and blocking_warning:
+        if runtime_mode_enum is not ModeType.AGENT and blocking_warning:
             yield blocking_warning
 
         full_response = ""
@@ -574,7 +574,7 @@ class ChatService:
 
     @staticmethod
     def _resolve_sources_type(mode_enum: ModeType) -> str:
-        if mode_enum == ModeType.CHAT:
+        if normalize_runtime_mode(mode_enum) is ModeType.AGENT:
             return "tool_results"
         return "retrieval"
 

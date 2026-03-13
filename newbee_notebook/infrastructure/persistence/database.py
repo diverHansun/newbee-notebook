@@ -20,6 +20,50 @@ from sqlalchemy import text
 _schema_checked = False
 
 
+def get_runtime_schema_statements() -> list[str]:
+    return [
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)
+        """,
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP
+        """,
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS processing_meta TEXT
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at
+        ON documents(stage_updated_at)
+        """,
+        """
+        ALTER TABLE IF EXISTS sessions
+        ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
+        """,
+        """
+        UPDATE messages SET mode = 'agent' WHERE mode = 'chat'
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        DROP CONSTRAINT IF EXISTS messages_mode_check
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        ADD CONSTRAINT messages_mode_check
+        CHECK (mode IN ('agent','ask','conclude','explain'))
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key         VARCHAR(128) PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+    ]
+
+
 def get_database_url() -> str:
     """
     Get the database URL from environment variables.
@@ -79,57 +123,8 @@ class Database:
         if not self._engine:
             return
         async with self._engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS processing_meta TEXT
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at
-                    ON documents(stage_updated_at)
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS sessions
-                    ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS app_settings (
-                        key         VARCHAR(128) PRIMARY KEY,
-                        value       TEXT NOT NULL,
-                        updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
-                    )
-                    """
-                )
-            )
+            for statement in get_runtime_schema_statements():
+                await conn.execute(text(statement))
     
     async def disconnect(self) -> None:
         """Close the database connection."""

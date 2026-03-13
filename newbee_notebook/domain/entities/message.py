@@ -12,7 +12,7 @@ from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
 class Message(Entity):
     message_id: Optional[int] = None
     session_id: str = ""
-    mode: ModeType = ModeType.CHAT
+    mode: ModeType = ModeType.AGENT
     role: MessageRole = MessageRole.USER
     content: str = ""
     created_at: datetime = field(default_factory=datetime.now)

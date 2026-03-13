@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.tools.contracts import ToolDefinition
+from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.mode_type import ModeType, normalize_runtime_mode
 
 
@@ -37,8 +38,15 @@ def test_ask_policy_prefers_knowledge_base_without_forcing_every_iteration():
     assert config.mode_name == "ask"
     assert config.loop_policy.execution_style == "open_loop"
     assert config.loop_policy.require_tool_every_iteration is False
+    assert config.loop_policy.first_turn_tool_repair_name == "knowledge_base"
+    assert config.loop_policy.first_turn_tool_repair_limit == 1
+    assert config.loop_policy.first_turn_tool_repair_force_choice is True
     assert config.tool_policy.default_tool_name == "knowledge_base"
     assert config.tool_policy.default_tool_args_template == {"search_type": "hybrid", "max_results": 5}
+
+
+def test_message_entity_defaults_to_agent_canonical_mode():
+    assert Message().mode is ModeType.AGENT
 
 
 def test_explain_policy_requires_grounded_document_first_retrievals():
