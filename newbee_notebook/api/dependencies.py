@@ -4,6 +4,7 @@ Newbee Notebook - API Dependencies
 FastAPI dependency injection configuration.
 """
 
+from pathlib import Path
 from typing import AsyncGenerator
 import logging
 from fastapi import Depends
@@ -22,8 +23,10 @@ from newbee_notebook.application.services.session_service import SessionService
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
+from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
+from newbee_notebook.core.mcp import MCPClientManager
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
@@ -97,6 +100,11 @@ async def get_message_repo(session=Depends(get_db_session)) -> MessageRepository
     return MessageRepositoryImpl(session)
 
 
+def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
+    """Get AppSettingsService instance."""
+    return AppSettingsService(session)
+
+
 # =============================================================================
 # Service Dependencies
 # =============================================================================
@@ -162,6 +170,7 @@ _es_index = None
 _runtime_builtin_tool_provider = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
+_mcp_client_manager = None
 
 
 def get_llm_singleton():
@@ -225,7 +234,8 @@ def get_runtime_tool_registry_singleton() -> ToolRegistry:
     global _runtime_tool_registry
     if _runtime_tool_registry is None:
         _runtime_tool_registry = ToolRegistry(
-            builtin_provider=get_runtime_builtin_tool_provider_singleton()
+            builtin_provider=get_runtime_builtin_tool_provider_singleton(),
+            mcp_tool_supplier=get_mcp_client_manager_singleton().list_cached_tools,
         )
     return _runtime_tool_registry
 
@@ -235,6 +245,13 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
     if _runtime_session_lock_manager is None:
         _runtime_session_lock_manager = RuntimeSessionLockManager()
     return _runtime_session_lock_manager
+
+
+def get_mcp_client_manager_singleton() -> MCPClientManager:
+    global _mcp_client_manager
+    if _mcp_client_manager is None:
+        _mcp_client_manager = MCPClientManager(config_path=Path(".mcp.json"))
+    return _mcp_client_manager
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
@@ -307,13 +324,28 @@ def get_runtime_tool_registry_dep() -> ToolRegistry:
     return get_runtime_tool_registry_singleton()
 
 
+async def get_mcp_client_manager_dep(
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
+) -> MCPClientManager:
+    manager = get_mcp_client_manager_singleton()
+    statuses = await manager.get_server_statuses()
+    manager.set_enabled((await settings_service.get("mcp.enabled")) == "true")
+    for status in statuses:
+        value = await settings_service.get(f"mcp.servers.{status.name}.enabled")
+        manager.set_server_enabled(status.name, value != "false")
+    await manager.get_tools()
+    return manager
+
+
 async def get_runtime_session_manager_dep(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
+    mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
+    del mcp_manager
     return SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,

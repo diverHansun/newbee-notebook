@@ -43,3 +43,16 @@ def test_tool_registry_merges_external_agent_tools_without_changing_contract():
 
     assert [tool.name for tool in tools] == ["knowledge_base", "time", "mcp.search"]
     assert all(isinstance(tool, ToolDefinition) for tool in tools)
+
+
+def test_tool_registry_reads_cached_mcp_tools_for_agent_only():
+    registry = ToolRegistry(
+        builtin_provider=BuiltinToolProvider(),
+        mcp_tool_supplier=lambda: [_external_tool("weather__forecast")],
+    )
+
+    agent_tools = registry.get_tools("agent")
+    ask_tools = registry.get_tools("ask")
+
+    assert [tool.name for tool in agent_tools] == ["knowledge_base", "time", "weather__forecast"]
+    assert [tool.name for tool in ask_tools] == ["knowledge_base", "time"]
