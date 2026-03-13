@@ -37,11 +37,16 @@ class AgentLoop:
         tools: list[ToolDefinition],
         mode_config: ModeConfig,
         llm_retry_attempts: int = 1,
+        tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
         self._mode_config = mode_config
         self._llm_retry_attempts = max(1, llm_retry_attempts)
+        self._tool_argument_defaults = {
+            str(name): dict(values)
+            for name, values in (tool_argument_defaults or {}).items()
+        }
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -97,6 +102,26 @@ class AgentLoop:
         if not required:
             return None
         return {"type": "function", "function": {"name": required}}
+
+    def _resolve_tool_arguments(self, tool_name: str, parsed_arguments: dict[str, Any]) -> dict[str, Any]:
+        effective_arguments = dict(self._tool_argument_defaults.get(tool_name, {}))
+        effective_arguments.update(parsed_arguments)
+        return effective_arguments
+
+    def _relax_scope_if_needed(self, tool_name: str, result: ToolCallResult) -> None:
+        quality_meta = result.quality_meta
+        if (
+            not quality_meta
+            or not quality_meta.scope_relaxation_recommended
+            or not self._mode_config.tool_policy.allow_scope_relaxation
+        ):
+            return
+        defaults = self._tool_argument_defaults.get(tool_name)
+        if not defaults or "filter_document_id" not in defaults:
+            return
+        defaults = dict(defaults)
+        defaults.pop("filter_document_id", None)
+        self._tool_argument_defaults[tool_name] = defaults
 
     async def _chat_with_retry(self, **kwargs) -> Any:
         last_error: Exception | None = None
@@ -228,14 +253,15 @@ class AgentLoop:
                     parsed_arguments = json.loads(raw_arguments)
                 except json.JSONDecodeError:
                     parsed_arguments = {}
+                effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
 
                 yield ToolCallEvent(
                     tool_name=tool_name,
                     tool_call_id=str(tool_call.get("id") or ""),
-                    tool_input=parsed_arguments,
+                    tool_input=effective_arguments,
                 )
                 tool = self._tools[tool_name]
-                result = await tool.execute(parsed_arguments)
+                result = await tool.execute(effective_arguments)
                 tool_calls_made.append(tool_name)
                 collected_sources.extend(result.sources)
                 messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
@@ -246,6 +272,7 @@ class AgentLoop:
                     content_preview=result.content[:200],
                     quality_meta=result.quality_meta,
                 )
+                self._relax_scope_if_needed(tool_name, result)
 
                 if self._mode_config.loop_policy.require_tool_every_iteration:
                     retrieval_iterations += 1

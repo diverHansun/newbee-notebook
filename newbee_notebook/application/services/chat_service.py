@@ -104,7 +104,11 @@ class ChatService:
         if runtime_session_manager is None:
             return False
         normalized_mode = normalize_runtime_mode(mode_enum)
-        return normalized_mode is ModeType.AGENT or mode_enum is ModeType.ASK
+        return normalized_mode is ModeType.AGENT or mode_enum in {
+            ModeType.ASK,
+            ModeType.EXPLAIN,
+            ModeType.CONCLUDE,
+        }
 
     @staticmethod
     def _source_items_to_dicts(items: List[Any]) -> List[dict]:

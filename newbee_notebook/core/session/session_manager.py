@@ -112,7 +112,7 @@ class SessionManager:
         )
 
     @staticmethod
-    def _to_stored_message(message) -> Any:
+    def _to_stored_message(message) -> StoredMessage:
         return StoredMessage(
             role=_normalize_message_role(message.role),
             content=message.content,
@@ -146,13 +146,76 @@ class SessionManager:
             inject_main=track == "side",
         )
 
-    def _build_loop(self, mode: ModeType):
+    @staticmethod
+    def _build_runtime_message(
+        *,
+        mode: ModeType,
+        message: str,
+        context: dict | None,
+    ) -> str:
+        normalized_message = str(message or "").strip()
+        if mode not in SessionManager.SIDE_TRACK_MODES:
+            return normalized_message
+
+        selected_text = str((context or {}).get("selected_text") or "").strip()
+        if not selected_text:
+            return normalized_message
+
+        default_instruction = (
+            "Explain the selected text using grounded notebook evidence."
+            if mode is ModeType.EXPLAIN
+            else "Conclude the selected text using grounded notebook evidence."
+        )
+        instruction = normalized_message or default_instruction
+        return (
+            "Selected text:\n"
+            f"{selected_text}\n\n"
+            "User request:\n"
+            f"{instruction}"
+        )
+
+    @staticmethod
+    def _build_tool_argument_defaults(
+        *,
+        mode: ModeType,
+        mode_config: Any,
+        allowed_document_ids: list[str] | None,
+        context: dict | None,
+    ) -> dict[str, dict[str, Any]]:
+        default_tool_name = mode_config.tool_policy.default_tool_name
+        if not default_tool_name:
+            return {}
+
+        defaults = dict(mode_config.tool_policy.default_tool_args_template)
+        if allowed_document_ids is not None:
+            defaults["allowed_document_ids"] = list(allowed_document_ids)
+        if mode in SessionManager.SIDE_TRACK_MODES:
+            document_id = str((context or {}).get("document_id") or "").strip()
+            if document_id:
+                defaults["filter_document_id"] = document_id
+
+        return {default_tool_name: defaults}
+
+    def _build_loop(
+        self,
+        *,
+        mode: ModeType,
+        allowed_document_ids: list[str] | None,
+        context: dict | None,
+    ):
         tools = self._tool_registry.get_tools(mode.value)
         mode_config = ModeConfigFactory.build(mode, tools)
+        tool_argument_defaults = self._build_tool_argument_defaults(
+            mode=mode,
+            mode_config=mode_config,
+            allowed_document_ids=allowed_document_ids,
+            context=context,
+        )
         return self._agent_loop_cls(
             llm_client=self._llm_client,
             tools=tools,
             mode_config=mode_config,
+            tool_argument_defaults=tool_argument_defaults,
         )
 
     async def chat_stream(
@@ -164,17 +227,26 @@ class SessionManager:
         context: dict | None = None,
         include_ec_context: bool = False,
     ) -> AsyncGenerator[Any, None]:
-        del allowed_document_ids, context, include_ec_context
+        del include_ec_context
         if not self._current_session:
             raise ValueError("Session not started")
 
         mode = normalize_runtime_mode(mode_type or self._current_mode)
         self._current_mode = mode
         chat_history = self._build_chat_history(mode)
-        loop = self._build_loop(mode)
+        loop = self._build_loop(
+            mode=mode,
+            allowed_document_ids=allowed_document_ids,
+            context=context,
+        )
+        runtime_message = self._build_runtime_message(
+            mode=mode,
+            message=message,
+            context=context,
+        )
 
         async with self._lock_manager.acquire(self._current_session.session_id):
-            async for event in loop.stream(message=message, chat_history=chat_history):
+            async for event in loop.stream(message=runtime_message, chat_history=chat_history):
                 if isinstance(event, SourceEvent):
                     self._last_sources = list(event.sources)
                 yield event

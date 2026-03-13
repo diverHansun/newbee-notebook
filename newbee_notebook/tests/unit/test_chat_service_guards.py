@@ -667,3 +667,46 @@ def test_chat_stream_emits_phase_events_for_runtime_agent_mode():
     assert observed[4]["type"] == "sources"
     assert observed[4]["sources"][0]["source_type"] == "retrieval"
     assert observed[5] == {"type": "done"}
+
+
+def test_chat_routes_explain_to_runtime_manager_with_selected_text_context():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+    ]
+    document_repo.get.return_value = SimpleNamespace(document_id="doc-1")
+    runtime_session_manager = _DummyRuntimeSessionManager()
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummySessionManager(),
+        runtime_session_manager=runtime_session_manager,
+    )
+
+    result = asyncio.run(
+        service.chat(
+            session_id="session-1",
+            message="explain this",
+            mode="explain",
+            context={"selected_text": "focus", "document_id": "doc-1"},
+        )
+    )
+
+    assert result.content == "runtime answer"
+    assert result.mode == ModeType.EXPLAIN
+    assert runtime_session_manager.chat_kwargs["mode_type"] == ModeType.EXPLAIN
+    assert runtime_session_manager.chat_kwargs["context"]["selected_text"] == "focus"

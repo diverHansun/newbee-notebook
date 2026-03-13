@@ -17,22 +17,30 @@ from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
 class _LoopCall:
     message: str
     chat_history: list[dict]
+    tool_argument_defaults: dict | None = None
 
 
 class RecordingLoop:
     instances: list["RecordingLoop"] = []
     stream_events: list = []
 
-    def __init__(self, *, llm_client, tools, mode_config, llm_retry_attempts=1):
+    def __init__(self, *, llm_client, tools, mode_config, llm_retry_attempts=1, tool_argument_defaults=None):
         self.llm_client = llm_client
         self.tools = tools
         self.mode_config = mode_config
         self.llm_retry_attempts = llm_retry_attempts
+        self.tool_argument_defaults = tool_argument_defaults
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
     async def stream(self, *, message: str, chat_history: list[dict]):
-        self.calls.append(_LoopCall(message=message, chat_history=chat_history))
+        self.calls.append(
+            _LoopCall(
+                message=message,
+                chat_history=chat_history,
+                tool_argument_defaults=self.tool_argument_defaults,
+            )
+        )
         for event in list(self.__class__.stream_events):
             yield event
 
@@ -189,3 +197,35 @@ async def test_explain_injects_main_track_history_into_side_context():
         {"role": "user", "content": "explain this"},
         {"role": "assistant", "content": "prior explain"},
     ]
+
+
+@pytest.mark.anyio
+async def test_explain_builds_runtime_message_and_document_scope_defaults():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_by_session.side_effect = [[], []]
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="explain the relation",
+        mode_type=ModeType.EXPLAIN,
+        allowed_document_ids=["doc-1", "doc-2"],
+        context={"selected_text": "selected sentence", "document_id": "doc-1"},
+    )
+
+    call = RecordingLoop.instances[-1].calls[-1]
+    assert "selected sentence" in call.message
+    assert "explain the relation" in call.message
+    assert call.tool_argument_defaults["knowledge_base"]["filter_document_id"] == "doc-1"
+    assert call.tool_argument_defaults["knowledge_base"]["allowed_document_ids"] == ["doc-1", "doc-2"]

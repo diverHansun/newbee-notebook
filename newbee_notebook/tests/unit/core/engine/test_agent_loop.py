@@ -88,6 +88,19 @@ def _tool(name: str, result: ToolCallResult) -> ToolDefinition:
     )
 
 
+def _recording_tool(name: str, results: list[ToolCallResult], captured_payloads: list[dict]) -> ToolDefinition:
+    async def _execute(payload: dict) -> ToolCallResult:
+        captured_payloads.append(dict(payload))
+        return results.pop(0)
+
+    return ToolDefinition(
+        name=name,
+        description=f"{name} tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=_execute,
+    )
+
+
 @pytest.mark.anyio
 async def test_agent_loop_open_loop_executes_tool_then_streams_final_answer():
     llm = _FakeLLMClient(
@@ -170,3 +183,42 @@ async def test_agent_loop_forces_synthesis_at_retrieval_limit():
     assert result.iterations == 3
     assert len(llm.chat_calls) == 3
     assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_explain_loop_relaxes_scope_from_document_to_notebook_after_low_quality_result():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "focus"}, "call-1")]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "focus more"}, "call-2")]),
+        ],
+        stream_chunks=[_stream_chunk("Explained")],
+    )
+    captured_payloads: list[dict] = []
+    tool = _recording_tool(
+        "knowledge_base",
+        [
+            ToolCallResult(content="weak", quality_meta=_quality("low")),
+            ToolCallResult(content="strong", quality_meta=_quality("high")),
+        ],
+        captured_payloads,
+    )
+    config = ModeConfigFactory.build(mode="explain", tools=[tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[tool],
+        mode_config=config,
+        tool_argument_defaults={
+            "knowledge_base": {
+                "allowed_document_ids": ["doc-1", "doc-2"],
+                "filter_document_id": "doc-1",
+            }
+        },
+    )
+
+    result = await loop.run(message="explain", chat_history=[])
+
+    assert result.response == "Explained"
+    assert captured_payloads[0]["filter_document_id"] == "doc-1"
+    assert captured_payloads[1]["allowed_document_ids"] == ["doc-1", "doc-2"]
+    assert "filter_document_id" not in captured_payloads[1]
