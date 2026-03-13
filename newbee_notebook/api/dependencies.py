@@ -25,9 +25,9 @@ from newbee_notebook.application.services.notebook_document_service import Noteb
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.rag.embeddings import build_embedding
-from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
+from newbee_notebook.core.engine import load_pgvector_index, load_es_index
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
-from newbee_notebook.core.session import SessionManager as RuntimeSessionManager
+from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
 from newbee_notebook.core.tools.knowledge_base import (
     hybrid_search_executor,
@@ -159,7 +159,6 @@ _llm_client_factory = None
 _embed_model = None
 _pgvector_index = None
 _es_index = None
-_session_manager = None
 _runtime_builtin_tool_provider = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
@@ -290,33 +289,6 @@ async def get_es_index_singleton():
     return _es_index
 
 
-async def get_session_manager_singleton(
-    session_repo: SessionRepositoryImpl,
-    message_repo: MessageRepositoryImpl,
-):
-    # Use a fresh LLM client per request. A shared singleton client can leak
-    # transport state across aborted stream + immediate fallback requests.
-    llm = build_llm()
-    pg_index = await get_pg_index_singleton()
-    es_index = await get_es_index_singleton()
-    return SessionManager(
-        llm=llm,
-        session_repo=session_repo,
-        message_repo=message_repo,
-        pgvector_index=pg_index,
-        es_index=es_index,
-        es_index_name="newbee_notebook_docs",
-    )
-
-
-async def get_session_manager_dep(
-    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
-    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
-) -> SessionManager:
-    """Get SessionManager instance for dependency injection."""
-    return await get_session_manager_singleton(session_repo, message_repo)
-
-
 async def get_llm_runtime_config_dep(session=Depends(get_db_session)):
     """Resolve the effective runtime LLM config for the current request."""
     return await resolve_llm_runtime_config(session)
@@ -340,15 +312,19 @@ async def get_runtime_session_manager_dep(
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
-) -> RuntimeSessionManager:
+) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
-    return RuntimeSessionManager(
+    return SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,
         llm_client=llm_client,
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
     )
+
+
+async def get_pg_index_dep():
+    return await get_pg_index_singleton()
 
 
 # =============================================================================
@@ -362,8 +338,8 @@ async def get_chat_service(
     document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
-    session_manager: SessionManager = Depends(get_session_manager_dep),
-    runtime_session_manager: RuntimeSessionManager = Depends(get_runtime_session_manager_dep),
+    session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
+    pg_index=Depends(get_pg_index_dep),
 ) -> ChatService:
     """Get ChatService instance."""
     return ChatService(
@@ -374,7 +350,7 @@ async def get_chat_service(
         ref_repo=ref_repo,
         message_repo=message_repo,
         session_manager=session_manager,
-        runtime_session_manager=runtime_session_manager,
+        vector_index=pg_index,
     )
 
 

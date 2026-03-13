@@ -103,7 +103,7 @@ async def chat_stream_generator(
     Generate streaming chat response.
     
     This is a placeholder implementation that simulates streaming.
-    The actual implementation will integrate with SessionManager and ModeSelector.
+    The production path uses the batch-2 runtime session orchestrator.
     
     Args:
         session_id: Session ID.

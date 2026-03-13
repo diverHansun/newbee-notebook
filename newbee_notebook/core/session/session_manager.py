@@ -13,7 +13,8 @@ from newbee_notebook.core.context import (
     StoredMessage,
     TokenCounter,
 )
-from newbee_notebook.core.engine import AgentLoop, ModeConfigFactory
+from newbee_notebook.core.engine.agent_loop import AgentLoop
+from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     ErrorEvent,

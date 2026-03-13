@@ -234,16 +234,6 @@ class TestBuildSimpleChatEngine:
         assert len(postprocessors) == 1
 
 
-class _DummyLegacyAskSessionManager:
-    vector_index = object()
-
-    async def start_session(self, session_id: str):
-        return None
-
-    async def chat(self, **kwargs):
-        return "legacy answer", []
-
-
 class _DummyRuntimeAskSessionManager:
     def __init__(self):
         self.started_with: list[str] = []
@@ -295,8 +285,7 @@ class TestAskRuntimeRouting:
             document_repo=document_repo,
             ref_repo=ref_repo,
             message_repo=message_repo,
-            session_manager=_DummyLegacyAskSessionManager(),
-            runtime_session_manager=runtime_manager,
+            session_manager=runtime_manager,
         )
 
         result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="ask"))
