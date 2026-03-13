@@ -1,4 +1,4 @@
-# MCP 模块：数据流与接口定义
+﻿# MCP 模块：数据流与接口定义
 
 ## 1. 上下文与范围
 
@@ -24,7 +24,7 @@ MCP 模块位于 ToolRegistry 与外部 MCP Server 之间：
 6. ModeConfigFactory 绑定 allowed_document_ids 到 RAG/ES 工具，产出 ModeConfig。
 7. AgentLoop 使用完整工具列表执行。
 8. LLM 决定调用某个 MCP 工具（如 `weather__get_forecast`）。
-9. MCPToolAdapter 的 BaseTool 包装器接收调用，通过 MCPClientManager 找到对应的 ClientSession。
+9. MCPToolAdapter 的 ToolDefinition 包装器接收调用，通过 MCPClientManager 找到对应的 ClientSession。
 10. ClientSession 发送 `tools/call` JSON-RPC 请求到 MCP Server。
 11. MCP Server 执行工具，返回结果。
 12. MCPToolAdapter 将 MCP 响应（content 数组）转换为字符串，返回给 AgentLoop。
@@ -132,7 +132,7 @@ class MCPClientManager:
         """初始化管理器。不立即连接任何 Server。"""
         ...
 
-    async def get_tools(self) -> List[BaseTool]:
+    async def get_tools(self) -> List[ToolDefinition]:
         """返回所有已启用且已连接 Server 的工具列表。
 
         首次调用触发懒加载：读取配置、连接 Server、发现工具。
@@ -169,14 +169,14 @@ class MCPToolAdapter:
     def adapt(
         tool_info: MCPToolInfo,
         client_session: ClientSession,
-    ) -> BaseTool:
-        """将单个 MCP 工具描述适配为 BaseTool。
+    ) -> ToolDefinition:
+        """将单个 MCP 工具描述适配为 ToolDefinition。
 
-        返回的 BaseTool:
+        返回的 ToolDefinition:
         - name: tool_info.qualified_name
         - description: tool_info.description
         - fn_schema: 从 tool_info.input_schema 生成
-        - acall: 通过 client_session.call_tool() 执行
+        - execute: 通过 client_session.call_tool() 执行
         """
         ...
 
@@ -303,5 +303,6 @@ ChatService 只需调用 `ToolRegistry.get_tools(mode, mcp_enabled)`，不直接
 | MCPServerConfig | MCPConfigLoader | 生产者 |
 | ClientSession 连接 | MCPClientManager | 所有者（创建、维护、销毁） |
 | MCPToolInfo 缓存 | MCPClientManager | 所有者（缓存、刷新） |
-| BaseTool（适配后） | MCPToolAdapter | 生产者（创建后交给 ToolRegistry） |
+| ToolDefinition（适配后） | MCPToolAdapter | 生产者（创建后交给 ToolRegistry） |
 | 工具调用结果 | MCP Server | MCP 模块是中转者（协议转换后传递给 AgentLoop） |
+

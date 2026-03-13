@@ -1,158 +1,276 @@
-# 第二批：AI 能力升级层
+# 第二批：AI Core 重构层
 
-本批次包含 4 个模块。Agent 重构是核心，Skill 和 MCP 依赖 Agent 重构完成后接入，图片接口依赖 MinIO 完成后存储图片。
+本批次的主目标不是继续给现有聊天能力打补丁，而是完成 AI Runtime 的核心重构：
 
----
+- 将 `Agent / Ask / Explain / Conclude` 统一迁移到自研 workflow runtime
+- 脱离 LlamaIndex 在执行层、消息层、记忆层的依赖
+- 建立自研的 `llm + context + engine + session + tools`
+- 为后续 MCP 接入、Skill 系统和图片能力打基础
 
-## 模块 1: Agent 模式重构
-
-### 目标
-
-将现有 chat 模式升级为 Agent 模式。Agent 作为通用执行者，整合工具调用、RAG 检索、Skill 和 MCP 能力。同时保留 ask 模式作为专注文档知识解读的独立通道。
-
-### 模式定位重新定义
-
-| 模式 | 角色定位 | Agent 引擎 | 核心能力 |
-|------|---------|-----------|---------|
-| Agent | 通用执行者 | FunctionAgent | MCP/Skill 执行为主，RAG/ES/Web 搜索作为可选工具 |
-| Ask | 文档知识专家 | ReActAgent | HybridRetriever 为核心，文档内容深度 Q&A 与推理 |
-| Explain | 选中文本解释 | QueryEngine | 保持现有 CondensePlusContext 实现 |
-| Conclude | 选中文本总结 | QueryEngine | 保持现有 CondensePlusContext 实现 |
-
-### 职责
-
-- ChatMode 重命名为 AgentMode，扩展工具注册机制
-- ModeType 枚举从 `chat` 改为 `agent`
-- Agent 的工具集统一管理：内置工具 + Skill 工具 + MCP 工具
-- RAG 能力包装为 FunctionTool，Agent 自主判断是否需要检索
-- API 端点调整 (`/chat` 保留为兼容别名)
-
-### 非职责
-
-- 不修改 Ask 模式的 ReActAgent 和 HybridRetriever 实现
-- 不修改 Explain/Conclude 的 QueryEngine 实现
-- 不改动内存管理策略 (Agent/Ask 共享 `_memory`，Explain/Conclude 共享 `_ec_memory`)
-
-### 与 Ask 模式的区别
-
-- Agent 模式的 RAG 是工具之一，Agent 自主决定何时使用
-- Ask 模式的 RAG 是核心流程，每次请求必定执行文档检索
-- Agent 适合开放性问题和任务执行
-- Ask 适合针对文档内容的精确问答
-
-### 涉及文件
-
-- `core/engine/modes/chat_mode.py` -> 重命名/扩展为 `agent_mode.py`
-- `core/engine/selector.py` -> 适配新模式名称
-- `core/tools/tool_registry.py` -> 扩展动态注册接口
-- `domain/value_objects/mode_type.py` -> 枚举变更
-- `api/routers/chat.py` -> 端点调整
+`batch-2` 是 `backend-v2` 下的一个大阶段，允许再拆成多个小阶段、多次 commit 落地。
 
 ---
 
-## 模块 2: Skill 系统
+## 整体架构变更
+
+### 重构前
+
+```
+ChatMode(FunctionAgent)   AskMode(ReActAgent)   ExplainMode(QueryEngine)   ConcludeMode(QueryEngine)
+         \                      |                       |                       /
+          ------ LlamaIndex Agent / ChatEngine / Memory / LLM 抽象混合驱动 ------
+```
+
+### 重构后
+
+```
+ModeConfigFactory
+       |
+Workflow Runtime (统一执行骨架)
+   |              |                \
+LoopPolicy        ToolPolicy        SourcePolicy
+   |
+LLMClient --------------------- ToolRegistry
+   |                                 |        \
+AsyncOpenAI (openai SDK)        BuiltinTools   MCPTools
+   |
+Provider (Qwen / Zhipu / OpenAI)
+```
+
+### 关键设计决策汇总
+
+| 决策 | 结论 |
+|------|------|
+| 执行引擎 | 统一 workflow runtime，模式差异通过 `ModeConfig = LoopPolicy + ToolPolicy + PromptPolicy + SourcePolicy` 表达 |
+| 模式策略 | `同一 runtime，不同 policy`，不再用四套独立引擎 |
+| Agent 行为 | `agent` 宽松开放，`ask` 偏知识库问答，`explain / conclude` 使用 retrieval-required loop |
+| LLM 调用层 | LLMClient 基于 openai SDK AsyncOpenAI，脱离 LlamaIndex |
+| 消息格式 | OpenAI 兼容格式（system/user/assistant/tool） |
+| 错误恢复 | 分类型策略：工具失败反馈 LLM、LLM 429 指数退避重试、invalid tool output repair |
+| 工具管理 | ToolRegistry 应用级单例，合并 BuiltinToolProvider + MCPClientManager |
+| MCP 协议 | 仅 `agent` 模式，stdio + HTTP Streamable，放在 batch-2 后段 |
+| LlamaIndex 边界 | 移除 runtime / QueryEngine / Memory；保留 retrieval、vector store、embedding |
+| 上下文管理 | 先落最小版：双轨内存 + truncation + lock；高级压缩后续增强 |
+
+---
+
+## 模块 1: Core 重构（5 个子模块）
+
+将现有 `core/engine/` 拆分为 5 个职责清晰的模块。
+
+### 1.1 Engine -- 执行引擎 / Workflow Runtime
+
+**目标**：统一四模式执行路径，消除引擎分裂。
+
+四种交互模式共享同一个 workflow runtime，差异通过 ModeConfigFactory 产出的 policy 体现：
+
+| 维度 | Agent | Ask | Explain | Conclude |
+|------|-------|-----|---------|----------|
+| 工具集合 | 内置工具 + MCP（后段） | `knowledge_base + time` | `knowledge_base only` | `knowledge_base only` |
+| 执行风格 | `open_loop` | `open_loop` | `retrieval_required_loop` | `retrieval_required_loop` |
+| 每轮是否必须调用工具 | 否 | 否 | 是，且必须 `knowledge_base` | 是，且必须 `knowledge_base` |
+| 单请求内最大检索迭代 | -- | -- | 3 | 3 |
+| 默认范围 | notebook / mixed | notebook | 当前 `document_id` | 当前 `document_id` |
+| system prompt | chat.md | ask.md | explain.md | conclude.md |
+| 用户消息 | 前端输入 | 前端输入 | `selected_text` + 可选 message | `selected_text` + 可选 message |
+
+核心组件：
+- **Workflow Runtime**：统一执行骨架。Agent/Ask 宽松，Explain/Conclude 强约束。
+- **ModeConfigFactory**：业务参数到 `LoopPolicy + ToolPolicy + PromptPolicy + SourcePolicy` 的翻译。
+- **StreamEvent**：统一事件协议（`start / warning / phase / tool_call / tool_result / sources / content / done / error / heartbeat`）。
+
+详细设计：`docs/backend-v2/batch-2/core/engine/`
+
+### 1.2 LLM -- LLM 调用层
+
+**目标**：脱离 LlamaIndex LLM 抽象，基于 openai SDK 直接调用 OpenAI 兼容 API。
+
+- **LLMClient**：AsyncOpenAI 的薄封装，暴露 `chat()` 和 `chat_stream()`。
+- **LLMClientFactory**：根据当前 provider/model 配置创建 LLMClient 实例。
+- **Provider 统一**：Qwen、Zhipu、OpenAI 三个 Provider 通过相同的 AsyncOpenAI + 不同的 base_url/api_key 接入，不需要各自的子类。
+
+LlamaIndex 脱离边界：
+- 移除：engine 执行层、LLM 调用层。消息格式改为 OpenAI 兼容 dict。
+- 保留：RAG 检索层（pgvector VectorStoreIndex、HybridRetriever）、Embedding 层。
+
+详细设计：`docs/backend-v2/batch-2/core/llm/`
+
+### 1.3 Context -- 上下文管理
+
+**目标**：在第一版先落最小可用上下文系统，而不是一次性做满所有压缩能力。
+
+- **第一版必须有**：双轨内存（Main / Side）、确定性截断、session lock、消息链构建
+- **后续增强**：分层压缩、异步摘要、预算细调
+
+详细设计：`docs/backend-v2/batch-2/core/context/`
+
+### 1.4 Session -- 会话管理
+
+**目标**：会话生命周期管理、消息持久化协调、并发控制。
+
+详细设计：`docs/backend-v2/batch-2/core/session/`
+
+### 1.5 Tools -- 工具层
+
+**目标**：统一工具注册中心，合并内置工具和 MCP 外部工具。
+
+- **ToolRegistry**：应用级单例，统一返回 `ToolDefinition`
+- **BuiltinToolProvider**：按 mode 提供内置工具集合
+- **knowledge_base 工具**：统一 RAG 检索工具，支持 `hybrid / semantic / keyword`
+- **统一工具协议**：`ToolDefinition + ToolCallResult + SourceItem + ToolQualityMeta`
+
+详细设计：`docs/backend-v2/batch-2/core/tools/`
+
+### 模块依赖关系
+
+```
+session --> engine, context       session 创建 AgentLoop，调 context 读写历史
+engine  --> llm, tools            AgentLoop 通过 LLMClient 调 LLM，使用 ToolDefinition 列表
+tools   --> mcp                   ToolRegistry 合并内置工具和 MCP 工具
+context --> llm                   Compressor 使用 LLMClient 生成摘要
+llm     --> config                从 llm.yaml 和环境变量加载配置
+```
+
+---
+
+## 模块 2: MCP 功能适配（batch-2 后段）
 
 ### 目标
 
-实现 Skill 机制，为 Agent 提供预定义的任务流能力。参考 Anthropic Skills 的设计理念，在后端 Python/LlamaIndex 生态中自行适配。
+实现 MCP (Model Context Protocol) Client，让 `agent` 模式能够连接外部 MCP Server 获取工具，扩展能力边界。仅 `agent` 模式接入 MCP，Ask/Explain/Conclude 不涉及。
 
-### 概念定义
+### 设计决策
 
-Skill 是预定义的 "prompt + tool 组合"，当 Agent 遇到特定场景时可调用对应 Skill 获得更好的表现。每个 Skill 封装了专用的系统指令、所需工具和输出格式。
+| 决策 | 结论 |
+|------|------|
+| 传输方式 | 同时支持 stdio 和 HTTP Streamable |
+| 配置格式 | mcp.json，与 Claude Code 协议对齐 |
+| 配置管理 | 静态配置文件，前端 Settings 面板仅控制开关 |
+| 加载策略 | 应用启动时连接，懒加载（用户启用 MCP 时触发） |
+| 工具注册 | 通过 ToolRegistry 统一管理，MCP 工具与内置工具同等对待 |
+| 作用范围 | 全局生效 |
 
-### 职责
+### 核心组件
 
-- 定义 Skill 的数据结构和配置格式 (YAML)
-- 实现 Skill 加载和注册机制
-- 将 Skill 作为 FunctionTool 注册到 Agent 的工具集
-- 提供内置 Skill (文档摘要、文档对比、术语提取等)
-- 支持用户通过 YAML 文件自定义 Skill
+- **MCPConfigLoader**：读取 mcp.json，解析环境变量占位符。
+- **MCPClientManager**：管理 MCP Server 连接生命周期，提供工具列表。
+- **MCPToolAdapter**：将 MCP Server 工具转换为 ToolDefinition。
 
-### 非职责
+### 配置示例
 
-- 不实现 Anthropic Skills 协议本身 (仅参考其理念)
-- 不涉及前端 Skill 管理界面 (通过配置文件管理)
+```json
+{
+  "mcpServers": {
+    "local-tool": {
+      "command": "python",
+      "args": ["-m", "my_tool_server"],
+      "env": { "API_KEY": "${MY_API_KEY}" }
+    },
+    "remote-service": {
+      "type": "http",
+      "url": "https://api.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${SERVICE_TOKEN}" }
+    }
+  }
+}
+```
 
-### 配置位置
+详细设计：`docs/backend-v2/batch-2/mcp/`
 
-`configs/skills/*.yaml`，每个文件定义一个或一组 Skill。
+---
+
+## 模块 3: Skill 系统（移至 batch-3）
+
+### 目标
+
+实现 Skill 机制，为 Agent 提供预定义的任务流能力。Skill 是"prompt + tool 组合"的封装，Agent 遇到特定场景时调用对应 Skill。
+
+### 状态
+
+不在 batch-2 实施。Skill 依赖新 runtime 稳定后再接入，避免与 core 重构互相耦合。
 
 ### 依赖
 
-依赖 Agent 模式重构完成，Skill 工具注册到 AgentMode 的工具集中。
+依赖 Core 重构完成（AgentLoop + ToolRegistry），Skill 将通过独立机制接入 AgentLoop。
 
 ### 待补充的详细设计
 
-详见 `docs/backend-v2/skills/` (后续逐步完善)
+详见 `docs/backend-v2/batch-2/skills/`（预留，正式设计放到 batch-3）
 
 ---
 
-## 模块 3: MCP 功能适配
+## 模块 4: 对话图片接口（移至 batch-3）
 
 ### 目标
 
-实现 MCP (Model Context Protocol) 的适配层，让 Agent 能够连接外部 MCP Server 获取工具和资源，扩展 Agent 的能力边界。
-
-### 概念定义
-
-MCP 是外部工具服务的标准化接入协议。在本项目中，后端作为 MCP Client，连接一个或多个 MCP Server，将 Server 提供的工具自动转化为 Agent 可用的 FunctionTool。
-
-### 职责
-
-- 实现 MCPToolAdapter，负责连接 MCP Server 和工具转化
-- 支持工具自动发现 (连接时获取 Server 的 tool list)
-- 将 MCP 工具注册到 Agent 的工具集
-- 支持多 MCP Server 配置和管理
-- 支持 SSE 和 stdio 两种传输方式
-
-### 非职责
-
-- 不实现 MCP Server (本项目是 Client 角色)
-- 不实现 MCP 的 Resource 和 Prompt 协议 (初期仅实现 Tool 协议)
-
-### 配置位置
-
-`configs/mcp.yaml`，配置 MCP Server 列表及连接参数。
-
-### 依赖
-
-依赖 Agent 模式重构完成，MCP 工具注册到 AgentMode 的工具集中。
-
-### 待补充的详细设计
-
-详见 `docs/backend-v2/mcp/` (后续逐步完善)
-
----
-
-## 模块 4: 对话图片接口
-
-### 目标
-
-支持用户在 Agent/Ask 对话中发送图片，利用 LLM 的 Vision 能力理解图片内容并回答问题。
+不在 batch-2 实施。图片输入依赖新消息协议、多模态兼容和 MinIO 运行时稳定后再推进。
 
 ### 职责
 
 - 实现图片上传 API，返回图片标识
 - 扩展 ChatRequest 支持图片引用
-- 在 Agent/Ask 模式中将图片作为多模态输入传递给 LLM
-- LLM Provider 层适配 Vision 模型调用
-- 图片临时存储管理 (存储和清理)
+- 在 Agent/Ask 模式中将图片作为多模态输入传递给 LLM（OpenAI 兼容格式的 image_url content part）
+- 图片临时存储管理（存储和清理）
 
 ### 非职责
 
-- 不支持 Agent 回答中生成图片 (仅支持用户发图提问)
-- 不支持图片 OCR 提取文字后检索 (使用 LLM Vision 直接理解)
+- 不支持 Agent 回答中生成图片（仅支持用户发图提问）
+- 不支持图片 OCR 提取文字后检索（使用 LLM Vision 直接理解）
 
 ### 前置条件
 
-- LLM Provider 支持 Vision (Qwen-VL / ZhipuAI GLM-4V / OpenAI GPT-4o)
-- 图片存储依赖 MinIO 或本地临时目录
+- LLM Provider 支持 Vision（Qwen-VL / ZhipuAI GLM-4V / OpenAI GPT-4o）
+- 图片存储依赖 MinIO
 
-### API 变更
+## 服务层适配
 
-- 新增: `POST /chat/images/upload` -- 上传对话图片
-- 扩展: ChatRequest 增加 `image_ids` 字段
+Core 重构后，Application Services 层需要适配新的模块接口。
 
-### LLM 兼容性
+详细设计：`docs/backend-v2/batch-2/services/`
 
-需要检测当前配置的 LLM 是否支持 Vision。不支持时返回明确的错误提示。
+| 文档 | 说明 |
+|------|------|
+| 01-blocking-fix | 文档处理阻塞逻辑修复（独立于 core 重构） |
+| 02-chat-service-refactor | ChatService 适配 AgentLoop + SessionManager |
+| 03-dependency-injection | DI 层变更（LLMClient、ToolRegistry 等单例注入） |
+| 04-api-layer | API 路由、SSE 协议适配新 StreamEvent |
+
+---
+
+## 实施顺序
+
+```
+0. 文档冻结：mode matrix、message contract、tool contract、retrieval quality gates、migration phases
+
+1. blocking-fix（独立收益项）
+
+2. Core 重构
+   llm -> tools -> context -> engine -> session
+
+3. 服务层适配
+   chat-service -> DI -> API
+
+4. 模式迁移
+   agent -> ask -> explain/conclude
+
+5. 删除旧 core
+   modes/ -> selector.py -> core/agent/ -> old session manager
+
+6. MCP 功能适配（依赖 tools/ToolRegistry）
+
+7. batch-3 再做 Skill / 图片接口
+```
+
+## 详细设计文档索引
+
+| 模块 | 路径 | 状态 |
+|------|------|------|
+| Engine | `docs/backend-v2/batch-2/core/engine/` | 已完成 |
+| LLM | `docs/backend-v2/batch-2/core/llm/` | 已完成 |
+| Context | `docs/backend-v2/batch-2/core/context/` | 已完成 |
+| Session | `docs/backend-v2/batch-2/core/session/` | 已完成 |
+| Tools | `docs/backend-v2/batch-2/core/tools/` | 已完成 |
+| MCP | `docs/backend-v2/batch-2/mcp/` | 已完成 |
+| Services | `docs/backend-v2/batch-2/services/` | 已完成 |
+| Skill | `docs/backend-v2/batch-2/skills/` | 延后到 batch-3 |
+| 图片接口 | -- | 延后到 batch-3 |

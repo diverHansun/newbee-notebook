@@ -62,5 +62,5 @@
 | 消息持久化归属 | 保留在 ChatService | SessionManager 只管运行时内存，不直接写 DB |
 | `_get_context_chunks()` | 保留在 ChatService | 位置检索（邻近 chunk）与 RAG 语义检索是不同操作，直接注入 pgvector_index |
 | 阻塞逻辑修复时机 | 可独立先行实施 | 不依赖 core 模块重构 |
-| thinking 事件兼容 | 保持 thinking 类型名 | 减少前端适配工作，PhaseEvent 映射为 thinking |
+| SSE 协议 | `phase` 为正式协议，`thinking` 仅兼容映射 | 避免旧命名继续成为长期真源 |
 | include_ec_context | 保留字段但标记废弃 | 避免前端立即报错，下版本移除 |

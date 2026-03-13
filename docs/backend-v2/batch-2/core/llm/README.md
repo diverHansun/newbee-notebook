@@ -18,6 +18,7 @@ LLM 模块提供轻量的 LLMClient 抽象，基于 openai Python SDK 的 AsyncO
 | [03-data-model.md](./03-data-model.md) | OpenAI SDK 类型参考、LLMConfig、Provider 配置 |
 | [04-dfd-interface.md](./04-dfd-interface.md) | LLMClient 接口定义、数据流、DI 集成 |
 | [05-test.md](./05-test.md) | 验证策略 |
+| [06-message-contract.md](./06-message-contract.md) | 内部统一消息协议：OpenAI-compatible message contract |
 
 ## 模块关系
 
@@ -34,5 +35,5 @@ LLM 模块提供轻量的 LLMClient 抽象，基于 openai Python SDK 的 AsyncO
 | 基础框架 | LlamaIndex OpenAI 适配器 | openai SDK AsyncOpenAI |
 | 抽象层次 | LlamaIndex LLM 抽象（achat_with_tools / astream_chat） | LLMClient（chat / chat_stream） |
 | Provider 适配 | QwenOpenAI / ZhipuOpenAI 继承 LlamaIndex OpenAI | Provider 配置驱动，同一个 AsyncOpenAI 类 |
-| 消息格式 | LlamaIndex ChatMessage | OpenAI 兼容 dict（ChatCompletionMessageParam） |
+| 消息格式 | LlamaIndex ChatMessage | OpenAI-compatible 内部消息协议 |
 | 工具调用 | LlamaIndex achat_with_tools 封装 | 直接传 tools 参数给 chat completions API |

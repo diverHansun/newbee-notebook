@@ -1,4 +1,4 @@
-# MCP 模块：核心概念与数据模型
+﻿# MCP 模块：核心概念与数据模型
 
 ## 1. MCPServerConfig
 
@@ -145,6 +145,7 @@ MCP 相关的开关状态存储在 AppSettings 键值表中。
 
 连接建立后通过 `tools/list` 获取并缓存。`tools/list_changed` 通知到达时刷新。Server 断开后清除。
 
-### 5.5 BaseTool（适配后）
+### 5.5 ToolDefinition（适配后）
 
 由 MCPToolAdapter 在 `get_tools()` 时基于 MCPToolInfo 创建。每次 `get_tools()` 调用返回当前有效的工具列表。工具实例本身是轻量的——实际调用通过 ClientSession 路由。
+

@@ -6,7 +6,7 @@ MCP 模块由四个组件构成：
 
 - **MCPConfigLoader**：配置文件解析，产出结构化的 Server 配置列表。
 - **MCPClientManager**：连接池管理器，维护所有 MCP Client 的生命周期。
-- **MCPToolAdapter**：工具适配层，将 MCP 工具转为 BaseTool。
+- **MCPToolAdapter**：工具适配层，将 MCP 工具转为 `ToolDefinition`。
 - **types**：数据类型定义。
 
 ```
@@ -19,7 +19,7 @@ MCPConfigLoader             JSON --> MCPServerConfig 列表
 MCPClientManager            MCPServerConfig --> ClientSession 连接池
     |                       懒加载 + 长连接复用
     v
-MCPToolAdapter              MCP Tool Schema --> BaseTool 列表
+MCPToolAdapter              MCP Tool Schema --> ToolDefinition 列表
     |
     v
 ToolRegistry                合并 BuiltinToolProvider + MCPClientManager
@@ -35,7 +35,7 @@ ModeConfigFactory           绑定 allowed_doc_ids --> AgentLoop
 | 注册方式 | BuiltinToolProvider 环境变量驱动 | 配置文件声明，运行时发现 |
 | 实现位置 | core/tools/ 本地 Python 函数 | 外部 MCP Server 进程/服务 |
 | 调用方式 | 直接函数调用 | MCP 协议 JSON-RPC（tools/call） |
-| 对 AgentLoop | BaseTool 接口 | 适配为 BaseTool 接口（透明） |
+| 对 runtime | ToolDefinition 接口 | 适配为统一工具协议（透明） |
 | 可用模式 | 按模式配置（Agent/Ask/Explain/Conclude） | 仅 Agent 模式 |
 
 ## 2. 设计模式与理由
@@ -60,10 +60,10 @@ MCP Server 的定义（command、args、env、url、headers）全部来自 JSON 
 
 ### 2.3 适配器模式
 
-MCPToolAdapter 将 MCP 工具描述适配为 LlamaIndex 的 BaseTool 接口。这是经典的适配器模式。
+MCPToolAdapter 将 MCP 工具描述适配为 runtime 的 `ToolDefinition` 接口。这是经典的适配器模式。
 
 理由：
-- AgentLoop 只认识 BaseTool 接口（acall、metadata）。
+- runtime 只认识 `ToolDefinition` 协议（schema + execute）。
 - MCP 工具的调用走 JSON-RPC 协议（tools/call），返回格式与本地函数不同。
 - 适配层封装协议差异，对 AgentLoop 完全透明。
 
@@ -91,7 +91,7 @@ core/mcp/
     __init__.py
     config.py              MCPConfigLoader：配置解析与环境变量展开
     client_manager.py      MCPClientManager：连接池管理、懒加载、动态开关
-    tool_adapter.py        MCPToolAdapter：MCP 工具 --> BaseTool 适配
+    tool_adapter.py        MCPToolAdapter：MCP 工具 --> ToolDefinition 适配
     types.py               数据类型：MCPServerConfig、MCPServerStatus、MCPToolInfo
 ```
 
@@ -111,7 +111,7 @@ MCPClientManager 维护 `Dict[str, ClientSession]` 连接池。核心方法：
 
 **tool_adapter.py** -- 工具适配
 
-MCPToolAdapter 将 MCP 的工具描述（name, description, inputSchema）转换为 BaseTool 实例。工具调用时，通过对应的 ClientSession 执行 `tools/call`，将 MCP 响应转换为字符串返回给 AgentLoop。
+MCPToolAdapter 将 MCP 的工具描述（name, description, inputSchema）转换为 `ToolDefinition`。工具调用时，通过对应的 ClientSession 执行 `tools/call`，将 MCP 响应转换为 `ToolCallResult` 返回给 runtime。
 
 **types.py** -- 数据类型
 
