@@ -6,6 +6,8 @@ from newbee_notebook.core.tools.contracts import (
     ToolDefinition,
     ToolQualityMeta,
 )
+from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
+from newbee_notebook.core.tools.registry import ToolRegistry
 from newbee_notebook.core.tools.tavily_tools import (
     build_tavily_search_tool,
     build_tavily_news_tool,
@@ -29,6 +31,8 @@ __all__ = [
     "ToolCallResult",
     "ToolDefinition",
     "ToolQualityMeta",
+    "BuiltinToolProvider",
+    "ToolRegistry",
     "build_tavily_search_tool",
     "build_tavily_news_tool",
     "build_tavily_crawl_tool",

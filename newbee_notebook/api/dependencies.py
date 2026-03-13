@@ -26,6 +26,7 @@ from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
+from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
 from newbee_notebook.core.common.config import (
     get_storage_config,
     get_embedding_provider,
@@ -152,6 +153,8 @@ _embed_model = None
 _pgvector_index = None
 _es_index = None
 _session_manager = None
+_runtime_builtin_tool_provider = None
+_runtime_tool_registry = None
 
 
 def get_llm_singleton():
@@ -173,6 +176,22 @@ def get_embedding_singleton():
     if _embed_model is None:
         _embed_model = build_embedding()
     return _embed_model
+
+
+def get_runtime_builtin_tool_provider_singleton() -> BuiltinToolProvider:
+    global _runtime_builtin_tool_provider
+    if _runtime_builtin_tool_provider is None:
+        _runtime_builtin_tool_provider = BuiltinToolProvider()
+    return _runtime_builtin_tool_provider
+
+
+def get_runtime_tool_registry_singleton() -> ToolRegistry:
+    global _runtime_tool_registry
+    if _runtime_tool_registry is None:
+        _runtime_tool_registry = ToolRegistry(
+            builtin_provider=get_runtime_builtin_tool_provider_singleton()
+        )
+    return _runtime_tool_registry
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
@@ -265,6 +284,11 @@ async def get_llm_client_dep(
     """Get the runtime LLM client for the current effective config."""
     factory = get_llm_client_factory_singleton()
     return factory.get_client(runtime_config)
+
+
+def get_runtime_tool_registry_dep() -> ToolRegistry:
+    """Get the new runtime tool registry singleton."""
+    return get_runtime_tool_registry_singleton()
 
 
 # =============================================================================
