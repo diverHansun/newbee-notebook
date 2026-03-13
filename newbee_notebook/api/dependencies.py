@@ -27,6 +27,11 @@ from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
+from newbee_notebook.core.tools.knowledge_base import (
+    hybrid_search_executor,
+    keyword_search_executor,
+    semantic_search_executor,
+)
 from newbee_notebook.core.common.config import (
     get_storage_config,
     get_embedding_provider,
@@ -181,7 +186,36 @@ def get_embedding_singleton():
 def get_runtime_builtin_tool_provider_singleton() -> BuiltinToolProvider:
     global _runtime_builtin_tool_provider
     if _runtime_builtin_tool_provider is None:
-        _runtime_builtin_tool_provider = BuiltinToolProvider()
+        async def _hybrid_search(payload: dict) -> list[dict]:
+            pg_index = await get_pg_index_singleton()
+            es_index = await get_es_index_singleton()
+            return await hybrid_search_executor(
+                payload,
+                pgvector_index=pg_index,
+                es_index=es_index,
+            )
+
+        async def _semantic_search(payload: dict) -> list[dict]:
+            pg_index = await get_pg_index_singleton()
+            return await semantic_search_executor(
+                payload,
+                pgvector_index=pg_index,
+            )
+
+        async def _keyword_search(payload: dict) -> list[dict]:
+            storage_cfg = get_storage_config()
+            es_cfg = storage_cfg.get("elasticsearch", {})
+            return await keyword_search_executor(
+                payload,
+                index_name=es_cfg.get("index_name", "newbee_notebook_docs"),
+                es_url=es_cfg.get("url", "http://localhost:9200"),
+            )
+
+        _runtime_builtin_tool_provider = BuiltinToolProvider(
+            hybrid_search=_hybrid_search,
+            semantic_search=_semantic_search,
+            keyword_search=_keyword_search,
+        )
     return _runtime_builtin_tool_provider
 
 
