@@ -12,6 +12,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
+from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.modes.base import BaseMode, ModeConfig, ModeType
 from newbee_notebook.core.engine.modes.chat_mode import ChatMode, DEFAULT_CHAT_SYSTEM_PROMPT
 from newbee_notebook.core.engine.modes.ask_mode import (
@@ -21,6 +22,7 @@ from newbee_notebook.core.engine.modes.ask_mode import (
 )
 from newbee_notebook.core.engine.modes.conclude_mode import ConcludeMode, DEFAULT_CONCLUDE_SYSTEM_PROMPT
 from newbee_notebook.core.engine.modes.explain_mode import ExplainMode, DEFAULT_EXPLAIN_SYSTEM_PROMPT
+from newbee_notebook.core.tools.contracts import ToolDefinition
 from newbee_notebook.core.rag.retrieval.scoped_retriever import ScopedRetriever
 from llama_index.core.schema import TextNode, NodeWithScore
 
@@ -351,5 +353,30 @@ class TestModeMemoryBehavior:
         mode = ExplainMode(llm=mock_llm, memory=mock_memory)
         
         assert mode.has_memory is True
+
+
+class TestRuntimeAskPolicy:
+    def test_runtime_ask_policy_prefers_knowledge_base(self):
+        tools = [
+            ToolDefinition(
+                name="knowledge_base",
+                description="kb",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="time",
+                description="time",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+        ]
+
+        config = ModeConfigFactory.build("ask", tools)
+
+        assert config.mode_name == "ask"
+        assert config.tool_policy.default_tool_name == "knowledge_base"
+        assert config.tool_policy.allowed_tool_names == ["knowledge_base", "time"]
+        assert config.source_policy.grounded_required is True
 
 

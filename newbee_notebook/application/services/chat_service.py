@@ -101,7 +101,10 @@ class ChatService:
 
     @staticmethod
     def _should_use_runtime_manager(mode_enum: ModeType, runtime_session_manager: Optional[RuntimeSessionManager]) -> bool:
-        return runtime_session_manager is not None and normalize_runtime_mode(mode_enum) is ModeType.AGENT
+        if runtime_session_manager is None:
+            return False
+        normalized_mode = normalize_runtime_mode(mode_enum)
+        return normalized_mode is ModeType.AGENT or mode_enum is ModeType.ASK
 
     @staticmethod
     def _source_items_to_dicts(items: List[Any]) -> List[dict]:
@@ -425,7 +428,7 @@ class ChatService:
             if doc_id in allowed_doc_id_set
         }
         mode_context = self._build_mode_context(context, filtered_doc_titles)
-        if not use_runtime:
+        if not (use_runtime and mode_enum in {ModeType.CHAT, ModeType.AGENT}):
             await self._validate_mode_guard(
                 mode_enum=mode_enum,
                 allowed_doc_ids=allowed_doc_ids,
@@ -443,7 +446,7 @@ class ChatService:
             allowed_doc_ids=allowed_doc_ids,
             docs_by_status=docs_by_status,
         )
-        if mode_enum != ModeType.CHAT and not use_runtime and blocking_warning:
+        if mode_enum != ModeType.CHAT and blocking_warning:
             yield blocking_warning
         if mode_enum != ModeType.CHAT and not use_runtime:
             # Chat mode emits finer-grained phase markers from ChatMode._stream().

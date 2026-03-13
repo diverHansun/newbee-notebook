@@ -9,8 +9,9 @@ Note: These tests don't require actual API keys or running services.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
+from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
 from newbee_notebook.core.tools.tavily_tools import TavilySearchTool, build_tavily_tool
 from newbee_notebook.core.tools.es_search_tool import (
     ElasticsearchSearchTool,
@@ -162,6 +163,20 @@ class TestElasticsearchSearchTool:
             allowed_doc_ids=[],
         )
         assert "No notebook-scoped documents are available" in result
+
+
+class TestRuntimeToolRegistry:
+    def test_ask_mode_gets_knowledge_base_and_time_only(self):
+        provider = BuiltinToolProvider(
+            hybrid_search=AsyncMock(),
+            semantic_search=AsyncMock(),
+            keyword_search=AsyncMock(),
+        )
+        registry = ToolRegistry(builtin_provider=provider)
+
+        tools = registry.get_tools("ask")
+
+        assert [tool.name for tool in tools] == ["knowledge_base", "time"]
 
 
 
