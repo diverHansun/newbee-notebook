@@ -28,6 +28,24 @@ from newbee_notebook.core.engine.index_builder import (
     load_pgvector_index_sync,
     load_es_index_sync,
 )
+from newbee_notebook.core.engine.mode_config import (
+    LoopPolicy,
+    ModeConfig as RuntimeModeConfig,
+    ModeConfigFactory,
+    SourcePolicy,
+    ToolPolicy,
+)
+from newbee_notebook.core.engine.stream_events import (
+    ContentEvent,
+    DoneEvent,
+    ErrorEvent,
+    PhaseEvent,
+    SourceEvent,
+    StartEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    WarningEvent,
+)
 from newbee_notebook.core.engine.session import SessionManager
 
 __all__ = [
@@ -49,6 +67,21 @@ __all__ = [
     "load_es_index",
     "load_pgvector_index_sync",
     "load_es_index_sync",
+    # Runtime config/events
+    "LoopPolicy",
+    "RuntimeModeConfig",
+    "ModeConfigFactory",
+    "SourcePolicy",
+    "ToolPolicy",
+    "ContentEvent",
+    "DoneEvent",
+    "ErrorEvent",
+    "PhaseEvent",
+    "SourceEvent",
+    "StartEvent",
+    "ToolCallEvent",
+    "ToolResultEvent",
+    "WarningEvent",
     # Session management
     "SessionManager",
 ]
