@@ -61,5 +61,6 @@ class ContextBuilder:
             max_tokens=budget.history,
         )
         messages.extend(trimmed_history)
-        messages.append({"role": "user", "content": current_message})
+        if str(current_message or "").strip():
+            messages.append({"role": "user", "content": current_message})
         return messages

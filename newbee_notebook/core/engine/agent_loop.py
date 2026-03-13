@@ -12,6 +12,7 @@ from newbee_notebook.core.engine.stream_events import (
     DoneEvent,
     ErrorEvent,
     PhaseEvent,
+    SourceEvent,
     StartEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -148,7 +149,7 @@ class AgentLoop:
         message: str,
         chat_history: list[dict[str, Any]],
     ) -> AsyncGenerator[
-        StartEvent | WarningEvent | PhaseEvent | ToolCallEvent | ToolResultEvent | ContentEvent | DoneEvent | ErrorEvent,
+        StartEvent | WarningEvent | PhaseEvent | ToolCallEvent | ToolResultEvent | SourceEvent | ContentEvent | DoneEvent | ErrorEvent,
         None,
     ]:
         messages = list(chat_history) + [{"role": "user", "content": message}]
@@ -270,6 +271,8 @@ class AgentLoop:
             if delta:
                 yield ContentEvent(delta=delta)
         self._last_sources = self._dedupe_sources(collected_sources)
+        if self._last_sources:
+            yield SourceEvent(sources=self._last_sources)
         yield DoneEvent()
 
     @staticmethod
@@ -300,6 +303,8 @@ class AgentLoop:
                 response_chunks.append(event.delta)
             elif isinstance(event, ToolCallEvent):
                 tool_calls_made.append(event.tool_name)
+            elif isinstance(event, SourceEvent):
+                sources = list(event.sources)
             elif isinstance(event, ErrorEvent):
                 raise RuntimeError(event.message)
 
@@ -309,7 +314,7 @@ class AgentLoop:
 
         return AgentResult(
             response="".join(response_chunks),
-            sources=getattr(self, "_last_sources", []),
+            sources=sources or getattr(self, "_last_sources", []),
             tool_calls_made=tool_calls_made,
             iterations=max(iterations, len(getattr(self._llm_client, "chat_calls", []))),
         )

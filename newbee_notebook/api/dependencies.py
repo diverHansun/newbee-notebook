@@ -26,6 +26,8 @@ from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index, SessionManager
+from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
+from newbee_notebook.core.session import SessionManager as RuntimeSessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
 from newbee_notebook.core.tools.knowledge_base import (
     hybrid_search_executor,
@@ -160,6 +162,7 @@ _es_index = None
 _session_manager = None
 _runtime_builtin_tool_provider = None
 _runtime_tool_registry = None
+_runtime_session_lock_manager = None
 
 
 def get_llm_singleton():
@@ -226,6 +229,13 @@ def get_runtime_tool_registry_singleton() -> ToolRegistry:
             builtin_provider=get_runtime_builtin_tool_provider_singleton()
         )
     return _runtime_tool_registry
+
+
+def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
+    global _runtime_session_lock_manager
+    if _runtime_session_lock_manager is None:
+        _runtime_session_lock_manager = RuntimeSessionLockManager()
+    return _runtime_session_lock_manager
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
@@ -323,6 +333,22 @@ async def get_llm_client_dep(
 def get_runtime_tool_registry_dep() -> ToolRegistry:
     """Get the new runtime tool registry singleton."""
     return get_runtime_tool_registry_singleton()
+
+
+async def get_runtime_session_manager_dep(
+    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    llm_client=Depends(get_llm_client_dep),
+    tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
+) -> RuntimeSessionManager:
+    """Get the request-scoped batch-2 runtime session manager."""
+    return RuntimeSessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=llm_client,
+        tool_registry=tool_registry,
+        lock_manager=get_runtime_session_lock_manager_singleton(),
+    )
 
 
 # =============================================================================
