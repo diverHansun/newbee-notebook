@@ -7,7 +7,7 @@ Application service for chat operations.
 from typing import Optional, List, AsyncGenerator, Dict, Any
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
@@ -53,6 +53,7 @@ class ChatResult:
     content: str
     mode: ModeType
     sources: List[ChatSource]
+    warnings: List[dict] = field(default_factory=list)
 
 
 class ChatService:
@@ -146,6 +147,7 @@ class ChatService:
             for doc_id, title in completed_doc_titles.items()
             if doc_id in allowed_doc_id_set
         }
+        warnings: List[dict] = []
         mode_context = self._build_mode_context(context, filtered_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
@@ -155,6 +157,13 @@ class ChatService:
             documents_by_status=docs_by_status,
             blocking_document_ids=blocking_doc_ids,
         )
+        blocking_warning = self._build_blocking_warning(
+            blocking_doc_ids=blocking_doc_ids,
+            allowed_doc_ids=allowed_doc_ids,
+            docs_by_status=docs_by_status,
+        )
+        if mode_enum != ModeType.CHAT and blocking_warning:
+            warnings.append(blocking_warning)
 
         # Fetch context-based chunks (used for sources/references)
         context_chunks = await self._get_context_chunks(context) if context else []
@@ -252,6 +261,7 @@ class ChatService:
                 )
                 for s in sources
             ],
+            warnings=warnings,
         )
 
     async def _chat_via_stream_fallback(
@@ -379,6 +389,13 @@ class ChatService:
         message_id = session.message_count + 1
 
         yield {"type": "start", "message_id": message_id}
+        blocking_warning = self._build_blocking_warning(
+            blocking_doc_ids=blocking_doc_ids,
+            allowed_doc_ids=allowed_doc_ids,
+            docs_by_status=docs_by_status,
+        )
+        if mode_enum != ModeType.CHAT and blocking_warning:
+            yield blocking_warning
         if mode_enum != ModeType.CHAT:
             # Chat mode emits finer-grained phase markers from ChatMode._stream().
             yield {"type": "thinking", "stage": "retrieving"}
@@ -525,9 +542,9 @@ class ChatService:
     ) -> None:
         """Common guard for retrieval-dependent modes."""
         rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
-        if mode_enum in rag_modes and (blocking_document_ids or []):
+        if mode_enum in rag_modes and not allowed_doc_ids and (blocking_document_ids or []):
             raise DocumentProcessingError(
-                message="文档正在处理中，请稍后重试",
+                message="所有文档正在处理中，暂无可用的检索数据",
                 details={
                     "mode": mode_enum.value,
                     "notebook_id": notebook_id,
@@ -545,6 +562,17 @@ class ChatService:
                 )
             if context and context.get("selected_text") and not context.get("document_id"):
                 raise ValueError("selected_text requires a document_id to ensure traceable sources")
+            if context and context.get("document_id"):
+                target_doc_id = context["document_id"]
+                if target_doc_id not in set(allowed_doc_ids):
+                    raise DocumentProcessingError(
+                        message="该文档索引尚未构建完成，暂时无法进行解释/总结",
+                        details={
+                            "mode": mode_enum.value,
+                            "document_id": target_doc_id,
+                            "retryable": True,
+                        },
+                    )
             if self._session_manager.vector_index is None:
                 raise RuntimeError("Vector index is not available")
 
@@ -557,7 +585,34 @@ class ChatService:
         if source_document_ids is None:
             return all_doc_ids
         valid_set = set(all_doc_ids)
-        return [doc_id for doc_id in source_document_ids if doc_id in valid_set]
+        filtered = [doc_id for doc_id in source_document_ids if doc_id in valid_set]
+        excluded = [doc_id for doc_id in source_document_ids if doc_id not in valid_set]
+        if excluded:
+            logger.info(
+                "source_document_ids filter excluded %d non-completed doc(s): %s",
+                len(excluded),
+                excluded,
+            )
+        return filtered
+
+    @staticmethod
+    def _build_blocking_warning(
+        blocking_doc_ids: List[str],
+        allowed_doc_ids: List[str],
+        docs_by_status: Dict[str, int],
+    ) -> Optional[Dict[str, Any]]:
+        if not blocking_doc_ids or not allowed_doc_ids:
+            return None
+        return {
+            "type": "warning",
+            "code": "partial_documents",
+            "message": f"{len(blocking_doc_ids)} 个文档正在处理中，当前检索范围不包含这些文档",
+            "details": {
+                "blocking_document_ids": blocking_doc_ids,
+                "available_document_count": len(allowed_doc_ids),
+                "documents_by_status": docs_by_status,
+            },
+        }
 
     @staticmethod
     def _resolve_sources_type(mode_enum: ModeType) -> str:

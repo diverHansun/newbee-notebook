@@ -18,6 +18,7 @@ from newbee_notebook.api.models.requests import ChatContext
 from newbee_notebook.application.services.session_service import SessionService, SessionNotFoundError
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.exceptions import DocumentProcessingError
 
 
 router = APIRouter(prefix="/chat")
@@ -53,6 +54,7 @@ class ChatResponse(BaseModel):
     content: str
     mode: str
     sources: list = Field(default_factory=list)
+    warnings: list = Field(default_factory=list)
 
 
 # =============================================================================
@@ -78,6 +80,13 @@ class SSEEvent:
     @staticmethod
     def thinking(stage: str = "thinking") -> str:
         return SSEEvent.format("thinking", {"stage": stage})
+
+    @staticmethod
+    def warning(code: str, message: str, details: Optional[dict] = None) -> str:
+        payload = {"code": code, "message": message}
+        if details:
+            payload["details"] = details
+        return SSEEvent.format("warning", payload)
     
     @staticmethod
     def sources(sources: list, sources_type: Optional[str] = None) -> str:
@@ -236,6 +245,8 @@ async def chat(
             include_ec_context=request.include_ec_context,
             source_document_ids=request.source_document_ids,
         )
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=e.http_status, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -255,6 +266,7 @@ async def chat(
         content=result.content,
         mode=result.mode.value,
         sources=[s.__dict__ for s in result.sources],
+        warnings=result.warnings,
     )
 
 
@@ -292,6 +304,8 @@ async def chat_stream(
             mode=request.mode,
             context=request.context.dict() if request.context else None,
         )
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=e.http_status, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

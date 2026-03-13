@@ -99,6 +99,17 @@ class _DummyNonStreamFailsButStreamWorksSessionManager(_DummySessionManager):
         return []
 
 
+class _DummyChatSessionManager(_DummySessionManager):
+    async def start_session(self, session_id: str):
+        return None
+
+    async def chat(self, **kwargs):
+        return "answer", []
+
+    def get_last_sources(self):
+        return []
+
+
 def _build_service(ref_repo=None, document_repo=None):
     return ChatService(
         session_repo=AsyncMock(),
@@ -160,17 +171,32 @@ def test_filter_sources_by_mode_quality_keeps_ask_sources_when_scores_absent():
     assert filtered == sources
 
 
-def test_validate_mode_guard_raises_document_processing_error_for_ask():
+def test_validate_mode_guard_allows_ask_when_completed_docs_exist():
+    service = _build_service()
+
+    asyncio.run(
+        service._validate_mode_guard(
+            mode_enum=ModeType.ASK,
+            allowed_doc_ids=["doc-1"],
+            context=None,
+            notebook_id="nb-1",
+            documents_by_status={"processing": 1, "completed": 1},
+            blocking_document_ids=["doc-2"],
+        )
+    )
+
+
+def test_validate_mode_guard_blocks_explain_when_target_document_is_not_completed():
     service = _build_service()
 
     with pytest.raises(DocumentProcessingError) as exc_info:
         asyncio.run(
             service._validate_mode_guard(
-                mode_enum=ModeType.ASK,
+                mode_enum=ModeType.EXPLAIN,
                 allowed_doc_ids=["doc-1"],
-                context=None,
+                context={"selected_text": "focus", "document_id": "doc-2"},
                 notebook_id="nb-1",
-                documents_by_status={"processing": 1, "completed": 0},
+                documents_by_status={"completed": 1, "processing": 1},
                 blocking_document_ids=["doc-2"],
             )
         )
@@ -178,7 +204,7 @@ def test_validate_mode_guard_raises_document_processing_error_for_ask():
     exc = exc_info.value
     assert exc.error_code == "E4001"
     assert exc.http_status == 409
-    assert exc.details["blocking_document_ids"] == ["doc-2"]
+    assert exc.details["document_id"] == "doc-2"
 
 
 def test_validate_mode_guard_keeps_conclude_selected_text_rule():
@@ -225,6 +251,37 @@ def test_filter_valid_sources_logs_missing_doc_once(caplog):
     ]
     assert len(warning_messages) == 1
     assert "Skipping 2 source item(s)" in warning_messages[0]
+
+
+def test_apply_source_filter_logs_excluded_non_completed_doc_ids(caplog):
+    service = _build_service()
+
+    with caplog.at_level(logging.INFO):
+        filtered = service._apply_source_filter(["doc-1"], ["doc-2", "doc-1", "doc-3"])
+
+    assert filtered == ["doc-1"]
+    assert "excluded 2 non-completed doc(s)" in caplog.text
+    assert "doc-2" in caplog.text
+    assert "doc-3" in caplog.text
+
+
+def test_build_blocking_warning_returns_payload_for_partial_scope():
+    warning = ChatService._build_blocking_warning(
+        blocking_doc_ids=["doc-2", "doc-3"],
+        allowed_doc_ids=["doc-1"],
+        docs_by_status={"completed": 1, "processing": 1, "pending": 1},
+    )
+
+    assert warning == {
+        "type": "warning",
+        "code": "partial_documents",
+        "message": "2 个文档正在处理中，当前检索范围不包含这些文档",
+        "details": {
+            "blocking_document_ids": ["doc-2", "doc-3"],
+            "available_document_count": 1,
+            "documents_by_status": {"completed": 1, "processing": 1, "pending": 1},
+        },
+    }
 
 
 def test_chat_stream_persists_messages_before_done_event():
@@ -310,6 +367,104 @@ def test_chat_stream_emits_thinking_events_for_phase_markers():
     assert ("thinking", "searching") in observed
     assert ("thinking", "generating") in observed
     assert any(event_type == "content" for event_type, _ in observed)
+
+
+def test_chat_stream_emits_warning_before_thinking_for_partial_documents():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [
+        SimpleNamespace(document_id="doc-1"),
+        SimpleNamespace(document_id="doc-2"),
+    ]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+        SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING, title="Busy"),
+    ]
+    document_repo.get.return_value = SimpleNamespace(document_id="doc-1")
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyStreamingSessionManager(),
+    )
+
+    async def _collect():
+        observed = []
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="ask"):
+            observed.append(event)
+            if event["type"] == "done":
+                break
+        return observed
+
+    observed = asyncio.run(_collect())
+    assert observed[0]["type"] == "start"
+    assert observed[1]["type"] == "warning"
+    assert observed[2] == {"type": "thinking", "stage": "retrieving"}
+
+
+def test_chat_returns_warnings_for_partial_documents_in_nonstream_mode():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [
+        SimpleNamespace(document_id="doc-1"),
+        SimpleNamespace(document_id="doc-2"),
+    ]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+        SimpleNamespace(document_id="doc-2", status=DocumentStatus.PROCESSING, title="Busy"),
+    ]
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyChatSessionManager(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="ask"))
+
+    assert result.warnings == [
+        {
+            "type": "warning",
+            "code": "partial_documents",
+            "message": "1 个文档正在处理中，当前检索范围不包含这些文档",
+            "details": {
+                "blocking_document_ids": ["doc-2"],
+                "available_document_count": 1,
+                "documents_by_status": {
+                    "uploaded": 0,
+                    "pending": 0,
+                    "processing": 1,
+                    "converted": 0,
+                    "completed": 1,
+                    "failed": 0,
+                },
+            },
+        }
+    ]
 
 
 def test_chat_stream_closes_upstream_generator_on_cancelled_error():
