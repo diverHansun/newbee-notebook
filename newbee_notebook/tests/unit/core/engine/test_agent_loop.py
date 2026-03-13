@@ -1,0 +1,172 @@
+﻿from __future__ import annotations
+
+import json
+
+import pytest
+
+from newbee_notebook.core.engine.agent_loop import AgentLoop
+from newbee_notebook.core.engine.mode_config import ModeConfigFactory
+from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition, ToolQualityMeta
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+class _FakeLLMClient:
+    def __init__(self, *, chat_responses=None, stream_chunks=None, chat_exceptions=None):
+        self.chat_responses = list(chat_responses or [])
+        self.stream_chunks = list(stream_chunks or [])
+        self.chat_exceptions = list(chat_exceptions or [])
+        self.chat_calls: list[dict] = []
+        self.stream_calls: list[dict] = []
+
+    async def chat(self, **kwargs):
+        self.chat_calls.append(kwargs)
+        if self.chat_exceptions:
+            exc = self.chat_exceptions.pop(0)
+            if exc is not None:
+                raise exc
+        return self.chat_responses.pop(0)
+
+    async def chat_stream(self, **kwargs):
+        self.stream_calls.append(kwargs)
+        for chunk in self.stream_chunks:
+            yield chunk
+
+
+def _tool_call(name: str, arguments: dict, tool_call_id: str = "call-1") -> dict:
+    return {
+        "id": tool_call_id,
+        "type": "function",
+        "function": {"name": name, "arguments": json.dumps(arguments)},
+    }
+
+
+def _chat_response(*, tool_calls=None, content=None, finish_reason=None) -> dict:
+    if finish_reason is None:
+        finish_reason = "tool_calls" if tool_calls else "stop"
+    return {
+        "choices": [
+            {
+                "finish_reason": finish_reason,
+                "message": {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": tool_calls,
+                },
+            }
+        ]
+    }
+
+
+def _stream_chunk(delta: str) -> dict:
+    return {"choices": [{"delta": {"content": delta}}]}
+
+
+def _quality(quality_band: str) -> ToolQualityMeta:
+    return ToolQualityMeta(
+        scope_used="document",
+        search_type="keyword",
+        result_count=1 if quality_band != "empty" else 0,
+        max_score=0.8 if quality_band == "high" else 0.3,
+        quality_band=quality_band,
+        scope_relaxation_recommended=quality_band != "high",
+    )
+
+
+def _tool(name: str, result: ToolCallResult) -> ToolDefinition:
+    async def _execute(_: dict) -> ToolCallResult:
+        return result
+
+    return ToolDefinition(
+        name=name,
+        description=f"{name} tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=_execute,
+    )
+
+
+@pytest.mark.anyio
+async def test_agent_loop_open_loop_executes_tool_then_streams_final_answer():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})]),
+            _chat_response(content="done"),
+        ],
+        stream_chunks=[_stream_chunk("Hello"), _stream_chunk(" world")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="1. [Doc] evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.8)],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="question", chat_history=[])
+
+    assert result.response == "Hello world"
+    assert result.tool_calls_made == ["knowledge_base"]
+    assert len(result.sources) == 1
+    assert result.iterations == 2
+    assert len(llm.chat_calls) == 2
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_early_synthesizes_when_quality_gate_is_high():
+    llm = _FakeLLMClient(
+        chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],
+        stream_chunks=[_stream_chunk("Grounded answer")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="evidence", score=0.9)],
+            quality_meta=_quality("high"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="explain", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="explain", chat_history=[])
+
+    assert result.response == "Grounded answer"
+    assert result.iterations == 1
+    assert len(llm.chat_calls) == 1
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_forces_synthesis_at_retrieval_limit():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x1"}, "call-1")]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x2"}, "call-2")]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x3"}, "call-3")]),
+        ],
+        stream_chunks=[_stream_chunk("Synthesized")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="weak evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="weak evidence", score=0.2)],
+            quality_meta=_quality("low"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="conclude", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="conclude", chat_history=[])
+
+    assert result.response == "Synthesized"
+    assert result.iterations == 3
+    assert len(llm.chat_calls) == 3
+    assert len(llm.stream_calls) == 1

@@ -35,6 +35,7 @@ from newbee_notebook.core.engine.mode_config import (
     SourcePolicy,
     ToolPolicy,
 )
+from newbee_notebook.core.engine.agent_loop import AgentLoop, AgentResult
 from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
@@ -73,6 +74,8 @@ __all__ = [
     "ModeConfigFactory",
     "SourcePolicy",
     "ToolPolicy",
+    "AgentLoop",
+    "AgentResult",
     "ContentEvent",
     "DoneEvent",
     "ErrorEvent",
