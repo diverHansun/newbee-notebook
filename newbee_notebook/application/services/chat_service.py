@@ -30,6 +30,8 @@ from newbee_notebook.core.engine.stream_events import (
     PhaseEvent,
     SourceEvent,
     StartEvent,
+    ToolCallEvent,
+    ToolResultEvent,
     WarningEvent,
 )
 from newbee_notebook.core.session import SessionManager
@@ -353,6 +355,24 @@ class ChatService:
                     continue
                 if isinstance(event, PhaseEvent):
                     yield {"type": "phase", "stage": event.stage}
+                    continue
+                if isinstance(event, ToolCallEvent):
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": event.tool_name,
+                        "tool_call_id": event.tool_call_id,
+                        "tool_input": event.tool_input,
+                    }
+                    continue
+                if isinstance(event, ToolResultEvent):
+                    yield {
+                        "type": "tool_result",
+                        "tool_name": event.tool_name,
+                        "tool_call_id": event.tool_call_id,
+                        "success": event.success,
+                        "content_preview": event.content_preview,
+                        "quality_meta": asdict(event.quality_meta) if event.quality_meta else None,
+                    }
                     continue
                 if isinstance(event, ContentEvent):
                     full_response += event.delta
