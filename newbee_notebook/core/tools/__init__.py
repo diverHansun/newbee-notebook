@@ -24,7 +24,6 @@ from newbee_notebook.core.tools.time import (
     build_current_time_tool,
     get_current_datetime,
 )
-from newbee_notebook.core.tools.tool_registry import build_tool_registry
 
 __all__ = [
     "SourceItem",
@@ -43,7 +42,6 @@ __all__ = [
     "zhipu_web_crawl",
     "build_current_time_tool",
     "get_current_datetime",
-    "build_tool_registry",
 ]
 
 
