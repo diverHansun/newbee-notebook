@@ -37,7 +37,7 @@ export const uiStrings = {
       zh: "该会话中的聊天记录将被删除。",
       en: "Chat history in this session will be deleted.",
     },
-    inputPlaceholderChat: { zh: "输入消息...", en: "Type a message..." },
+    inputPlaceholderAgent: { zh: "输入消息（Agent + 工具调用）...", en: "Type a message (agent + tools)..." },
     inputPlaceholderAsk: { zh: "输入问题（基于文档检索）...", en: "Ask a question (document search)..." },
     stopGenerate: { zh: "停止生成", en: "Stop generating" },
     sendMessage: { zh: "发送消息", en: "Send message" },

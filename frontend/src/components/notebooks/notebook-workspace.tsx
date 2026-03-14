@@ -32,7 +32,7 @@ function buildRagHint(documents: NotebookDocumentItem[]): string | null {
     converted: blocking.filter((d) => d.status === "converted").length,
   };
 
-  return `文档处理中，RAG 暂不可用：等待 ${counts.uploaded + counts.pending}，处理中 ${counts.processing}，已转换待索引 ${counts.converted}。可先使用 Chat 模式。`;
+  return `文档处理中，RAG 暂不可用：等待 ${counts.uploaded + counts.pending}，处理中 ${counts.processing}，已转换待索引 ${counts.converted}。可先使用 Agent 模式。`;
 }
 
 export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {

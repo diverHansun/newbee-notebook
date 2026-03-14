@@ -15,12 +15,12 @@ type ChatPanelProps = {
   sessions: Session[];
   currentSessionId: string | null;
   messages: ChatMessage[];
-  mode: "chat" | "ask";
+  mode: "agent" | "ask";
   isStreaming: boolean;
   askBlocked: boolean;
   ragHint?: string;
-  onModeChange: (mode: "chat" | "ask") => void;
-  onSendMessage: (text: string, mode: "chat" | "ask", sourceDocIds?: string[] | null) => void;
+  onModeChange: (mode: "agent" | "ask") => void;
+  onSendMessage: (text: string, mode: "agent" | "ask", sourceDocIds?: string[] | null) => void;
   onCancel: () => void;
   onSwitchSession: (sessionId: string) => void;
   onCreateSession: (title?: string) => void;

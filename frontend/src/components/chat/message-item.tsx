@@ -15,6 +15,7 @@ type TranslateFn = (text: LocalizedString) => string;
 
 function modeBadgeClass(mode: string): string {
   const map: Record<string, string> = {
+    agent: "badge-chat",
     chat: "badge-chat",
     ask: "badge-ask",
     explain: "badge-explain",
@@ -25,7 +26,8 @@ function modeBadgeClass(mode: string): string {
 
 function modeLabel(mode: string): string {
   const map: Record<string, string> = {
-    chat: "Chat",
+    agent: "Agent",
+    chat: "Agent",
     ask: "Ask",
     explain: "Explain",
     conclude: "Conclude",
