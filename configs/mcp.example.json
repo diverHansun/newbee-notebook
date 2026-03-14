@@ -1,16 +1,16 @@
 {
   "mcpServers": {
-    "filesystem": {
-      "command": "python",
+    "firecrawl": {
+      "command": "npx",
       "args": [
-        "-m",
-        "filesystem_server"
+        "-y",
+        "firecrawl-mcp"
       ],
       "env": {
-        "FILESYSTEM_ROOT": "${FILESYSTEM_ROOT:-D:/Projects/notebook-project/newbee-notebook}"
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       }
     },
-    "weather": {
+    "remote-example": {
       "type": "streamable-http",
       "url": "https://example.com/mcp",
       "headers": {

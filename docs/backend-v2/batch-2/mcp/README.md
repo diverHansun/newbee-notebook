@@ -15,6 +15,7 @@ MCP（Model Context Protocol）模块为 Agent 模式提供外部工具扩展能
 | [03-data-model.md](./03-data-model.md) | 核心概念与数据模型：MCPServerConfig、连接状态、工具描述 |
 | [04-dfd-interface.md](./04-dfd-interface.md) | 数据流、接口定义、前端交互协议 |
 | [05-test.md](./05-test.md) | 验证策略 |
+| [06-acceptance-checklist.md](./06-acceptance-checklist.md) | Firecrawl 真实配置与 API/前端联调验收清单 |
 
 ## 设计决策
 

@@ -23,7 +23,7 @@ MCP 模块位于 ToolRegistry 与外部 MCP Server 之间：
 5. ChatService 将工具列表传入 `ModeConfigFactory.build(tools, allowed_document_ids, ...)`。
 6. ModeConfigFactory 绑定 allowed_document_ids 到 RAG/ES 工具，产出 ModeConfig。
 7. AgentLoop 使用完整工具列表执行。
-8. LLM 决定调用某个 MCP 工具（如 `weather__get_forecast`）。
+8. LLM 决定调用某个 MCP 工具（如 `weather_get_forecast`）。
 9. MCPToolAdapter 的 ToolDefinition 包装器接收调用，通过 MCPClientManager 找到对应的 ClientSession。
 10. ClientSession 发送 `tools/call` JSON-RPC 请求到 MCP Server。
 11. MCP Server 执行工具，返回结果。
@@ -48,8 +48,8 @@ MCPClientManager.get_tools()
                     +--> stdio: 启动子进程，建立 stdin/stdout 通道
                     |    ClientSession(StdioTransport(...))
                     |
-                    +--> http: 建立 HTTP 会话
-                    |    ClientSession(StreamableHTTPTransport(url, headers))
+                    +--> streamable-http: 建立 HTTP 会话
+                    |    ClientSession(streamablehttp_client(url, headers))
                     |
                     v
                 session.initialize()  协议握手
@@ -128,7 +128,7 @@ class MCPConfigLoader:
 
 ```python
 class MCPClientManager:
-    def __init__(self, config_path: Path, settings_service: AppSettingsService) -> None:
+    def __init__(self, config_path: Path) -> None:
         """初始化管理器。不立即连接任何 Server。"""
         ...
 
@@ -259,7 +259,7 @@ async def get_mcp_client_manager(
 ) -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
-        config_path = get_data_dir() / "mcp.json"
+        config_path = get_configs_directory() / "mcp.json"
         _mcp_client_manager = MCPClientManager(config_path, settings_service)
     return _mcp_client_manager
 
