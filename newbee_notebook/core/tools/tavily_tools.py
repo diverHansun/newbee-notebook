@@ -1,9 +1,11 @@
-﻿"""Tavily web tools (OpenAI-style tools for search, news, and URL crawl)."""
+﻿"""Tavily web tools"""
+
+from __future__ import annotations
 
 import os
-from typing import Optional, Sequence, Literal
+from typing import Literal, Optional
 
-from llama_index.core.tools import FunctionTool, ToolMetadata
+from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 
 
 def _require_api_key() -> str:
@@ -48,21 +50,6 @@ def tavily_search(
     return _format_results(resp)
 
 
-def tavily_news_search(
-    query: str,
-    max_results: int = 5,
-    time_range: Literal["day", "week", "month", "year"] = "week",
-) -> str:
-    """News-focused search."""
-    return tavily_search(
-        query=query,
-        max_results=max_results,
-        search_depth="advanced",
-        topic="news",
-        time_range=time_range,
-    )
-
-
 def tavily_crawl(
     url: str,
     max_results: int = 1,
@@ -91,59 +78,172 @@ def tavily_crawl(
     return "\n".join(lines)
 
 
-def build_tavily_search_tool(max_results: int = 5) -> FunctionTool:
-    return FunctionTool.from_defaults(
-        fn=lambda query: tavily_search(query=query, max_results=max_results),
+def _build_source_item(title: str, content: str, locator: str, source_type: str = "web_search") -> SourceItem:
+    return SourceItem(
+        document_id="",
+        chunk_id=locator,
+        title=title,
+        text=content,
+        source_type=source_type,
+    )
+
+
+def _tavily_runtime_search(
+    *,
+    query: str,
+    max_results: int = 5,
+    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "advanced",
+    topic: Literal["general", "news", "finance"] = "general",
+    time_range: Optional[Literal["day", "week", "month", "year"]] = None,
+) -> ToolCallResult:
+    if not query or not query.strip():
+        return ToolCallResult(content="", error="query is required")
+
+    content = tavily_search(
+        query=query,
+        max_results=max_results,
+        search_depth=search_depth,
+        topic=topic,
+        time_range=time_range,
+    )
+    return ToolCallResult(
+        content=content,
+        metadata={
+            "provider": "tavily",
+            "operation": "search",
+            "query": query,
+            "max_results": max_results,
+            "search_depth": search_depth,
+            "topic": topic,
+            "time_range": time_range,
+        },
+    )
+
+
+def _tavily_runtime_crawl(
+    *,
+    url: str,
+    max_results: int = 1,
+    include_raw_content: bool = False,
+    include_images: bool = False,
+) -> ToolCallResult:
+    if not url or not url.strip():
+        return ToolCallResult(content="", error="url is required")
+
+    content = tavily_crawl(
+        url=url,
+        max_results=max_results,
+        include_raw_content=include_raw_content,
+        include_images=include_images,
+    )
+    return ToolCallResult(
+        content=content,
+        sources=[_build_source_item(url, content, url)],
+        metadata={
+            "provider": "tavily",
+            "operation": "crawl",
+            "url": url,
+            "max_results": max_results,
+            "include_raw_content": include_raw_content,
+            "include_images": include_images,
+        },
+    )
+
+
+def build_tavily_search_runtime_tool(
+    default_max_results: int = 5,
+    default_search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "advanced",
+    default_topic: Literal["general", "news", "finance"] = "general",
+) -> ToolDefinition:
+    async def _execute(payload: dict) -> ToolCallResult:
+        return _tavily_runtime_search(
+            query=str(payload.get("query") or "").strip(),
+            max_results=int(payload.get("max_results") or default_max_results),
+            search_depth=str(payload.get("search_depth") or default_search_depth),
+            topic=str(payload.get("topic") or default_topic),
+            time_range=payload.get("time_range"),
+        )
+
+    return ToolDefinition(
         name="tavily_search",
-        description="General web search to retrieve fresh information; supports general/news/finance topics.",
+        description=(
+            "Search the public web for fresh external information. "
+            "Use for current events, vendor documentation, product pages, pricing, or facts not present in notebook documents. "
+            "Provide a precise query, keep max_results modest unless broader coverage is needed, and use topic to bias retrieval."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Precise web search query describing the target fact, entity, product, or topic.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "How many web search results to retrieve. Defaults to 5 and can be lowered for narrow lookups.",
+                },
+                "search_depth": {
+                    "type": "string",
+                    "enum": ["basic", "advanced", "fast", "ultra-fast"],
+                    "description": "Search thoroughness and latency tradeoff. Advanced is the default balanced mode.",
+                },
+                "topic": {
+                    "type": "string",
+                    "enum": ["general", "news", "finance"],
+                    "description": "Result domain bias. Use general unless the request is explicitly news- or finance-oriented.",
+                },
+                "time_range": {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "year"],
+                    "description": "Optional recency window for time-sensitive web search.",
+                },
+            },
+            "required": ["query"],
+        },
+        execute=_execute,
     )
 
 
-def build_tavily_news_tool(max_results: int = 5) -> FunctionTool:
-    return FunctionTool.from_defaults(
-        fn=lambda query: tavily_news_search(query=query, max_results=max_results),
-        name="tavily_news",
-        description="News-focused search for recent reports and summaries.",
-    )
+def build_tavily_crawl_runtime_tool(
+    default_max_results: int = 1,
+) -> ToolDefinition:
+    async def _execute(payload: dict) -> ToolCallResult:
+        return _tavily_runtime_crawl(
+            url=str(payload.get("url") or "").strip(),
+            max_results=int(payload.get("max_results") or default_max_results),
+            include_raw_content=bool(payload.get("include_raw_content", False)),
+            include_images=bool(payload.get("include_images", False)),
+        )
 
-
-def build_tavily_crawl_tool(max_results: int = 1) -> FunctionTool:
-    return FunctionTool.from_defaults(
-        fn=lambda url: tavily_crawl(url=url, max_results=max_results),
+    return ToolDefinition(
         name="tavily_crawl",
-        description="Fetch and summarize the main content of a given URL.",
+        description=(
+            "Fetch and summarize the contents of a specific web page URL. "
+            "Use after search when a target page should be read more directly."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The target web page URL to fetch and summarize.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Maximum number of crawl results to return. Defaults to 1 for a single page lookup.",
+                },
+                "include_raw_content": {
+                    "type": "boolean",
+                    "description": "Whether to include raw page content when available. Defaults to false.",
+                },
+                "include_images": {
+                    "type": "boolean",
+                    "description": "Whether to include image references when available. Defaults to false.",
+                },
+            },
+            "required": ["url"],
+        },
+        execute=_execute,
     )
-
-
-# ---------------------------------------------------------------------------
-# Simple OO wrapper used by tests
-# ---------------------------------------------------------------------------
-
-
-class TavilySearchTool:
-    """Wrapper exposing Tavily search as a FunctionTool (cached)."""
-
-    def __init__(self, max_results: int = 5):
-        self.max_results = max_results
-        self._function_tool: FunctionTool | None = None
-
-    def _ensure_api_key(self) -> None:
-        if not os.getenv("TAVILY_API_KEY"):
-            raise ValueError("TAVILY_API_KEY not set")
-
-    def get_tool(self) -> FunctionTool:
-        if self._function_tool is None:
-            self._ensure_api_key()
-            self._function_tool = FunctionTool.from_defaults(
-                fn=lambda query: tavily_search(query=query, max_results=self.max_results),
-                name="web_search",
-                description="Web search using Tavily; retrieves fresh results.",
-            )
-        return self._function_tool
-
-
-def build_tavily_tool(max_results: int = 5) -> FunctionTool:
-    """Convenience function matching legacy tests."""
-    return TavilySearchTool(max_results=max_results).get_tool()
-
-

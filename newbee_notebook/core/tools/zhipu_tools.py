@@ -1,4 +1,4 @@
-"""Zhipu web search and web reader tools."""
+﻿"""Zhipu web search tools """
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import os
 from typing import Any, Dict, Optional
 
 import requests
-from llama_index.core.tools import FunctionTool
 
 from newbee_notebook.core.common.config import get_zhipu_tools_config
+from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 
 
 DEFAULT_BASE_URL = "https://open.bigmodel.cn/api"
@@ -149,28 +149,125 @@ def zhipu_web_crawl(url: str, return_format: Optional[str] = None) -> str:
         return f"Zhipu web_crawl request error: {exc}"
 
 
-def build_zhipu_web_search_tool() -> FunctionTool:
-    return FunctionTool.from_defaults(
-        fn=zhipu_web_search,
+def _build_source_item(title: str, content: str, locator: str, source_type: str = "web_search") -> SourceItem:
+    return SourceItem(
+        document_id="",
+        chunk_id=locator,
+        title=title,
+        text=content,
+        source_type=source_type,
+    )
+
+
+def _zhipu_runtime_search(
+    *,
+    search_query: str,
+    search_recency_filter: Optional[str] = None,
+) -> ToolCallResult:
+    if not search_query or not search_query.strip():
+        return ToolCallResult(content="", error="search_query is required")
+
+    content = zhipu_web_search(
+        search_query=search_query,
+        search_recency_filter=search_recency_filter,
+    )
+    return ToolCallResult(
+        content=content,
+        metadata={
+            "provider": "zhipu",
+            "operation": "search",
+            "search_query": search_query,
+            "search_recency_filter": search_recency_filter,
+        },
+    )
+
+
+def _zhipu_runtime_crawl(
+    *,
+    url: str,
+    return_format: Optional[str] = None,
+) -> ToolCallResult:
+    if not url or not url.strip():
+        return ToolCallResult(content="", error="url is required")
+
+    content = zhipu_web_crawl(url=url, return_format=return_format)
+    return ToolCallResult(
+        content=content,
+        sources=[_build_source_item(url, content, url)],
+        metadata={
+            "provider": "zhipu",
+            "operation": "crawl",
+            "url": url,
+            "return_format": return_format,
+        },
+    )
+
+
+def build_zhipu_web_search_runtime_tool() -> ToolDefinition:
+    cfg = _load_tool_config("web_search")
+    default_recency = cfg.get("search_recency_filter", "noLimit")
+
+    async def _execute(payload: dict) -> ToolCallResult:
+        return _zhipu_runtime_search(
+            search_query=str(payload.get("search_query") or "").strip(),
+            search_recency_filter=str(payload.get("search_recency_filter") or default_recency),
+        )
+
+    return ToolDefinition(
         name="zhipu_web_search",
         description=(
-            "Use Zhipu Web Search to fetch web results (title/URL/summary). "
-            "Parameters: search_query (required), search_recency_filter "
-            "(oneDay|oneWeek|oneMonth|oneYear|noLimit, defaults from config). "
-            "Other search options use config defaults."
+            "Search the public web with Zhipu Web Search. "
+            "Use for current external facts, product pages, official announcements, and sources outside notebook documents."
         ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "search_query": {
+                    "type": "string",
+                    "description": "Precise web search query for the information that should be found outside the notebook.",
+                },
+                "search_recency_filter": {
+                    "type": "string",
+                    "enum": ["oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"],
+                    "description": "Optional recency filter. Defaults to the configured search_recency_filter value.",
+                },
+            },
+            "required": ["search_query"],
+        },
+        execute=_execute,
     )
 
 
-def build_zhipu_web_crawl_tool() -> FunctionTool:
-    return FunctionTool.from_defaults(
-        fn=zhipu_web_crawl,
+def build_zhipu_web_crawl_runtime_tool() -> ToolDefinition:
+    cfg = _load_tool_config("web_crawl")
+    default_return_format = cfg.get("return_format", "markdown")
+
+    async def _execute(payload: dict) -> ToolCallResult:
+        return _zhipu_runtime_crawl(
+            url=str(payload.get("url") or "").strip(),
+            return_format=str(payload.get("return_format") or default_return_format),
+        )
+
+    return ToolDefinition(
         name="zhipu_web_crawl",
         description=(
-            "Use Zhipu Web Reader to fetch and parse a web page. "
-            "Parameters: url (required), return_format (markdown|text, default from config). "
-            "Other reader options use config defaults."
+            "Fetch and parse a specific web page using Zhipu Web Reader. "
+            "Use after search when the target page should be read directly."
         ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The target web page URL to fetch and parse.",
+                },
+                "return_format": {
+                    "type": "string",
+                    "enum": ["markdown", "text"],
+                    "description": "Preferred returned content format. Defaults to the configured reader format.",
+                },
+            },
+            "required": ["url"],
+        },
+        execute=_execute,
     )
-
-

@@ -1,12 +1,21 @@
-"""Built-in runtime tool provider for the batch-2 agent runtime."""
+﻿"""Built-in runtime tool provider for the batch-2 agent runtime."""
 
 from __future__ import annotations
 
+import os
 from collections.abc import Awaitable, Callable, Sequence
 
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 from newbee_notebook.core.tools.knowledge_base import build_knowledge_base_tool
+from newbee_notebook.core.tools.tavily_tools import (
+    build_tavily_crawl_runtime_tool,
+    build_tavily_search_runtime_tool,
+)
 from newbee_notebook.core.tools.time import get_current_datetime
+from newbee_notebook.core.tools.zhipu_tools import (
+    build_zhipu_web_crawl_runtime_tool,
+    build_zhipu_web_search_runtime_tool,
+)
 
 SearchExecutor = Callable[[dict], Awaitable[list[dict]]]
 
@@ -52,6 +61,20 @@ class BuiltinToolProvider:
             execute=_time_tool,
         )
 
+    def _build_agent_web_tools(self) -> list[ToolDefinition]:
+        tools: list[ToolDefinition] = []
+        if os.getenv("TAVILY_API_KEY"):
+            tools.extend([
+                build_tavily_search_runtime_tool(),
+                build_tavily_crawl_runtime_tool(),
+            ])
+        if os.getenv("ZHIPU_API_KEY"):
+            tools.extend([
+                build_zhipu_web_search_runtime_tool(),
+                build_zhipu_web_crawl_runtime_tool(),
+            ])
+        return tools
+
     def get_tools(self, mode: str) -> list[ToolDefinition]:
         normalized = str(mode).strip().lower()
         if normalized in {"explain", "conclude"}:
@@ -71,5 +94,8 @@ class BuiltinToolProvider:
                 default_search_type="hybrid",
                 default_max_results=5,
             )
-            return [knowledge_base, self._build_time_tool()]
+            tools = [knowledge_base, self._build_time_tool()]
+            if normalized in {"agent", "chat"}:
+                tools.extend(self._build_agent_web_tools())
+            return tools
         return []

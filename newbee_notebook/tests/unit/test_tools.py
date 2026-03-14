@@ -1,10 +1,10 @@
 """Unit tests for tools layer components."""
 
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 
+import newbee_notebook.core.tools as tools_module
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
-from newbee_notebook.core.tools.tavily_tools import TavilySearchTool, build_tavily_tool
 from newbee_notebook.core.rag.retrieval.es_keyword import es_search
 
 
@@ -13,37 +13,12 @@ def anyio_backend():
     return "asyncio"
 
 
-class TestTavilySearchTool:
-    """Test TavilySearchTool functionality."""
-    
-    def test_tool_creation(self):
-        """Test TavilySearchTool instantiation."""
-        tool = TavilySearchTool(max_results=3)
-        assert tool.max_results == 3
-    
-    def test_get_tool_returns_function_tool(self):
-        """Test that get_tool returns a FunctionTool."""
-        with patch.dict("os.environ", {"TAVILY_API_KEY": "test_key"}):
-            tool = TavilySearchTool()
-            function_tool = tool.get_tool()
-            
-            assert function_tool is not None
-            assert function_tool.metadata.name == "web_search"
-            assert "web" in function_tool.metadata.description.lower()
-    
-    def test_tool_is_cached(self):
-        """Test that the same FunctionTool instance is returned."""
-        tool = TavilySearchTool()
-        with patch.dict("os.environ", {"TAVILY_API_KEY": "test_key"}):
-            ft1 = tool.get_tool()
-            ft2 = tool.get_tool()
-            assert ft1 is ft2  # Same instance
-    
-    def test_build_tavily_tool_convenience(self):
-        """Test build_tavily_tool convenience function."""
-        with patch.dict("os.environ", {"TAVILY_API_KEY": "test_key"}):
-            function_tool = build_tavily_tool(max_results=5)
-            assert function_tool.metadata.name == "web_search"
+def test_tools_module_no_longer_exports_legacy_function_tool_builders():
+    assert not hasattr(tools_module, "build_tavily_search_tool")
+    assert not hasattr(tools_module, "build_tavily_news_tool")
+    assert not hasattr(tools_module, "build_tavily_crawl_tool")
+    assert not hasattr(tools_module, "build_zhipu_web_search_tool")
+    assert not hasattr(tools_module, "build_zhipu_web_crawl_tool")
 
 
 class TestElasticsearchKeywordRetrieval:

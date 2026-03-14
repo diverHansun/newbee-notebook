@@ -333,12 +333,18 @@ def test_agent_prompt_explains_knowledge_base_argument_strategy():
     prompt = load_prompt("chat.md")
 
     assert "knowledge_base" in prompt
+    assert "tavily_search" in prompt
+    assert "tavily_crawl" in prompt
+    assert "zhipu_web_search" in prompt
+    assert "zhipu_web_crawl" in prompt
     assert "query" in prompt
     assert "search_type" in prompt
     assert "max_results" in prompt
     assert "filter_document_id" in prompt
     assert "allowed_document_ids" in prompt
     assert "Avoid generic queries" in prompt
+    assert "public web information" in prompt
+    assert "instead of relying on memory" in prompt
 
 
 def test_explain_and_conclude_prompts_explain_document_scoped_retrieval_arguments():

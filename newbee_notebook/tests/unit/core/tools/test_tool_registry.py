@@ -25,7 +25,9 @@ def _external_tool(name: str) -> ToolDefinition:
     )
 
 
-def test_builtin_tool_provider_returns_ask_tools():
+def test_builtin_tool_provider_returns_ask_tools(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     provider = BuiltinToolProvider()
 
     tools = provider.get_tools("ask")
@@ -33,7 +35,9 @@ def test_builtin_tool_provider_returns_ask_tools():
     assert [tool.name for tool in tools] == ["knowledge_base", "time"]
 
 
-def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_only():
+def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_only(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     provider = BuiltinToolProvider()
 
     explain_tools = provider.get_tools("explain")
@@ -44,7 +48,9 @@ def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_on
 
 
 @pytest.mark.anyio
-async def test_tool_registry_merges_external_agent_tools_without_changing_contract():
+async def test_tool_registry_merges_external_agent_tools_without_changing_contract(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     registry = ToolRegistry(builtin_provider=BuiltinToolProvider())
 
     tools = await registry.get_tools("agent", external_tools=[_external_tool("mcp.search")])
@@ -54,7 +60,9 @@ async def test_tool_registry_merges_external_agent_tools_without_changing_contra
 
 
 @pytest.mark.anyio
-async def test_tool_registry_reads_cached_mcp_tools_for_agent_only():
+async def test_tool_registry_reads_cached_mcp_tools_for_agent_only(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     registry = ToolRegistry(
         builtin_provider=BuiltinToolProvider(),
         mcp_tool_supplier=lambda: [_external_tool("weather_forecast")],
@@ -68,7 +76,9 @@ async def test_tool_registry_reads_cached_mcp_tools_for_agent_only():
 
 
 @pytest.mark.anyio
-async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only():
+async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     supplier_calls: list[str] = []
 
     async def _supplier():
