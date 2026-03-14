@@ -224,14 +224,14 @@ class SessionManager:
 
         return {default_tool_name: defaults}
 
-    def _build_loop(
+    async def _build_loop(
         self,
         *,
         mode: ModeType,
         allowed_document_ids: list[str] | None,
         context: dict | None,
     ):
-        tools = self._tool_registry.get_tools(mode.value)
+        tools = await self._tool_registry.get_tools(mode.value)
         mode_config = ModeConfigFactory.build(mode, tools)
         tool_argument_defaults = self._build_tool_argument_defaults(
             mode=mode,
@@ -262,7 +262,7 @@ class SessionManager:
         mode = normalize_runtime_mode(mode_type or self._current_mode)
         self._current_mode = mode
         chat_history = self._build_chat_history(mode)
-        loop = self._build_loop(
+        loop = await self._build_loop(
             mode=mode,
             allowed_document_ids=allowed_document_ids,
             context=context,

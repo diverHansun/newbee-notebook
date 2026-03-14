@@ -51,7 +51,7 @@ class DummyToolRegistry:
     def __init__(self):
         self.calls: list[str] = []
 
-    def get_tools(self, mode, external_tools=None):
+    async def get_tools(self, mode, external_tools=None):
         self.calls.append(str(mode))
         return []
 
@@ -261,6 +261,36 @@ async def test_ask_builds_runtime_message_with_notebook_scope_hint():
     assert "current notebook already contains 1 completed document" in call.message
     assert "knowledge_base" in call.message
     assert "这个文档主要讨论什么？" in call.message
+
+
+@pytest.mark.anyio
+async def test_session_manager_awaits_async_tool_registry_for_agent_mode():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_by_session.side_effect = [[], []]
+
+    class _TrackingToolRegistry(DummyToolRegistry):
+        async def get_tools(self, mode, external_tools=None):
+            self.calls.append(f"awaited:{mode}")
+            return []
+
+    registry = _TrackingToolRegistry()
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=registry,
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(message="hello", mode_type=ModeType.AGENT)
+
+    assert registry.calls == ["awaited:agent"]
 
 
 def test_default_system_prompt_loads_mode_prompt_files(monkeypatch):

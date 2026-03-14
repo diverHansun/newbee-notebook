@@ -20,6 +20,11 @@ from newbee_notebook.core.tools.es_search_tool import (
 )
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 class TestTavilySearchTool:
     """Test TavilySearchTool functionality."""
     
@@ -166,7 +171,8 @@ class TestElasticsearchSearchTool:
 
 
 class TestRuntimeToolRegistry:
-    def test_ask_mode_gets_knowledge_base_and_time_only(self):
+    @pytest.mark.anyio
+    async def test_ask_mode_gets_knowledge_base_and_time_only(self):
         provider = BuiltinToolProvider(
             hybrid_search=AsyncMock(),
             semantic_search=AsyncMock(),
@@ -174,7 +180,7 @@ class TestRuntimeToolRegistry:
         )
         registry = ToolRegistry(builtin_provider=provider)
 
-        tools = registry.get_tools("ask")
+        tools = await registry.get_tools("ask")
 
         assert [tool.name for tool in tools] == ["knowledge_base", "time"]
 

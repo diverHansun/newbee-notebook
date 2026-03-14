@@ -38,3 +38,8 @@ def resolve_project_relative_path(path_value: str, *, start: str | Path | None =
 def get_models_directory(start: str | Path | None = None) -> Path:
     """Return the effective models directory path."""
     return Path(resolve_project_relative_path("models", start=start))
+
+
+def get_configs_directory(start: str | Path | None = None) -> Path:
+    """Return the effective repo-level configs directory path."""
+    return get_project_root(start=start) / "configs"

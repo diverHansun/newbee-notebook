@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { MCPConfigPanel } from "@/components/layout/mcp-config-panel";
 import { ModelConfigPanel } from "@/components/layout/model-config-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getHealthStatus, getSystemInfo } from "@/lib/api/system";
@@ -9,7 +10,7 @@ import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { useTheme } from "@/lib/theme/theme-context";
 
-export type ControlPanelTab = "language" | "theme" | "model" | "about";
+export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "about";
 
 type ControlPanelNavIconName =
   | ControlPanelTab
@@ -28,18 +29,18 @@ type ActiveNavItem = {
 };
 
 type DisabledNavItem = {
-  key: "rag" | "mcp" | "skills";
+  key: "rag" | "skills";
 };
 
 const ACTIVE_ITEMS: ActiveNavItem[] = [
   { key: "language" },
   { key: "theme" },
   { key: "model" },
+  { key: "mcp" },
 ];
 
 const DISABLED_ITEMS: DisabledNavItem[] = [
   { key: "rag" },
-  { key: "mcp" },
   { key: "skills" },
 ];
 
@@ -223,6 +224,8 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
           )}
 
           {activeTab === "model" && <ModelConfigPanel />}
+
+          {activeTab === "mcp" && <MCPConfigPanel />}
 
           {activeTab === "about" && (
             <div className="control-panel-stack">

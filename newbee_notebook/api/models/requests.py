@@ -82,3 +82,10 @@ class ChatRequest(BaseModel):
         None,
         description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
     )
+
+
+class UpdateSettingRequest(BaseModel):
+    """Minimal key/value request model for runtime settings."""
+
+    key: str = Field(..., min_length=1, description="Setting key")
+    value: str = Field(..., description="Setting value")

@@ -21,7 +21,7 @@ MCP（Model Context Protocol）模块为 Agent 模式提供外部工具扩展能
 | 决策 | 结论 | 依据 |
 |------|------|------|
 | MCP 适用范围 | 仅 Agent 模式 | Ask/Explain/Conclude 的工具集合固定（RAG 为主），不需要外部扩展 |
-| 传输方式 | stdio + HTTP streamable 混合 | stdio 适合本地轻量工具，HTTP 适合远程服务；MCP 协议原生支持两种 |
+| 传输方式 | stdio + Streamable HTTP | stdio 适合本地轻量工具，Streamable HTTP 适合远程服务；MCP 协议原生支持两种 |
 | 配置格式 | JSON 文件，对齐 Claude Code | 降低用户认知成本，复用社区已有的 MCP Server 配置 |
 | 前端控制 | Settings Panel 中 MCP 总开关 + 单个 Server 开关 | 配置变更引导用户编辑 JSON 文件，避免前端处理复杂字段 |
 | 连接生命周期 | 懒加载，首次 Agent 请求触发 | 避免启动时连接失败阻塞应用；与 pgvector/ES 的单例懒加载模式一致 |

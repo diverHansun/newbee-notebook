@@ -55,7 +55,7 @@ MCP Server 的定义（command、args、env、url、headers）全部来自 JSON 
 
 理由：
 - Server 配置涉及命令路径、环境变量、认证令牌等敏感信息，文件系统比数据库更安全和可控。
-- 与 Claude Code 的 `.mcp.json` 格式对齐，用户可以直接复制社区配置。
+- 字段结构与 Claude Code / Anthropic MCP server schema 对齐，项目路径固定为 `configs/mcp.json`，用户可以直接复用社区配置内容。
 - 前端不需要处理复杂的配置表单字段。
 
 ### 2.3 适配器模式

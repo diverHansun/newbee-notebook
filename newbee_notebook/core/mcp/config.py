@@ -42,14 +42,16 @@ def load_mcp_config(config_path: Path) -> list[MCPServerConfig]:
     if not config_path.exists():
         return []
 
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload = json.loads(config_path.read_text(encoding="utf-8-sig"))
     servers = payload.get("mcpServers") or {}
     configs: list[MCPServerConfig] = []
 
     for name, raw_server in servers.items():
         server = _expand_value(dict(raw_server or {}))
         transport = str(server.get("type") or ("stdio" if server.get("command") else "")).strip().lower()
-        if transport not in {"stdio", "http"}:
+        if transport in {"http", "streamable_http"}:
+            transport = "streamable-http"
+        if transport not in {"stdio", "streamable-http"}:
             raise ValueError(f"Unsupported MCP transport for {name}: {transport or '<missing>'}")
 
         configs.append(

@@ -298,7 +298,7 @@ ChatService 只需调用 `ToolRegistry.get_tools(mode, mcp_enabled)`，不直接
 
 | 数据 | 所有者 | MCP 模块的角色 |
 |------|--------|---------------|
-| mcp.json 配置文件 | 用户/文件系统 | 消费者（只读） |
+| configs/mcp.json 配置文件 | 用户/文件系统 | 消费者（只读） |
 | AppSettings 开关状态 | AppSettingsService | 消费者（读取开关） |
 | MCPServerConfig | MCPConfigLoader | 生产者 |
 | ClientSession 连接 | MCPClientManager | 所有者（创建、维护、销毁） |

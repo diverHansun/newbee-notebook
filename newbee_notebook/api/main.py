@@ -24,6 +24,7 @@ from newbee_notebook.api.routers import (
     notebooks,
     notebook_documents,
     sessions,
+    settings,
     health,
     chat,
     documents,
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(notebooks.router, prefix="/api/v1", tags=["Notebooks"])
     app.include_router(notebook_documents.router, prefix="/api/v1", tags=["Notebook Documents"])
     app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
+    app.include_router(settings.router, prefix="/api/v1", tags=["Settings"])
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])

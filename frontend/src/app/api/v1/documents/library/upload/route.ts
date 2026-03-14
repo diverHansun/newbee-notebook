@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const BACKEND_URL =
-  process.env.INTERNAL_API_URL || "http://localhost:8000";
+  (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
 
 export async function POST(request: NextRequest) {
   const targetUrl = `${BACKEND_URL}/api/v1/documents/library/upload`;

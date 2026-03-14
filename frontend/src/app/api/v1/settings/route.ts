@@ -2,22 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
 
 const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ notebookId: string }> }
-) {
-  const { notebookId } = await params;
-  const targetUrl = `${BACKEND_URL}/api/v1/chat/notebooks/${notebookId}/chat`;
+export async function PUT(request: NextRequest) {
+  const targetUrl = `${BACKEND_URL}/api/v1/settings`;
 
   try {
     const bodyText = await request.text();
-
     const backendResponse = await fetch(targetUrl, {
-      method: "POST",
+      method: "PUT",
       headers: {
         "content-type": "application/json",
         accept: "application/json",
@@ -32,9 +26,9 @@ export async function POST(
     return new NextResponse(responseText, {
       status: backendResponse.status,
       headers: {
-        "x-chat-proxy-route": "next-app-api",
         "content-type":
-          backendResponse.headers.get("content-type") || "application/json; charset=utf-8",
+          backendResponse.headers.get("content-type") ||
+          "application/json; charset=utf-8",
         "cache-control":
           backendResponse.headers.get("cache-control") || "no-cache, no-store",
       },
@@ -46,11 +40,11 @@ export async function POST(
 
     return NextResponse.json(
       {
-        error_code: "E_CHAT_PROXY",
+        error_code: "E_SETTINGS_PROXY",
         message:
           error instanceof Error
             ? error.message
-            : "Failed to proxy /chat request to backend",
+            : "Failed to proxy settings request to backend",
       },
       { status: 502 }
     );

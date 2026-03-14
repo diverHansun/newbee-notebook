@@ -28,7 +28,7 @@ async def test_mcp_tool_adapter_prefixes_server_name_and_routes_call():
         MCPToolInfo(
             server_name="weather",
             name="forecast",
-            qualified_name="weather__forecast",
+            qualified_name="weather_forecast",
             description="Get weather forecast",
             input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
         ),
@@ -37,7 +37,7 @@ async def test_mcp_tool_adapter_prefixes_server_name_and_routes_call():
 
     result = await tool.execute({"city": "Hong Kong"})
 
-    assert tool.name == "weather__forecast"
+    assert tool.name == "weather_forecast"
     assert tool.parameters["type"] == "object"
     assert captured == [("forecast", {"city": "Hong Kong"})]
     assert result.content == "sunny"

@@ -37,6 +37,7 @@ from newbee_notebook.core.tools.knowledge_base import (
     keyword_search_executor,
     semantic_search_executor,
 )
+from newbee_notebook.core.common.project_paths import get_configs_directory
 from newbee_notebook.core.common.config import (
     get_storage_config,
     get_embedding_provider,
@@ -250,7 +251,7 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
 def get_mcp_client_manager_singleton() -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
-        _mcp_client_manager = MCPClientManager(config_path=Path(".mcp.json"))
+        _mcp_client_manager = MCPClientManager(config_path=get_configs_directory() / "mcp.json")
     return _mcp_client_manager
 
 def reset_llm_singleton() -> None:

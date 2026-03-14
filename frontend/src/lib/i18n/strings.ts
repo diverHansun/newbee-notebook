@@ -186,6 +186,25 @@ export const uiStrings = {
     connected: { zh: "已连接", en: "Connected" },
     disconnected: { zh: "未连接", en: "Disconnected" },
     checking: { zh: "检测中...", en: "Checking..." },
+    mcpGlobal: { zh: "MCP 全局开关", en: "MCP global switch" },
+    mcpGlobalHint: {
+      zh: "关闭后会立即断开所有 MCP 连接。",
+      en: "Turning this off disconnects all MCP connections immediately.",
+    },
+    mcpConfigPath: { zh: "配置文件", en: "Config file" },
+    mcpServers: { zh: "MCP Servers", en: "MCP Servers" },
+    mcpServersHint: {
+      zh: "这里只展示已加载的服务状态，服务定义来自 configs/mcp.json。",
+      en: "This panel shows loaded server status only. Server definitions come from configs/mcp.json.",
+    },
+    mcpEmpty: {
+      zh: "当前未配置任何 MCP 服务，请编辑 configs/mcp.json。",
+      en: "No MCP servers are configured. Edit configs/mcp.json.",
+    },
+    mcpToolCount: { zh: "工具数量", en: "Tool count" },
+    mcpStatusConnecting: { zh: "连接中", en: "Connecting" },
+    mcpStatusDisabled: { zh: "已禁用", en: "Disabled" },
+    mcpStatusError: { zh: "错误", en: "Error" },
   },
   selectionMenu: {
     explain: { zh: "解释", en: "Explain" },

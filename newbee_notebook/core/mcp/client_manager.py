@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from newbee_notebook.core.mcp.config import load_mcp_config
+from newbee_notebook.core.mcp.connectors import connect_mcp_server
 from newbee_notebook.core.mcp.tool_adapter import MCPToolAdapter
 from newbee_notebook.core.mcp.types import (
     MCPClientProtocol,
@@ -21,10 +22,6 @@ logger = logging.getLogger(__name__)
 MCPConnectorFactory = Callable[[MCPServerConfig], Awaitable[MCPClientProtocol]]
 
 
-async def _missing_connector_factory(_: MCPServerConfig) -> MCPClientProtocol:
-    raise RuntimeError("MCP SDK is not installed")
-
-
 class MCPClientManager:
     def __init__(
         self,
@@ -34,7 +31,7 @@ class MCPClientManager:
         config_loader: Callable[[Path], list[MCPServerConfig]] = load_mcp_config,
     ):
         self._config_path = config_path
-        self._connector_factory = connector_factory or _missing_connector_factory
+        self._connector_factory = connector_factory or connect_mcp_server
         self._config_loader = config_loader
         self._enabled = False
         self._server_enabled: dict[str, bool] = {}
@@ -187,18 +184,25 @@ class MCPClientManager:
             return MCPToolInfo(
                 server_name=server_name,
                 name=raw_tool.name,
-                qualified_name=f"{server_name}__{raw_tool.name}",
+                qualified_name=f"{server_name}_{raw_tool.name}",
                 description=raw_tool.description,
                 input_schema=raw_tool.input_schema,
             )
 
-        name = str(raw_tool.get("name") or "")
-        description = str(raw_tool.get("description") or "")
-        schema = dict(raw_tool.get("input_schema") or raw_tool.get("inputSchema") or {"type": "object", "properties": {}})
+        if isinstance(raw_tool, dict):
+            name = str(raw_tool.get("name") or "")
+            description = str(raw_tool.get("description") or "")
+            raw_schema = raw_tool.get("input_schema") or raw_tool.get("inputSchema")
+        else:
+            name = str(getattr(raw_tool, "name", "") or "")
+            description = str(getattr(raw_tool, "description", "") or "")
+            raw_schema = getattr(raw_tool, "input_schema", None) or getattr(raw_tool, "inputSchema", None)
+
+        schema = dict(raw_schema or {"type": "object", "properties": {}})
         return MCPToolInfo(
             server_name=server_name,
             name=name,
-            qualified_name=f"{server_name}__{name}",
+            qualified_name=f"{server_name}_{name}",
             description=description,
             input_schema=schema,
         )

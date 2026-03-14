@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "python",
+      "args": [
+        "-m",
+        "filesystem_server"
+      ],
+      "env": {
+        "FILESYSTEM_ROOT": "${FILESYSTEM_ROOT:-D:/Projects/notebook-project/newbee-notebook}"
+      }
+    },
+    "weather": {
+      "type": "streamable-http",
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_TOKEN}"
+      }
+    }
+  }
+}

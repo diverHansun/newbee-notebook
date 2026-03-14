@@ -213,3 +213,28 @@ class NotebookDocumentRefResponse(BaseModel):
     created_at: datetime
 
 
+class MCPServerStatusResponse(BaseModel):
+    """Response model for a single MCP server status item."""
+
+    name: str
+    transport: str
+    enabled: bool
+    connection_status: str
+    tool_count: int
+    error_message: Optional[str] = None
+
+
+class MCPServersStatusResponse(BaseModel):
+    """Response model for MCP server status listing."""
+
+    mcp_enabled: bool
+    servers: List[MCPServerStatusResponse]
+
+
+class UpdateSettingResponse(BaseModel):
+    """Response model for a key/value settings update."""
+
+    key: str
+    value: str
+
+
