@@ -17,6 +17,9 @@ class LoopPolicy:
     required_tool_name: str | None = None
     require_tool_every_iteration: bool = False
     synthesis_quality_bands: tuple[str, ...] = ()
+    low_quality_tool_name: str | None = None
+    low_quality_bands: tuple[str, ...] = ()
+    max_low_quality_tool_streak: int = 0
     first_turn_tool_repair_name: str | None = None
     first_turn_tool_repair_limit: int = 0
     first_turn_tool_repair_force_choice: bool = False
@@ -63,6 +66,9 @@ class ModeConfigFactory:
                 loop_policy=LoopPolicy(
                     execution_style="open_loop",
                     max_total_iterations=50,
+                    low_quality_tool_name="knowledge_base",
+                    low_quality_bands=("low", "empty"),
+                    max_low_quality_tool_streak=2,
                 ),
                 tool_policy=ToolPolicy(
                     allowed_tool_names=allowed_tool_names,

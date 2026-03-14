@@ -118,6 +118,12 @@ runtime 使用 OpenAI-compatible message schema，详细约定见：
 - `assistant`
 - `tool`
 
+补充边界：
+
+- `engine` 只消费 canonical messages
+- `reasoning_content / thinking` 属于 provider transient signal
+- `engine` 可以把 transient signal 映射成 `phase / thinking` 事件，但不能把它们写成业务消息
+
 ## 6. `StreamEvent`
 
 统一事件集合：
@@ -144,6 +150,23 @@ runtime 使用 OpenAI-compatible message schema，详细约定见：
 - `synthesizing`
 
 `thinking` 仅作为兼容旧前端的 alias，不再作为文档中的正式协议名称。
+
+### 6.2 tool-using 请求的 thinking 策略
+
+对于 batch-2 第一版的 tool-using requests：
+
+- `agent`
+- `ask`
+- `explain`
+- `conclude`
+
+runtime 默认不依赖 provider thinking mode 作为核心执行能力。
+
+更具体地说：
+
+- OpenAI-compatible `tool_calls` 是主执行信号
+- `reasoning_content` 只作为可选观测信息
+- provider-specific thinking 差异由 `LLMClient` 吸收，而不是由 `AgentLoop` 直接分支处理
 
 ## 7. `ToolCallResult`
 

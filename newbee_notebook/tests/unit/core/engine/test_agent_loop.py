@@ -132,13 +132,13 @@ def _recording_tool(name: str, results: list[ToolCallResult], captured_payloads:
 
 
 @pytest.mark.anyio
-async def test_agent_loop_open_loop_executes_tool_then_streams_final_answer():
+async def test_agent_loop_open_loop_falls_back_to_synthesis_stream_when_final_reasoning_content_is_empty():
     llm = _FakeLLMClient(
         chat_responses=[
             _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})]),
-            _chat_response(content="done"),
+            _chat_response(content=''),
         ],
-        stream_chunks=[_stream_chunk("Hello"), _stream_chunk(" world")],
+        stream_chunks=[_stream_chunk('Hello'), _stream_chunk(' world')],
     )
     tool = _tool(
         "knowledge_base",
@@ -184,7 +184,7 @@ async def test_ask_loop_repairs_first_turn_without_tool_call_once():
 
     result = await loop.run(message="ask", chat_history=[])
 
-    assert result.response == "Grounded answer"
+    assert result.response == "Here is the grounded answer."
     assert result.tool_calls_made == ["knowledge_base"]
     assert len(llm.chat_calls) == 3
     assert llm.chat_calls[0]["tool_choice"] is None
@@ -193,6 +193,7 @@ async def test_ask_loop_repairs_first_turn_without_tool_call_once():
         "function": {"name": "knowledge_base"},
     }
     assert llm.chat_calls[2]["tool_choice"] is None
+    assert len(llm.stream_calls) == 0
     repair_messages = [msg for msg in llm.chat_calls[1]["messages"] if msg.get("role") == "system" and "knowledge_base" in str(msg.get("content"))]
     assert repair_messages
 
@@ -313,6 +314,141 @@ async def test_explain_loop_relaxes_scope_from_document_to_notebook_after_low_qu
     assert captured_payloads[0]["filter_document_id"] == "doc-1"
     assert captured_payloads[1]["allowed_document_ids"] == ["doc-1", "doc-2"]
     assert "filter_document_id" not in captured_payloads[1]
+
+
+
+
+
+
+@pytest.mark.anyio
+async def test_agent_loop_open_loop_uses_final_reasoning_content_without_extra_synthesis_call():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call('knowledge_base', {'query': 'paper title'})]),
+            _chat_response(content='The paper title is Example Title.'),
+        ],
+        stream_chunks=[],
+    )
+    tool = _tool(
+        'knowledge_base',
+        ToolCallResult(
+            content='paper title evidence',
+            sources=[SourceItem(document_id='doc-1', chunk_id='chunk-1', title='Doc', text='paper title evidence', score=0.9)],
+            quality_meta=_quality('medium'),
+        ),
+    )
+    config = ModeConfigFactory.build(mode='agent', tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message='question', chat_history=[])
+
+    assert result.response == 'The paper title is Example Title.'
+    assert result.tool_calls_made == ['knowledge_base']
+    assert len(llm.stream_calls) == 0
+
+
+@pytest.mark.anyio
+async def test_agent_loop_disables_provider_thinking_for_runtime_calls():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "paper title"})]),
+            _chat_response(content="Final answer"),
+        ],
+        stream_chunks=[],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="paper title evidence",
+            sources=[SourceItem(document_id="doc-1", chunk_id="chunk-1", title="Doc", text="paper title evidence", score=0.9)],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="question", chat_history=[])
+
+    assert result.response == "Final answer"
+    assert llm.chat_calls[0]["disable_thinking"] is True
+    assert llm.chat_calls[1]["disable_thinking"] is True
+
+
+@pytest.mark.anyio
+async def test_agent_loop_open_loop_forces_synthesis_after_two_low_quality_knowledge_base_results():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "paper title"})]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "title"})]),
+        ],
+        stream_chunks=[_stream_chunk("Insufficient"), _stream_chunk(" evidence")],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="no evidence",
+            sources=[],
+            quality_meta=_quality("low"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="question", chat_history=[])
+
+    assert result.response == "Insufficient evidence"
+    assert result.tool_calls_made == ["knowledge_base", "knowledge_base"]
+    assert len(llm.chat_calls) == 2
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_parses_textual_tool_call_markup_from_content():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(
+                content=(
+                    '<tool_call>knowledge_base'
+                    '<arg_key>query</arg_key><arg_value>paper title</arg_value>'
+                    '<arg_key>search_type</arg_key><arg_value>keyword</arg_value>'
+                    '<arg_key>max_results</arg_key><arg_value>5</arg_value>'
+                    '</tool_call>'
+                ),
+                finish_reason='stop',
+            ),
+            _chat_response(content='Grounded title'),
+        ],
+        stream_chunks=[],
+    )
+    captured_payloads: list[dict] = []
+    tool = _recording_tool(
+        'knowledge_base',
+        [
+            ToolCallResult(
+                content='paper title evidence',
+                sources=[
+                    SourceItem(
+                        document_id='doc-1',
+                        chunk_id='chunk-1',
+                        title='Doc',
+                        text='paper title evidence',
+                        score=0.92,
+                    )
+                ],
+                quality_meta=_quality('high'),
+            )
+        ],
+        captured_payloads,
+    )
+    config = ModeConfigFactory.build(mode='agent', tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message='question', chat_history=[])
+
+    assert result.response == 'Grounded title'
+    assert result.tool_calls_made == ['knowledge_base']
+    assert captured_payloads == [{'query': 'paper title', 'search_type': 'keyword', 'max_results': 5}]
+    assert len(llm.stream_calls) == 0
 
 
 @pytest.mark.anyio

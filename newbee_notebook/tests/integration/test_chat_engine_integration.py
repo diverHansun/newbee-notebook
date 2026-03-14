@@ -258,13 +258,13 @@ def test_non_stream_ask_route_runs_runtime_pipeline_and_persists_messages():
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "ask"
-    assert body["content"] == "Grounded answer"
+    assert body["content"] == "ready for synthesis"
     assert body["sources"][0]["document_id"] == "doc-1"
     assert len(message_repo.messages) == 2
     assert message_repo.messages[0].role == MessageRole.USER
     assert message_repo.messages[0].mode == ModeType.ASK
     assert message_repo.messages[1].role == MessageRole.ASSISTANT
-    assert message_repo.messages[1].content == "Grounded answer"
+    assert message_repo.messages[1].content == "ready for synthesis"
     assert len(reference_repo.references) == 1
     assert hybrid_search.payloads[0]["allowed_document_ids"] == ["doc-1"]
     assert hybrid_search.payloads[0]["search_type"] == "hybrid"

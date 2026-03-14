@@ -117,5 +117,5 @@ async def test_agent_loop_retries_llm_chat_failures():
 
     result = await loop.run(message="hello", chat_history=[])
 
-    assert result.response == "final"
+    assert result.response == "done"
     assert len(llm.chat_calls) == 2

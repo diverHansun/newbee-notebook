@@ -24,6 +24,8 @@ batch-2 之后，内部消息协议统一为 OpenAI-compatible schema。
 
 - 内部 runtime 全部使用 OpenAI-compatible messages
 - 对外 API 仍兼容现有 `/chat` 与 `/chat/stream`
+- batch-2 第一版的内部真源固定为 `OpenAI Chat Completions-compatible` 协议
+- 不以 Qwen Responses API 或 provider 自定义事件流作为 runtime 内部标准
 
 ### 2.2 消息和事件分离
 
@@ -31,6 +33,26 @@ batch-2 之后，内部消息协议统一为 OpenAI-compatible schema。
 - `events`：给前端和 session 层看的执行过程
 
 不要把 SSE 事件直接写进消息链。
+
+### 2.3 thinking 不是 canonical message
+
+- `reasoning_content`
+- `thinking`
+- provider-specific streaming fragments
+
+这些都属于 provider transient signals，不属于 batch-2 runtime 的 canonical message。
+
+它们可以用于：
+
+- SSE `thinking/phase` 映射
+- runtime 调试
+- provider 行为诊断
+
+但不能用于：
+
+- 写入 `messages` 表
+- 作为下一轮请求的 canonical assistant content
+- 混入 `ContextBuilder` 的持久化历史
 
 ## 3. 内部消息类型
 
@@ -109,6 +131,19 @@ batch-2 第一版以文本为主，多模态 part 保留为协议兼容，不在
 
 ## 4. 内部类型边界
 
+### 4.0 三层消息模型
+
+batch-2 固定三层边界：
+
+1. `Persistent Business Messages`
+   - 持久化 `user / assistant(final)`
+2. `Request-Scoped Runtime Messages`
+   - 当前请求内完整存在 `system / user / assistant(tool_calls) / tool / assistant(final)`
+3. `Provider Transient Signals`
+   - `reasoning_content / thinking / stream fragments`
+
+其中只有第 1 层进入 DB；第 2 层只在本次请求内存在；第 3 层只在 provider 适配层消费。
+
 ### 4.1 `context` 负责产出消息链
 
 `context` 模块输出：
@@ -127,6 +162,16 @@ batch-2 第一版以文本为主，多模态 part 保留为协议兼容，不在
 ### 4.3 `session` 负责持久化业务消息
 
 持久化层可继续存储业务意义上的 user/assistant turn，但 runtime 内部消息协议以 OpenAI-compatible schema 为准。
+
+### 4.4 `llm` 负责吸收 provider 差异
+
+provider 差异由 `LLMClient` 处理，包括但不限于：
+
+- thinking 参数的开关形式
+- `reasoning_content` 的提取
+- 标准 `tool_calls` 与文本型 `<tool_call>` 的兼容
+
+`engine / session / context` 不直接感知 Qwen 或 Zhipu 的差异。
 
 ## 5. tool call 约束
 
@@ -158,6 +203,13 @@ batch-2 第一版以文本为主，多模态 part 保留为协议兼容，不在
 
 - `ContentEvent(delta)`
 - 最终 `DoneEvent`
+
+tool-using 请求默认不依赖 provider thinking stream 作为业务输出来源。
+
+也就是说：
+
+- `delta.content` 才是最终 assistant 文本的 canonical 增量
+- `delta.reasoning_content` 只作为 transient signal
 
 ### 6.3 预留未来能力
 

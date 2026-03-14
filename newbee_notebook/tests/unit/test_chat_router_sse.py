@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from newbee_notebook.api.dependencies import get_chat_service, get_session_service
 from newbee_notebook.api.routers import chat as chat_router
 from newbee_notebook.api.routers.chat import SSEEvent, heartbeat_generator
+from newbee_notebook.application.services.session_service import SessionLimitExceededError
 from newbee_notebook.exceptions import DocumentProcessingError
 
 
@@ -85,6 +86,42 @@ def test_chat_stream_endpoint_returns_409_for_document_processing_error():
 
     assert response.status_code == 409
     assert response.json()["detail"] == "该文档索引尚未构建完成，暂时无法进行解释/总结"
+
+
+def test_chat_endpoint_returns_400_for_session_limit_exceeded():
+    chat_service = AsyncMock()
+    session_service = AsyncMock()
+    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(20))
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={"message": "hi", "mode": "agent"},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "E3001"
+    assert detail["details"]["current_count"] == 20
+    assert detail["details"]["max_count"] == 20
+
+
+def test_chat_stream_endpoint_returns_400_for_session_limit_exceeded():
+    chat_service = AsyncMock()
+    session_service = AsyncMock()
+    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(20))
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat/stream",
+        json={"message": "hi", "mode": "agent"},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "E3001"
+    assert detail["details"]["current_count"] == 20
+    assert detail["details"]["max_count"] == 20
 
 
 def test_chat_endpoint_accepts_agent_mode():

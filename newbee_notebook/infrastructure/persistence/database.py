@@ -100,23 +100,37 @@ class Database:
         self._url = url or get_database_url()
         self._engine: AsyncEngine = None
         self._session_factory: async_sessionmaker = None
+
+    @property
+    def is_connected(self) -> bool:
+        return self._engine is not None and self._session_factory is not None
     
     async def connect(self) -> None:
         """Initialize the database connection."""
         global _schema_checked
-        self._engine = create_async_engine(
+        if self.is_connected:
+            return
+
+        engine = create_async_engine(
             self._url,
             echo=False,  # Set to True for SQL debugging
             poolclass=NullPool,  # Disable connection pooling for serverless
         )
-        if not _schema_checked:
-            await self._ensure_runtime_schema()
-            _schema_checked = True
-        self._session_factory = async_sessionmaker(
-            bind=self._engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+        self._engine = engine
+        try:
+            if not _schema_checked:
+                await self._ensure_runtime_schema()
+                _schema_checked = True
+            self._session_factory = async_sessionmaker(
+                bind=self._engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+        except Exception:
+            self._session_factory = None
+            self._engine = None
+            await engine.dispose()
+            raise
 
     async def _ensure_runtime_schema(self) -> None:
         """Best-effort schema backfill for additive columns used by new releases."""
@@ -174,6 +188,7 @@ async def get_database() -> Database:
     global _database
     if _database is None:
         _database = Database()
+    if not _database.is_connected:
         await _database.connect()
     return _database
 

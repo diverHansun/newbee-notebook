@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 
@@ -81,13 +82,25 @@ class AgentLoop:
         return getattr(choice, "message", {}) or {}
 
     @classmethod
+    def _extract_message_content(cls, response: Any) -> str:
+        message = cls._extract_message(response)
+        if isinstance(message, dict):
+            return str(message.get("content") or "")
+        return str(getattr(message, "content", "") or "")
+
+    @classmethod
     def _extract_tool_calls(cls, response: Any) -> list[dict[str, Any]]:
         message = cls._extract_message(response)
         if isinstance(message, dict):
             tool_calls = list(message.get("tool_calls") or [])
+            content = str(message.get("content") or "")
         else:
             tool_calls = list(getattr(message, "tool_calls", []) or [])
-        return [cls._normalize_tool_call(item) for item in tool_calls]
+            content = str(getattr(message, "content", "") or "")
+        normalized = [cls._normalize_tool_call(item) for item in tool_calls]
+        if normalized:
+            return normalized
+        return cls._parse_textual_tool_calls(content)
 
     @staticmethod
     def _normalize_tool_call(tool_call: Any) -> dict[str, Any]:
@@ -111,6 +124,71 @@ class AgentLoop:
                 "arguments": str(getattr(function_payload, "arguments", "{}") or "{}"),
             },
         }
+
+    @staticmethod
+    def _coerce_markup_value(value: str) -> Any:
+        normalized = value.strip()
+        if not normalized:
+            return ""
+        try:
+            return json.loads(normalized)
+        except json.JSONDecodeError:
+            pass
+        lowered = normalized.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "null":
+            return None
+        try:
+            return int(normalized)
+        except ValueError:
+            pass
+        try:
+            return float(normalized)
+        except ValueError:
+            return normalized
+
+    @classmethod
+    def _parse_textual_tool_calls(cls, content: str) -> list[dict[str, Any]]:
+        if not content or "<tool_call>" not in content:
+            return []
+        matches = re.findall(r"<tool_call>(.*?)</tool_call>", content, flags=re.DOTALL)
+        parsed_calls: list[dict[str, Any]] = []
+        for index, body in enumerate(matches, start=1):
+            inner = str(body or "").strip()
+            if not inner:
+                continue
+            name_fragment, _, args_fragment = inner.partition("<arg_key>")
+            tool_name = name_fragment.strip()
+            if not tool_name:
+                continue
+            arguments: dict[str, Any] = {}
+            if args_fragment:
+                reconstructed = "<arg_key>" + args_fragment
+                pairs = re.findall(
+                    r"<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>",
+                    reconstructed,
+                    flags=re.DOTALL,
+                )
+                for key, value in pairs:
+                    normalized_key = str(key or "").strip()
+                    if not normalized_key:
+                        continue
+                    arguments[normalized_key] = cls._coerce_markup_value(str(value or ""))
+            parsed_calls.append(
+                {
+                    "id": f"text-tool-call-{index}",
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
+                    },
+                }
+            )
+        return parsed_calls
+
 
     @classmethod
     def _extract_stream_delta(cls, chunk: Any) -> str:
@@ -221,6 +299,7 @@ class AgentLoop:
         tool_calls_made: list[str] = []
         iterations = 0
         retrieval_iterations = 0
+        low_quality_tool_streak = 0
         repair_attempts = 0
         first_turn_repair_attempts = 0
         force_synthesis = False
@@ -245,10 +324,12 @@ class AgentLoop:
                 messages=messages,
                 tools=tool_specs or None,
                 tool_choice=forced_tool_choice or self._required_tool_choice(),
+                disable_thinking=True,
             )
             iterations += 1
 
             tool_calls = self._extract_tool_calls(response)
+            assistant_content = self._extract_message_content(response).strip()
             if not tool_calls:
                 if (
                     self._mode_config.loop_policy.require_tool_every_iteration
@@ -278,6 +359,14 @@ class AgentLoop:
                             "function": {"name": first_turn_tool_name},
                         }
                     continue
+                if assistant_content and not self._mode_config.loop_policy.require_tool_every_iteration:
+                    yield PhaseEvent(stage="synthesizing")
+                    yield ContentEvent(delta=assistant_content)
+                    self._last_sources = self._dedupe_sources(collected_sources)
+                    if self._last_sources:
+                        yield SourceEvent(sources=self._last_sources)
+                    yield DoneEvent()
+                    return
                 break
 
             repair_attempts = 0
@@ -337,6 +426,22 @@ class AgentLoop:
                     ):
                         force_synthesis = True
                         break
+                else:
+                    low_quality_tool_name = self._mode_config.loop_policy.low_quality_tool_name
+                    low_quality_bands = self._mode_config.loop_policy.low_quality_bands
+                    max_low_quality_tool_streak = self._mode_config.loop_policy.max_low_quality_tool_streak
+                    quality_band = getattr(result.quality_meta, "quality_band", None)
+                    if (
+                        max_low_quality_tool_streak > 0
+                        and tool_name == low_quality_tool_name
+                        and quality_band in low_quality_bands
+                    ):
+                        low_quality_tool_streak += 1
+                    else:
+                        low_quality_tool_streak = 0
+                    if low_quality_tool_streak >= max_low_quality_tool_streak > 0:
+                        force_synthesis = True
+                        break
             else:
                 continue
 
@@ -349,6 +454,7 @@ class AgentLoop:
                 messages=messages,
                 tools=None,
                 tool_choice=None,
+                disable_thinking=True,
             )
         )
         async for chunk in stream:

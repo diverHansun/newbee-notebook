@@ -78,6 +78,42 @@ def test_llm_client_chat_stream_sets_stream_flag_and_passthrough():
     assert call["tool_choice"] == "none"
 
 
+def test_llm_client_disables_qwen_thinking_for_tool_requests_by_default():
+    transport = _FakeTransport()
+    client = LLMClient(runtime_config=_runtime_config(provider="qwen", model="qwen3.5-plus"), transport=transport)
+
+    asyncio.run(
+        client.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            tools=[{"type": "function", "function": {"name": "knowledge_base"}}],
+            disable_thinking=True,
+            extra_body={"reasoning": {"effort": "low"}},
+        )
+    )
+
+    call = transport.chat.completions.calls[0]
+    assert call["extra_body"] == {
+        "reasoning": {"effort": "low"},
+        "enable_thinking": False,
+    }
+
+
+def test_llm_client_disables_zhipu_thinking_for_tool_requests_by_default():
+    transport = _FakeTransport()
+    client = LLMClient(runtime_config=_runtime_config(provider="zhipu", model="glm-4.7-flash"), transport=transport)
+
+    asyncio.run(
+        client.chat_stream(
+            messages=[{"role": "user", "content": "hello"}],
+            tools=[{"type": "function", "function": {"name": "knowledge_base"}}],
+            disable_thinking=True,
+        )
+    )
+
+    call = transport.chat.completions.calls[0]
+    assert call["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
 def test_llm_client_factory_refreshes_cached_client_when_provider_or_model_changes():
     built = []
 

@@ -15,7 +15,11 @@ from pydantic import BaseModel, Field
 
 from newbee_notebook.api.dependencies import get_session_service, get_chat_service
 from newbee_notebook.api.models.requests import ChatRequest
-from newbee_notebook.application.services.session_service import SessionService, SessionNotFoundError
+from newbee_notebook.application.services.session_service import (
+    SessionLimitExceededError,
+    SessionService,
+    SessionNotFoundError,
+)
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.domain.value_objects.mode_type import ModeType
 from newbee_notebook.exceptions import DocumentProcessingError
@@ -23,6 +27,21 @@ from newbee_notebook.exceptions import DocumentProcessingError
 
 router = APIRouter(prefix="/chat")
 SSE_HEARTBEAT_INTERVAL_SECONDS = 10
+
+
+def _session_limit_detail(exc: SessionLimitExceededError) -> dict:
+    return {
+        "error_code": "E3001",
+        "message": str(exc),
+        "details": {
+            "current_count": exc.current_count,
+            "max_count": exc.max_count,
+            "suggestions": [
+                "Delete unused sessions",
+                "Create a new notebook",
+            ],
+        },
+    }
 
 
 class ChatResponse(BaseModel):
@@ -215,8 +234,11 @@ async def chat(
             raise HTTPException(status_code=404, detail="Session not found")
     else:
         # Create a new session
-        session = await session_service.create(notebook_id)
-        request.session_id = session.session_id
+        try:
+            session = await session_service.create(notebook_id)
+            request.session_id = session.session_id
+        except SessionLimitExceededError as exc:
+            raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
     
     try:
         result = await chat_service.chat(
@@ -276,8 +298,11 @@ async def chat_stream(
         except SessionNotFoundError:
             raise HTTPException(status_code=404, detail="Session not found")
     else:
-        session = await session_service.create(notebook_id)
-        request.session_id = session.session_id
+        try:
+            session = await session_service.create(notebook_id)
+            request.session_id = session.session_id
+        except SessionLimitExceededError as exc:
+            raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
 
     try:
         # Pre-validate to fail fast for conclude/explain

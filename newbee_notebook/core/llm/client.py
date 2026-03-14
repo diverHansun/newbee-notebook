@@ -24,6 +24,7 @@ class LLMClient:
         tools: list | None = None,
         tool_choice: Any = None,
         stream: bool | None = None,
+        disable_thinking: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
@@ -42,23 +43,53 @@ class LLMClient:
         if stream is not None:
             params["stream"] = stream
         params.update(kwargs)
+        if disable_thinking:
+            self._apply_disable_thinking(params)
         return params
 
-    async def chat(self, *, messages: list, tools: list | None = None, tool_choice=None, **kwargs: Any):
+    def _apply_disable_thinking(self, params: dict[str, Any]) -> None:
+        provider = str(self.runtime_config.provider or "").strip().lower()
+        if provider in {"qwen", "zhipu"}:
+            extra_body = dict(params.get("extra_body") or {})
+            if provider == "qwen":
+                extra_body.setdefault("enable_thinking", False)
+            else:
+                extra_body.setdefault("thinking", {"type": "disabled"})
+            params["extra_body"] = extra_body
+
+    async def chat(
+        self,
+        *,
+        messages: list,
+        tools: list | None = None,
+        tool_choice=None,
+        disable_thinking: bool = False,
+        **kwargs: Any,
+    ):
         params = self._build_params(
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
+            disable_thinking=disable_thinking,
             **kwargs,
         )
         return await self._transport.chat.completions.create(**params)
 
-    async def chat_stream(self, *, messages: list, tools: list | None = None, tool_choice=None, **kwargs: Any):
+    async def chat_stream(
+        self,
+        *,
+        messages: list,
+        tools: list | None = None,
+        tool_choice=None,
+        disable_thinking: bool = False,
+        **kwargs: Any,
+    ):
         params = self._build_params(
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
             stream=True,
+            disable_thinking=disable_thinking,
             **kwargs,
         )
         return await self._transport.chat.completions.create(**params)
