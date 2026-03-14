@@ -1,8 +1,8 @@
 {
     "info": {
-        "name": "Newbee Notebook API v2.4",
+        "name": "Newbee Notebook API v2.5",
         "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-        "description": "Newbee Notebook API Postman Collection v2.4 (backend-v2 batch-2-core)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Chat modes: agent (chat alias), ask, explain, conclude\n- Context support (selected_text + document_id)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Notes\n- Storage backend switch (`STORAGE_BACKEND=local|minio`) is environment-driven in batch-1 MinIO Phase 0/1.\n- This collection keeps API paths stable; use existing document endpoints for local/minio modes.\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until 'completed' before chat\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Chat Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+        "description": "Newbee Notebook API Postman Collection v2.5 (backend-v2 / batch-2 complete)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Runtime modes: agent, ask, explain, conclude\n- `chat` is retained only as a backward-compatible alias for `agent`\n- Context support (`selected_text` + `document_id`)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- MCP settings and status APIs (`/settings/*`)\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Notes\n- Storage backend switch (`STORAGE_BACKEND=local|minio`) is environment-driven in batch-1 MinIO Phase 0/1.\n- This collection keeps API paths stable; use existing document endpoints for local/minio modes.\n- Document-scoped retrieval now relies on stable `source_document_id` metadata in search indexes.\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until `completed` before asking grounded questions\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -1303,7 +1303,7 @@
                     "response": []
                 },
                 {
-                    "name": "Get Session Messages (Chat/Ask Only)",
+                    "name": "Get Session Messages (Agent/Ask Only)",
                     "event": [
                         {
                             "listen": "test",
@@ -1353,7 +1353,7 @@
                                 }
                             ]
                         },
-                        "description": "Get only Agent and Ask messages from a session. Filters out Explain/Conclude messages."
+                        "description": "Get only Agent and Ask messages from a session. Filters out Explain/Conclude messages. The legacy `chat` alias is normalized to `agent`."
                     },
                     "response": []
                 },
@@ -1502,10 +1502,10 @@
         },
         {
             "name": "Chat",
-            "description": "Chat functionality with support for multiple modes and streaming.",
+            "description": "Conversation endpoints. Canonical runtime modes are agent, ask, explain, and conclude. `chat` remains a backward-compatible alias for `agent`.",
             "item": [
                 {
-                    "name": "Chat (non-stream)",
+                    "name": "Agent (non-stream)",
                     "event": [
                         {
                             "listen": "test",
@@ -1553,7 +1553,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"message\": \"Hello! Can you help me with a question?\",\n  \"mode\": \"chat\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": null\n}",
+                            "raw": "{\n  \"message\": \"Hello! Can you help me with a question?\",\n  \"mode\": \"agent\",\n  \"session_id\": \"{{session_id}}\",\n  \"context\": null\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -1572,7 +1572,7 @@
                                 "chat"
                             ]
                         },
-                        "description": "Send a chat message in non-streaming mode. Supports modes: agent, ask, explain, conclude. The legacy alias chat is still accepted."
+                        "description": "Send an agent message in non-streaming mode. Supports modes: agent, ask, explain, conclude. The legacy alias `chat` is still accepted."
                     },
                     "response": []
                 },
@@ -1645,7 +1645,7 @@
                                 "chat"
                             ]
                         },
-                        "description": "Ask mode (ReAct + hybrid RAG)."
+                        "description": "Ask mode using the batch-2 agent runtime with `knowledge_base + time` tools. Prompt policy biases the model toward grounded notebook retrieval."
                     },
                     "response": []
                 },
@@ -1702,7 +1702,7 @@
                                 "chat"
                             ]
                         },
-                        "description": "Explain mode with selected_text + document_id (uses hybrid RAG)."
+                        "description": "Explain mode with `selected_text + document_id`. Uses the batch-2 retrieval-required workflow and `knowledge_base` only."
                     },
                     "response": []
                 },
@@ -1759,12 +1759,12 @@
                                 "chat"
                             ]
                         },
-                        "description": "Conclude mode with selected_text + document_id."
+                        "description": "Conclude mode with `selected_text + document_id`. Uses the batch-2 retrieval-required workflow and `knowledge_base` only."
                     },
                     "response": []
                 },
                 {
-                    "name": "Chat Stream (SSE)",
+                    "name": "Conversation Stream (SSE)",
                     "event": [
                         {
                             "listen": "test",
@@ -1826,7 +1826,7 @@
                                 "stream"
                             ]
                         },
-                        "description": "Send a chat message in streaming mode (Server-Sent Events). Response is delivered incrementally."
+                        "description": "Send a conversation request in streaming mode (Server-Sent Events). Canonical mode is `agent`; `chat` remains a backward-compatible alias."
                     },
                     "response": []
                 },
@@ -2084,7 +2084,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"provider\": \"qwen3-embedding\",\n  \"mode\": \"api\",\n  \"api_model\": \"text-embedding-v4\"\n}",
+                            "raw": "{\n  \"provider\": \"qwen3-embedding\",\n  \"mode\": \"local\",\n  \"api_model\": \"text-embedding-v4\"\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -2101,7 +2101,7 @@
                                 "embedding"
                             ]
                         },
-                        "description": "Update runtime embedding provider/mode/model."
+                        "description": "Update runtime embedding provider/mode/model. For qwen3-embedding, `mode` can be `local` or `api`. Local mode uses models discovered under the repository `models/` directory."
                     },
                     "response": []
                 },
