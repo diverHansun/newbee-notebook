@@ -62,7 +62,7 @@ def test_llm_client_chat_maps_openai_compatible_parameters():
 
 def test_llm_client_chat_stream_sets_stream_flag_and_passthrough():
     transport = _FakeTransport()
-    client = LLMClient(runtime_config=_runtime_config(provider="zhipu", model="glm-4.7-flash"), transport=transport)
+    client = LLMClient(runtime_config=_runtime_config(provider="zhipu", model="glm-4.7"), transport=transport)
 
     response = asyncio.run(
         client.chat_stream(
@@ -73,7 +73,7 @@ def test_llm_client_chat_stream_sets_stream_flag_and_passthrough():
 
     assert response["ok"] is True
     call = transport.chat.completions.calls[0]
-    assert call["model"] == "glm-4.7-flash"
+    assert call["model"] == "glm-4.7"
     assert call["stream"] is True
     assert call["tool_choice"] == "none"
 
@@ -100,7 +100,7 @@ def test_llm_client_disables_qwen_thinking_for_tool_requests_by_default():
 
 def test_llm_client_disables_zhipu_thinking_for_tool_requests_by_default():
     transport = _FakeTransport()
-    client = LLMClient(runtime_config=_runtime_config(provider="zhipu", model="glm-4.7-flash"), transport=transport)
+    client = LLMClient(runtime_config=_runtime_config(provider="zhipu", model="glm-4.7"), transport=transport)
 
     asyncio.run(
         client.chat_stream(
@@ -124,7 +124,7 @@ def test_llm_client_factory_refreshes_cached_client_when_provider_or_model_chang
     factory = LLMClientFactory(client_builder=_builder)
 
     config_a = _runtime_config(provider="qwen", model="qwen3.5-plus")
-    config_b = _runtime_config(provider="zhipu", model="glm-4.7-flash")
+    config_b = _runtime_config(provider="zhipu", model="glm-4.7")
 
     client_a1 = factory.get_client(config_a)
     client_a2 = factory.get_client(config_a)
@@ -132,4 +132,4 @@ def test_llm_client_factory_refreshes_cached_client_when_provider_or_model_chang
 
     assert client_a1 is client_a2
     assert client_b is not client_a1
-    assert built == [("qwen", "qwen3.5-plus"), ("zhipu", "glm-4.7-flash")]
+    assert built == [("qwen", "qwen3.5-plus"), ("zhipu", "glm-4.7")]

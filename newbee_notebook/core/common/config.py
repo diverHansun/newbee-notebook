@@ -233,7 +233,7 @@ def get_llm_model():
         return "qwen-plus"
     if provider == "openai":
         return "gpt-4o-mini"
-    return "glm-4.7-flash"
+    return "glm-4.7"
 
 
 def get_llm_temperature():

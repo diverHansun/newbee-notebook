@@ -7,7 +7,7 @@ llm:
 
   # ZhipuAI GLM family (default)
   zhipu:
-    model: glm-4.7-flash
+    model: glm-4.7
     temperature: 0.7
     max_tokens: 32768
     top_p: 0.8

@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 from newbee_notebook.core.rag.embeddings import qwen3_embedding
@@ -47,6 +48,41 @@ def test_build_qwen3_embedding_local_uses_env_overrides(monkeypatch):
 
     assert captured_kwargs["device"] == "cuda"
     assert captured_kwargs["embed_batch_size"] == 16
+
+
+def test_build_qwen3_embedding_local_resolves_main_repo_models_dir(monkeypatch, tmp_path):
+    captured_kwargs = {}
+
+    class DummyLocalEmbedding:
+        def __init__(self, **kwargs):
+            captured_kwargs.update(kwargs)
+
+    repo_root = tmp_path / "repo"
+    worktree_root = repo_root / ".worktrees" / "batch-2-core"
+    anchor = worktree_root / "newbee_notebook" / "core" / "rag" / "embeddings" / "qwen3_embedding.py"
+    anchor.parent.mkdir(parents=True, exist_ok=True)
+    anchor.write_text("# anchor", encoding="utf-8")
+    (repo_root / "models" / "Qwen3-Embedding-0.6B").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        qwen3_embedding,
+        "_get_qwen3_embedding_config",
+        lambda: {
+            "mode": "local",
+            "model_path": "models/Qwen3-Embedding-0.6B",
+            "device": "cpu",
+            "max_length": 8192,
+            "dim": 1024,
+            "embed_batch_size": 32,
+        },
+    )
+    monkeypatch.setattr(qwen3_embedding, "Qwen3LocalEmbedding", DummyLocalEmbedding)
+
+    qwen3_embedding.build_qwen3_embedding(mode="local", source_path=anchor)
+
+    assert Path(captured_kwargs["model_path"]) == (
+        repo_root / "models" / "Qwen3-Embedding-0.6B"
+    ).resolve()
 
 
 def test_build_qwen3_embedding_api_uses_env_overrides(monkeypatch):
@@ -113,12 +149,29 @@ def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
         def insert_nodes(self, nodes):
             call_args.setdefault("inserted_nodes", []).append(list(nodes))
 
+    class _DummySessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyDb:
+        def session(self):
+            return _DummySessionContext()
+
     def fake_get_builder(provider):
         call_args["provider"] = provider
         return lambda: DummyEmbed()
 
+    sync_mock = AsyncMock(
+        return_value={"provider": "qwen3-embedding", "mode": "local", "model_path": "D:/models/Qwen3"}
+    )
+
     monkeypatch.setattr(rebuild_pgvector, "get_builder", fake_get_builder)
     monkeypatch.setattr(rebuild_pgvector, "get_storage_config", lambda: {"postgresql": {}})
+    monkeypatch.setattr(rebuild_pgvector, "get_database", AsyncMock(return_value=_DummyDb()))
+    monkeypatch.setattr(rebuild_pgvector, "sync_embedding_runtime_env_from_db", sync_mock)
     monkeypatch.setattr(
         rebuild_pgvector,
         "get_pgvector_config_for_provider",
@@ -147,11 +200,11 @@ def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
     asyncio.run(
         rebuild_pgvector.rebuild_pgvector_index(
             clear_only=False,
-            provider="qwen3-embedding",
         )
     )
 
     assert call_args["provider"] == "qwen3-embedding"
+    sync_mock.assert_awaited_once()
     assert call_args["cleared"] is True
     assert call_args["closed"] is True
     assert call_args["inserted_nodes"] == [["node-1", "node-2"]]
@@ -194,8 +247,22 @@ def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
         def insert_nodes(self, nodes):
             call_args.setdefault("inserted_nodes", []).append(list(nodes))
 
+    class _DummySessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyDb:
+        def session(self):
+            return _DummySessionContext()
+
+    sync_mock = AsyncMock(return_value={"provider": "qwen3-embedding", "mode": "local"})
     monkeypatch.setattr(rebuild_es, "build_embedding", lambda: DummyEmbed())
     monkeypatch.setattr(rebuild_es, "get_storage_config", lambda: {"elasticsearch": {}})
+    monkeypatch.setattr(rebuild_es, "get_database", AsyncMock(return_value=_DummyDb()))
+    monkeypatch.setattr(rebuild_es, "sync_embedding_runtime_env_from_db", sync_mock)
     monkeypatch.setattr(rebuild_es, "ElasticsearchStore", lambda _config: DummyStore())
     monkeypatch.setattr(
         rebuild_es,
@@ -216,6 +283,7 @@ def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
     asyncio.run(rebuild_es.rebuild_es_index(clear_only=False))
 
     assert call_args["initialized"] is True
+    sync_mock.assert_awaited_once()
     assert call_args["cleared"] is True
     assert call_args["closed"] is True
     assert call_args["inserted_nodes"] == [["node-es-1"]]

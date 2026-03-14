@@ -286,6 +286,42 @@ def test_ask_prompt_matches_runtime_tool_contract():
 
     assert "knowledge_base" in prompt
     assert "time" in prompt
+    assert "query" in prompt
+    assert "search_type" in prompt
+    assert "max_results" in prompt
+    assert "filter_document_id" in prompt
+    assert "allowed_document_ids" in prompt
+    assert "keyword" in prompt
+    assert "semantic" in prompt
+    assert "hybrid" in prompt
     assert "Do not ask the user to upload a file" in prompt
     assert "zhipu_web_search" not in prompt
     assert "zhipu_web_crawl" not in prompt
+
+
+def test_agent_prompt_explains_knowledge_base_argument_strategy():
+    prompt = load_prompt("chat.md")
+
+    assert "knowledge_base" in prompt
+    assert "query" in prompt
+    assert "search_type" in prompt
+    assert "max_results" in prompt
+    assert "filter_document_id" in prompt
+    assert "allowed_document_ids" in prompt
+    assert "Avoid generic queries" in prompt
+
+
+def test_explain_and_conclude_prompts_explain_document_scoped_retrieval_arguments():
+    explain_prompt = load_prompt("explain.md")
+    conclude_prompt = load_prompt("conclude.md")
+
+    for prompt in (explain_prompt, conclude_prompt):
+        assert "knowledge_base" in prompt
+        assert "query" in prompt
+        assert "search_type" in prompt
+        assert "max_results" in prompt
+        assert "filter_document_id" in prompt
+        assert "allowed_document_ids" in prompt
+
+    assert "keyword" in explain_prompt
+    assert "hybrid" in conclude_prompt

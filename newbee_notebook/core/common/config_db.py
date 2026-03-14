@@ -9,12 +9,18 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.core.common.config import get_embeddings_config, get_llm_config
+from newbee_notebook.core.common.project_paths import resolve_project_relative_path
 
 logger = logging.getLogger(__name__)
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
+
+
+def _get_app_settings_service(session: AsyncSession):
+    from newbee_notebook.application.services.app_settings_service import AppSettingsService
+
+    return AppSettingsService(session)
 
 
 def _as_float(value: Any, default: float) -> float:
@@ -104,7 +110,7 @@ async def get_llm_config_async(session: AsyncSession) -> dict[str, Any]:
     source = "default"
     db_values: dict[str, str] = {}
     try:
-        db_values = await AppSettingsService(session).get_many("llm.")
+        db_values = await _get_app_settings_service(session).get_many("llm.")
         if db_values:
             source = "db"
     except Exception as exc:  # noqa: BLE001
@@ -154,7 +160,7 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
     source = "default"
     db_values: dict[str, str] = {}
     try:
-        db_values = await AppSettingsService(session).get_many("embedding.")
+        db_values = await _get_app_settings_service(session).get_many("embedding.")
         if db_values:
             source = "db"
     except Exception as exc:  # noqa: BLE001
@@ -190,7 +196,7 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
             or "text-embedding-v4"
         )
         if source == "default":
-            if any(key in db_values for key in ("embedding.mode", "embedding.api_model")):
+            if any(key in db_values for key in ("embedding.mode", "embedding.api_model", "embedding.model_path")):
                 source = "db"
             elif os.getenv("QWEN3_EMBEDDING_MODE") or os.getenv("QWEN3_EMBEDDING_API_MODEL"):
                 source = "env"
@@ -198,10 +204,17 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
                 source = "yaml"
 
         if mode == "local":
-            model_path = os.getenv("QWEN3_EMBEDDING_MODEL_PATH") or provider_cfg.get("model_path") or "models/Qwen3-Embedding-0.6B"
-            model_name = Path(str(model_path)).name or str(model_path)
+            model_path = (
+                db_values.get("embedding.model_path")
+                or os.getenv("QWEN3_EMBEDDING_MODEL_PATH")
+                or provider_cfg.get("model_path")
+                or "models/Qwen3-Embedding-0.6B"
+            )
+            resolved_model_path = resolve_project_relative_path(str(model_path))
+            model_name = Path(str(resolved_model_path)).name or str(resolved_model_path)
         else:
             model_name = str(api_model)
+            resolved_model_path = None
 
         dim = _as_int(
             os.getenv("QWEN3_EMBEDDING_DIM") or provider_cfg.get("dim") or defaults.get("dim", 1024),
@@ -213,6 +226,7 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
             "mode": mode,
             "model": model_name,
             "api_model": str(api_model),
+            "model_path": resolved_model_path,
             "dim": dim,
             "source": source,
         }
@@ -265,6 +279,9 @@ def apply_embedding_runtime_env(config: dict[str, Any]) -> None:
         os.environ["QWEN3_EMBEDDING_MODE"] = mode
         if config.get("api_model"):
             os.environ["QWEN3_EMBEDDING_API_MODEL"] = str(config["api_model"])
+        if mode == "local":
+            model_path = config.get("model_path") or "models/Qwen3-Embedding-0.6B"
+            os.environ["QWEN3_EMBEDDING_MODEL_PATH"] = resolve_project_relative_path(str(model_path))
     else:
         os.environ["EMBEDDING_MODEL"] = str(config.get("model") or "embedding-3")
 
@@ -275,3 +292,10 @@ async def sync_runtime_env_from_db(session: AsyncSession) -> None:
     emb_cfg = await get_embedding_config_async(session)
     apply_llm_runtime_env(llm_cfg)
     apply_embedding_runtime_env(emb_cfg)
+
+
+async def sync_embedding_runtime_env_from_db(session: AsyncSession) -> dict[str, Any]:
+    """Load the effective embedding config from DB and project it into process env."""
+    emb_cfg = await get_embedding_config_async(session)
+    apply_embedding_runtime_env(emb_cfg)
+    return emb_cfg

@@ -41,9 +41,26 @@ class _FakeIndex:
 def test_index_es_nodes_closes_nested_async_vector_store(monkeypatch):
     fake_index = _FakeIndex(vector_store=_FakeVectorStoreWithNestedAsyncClose())
 
+    class _DummySessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyDb:
+        def session(self):
+            return _DummySessionContext()
+
+    monkeypatch.setattr(
+        document_tasks,
+        "sync_embedding_runtime_env_from_db",
+        AsyncMock(return_value={"provider": "zhipu", "mode": None}),
+    )
     monkeypatch.setattr(document_tasks, "build_embedding", lambda: object())
     monkeypatch.setattr(document_tasks, "load_es_index", AsyncMock(return_value=fake_index))
     monkeypatch.setattr(document_tasks, "get_storage_config", lambda: {})
+    monkeypatch.setattr(document_tasks, "get_database", AsyncMock(return_value=_DummyDb()))
 
     asyncio.run(document_tasks._index_es_nodes(["node-1"]))
 
@@ -55,11 +72,27 @@ def test_delete_document_nodes_task_closes_loaded_indexes(monkeypatch):
     fake_pg = _FakeIndex(vector_store=_FakeVectorStoreWithAsyncClose())
     fake_es = _FakeIndex(vector_store=_FakeVectorStoreWithNestedAsyncClose())
 
+    class _DummySessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyDb:
+        def session(self):
+            return _DummySessionContext()
+
+    monkeypatch.setattr(
+        document_tasks,
+        "sync_embedding_runtime_env_from_db",
+        AsyncMock(return_value={"provider": "zhipu", "mode": None}),
+    )
     monkeypatch.setattr(document_tasks, "build_embedding", lambda: object())
     monkeypatch.setattr(document_tasks, "load_pgvector_index", AsyncMock(return_value=fake_pg))
     monkeypatch.setattr(document_tasks, "load_es_index", AsyncMock(return_value=fake_es))
     monkeypatch.setattr(document_tasks, "get_storage_config", lambda: {})
-    monkeypatch.setattr(document_tasks, "get_embedding_provider", lambda: "zhipu")
+    monkeypatch.setattr(document_tasks, "get_database", AsyncMock(return_value=_DummyDb()))
     monkeypatch.setattr(
         document_tasks,
         "get_pgvector_config_for_provider",

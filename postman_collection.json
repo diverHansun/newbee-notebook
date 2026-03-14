@@ -2189,7 +2189,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"provider\": \"zhipu\",\n  \"model\": \"glm-4.7-flash\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 32768,\n  \"top_p\": 0.8\n}",
+                                                                   "raw":  "{\n  \"provider\": \"zhipu\",\n  \"model\": \"glm-4.7\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 32768,\n  \"top_p\": 0.8\n}",
                                                                    "options":  {
                                                                                    "raw":  {
                                                                                                "language":  "json"
@@ -2751,5 +2751,6 @@
                      }
                  ]
 }
+
 
 

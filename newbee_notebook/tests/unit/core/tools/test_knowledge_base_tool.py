@@ -156,3 +156,17 @@ async def test_builtin_provider_applies_mode_specific_defaults_and_allows_overri
     assert calls[1]["max_results"] == 8
     assert calls[2]["search_type"] == "hybrid"
     assert calls[2]["max_results"] == 9
+
+
+def test_knowledge_base_tool_exposes_argument_documentation():
+    tool = build_knowledge_base_tool()
+
+    assert "query" in tool.description
+    assert "search_type" in tool.description
+    assert "max_results" in tool.description
+    assert "filter_document_id" in tool.description
+    assert "allowed_document_ids" in tool.description
+    assert "keyword" in tool.parameters["properties"]["search_type"]["description"]
+    assert "semantic" in tool.parameters["properties"]["search_type"]["description"]
+    assert "hybrid" in tool.parameters["properties"]["search_type"]["description"]
+    assert "precise" in tool.parameters["properties"]["query"]["description"].lower()

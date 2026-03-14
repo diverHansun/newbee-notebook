@@ -13,14 +13,15 @@ from llama_index.core import VectorStoreIndex
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from newbee_notebook.core.common.config_db import sync_embedding_runtime_env_from_db
 from newbee_notebook.core.common.config import (
-    get_embedding_provider,
     get_embeddings_config,
     get_pgvector_config_for_provider,
     get_storage_config,
 )
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.rag.embeddings.registry import get_builder, get_registered_providers
+from newbee_notebook.infrastructure.persistence.database import get_database
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig, PGVectorStore
 from newbee_notebook.scripts.rebuild_common import (
     get_rebuildable_documents,
@@ -66,7 +67,14 @@ async def rebuild_pgvector_index(
     storage_config = get_storage_config()
     pg_config = storage_config.get("postgresql", {})
 
-    effective_provider = provider or get_embedding_provider()
+    effective_provider = provider
+    if effective_provider is None:
+        db = await get_database()
+        async with db.session() as session:
+            embedding_cfg = await sync_embedding_runtime_env_from_db(session)
+        effective_provider = str(embedding_cfg["provider"])
+    else:
+        effective_provider = str(effective_provider)
     print(f"\nUsing embedding provider: {effective_provider}")
 
     print("\n[1/4] Initializing embedding model...")

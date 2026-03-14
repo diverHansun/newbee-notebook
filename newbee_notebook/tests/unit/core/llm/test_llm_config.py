@@ -35,7 +35,7 @@ def test_resolve_llm_runtime_config_uses_provider_specific_base_url_override(mon
     async def _fake_get_llm_config_async(_session):
         return {
             "provider": "zhipu",
-            "model": "glm-4.7-flash",
+            "model": "glm-4.7",
             "temperature": 0.2,
             "max_tokens": 2048,
             "top_p": 0.7,
@@ -49,5 +49,6 @@ def test_resolve_llm_runtime_config_uses_provider_specific_base_url_override(mon
     config = asyncio.run(llm_config_module.resolve_llm_runtime_config(SimpleNamespace()))
 
     assert config.provider == "zhipu"
+    assert config.model == "glm-4.7"
     assert config.api_key == "zhipu-key"
     assert config.base_url == "https://example.zhipu.test/v4"

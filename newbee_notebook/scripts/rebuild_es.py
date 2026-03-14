@@ -13,9 +13,11 @@ from llama_index.core import VectorStoreIndex
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from newbee_notebook.core.common.config_db import sync_embedding_runtime_env_from_db
 from newbee_notebook.core.common.config import get_storage_config
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig, ElasticsearchStore
+from newbee_notebook.infrastructure.persistence.database import get_database
 from newbee_notebook.scripts.rebuild_common import (
     get_rebuildable_documents,
     load_document_nodes,
@@ -61,6 +63,13 @@ async def rebuild_es_index(
             return
 
         print("\n[2/4] Initializing embedding model...")
+        db = await get_database()
+        async with db.session() as session:
+            embedding_cfg = await sync_embedding_runtime_env_from_db(session)
+        print(
+            "Embedding runtime config: "
+            f"provider={embedding_cfg['provider']} source={embedding_cfg.get('source', 'unknown')}"
+        )
         embed_model = build_embedding()
         print(f"Embedding model loaded (dimension: {getattr(embed_model, 'dimensions', 'unknown')})")
 

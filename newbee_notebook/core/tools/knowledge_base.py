@@ -285,17 +285,49 @@ def build_knowledge_base_tool(
 
     return ToolDefinition(
         name="knowledge_base",
-        description=description or "Retrieve notebook or document-grounded knowledge.",
+        description=description
+        or (
+            "Retrieve notebook or document-grounded knowledge. "
+            "Use query for a precise retrieval phrase, search_type to choose keyword, semantic, "
+            "or hybrid retrieval, max_results to control evidence breadth, and filter_document_id "
+            "to stay inside one current document when needed. allowed_document_ids is injected by "
+            "the runtime to enforce notebook scope; do not assume access outside it."
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "A precise retrieval query built from the user's request and the most "
+                        "important entities, phrases, or concepts. Avoid vague queries like "
+                        "'document', '*' or a single generic noun when more specific wording exists."
+                    ),
+                },
                 "search_type": {
                     "type": "string",
                     "enum": ["hybrid", "semantic", "keyword"],
+                    "description": (
+                        "Retrieval strategy. Use keyword for exact titles, names, quoted text, "
+                        "or terminology; semantic for paraphrased concepts; hybrid for most "
+                        "notebook question answering when both recall and precision matter."
+                    ),
                 },
-                "max_results": {"type": "integer", "minimum": 1},
-                "filter_document_id": {"type": "string"},
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "How many evidence chunks to retrieve. Keep it modest for focused lookup "
+                        "(for example 3-5) and increase only when broader coverage is needed."
+                    ),
+                },
+                "filter_document_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional current-document scope. Use this when the answer should stay "
+                        "inside one specific document instead of the broader notebook scope."
+                    ),
+                },
             },
             "required": ["query"],
         },
