@@ -175,7 +175,7 @@ def get_memory_summarize_prompt():
     Priority order:
     1. configs/memory.yaml (memory.summarize_prompt)
     2. MEMORY_SUMMARIZE_PROMPT environment variable
-    3. None (use default in build_chat_memory)
+    3. None (runtime summary prompt defaults apply)
     
     Returns:
         str or None: Summarize prompt for memory
@@ -233,7 +233,7 @@ def get_llm_model():
         return "qwen-plus"
     if provider == "openai":
         return "gpt-4o-mini"
-    return "glm-4.7-flash"
+    return "glm-4.7"
 
 
 def get_llm_temperature():
@@ -462,13 +462,13 @@ def get_modes_config():
 
 
 def get_explain_skip_condense() -> bool:
-    """Return explain mode skip_condense setting from modes.yaml."""
+    """Compatibility helper retained while modes.yaml is repurposed for runtime policy."""
     cfg = get_modes_config()
     return bool(cfg.get("modes", {}).get("explain", {}).get("skip_condense", True))
 
 
 def get_conclude_skip_condense() -> bool:
-    """Return conclude mode skip_condense setting from modes.yaml."""
+    """Compatibility helper retained while modes.yaml is repurposed for runtime policy."""
     cfg = get_modes_config()
     return bool(cfg.get("modes", {}).get("conclude", {}).get("skip_condense", True))
 

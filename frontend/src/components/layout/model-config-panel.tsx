@@ -46,7 +46,7 @@ function inferProviderByPreset(name: string, label: string): string {
   return "qwen";
 }
 function getDefaultLLMModel(provider: string, presets: Array<{ name: string; label: string }>): string {
-  const fallback = provider === "zhipu" ? "glm-4.7-flash" : "qwen3.5-plus";
+  const fallback = provider === "zhipu" ? "glm-4.7" : "qwen3.5-plus";
   const matchedPreset = presets.find((item) => inferProviderByPreset(item.name, item.label) === provider);
   return matchedPreset?.name ?? fallback;
 }

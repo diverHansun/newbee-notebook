@@ -10,18 +10,18 @@ import { uiStrings } from "@/lib/i18n/strings";
 
 type ChatInputProps = {
   notebookId: string;
-  mode: "chat" | "ask";
+  mode: "agent" | "ask";
   isStreaming: boolean;
   askBlocked: boolean;
   sourceDocIds: string[] | null;
   onSourceDocIdsChange: (ids: string[] | null) => void;
-  onModeChange: (mode: "chat" | "ask") => void;
-  onSend: (text: string, mode: "chat" | "ask") => void;
+  onModeChange: (mode: "agent" | "ask") => void;
+  onSend: (text: string, mode: "agent" | "ask") => void;
   onCancel: () => void;
 };
 
 const MODE_OPTIONS = [
-  { value: "chat", label: "Chat" },
+  { value: "agent", label: "Agent" },
   { value: "ask", label: "Ask" },
 ] as const;
 
@@ -138,7 +138,7 @@ export function ChatInput({
           placeholder={
             mode === "ask"
               ? t(uiStrings.chat.inputPlaceholderAsk)
-              : t(uiStrings.chat.inputPlaceholderChat)
+              : t(uiStrings.chat.inputPlaceholderAgent)
           }
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -155,7 +155,7 @@ export function ChatInput({
             <SegmentedControl
               value={mode}
               options={MODE_OPTIONS.map((item) => ({ ...item }))}
-              onChange={(next) => onModeChange(next as "chat" | "ask")}
+              onChange={(next) => onModeChange(next as "agent" | "ask")}
               disabled={isStreaming}
             />
             <SourceSelector

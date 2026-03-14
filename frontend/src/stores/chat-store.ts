@@ -30,7 +30,7 @@ type ChatState = {
   currentSessionId: string | null;
   messages: ChatMessage[];
   isStreaming: boolean;
-  currentMode: "chat" | "ask";
+  currentMode: "agent" | "ask";
   streamingMessageId: number | null;
   explainCard: ExplainCardState | null;
   setCurrentSessionId: (sessionId: string | null) => void;
@@ -41,7 +41,7 @@ type ChatState = {
   updateThinkingStage: (id: string, stage: string | null) => void;
   appendMessageContent: (id: string, delta: string) => void;
   setStreaming: (isStreaming: boolean, messageId?: number | null) => void;
-  setMode: (mode: "chat" | "ask") => void;
+  setMode: (mode: "agent" | "ask") => void;
   clearMessages: () => void;
   setExplainCard: (
     state: ExplainCardState | null | ((prev: ExplainCardState | null) => ExplainCardState | null)
@@ -53,7 +53,7 @@ export const useChatStore = create<ChatState>((set) => ({
   currentSessionId: null,
   messages: [],
   isStreaming: false,
-  currentMode: "chat",
+  currentMode: "agent",
   streamingMessageId: null,
   explainCard: null,
   setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),

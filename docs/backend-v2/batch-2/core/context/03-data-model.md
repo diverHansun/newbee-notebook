@@ -70,6 +70,21 @@ class InternalMessage(TypedDict, total=False):
 
 因此 context 对持久化结构和 runtime 结构做一次受控转换。
 
+### 3.3 Context 只接收 canonical business history
+
+第一版明确限制：
+
+- `SessionMemory` 不存储 `assistant(tool_calls)`
+- `SessionMemory` 不存储 `tool`
+- `SessionMemory` 不存储 `reasoning_content`
+
+也就是说，ContextBuilder 的历史输入只来自：
+
+- `user`
+- `assistant(final)`
+
+工具调用链与 provider thinking 都只属于 request-scoped runtime，不属于持久化上下文。
+
 ## 4. `ContextBudget`
 
 第一版预算结构保留简单版：
@@ -139,3 +154,13 @@ class InternalMessage(TypedDict, total=False):
 ### 8.3 `Compressor`
 
 纯工具组件，可被 `ContextBuilder` 调用。
+
+## 9. 与 provider transient signals 的边界
+
+context 模块不直接处理：
+
+- `reasoning_content`
+- `thinking`
+- provider-specific stream delta
+
+这些内容由 `llm` 和 `engine` 在请求期消费，不能进入 session 持久化历史。

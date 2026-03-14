@@ -55,7 +55,7 @@ MCP Server 的定义（command、args、env、url、headers）全部来自 JSON 
 
 理由：
 - Server 配置涉及命令路径、环境变量、认证令牌等敏感信息，文件系统比数据库更安全和可控。
-- 与 Claude Code 的 `.mcp.json` 格式对齐，用户可以直接复制社区配置。
+- 字段结构与 Claude Code / Anthropic MCP server schema 对齐，项目路径固定为 `configs/mcp.json`，用户可以直接复用社区配置内容。
 - 前端不需要处理复杂的配置表单字段。
 
 ### 2.3 适配器模式
@@ -134,7 +134,7 @@ stdio 类型的 MCP Server 作为子进程运行。需要注意：
 
 ### 4.3 工具名称冲突
 
-不同 MCP Server 可能暴露同名工具，或 MCP 工具名与内置工具名冲突。解决策略：为 MCP 工具添加 Server 名前缀（`{server_name}__{tool_name}`），确保全局唯一。
+不同 MCP Server 可能暴露同名工具，或 MCP 工具名与内置工具名冲突。解决策略：为 MCP 工具添加 Server 名前缀（`{server_name}_{tool_name}`），确保全局唯一。
 
 ### 4.4 工具调用延迟
 

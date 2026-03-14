@@ -131,7 +131,7 @@ export type Session = {
 };
 
 export type MessageRole = "user" | "assistant" | "system";
-export type MessageMode = "chat" | "ask" | "explain" | "conclude";
+export type MessageMode = "agent" | "chat" | "ask" | "explain" | "conclude";
 
 export type SessionMessage = {
   message_id: number;

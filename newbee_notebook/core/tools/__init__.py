@@ -1,5 +1,14 @@
 """Tools module for Newbee Notebook."""
 
+from newbee_notebook.core.tools.contracts import (
+    SourceItem,
+    ToolCallResult,
+    ToolDefinition,
+    ToolQualityMeta,
+)
+from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
+from newbee_notebook.core.tools.registry import ToolRegistry
+from newbee_notebook.core.tools.knowledge_base import build_knowledge_base_tool
 from newbee_notebook.core.tools.tavily_tools import (
     build_tavily_search_tool,
     build_tavily_news_tool,
@@ -19,6 +28,13 @@ from newbee_notebook.core.tools.time import (
 from newbee_notebook.core.tools.tool_registry import build_tool_registry
 
 __all__ = [
+    "SourceItem",
+    "ToolCallResult",
+    "ToolDefinition",
+    "ToolQualityMeta",
+    "BuiltinToolProvider",
+    "ToolRegistry",
+    "build_knowledge_base_tool",
     "build_tavily_search_tool",
     "build_tavily_news_tool",
     "build_tavily_crawl_tool",

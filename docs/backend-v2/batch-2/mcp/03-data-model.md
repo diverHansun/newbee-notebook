@@ -11,12 +11,12 @@ MCP Server 的静态配置，由 MCPConfigLoader 从 JSON 文件解析产出。
 | command | 可执行文件路径 | stdio |
 | args | 命令行参数列表 | stdio |
 | env | 环境变量字典 | stdio |
-| url | Server 端点 URL | http |
-| headers | HTTP 请求头字典 | http |
+| url | Server 端点 URL | streamable-http |
+| headers | HTTP 请求头字典 | streamable-http |
 
 transport 取值：
 - `"stdio"`：有 `command` 字段时隐式推断为 stdio（与 Claude Code 行为一致）。
-- `"http"`：`type` 字段显式指定为 `"http"`。
+- `"streamable-http"`：`type` 字段显式指定为 `"streamable-http"`，同时兼容 `"http"` 和 `"streamable_http"` 的历史写法并在解析时统一归一化。
 
 ### 1.1 配置文件格式
 
@@ -31,7 +31,7 @@ transport 取值：
       }
     },
     "remote-service": {
-      "type": "http",
+      "type": "streamable-http",
       "url": "https://api.example.com/mcp",
       "headers": {
         "Authorization": "Bearer ${SERVICE_TOKEN}"
@@ -41,7 +41,7 @@ transport 取值：
 }
 ```
 
-类型推断规则：存在 `command` 字段 -> stdio；存在 `type: "http"` -> http。两者都存在时以 `type` 为准。
+类型推断规则：存在 `command` 字段 -> stdio；存在 `type: "streamable-http"` / `"http"` / `"streamable_http"` -> streamable-http。两者都存在时以 `type` 为准。
 
 ### 1.2 环境变量展开
 
@@ -59,7 +59,7 @@ transport 取值：
 | 字段 | 含义 |
 |------|------|
 | name | Server 标识名 |
-| transport | 传输类型（"stdio" / "http"） |
+| transport | 传输类型（"stdio" / "streamable-http"） |
 | enabled | 是否启用（来自 AppSettings） |
 | connection_status | 连接状态 |
 | tool_count | 该 Server 提供的工具数量（未连接时为 0） |
@@ -108,11 +108,11 @@ MCP Server 暴露的单个工具的描述信息，缓存在 MCPClientManager 中
 |------|------|
 | server_name | 所属 Server 标识名 |
 | name | 工具原始名称（MCP Server 定义的） |
-| qualified_name | 全限定名（`{server_name}__{name}`），用于避免名称冲突 |
+| qualified_name | 全限定名（`{server_name}_{name}`），用于避免名称冲突 |
 | description | 工具描述，注入 Agent 的工具描述中 |
 | input_schema | 工具参数的 JSON Schema |
 
-qualified_name 示例：Server 名为 `weather`，工具名为 `get_forecast`，则全限定名为 `weather__get_forecast`。
+qualified_name 示例：Server 名为 `weather`，工具名为 `get_forecast`，则全限定名为 `weather_get_forecast`。
 
 ## 4. AppSettings 键定义
 

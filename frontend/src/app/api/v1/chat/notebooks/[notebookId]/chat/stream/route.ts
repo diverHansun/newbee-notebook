@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 // Allow long-running LLM streams.
 export const maxDuration = 300;
 
-const BACKEND_URL = process.env.INTERNAL_API_URL || "http://localhost:8000";
+const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
 
 export async function POST(
   request: NextRequest,

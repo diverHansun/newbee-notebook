@@ -1,6 +1,9 @@
 """LLM adapters with registry-based provider selection."""
 
 from newbee_notebook.core.common.config import get_llm_provider
+from newbee_notebook.core.llm.client import LLMClient
+from newbee_notebook.core.llm.config import LLMRuntimeConfig, ProviderConfig
+from newbee_notebook.core.llm.factory import LLMClientFactory
 from newbee_notebook.core.llm.registry import get_builder, get_registered_providers
 
 # Import provider modules to trigger @register_llm decorators.
@@ -22,6 +25,10 @@ def build_llm():
 
 __all__ = [
     "build_llm",
+    "LLMClient",
+    "LLMRuntimeConfig",
+    "ProviderConfig",
+    "LLMClientFactory",
     "build_zhipu_llm",
     "build_openai_llm",
     "build_qwen_llm",

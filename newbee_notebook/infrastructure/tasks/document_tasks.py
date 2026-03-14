@@ -16,10 +16,10 @@ from llama_index.readers.file import MarkdownReader
 
 from newbee_notebook.core.common.config import (
     get_documents_directory,
-    get_embedding_provider,
     get_pgvector_config_for_provider,
     get_storage_config,
 )
+from newbee_notebook.core.common.config_db import sync_embedding_runtime_env_from_db
 from newbee_notebook.core.engine.index_builder import load_es_index, load_pgvector_index
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.rag.text_splitter.splitter import split_documents
@@ -41,6 +41,7 @@ from newbee_notebook.infrastructure.tasks.pipeline_context import PipelineContex
 
 logger = logging.getLogger(__name__)
 _EMBED_MODEL = None
+_EMBED_MODEL_SIGNATURE = None
 _PROCESSOR = DocumentProcessor()
 _PIPELINE_LOCK_REDIS = None
 _PIPELINE_LOCK_DISABLED = False
@@ -639,11 +640,11 @@ async def _index_to_stores(nodes, ctx: PipelineContext) -> None:
     chunk_count = len(nodes)
 
     await ctx.set_stage(ProcessingStage.INDEXING_PG, {"chunk_count": chunk_count})
-    await _index_pg_nodes(nodes)
+    await _index_pg_nodes(nodes, session=ctx.session)
     ctx.indexed_anything = True
 
     await ctx.set_stage(ProcessingStage.INDEXING_ES, {"chunk_count": chunk_count})
-    await _index_es_nodes(nodes)
+    await _index_es_nodes(nodes, session=ctx.session)
 
 
 async def _find_documents_by_status(
@@ -749,20 +750,43 @@ async def _process_pending_async(document_ids: list[str] | None = None) -> dict:
     }
 
 
-def _get_embed_model():
-    global _EMBED_MODEL
-    if _EMBED_MODEL is None:
+async def _get_embed_model(session=None):
+    global _EMBED_MODEL, _EMBED_MODEL_SIGNATURE
+
+    owns_session = session is None
+    if owns_session:
+        db = await get_database()
+        session_ctx = db.session()
+        session = await session_ctx.__aenter__()
+    else:
+        session_ctx = None
+
+    try:
+        embedding_cfg = await sync_embedding_runtime_env_from_db(session)
+    finally:
+        if session_ctx is not None:
+            await session_ctx.__aexit__(None, None, None)
+
+    signature = (
+        embedding_cfg.get("provider"),
+        embedding_cfg.get("mode"),
+        embedding_cfg.get("api_model"),
+        embedding_cfg.get("model"),
+        embedding_cfg.get("model_path"),
+    )
+    if _EMBED_MODEL is None or _EMBED_MODEL_SIGNATURE != signature:
         _EMBED_MODEL = build_embedding()
-    return _EMBED_MODEL
+        _EMBED_MODEL_SIGNATURE = signature
+    return _EMBED_MODEL, embedding_cfg
 
 
-async def _index_pg_nodes(nodes):
+async def _index_pg_nodes(nodes, *, session=None):
     """Index nodes into pgvector."""
-    embed_model = _get_embed_model()
+    embed_model, embedding_cfg = await _get_embed_model(session=session)
     storage_cfg = get_storage_config()
 
     pg_cfg = storage_cfg.get("postgresql", {})
-    provider = get_embedding_provider()
+    provider = str(embedding_cfg["provider"])
     pgvector_provider_cfg = get_pgvector_config_for_provider(provider)
     pg_config = PGVectorConfig(
         host=pg_cfg.get("host", "localhost"),
@@ -780,9 +804,9 @@ async def _index_pg_nodes(nodes):
         await _close_vector_index(pg_index)
 
 
-async def _index_es_nodes(nodes):
+async def _index_es_nodes(nodes, *, session=None):
     """Index nodes into Elasticsearch."""
-    embed_model = _get_embed_model()
+    embed_model, _embedding_cfg = await _get_embed_model(session=session)
     storage_cfg = get_storage_config()
 
     es_cfg = storage_cfg.get("elasticsearch", {})
@@ -831,14 +855,13 @@ async def _close_vector_index(index) -> None:
 async def _delete_document_nodes_async(document_id: str):
     """Delete vector/ES nodes belonging to a document (best effort)."""
     try:
-        global _EMBED_MODEL
-        if _EMBED_MODEL is None:
-            _EMBED_MODEL = build_embedding()
-        embed_model = _EMBED_MODEL
+        db = await get_database()
+        async with db.session() as session:
+            embed_model, embedding_cfg = await _get_embed_model(session=session)
         storage_cfg = get_storage_config()
 
         pg_cfg = storage_cfg.get("postgresql", {})
-        provider = get_embedding_provider()
+        provider = str(embedding_cfg["provider"])
         pgvector_provider_cfg = get_pgvector_config_for_provider(provider)
         pg_config = PGVectorConfig(
             host=pg_cfg.get("host", "localhost"),

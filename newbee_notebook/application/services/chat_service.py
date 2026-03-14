@@ -7,10 +7,11 @@ Application service for chat operations.
 from typing import Optional, List, AsyncGenerator, Dict, Any
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from dataclasses import asdict
 
 from newbee_notebook.domain.entities.session import Session
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
+from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole, normalize_runtime_mode
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.reference_repository import (
@@ -22,16 +23,25 @@ from newbee_notebook.domain.repositories.message_repository import MessageReposi
 from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
-from newbee_notebook.core.engine import SessionManager
+from newbee_notebook.core.engine.stream_events import (
+    ContentEvent,
+    DoneEvent,
+    ErrorEvent,
+    PhaseEvent,
+    SourceEvent,
+    StartEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    WarningEvent,
+)
+from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
 
 
 logger = logging.getLogger(__name__)
-NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS = 90
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
-STREAM_PHASE_MARKER_PREFIX = "__PHASE__:"
 ASK_SOURCE_SCORE_THRESHOLD = 0.3
 
 
@@ -53,6 +63,7 @@ class ChatResult:
     content: str
     mode: ModeType
     sources: List[ChatSource]
+    warnings: List[dict] = field(default_factory=list)
 
 
 class ChatService:
@@ -75,6 +86,7 @@ class ChatService:
         ref_repo: NotebookDocumentRefRepository,
         message_repo: MessageRepository,
         session_manager: SessionManager,
+        vector_index: Any = None,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
@@ -83,7 +95,17 @@ class ChatService:
         self._ref_repo = ref_repo
         self._message_repo = message_repo
         self._session_manager = session_manager
-        self._vector_index = session_manager.vector_index
+        self._vector_index = vector_index
+
+    @staticmethod
+    def _source_items_to_dicts(items: List[Any]) -> List[dict]:
+        normalized: List[dict] = []
+        for item in items or []:
+            if isinstance(item, dict):
+                normalized.append(item)
+            else:
+                normalized.append(asdict(item))
+        return normalized
 
     @staticmethod
     def _get_stream_chunk_timeout_seconds(mode: ModeType) -> int:
@@ -93,15 +115,6 @@ class ChatService:
             return STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES
         return STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT
 
-    @staticmethod
-    def _parse_stream_phase_marker(chunk: str) -> Optional[str]:
-        if not isinstance(chunk, str):
-            return None
-        if not chunk.startswith(STREAM_PHASE_MARKER_PREFIX):
-            return None
-        stage = chunk[len(STREAM_PHASE_MARKER_PREFIX):].strip()
-        return stage or None
-    
     async def chat(
         self,
         session_id: str,
@@ -134,7 +147,7 @@ class ChatService:
             else bool(getattr(session, "include_ec_context", False))
         )
 
-        # Ensure session manager is aligned with this session (loads history)
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
         await self._session_manager.start_session(session_id=session_id)
 
         # Notebook scope documents
@@ -146,6 +159,7 @@ class ChatService:
             for doc_id, title in completed_doc_titles.items()
             if doc_id in allowed_doc_id_set
         }
+        warnings: List[dict] = []
         mode_context = self._build_mode_context(context, filtered_doc_titles)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
@@ -155,55 +169,39 @@ class ChatService:
             documents_by_status=docs_by_status,
             blocking_document_ids=blocking_doc_ids,
         )
+        blocking_warning = self._build_blocking_warning(
+            blocking_doc_ids=blocking_doc_ids,
+            allowed_doc_ids=allowed_doc_ids,
+            docs_by_status=docs_by_status,
+        )
+        if runtime_mode_enum is not ModeType.AGENT and blocking_warning:
+            warnings.append(blocking_warning)
 
         # Fetch context-based chunks (used for sources/references)
         context_chunks = await self._get_context_chunks(context) if context else []
 
-        # Generate response via SessionManager + ModeSelector.
-        # If the provider-specific non-stream path fails with a transport error,
-        # fall back to aggregating the streaming path so /chat can still succeed.
-        try:
-            response_content, sources = await self._session_manager.chat(
-                message=message,
-                mode_type=mode_enum,
-                allowed_document_ids=allowed_doc_ids,
-                context=mode_context,
-                include_ec_context=effective_include_ec_context,
-            )
-        except Exception as exc:
-            if not self._is_llm_transport_error(exc):
-                raise
-
-            logger.warning(
-                "Non-stream chat failed; falling back to aggregated stream. session=%s mode=%s error=%s",
-                session_id,
-                mode_enum.value,
-                exc,
-            )
-            try:
-                response_content, sources = await self._chat_via_stream_fallback(
-                    message=message,
-                    mode_enum=mode_enum,
-                    allowed_doc_ids=allowed_doc_ids,
-                    mode_context=mode_context,
-                    include_ec_context=effective_include_ec_context,
-                )
-            except Exception as fallback_exc:
-                raise RuntimeError(
-                    f"LLM request failed in non-stream and stream fallback paths: {fallback_exc}"
-                ) from fallback_exc
+        runtime_result = await self._session_manager.chat(
+            message=message,
+            mode_type=runtime_mode_enum,
+            allowed_document_ids=allowed_doc_ids,
+            context=mode_context,
+            include_ec_context=effective_include_ec_context,
+        )
+        response_content = runtime_result.content
+        sources = self._source_items_to_dicts(runtime_result.sources)
+        warnings.extend(runtime_result.warnings)
         message_id = session.message_count + 1
 
         # Persist messages
         user_msg = Message(
             session_id=session_id,
-            mode=mode_enum,
+            mode=runtime_mode_enum,
             role=MessageRole.USER,
             content=message,
         )
         assistant_msg = Message(
             session_id=session_id,
-            mode=mode_enum,
+            mode=runtime_mode_enum,
             role=MessageRole.ASSISTANT,
             content=response_content,
         )
@@ -241,7 +239,7 @@ class ChatService:
             session_id=session_id,
             message_id=message_id,
             content=response_content,
-            mode=mode_enum,
+            mode=runtime_mode_enum,
             sources=[
                 ChatSource(
                     document_id=s.get("document_id"),
@@ -252,71 +250,9 @@ class ChatService:
                 )
                 for s in sources
             ],
+            warnings=warnings,
         )
 
-    async def _chat_via_stream_fallback(
-        self,
-        message: str,
-        mode_enum: ModeType,
-        allowed_doc_ids: List[str],
-        mode_context: Optional[dict],
-        include_ec_context: bool,
-    ) -> tuple[str, List[dict]]:
-        """Aggregate SessionManager.chat_stream() as a fallback for /chat."""
-        stream = self._session_manager.chat_stream(
-            message=message,
-            mode_type=mode_enum,
-            allowed_document_ids=allowed_doc_ids,
-            context=mode_context,
-            include_ec_context=include_ec_context,
-        )
-
-        full_response = ""
-        try:
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(
-                        stream.__anext__(),
-                        timeout=NONSTREAM_STREAM_FALLBACK_CHUNK_TIMEOUT_SECONDS,
-                    )
-                except StopAsyncIteration:
-                    break
-                if self._parse_stream_phase_marker(chunk):
-                    continue
-                full_response += chunk
-        finally:
-            try:
-                await stream.aclose()
-            except Exception:
-                pass
-
-        return full_response, self._session_manager.get_last_sources() or []
-
-    @staticmethod
-    def _is_llm_transport_error(exc: Exception) -> bool:
-        """Best-effort classifier for transient provider/network failures."""
-        seen = set()
-        current: Optional[BaseException] = exc
-        while current is not None and id(current) not in seen:
-            seen.add(id(current))
-            cls_name = current.__class__.__name__
-            module_name = current.__class__.__module__
-
-            if module_name.startswith("openai") and cls_name in {"APIConnectionError", "APITimeoutError"}:
-                return True
-
-            if module_name.startswith("httpx") or module_name.startswith("httpcore"):
-                return True
-
-            if cls_name in {"APIConnectionError", "APITimeoutError"}:
-                return True
-
-            if isinstance(current, (asyncio.TimeoutError, TimeoutError, ConnectionError)):
-                return True
-
-            current = current.__cause__ or current.__context__
-        return False
-    
     async def chat_stream(
         self,
         session_id: str,
@@ -341,7 +277,7 @@ class ChatService:
         Yields:
             Event dictionaries with type and data:
             - {"type": "start", "message_id": int}
-            - {"type": "thinking", "stage": str}
+            - {"type": "phase", "stage": str}
             - {"type": "content", "delta": str}
             - {"type": "sources", "sources": list}
             - {"type": "done"}
@@ -352,6 +288,7 @@ class ChatService:
             raise ValueError(f"Session not found: {session_id}")
 
         mode_enum = ModeType(mode)
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
         effective_include_ec_context = (
             include_ec_context
             if include_ec_context is not None
@@ -367,21 +304,26 @@ class ChatService:
             if doc_id in allowed_doc_id_set
         }
         mode_context = self._build_mode_context(context, filtered_doc_titles)
-        await self._validate_mode_guard(
-            mode_enum=mode_enum,
-            allowed_doc_ids=allowed_doc_ids,
-            context=context,
-            notebook_id=session.notebook_id,
-            documents_by_status=docs_by_status,
-            blocking_document_ids=blocking_doc_ids,
-        )
+        if mode_enum not in {ModeType.CHAT, ModeType.AGENT}:
+            await self._validate_mode_guard(
+                mode_enum=mode_enum,
+                allowed_doc_ids=allowed_doc_ids,
+                context=context,
+                notebook_id=session.notebook_id,
+                documents_by_status=docs_by_status,
+                blocking_document_ids=blocking_doc_ids,
+            )
 
         message_id = session.message_count + 1
 
         yield {"type": "start", "message_id": message_id}
-        if mode_enum != ModeType.CHAT:
-            # Chat mode emits finer-grained phase markers from ChatMode._stream().
-            yield {"type": "thinking", "stage": "retrieving"}
+        blocking_warning = self._build_blocking_warning(
+            blocking_doc_ids=blocking_doc_ids,
+            allowed_doc_ids=allowed_doc_ids,
+            docs_by_status=docs_by_status,
+        )
+        if runtime_mode_enum is not ModeType.AGENT and blocking_warning:
+            yield blocking_warning
 
         full_response = ""
         sources: List[dict] = []
@@ -392,30 +334,66 @@ class ChatService:
         try:
             stream = self._session_manager.chat_stream(
                 message=message,
-                mode_type=mode_enum,
+                mode_type=runtime_mode_enum,
                 allowed_document_ids=allowed_doc_ids,
                 context=mode_context,
                 include_ec_context=effective_include_ec_context,
             )
-            chunk_timeout_seconds = self._get_stream_chunk_timeout_seconds(mode_enum)
             while True:
                 try:
-                    chunk = await asyncio.wait_for(
+                    event = await asyncio.wait_for(
                         stream.__anext__(),
-                        timeout=chunk_timeout_seconds,
+                        timeout=self._get_stream_chunk_timeout_seconds(mode_enum),
                     )
                 except StopAsyncIteration:
                     break
-                phase_stage = self._parse_stream_phase_marker(chunk)
-                if phase_stage:
-                    yield {"type": "thinking", "stage": phase_stage}
-                    continue
-                full_response += chunk
-                yield {"type": "content", "delta": chunk}
 
-            sources = self._merge_sources_with_context(
-                self._session_manager.get_last_sources(), context, context_chunks
-            )
+                if isinstance(event, StartEvent):
+                    continue
+                if isinstance(event, WarningEvent):
+                    yield {"type": "warning", "code": event.code, "message": event.message}
+                    continue
+                if isinstance(event, PhaseEvent):
+                    yield {"type": "phase", "stage": event.stage}
+                    continue
+                if isinstance(event, ToolCallEvent):
+                    yield {
+                        "type": "tool_call",
+                        "tool_name": event.tool_name,
+                        "tool_call_id": event.tool_call_id,
+                        "tool_input": event.tool_input,
+                    }
+                    continue
+                if isinstance(event, ToolResultEvent):
+                    yield {
+                        "type": "tool_result",
+                        "tool_name": event.tool_name,
+                        "tool_call_id": event.tool_call_id,
+                        "success": event.success,
+                        "content_preview": event.content_preview,
+                        "quality_meta": asdict(event.quality_meta) if event.quality_meta else None,
+                    }
+                    continue
+                if isinstance(event, ContentEvent):
+                    full_response += event.delta
+                    yield {"type": "content", "delta": event.delta}
+                    continue
+                if isinstance(event, SourceEvent):
+                    sources = self._merge_sources_with_context(
+                        self._source_items_to_dicts(event.sources),
+                        context,
+                        context_chunks,
+                    )
+                    continue
+                if isinstance(event, DoneEvent):
+                    break
+                if isinstance(event, ErrorEvent):
+                    yield {
+                        "type": "error",
+                        "error_code": event.code,
+                        "message": event.message,
+                    }
+                    return
             sources_before_validation = list(sources)
             sources = await self._filter_valid_sources(sources)
             sources = self._filter_sources_by_mode_quality(sources, mode_enum)
@@ -436,13 +414,13 @@ class ChatService:
             # race with database writes and cause missing chat history.
             user_msg = Message(
                 session_id=session_id,
-                mode=mode_enum,
+                mode=runtime_mode_enum,
                 role=MessageRole.USER,
                 content=message,
             )
             assistant_msg = Message(
                 session_id=session_id,
-                mode=mode_enum,
+                mode=runtime_mode_enum,
                 role=MessageRole.ASSISTANT,
                 content=full_response,
             )
@@ -525,9 +503,9 @@ class ChatService:
     ) -> None:
         """Common guard for retrieval-dependent modes."""
         rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
-        if mode_enum in rag_modes and (blocking_document_ids or []):
+        if mode_enum in rag_modes and not allowed_doc_ids and (blocking_document_ids or []):
             raise DocumentProcessingError(
-                message="文档正在处理中，请稍后重试",
+                message="所有文档正在处理中，暂无可用的检索数据",
                 details={
                     "mode": mode_enum.value,
                     "notebook_id": notebook_id,
@@ -545,9 +523,17 @@ class ChatService:
                 )
             if context and context.get("selected_text") and not context.get("document_id"):
                 raise ValueError("selected_text requires a document_id to ensure traceable sources")
-            if self._session_manager.vector_index is None:
-                raise RuntimeError("Vector index is not available")
-
+            if context and context.get("document_id"):
+                target_doc_id = context["document_id"]
+                if target_doc_id not in set(allowed_doc_ids):
+                    raise DocumentProcessingError(
+                        message="该文档索引尚未构建完成，暂时无法进行解释/总结",
+                        details={
+                            "mode": mode_enum.value,
+                            "document_id": target_doc_id,
+                            "retryable": True,
+                        },
+                    )
     @staticmethod
     def _apply_source_filter(
         all_doc_ids: List[str],
@@ -557,11 +543,38 @@ class ChatService:
         if source_document_ids is None:
             return all_doc_ids
         valid_set = set(all_doc_ids)
-        return [doc_id for doc_id in source_document_ids if doc_id in valid_set]
+        filtered = [doc_id for doc_id in source_document_ids if doc_id in valid_set]
+        excluded = [doc_id for doc_id in source_document_ids if doc_id not in valid_set]
+        if excluded:
+            logger.info(
+                "source_document_ids filter excluded %d non-completed doc(s): %s",
+                len(excluded),
+                excluded,
+            )
+        return filtered
+
+    @staticmethod
+    def _build_blocking_warning(
+        blocking_doc_ids: List[str],
+        allowed_doc_ids: List[str],
+        docs_by_status: Dict[str, int],
+    ) -> Optional[Dict[str, Any]]:
+        if not blocking_doc_ids or not allowed_doc_ids:
+            return None
+        return {
+            "type": "warning",
+            "code": "partial_documents",
+            "message": f"{len(blocking_doc_ids)} 个文档正在处理中，当前检索范围不包含这些文档",
+            "details": {
+                "blocking_document_ids": blocking_doc_ids,
+                "available_document_count": len(allowed_doc_ids),
+                "documents_by_status": docs_by_status,
+            },
+        }
 
     @staticmethod
     def _resolve_sources_type(mode_enum: ModeType) -> str:
-        if mode_enum == ModeType.CHAT:
+        if normalize_runtime_mode(mode_enum) is ModeType.AGENT:
             return "tool_results"
         return "retrieval"
 

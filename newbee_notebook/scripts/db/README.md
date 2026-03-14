@@ -22,8 +22,7 @@ What it does:
 2. Enables `uuid-ossp` extension for UUID generation
 3. Enables `pgcrypto` extension for `gen_random_uuid()`
 4. Creates core business tables (`library`, `notebooks`, `documents`, `sessions`, `notebook_document_refs`, `messages`, `references`, `app_settings`)
-5. Creates legacy chat tables (`chat_sessions`, `chat_messages`) for backward compatibility
-6. Documents expected pgvector tables for active embedding providers:
+5. Documents expected pgvector tables for active embedding providers:
    - `data_documents_qwen3_embedding` (1024 dims)
    - `data_documents_zhipu` (1024 dims)
 

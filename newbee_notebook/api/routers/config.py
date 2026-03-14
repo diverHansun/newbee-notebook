@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -20,6 +18,7 @@ from newbee_notebook.core.common.config_db import (
     get_embedding_config_async,
     get_llm_config_async,
 )
+from newbee_notebook.core.common.project_paths import get_models_directory
 from newbee_notebook.core.llm import get_registered_providers as get_registered_llm_providers
 from newbee_notebook.core.rag.embeddings import (
     get_registered_providers as get_registered_embedding_providers,
@@ -93,7 +92,7 @@ class ResetResponse(BaseModel):
 
 
 def _scan_local_embedding_models() -> list[str]:
-    models_dir = Path("models")
+    models_dir = get_models_directory()
     if not models_dir.exists():
         return []
 
@@ -129,7 +128,7 @@ async def get_available_models():
             providers=[provider for provider in get_registered_llm_providers() if provider in {"qwen", "zhipu", "openai"}],
             presets=[
                 PresetModel(name="qwen3.5-plus", label="Qwen 3.5 Plus (Qwen)"),
-                PresetModel(name="glm-4.7-flash", label="GLM-4.7-Flash (Zhipu)"),
+                PresetModel(name="glm-4.7", label="GLM-4.7 (Zhipu)"),
             ],
             custom_input=True,
         ),

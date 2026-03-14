@@ -8,6 +8,8 @@ LLM 模块提供轻量的 LLMClient 抽象，基于 openai Python SDK 的 AsyncO
 - **薄封装**：LLMClient 是 AsyncOpenAI 的薄封装，不引入额外抽象层。openai SDK 已经提供了完善的类型定义、重试机制和流式支持。
 - **Provider 透明**：上层调用者（AgentLoop）不感知具体使用哪个 Provider，只通过 LLMClient 接口调用。
 - **脱离 LlamaIndex**：执行层（engine）和 LLM 调用层不再依赖 LlamaIndex。LlamaIndex 保留在 RAG 检索层和 Embedding 层。
+- **Chat Completions 作为内部真源**：batch-2 第一版固定以 OpenAI-compatible Chat Completions message/tool schema 作为内部标准，不以 provider 自定义 Responses API 或事件流作为 runtime 内部真源。
+- **thinking 差异由 LLMClient 吸收**：Qwen/Zhipu 的 `reasoning_content`、thinking 开关和流式细节由 `LLMClient` 处理，不让 `engine/context/session` 直接感知 provider 细节。
 
 ## 文档索引
 
@@ -37,3 +39,9 @@ LLM 模块提供轻量的 LLMClient 抽象，基于 openai Python SDK 的 AsyncO
 | Provider 适配 | QwenOpenAI / ZhipuOpenAI 继承 LlamaIndex OpenAI | Provider 配置驱动，同一个 AsyncOpenAI 类 |
 | 消息格式 | LlamaIndex ChatMessage | OpenAI-compatible 内部消息协议 |
 | 工具调用 | LlamaIndex achat_with_tools 封装 | 直接传 tools 参数给 chat completions API |
+
+## 当前冻结的 batch-2 边界
+
+- tool-using 请求默认不依赖 provider thinking mode 作为核心执行能力
+- `reasoning_content` 只作为 runtime transient signal，不进入持久化消息
+- provider 差异由 `LLMClient` 吸收，业务层只消费统一的 message/tool contract

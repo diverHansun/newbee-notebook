@@ -152,7 +152,7 @@ llm     --> config                从 llm.yaml 和环境变量加载配置
 
 ### 核心组件
 
-- **MCPConfigLoader**：读取 mcp.json，解析环境变量占位符。
+- **MCPConfigLoader**：读取 `configs/mcp.json`，解析环境变量占位符。
 - **MCPClientManager**：管理 MCP Server 连接生命周期，提供工具列表。
 - **MCPToolAdapter**：将 MCP Server 工具转换为 ToolDefinition。
 

@@ -1,37 +1,45 @@
-# Mode configuration for different interaction modes
+# Runtime mode policy reference for batch-2.
 
 modes:
-  chat:
-    agent_type: function  # FunctionAgent for function calling
+  agent:
+    execution_style: open_loop
     tools:
-      - tavily
-      - elasticsearch
-    memory: true
-    description: "Free-form conversation with web search and knowledge base access"
-    
+      - knowledge_base
+      - time
+    description: "Canonical runtime mode for free-form conversation and tool use"
+
   ask:
-    agent_type: react  # ReActAgent for reasoning + acting
-    retrieval: hybrid  # Hybrid retrieval: pgvector + ES BM25
-    memory: true
-    description: "Deep Q&A with RAG and hybrid retrieval"
-    
-  conclude:
-    engine: chat_engine  # ChatEngine with condense_plus_context
-    retrieval: pgvector
-    memory: false
-    skip_condense: true
-    description: "Document summarization and conclusion generation"
-    
+    execution_style: open_loop
+    tools:
+      - knowledge_base
+      - time
+    first_turn_tool_repair:
+      tool_name: knowledge_base
+      limit: 1
+    description: "Notebook-grounded Q&A with a soft first-turn repair toward knowledge_base"
+
   explain:
-    engine: query_engine  # QueryEngine for single-turn queries
-    retrieval: pgvector
-    memory: false
+    execution_style: retrieval_required_loop
+    required_tool: knowledge_base
+    max_retrieval_iterations: 3
+    initial_scope: document
+    allow_scope_relaxation: true
     skip_condense: true
-    description: "Concept explanation and knowledge clarification"
+    description: "Selected-text explanation using repeated knowledge-base retrieval before synthesis"
+
+  conclude:
+    execution_style: retrieval_required_loop
+    required_tool: knowledge_base
+    max_retrieval_iterations: 3
+    initial_scope: document
+    allow_scope_relaxation: true
+    skip_condense: true
+    description: "Selected-text summarization using repeated knowledge-base retrieval before synthesis"
 
 retrieval:
-  hybrid:
-    pgvector_weight: 0.5
-    bm25_weight: 0.5
-    fusion_method: rrf  # reciprocal rank fusion
-    top_k: 10
+  explain_defaults:
+    search_type: keyword
+    max_results: 5
+  conclude_defaults:
+    search_type: hybrid
+    max_results: 8

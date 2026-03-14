@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from newbee_notebook.core.common.config import get_embeddings_config
+from newbee_notebook.core.common.project_paths import resolve_project_relative_path
 from newbee_notebook.core.rag.embeddings.base import BaseEmbeddingModel
 from newbee_notebook.core.rag.embeddings.registry import register_embedding
 
@@ -208,8 +209,17 @@ def _get_int_env(name: str, default: int) -> int:
         return default
 
 
+def _resolve_local_model_path(model_path: str, *, source_path: str | os.PathLike[str] | None = None) -> str:
+    """Resolve local embedding model path against the main repository when needed."""
+    return resolve_project_relative_path(model_path, start=source_path or __file__)
+
+
 @register_embedding("qwen3-embedding")
-def build_qwen3_embedding(mode: Optional[str] = None) -> BaseEmbeddingModel:
+def build_qwen3_embedding(
+    mode: Optional[str] = None,
+    *,
+    source_path: str | os.PathLike[str] | None = None,
+) -> BaseEmbeddingModel:
     """Build qwen3 embedding model from config."""
     cfg = _get_qwen3_embedding_config()
     final_mode = (mode or os.getenv(ENV_QWEN3_MODE) or cfg.get("mode", "local")).strip().lower()
@@ -230,9 +240,12 @@ def build_qwen3_embedding(mode: Optional[str] = None) -> BaseEmbeddingModel:
             f"Unsupported qwen3-embedding mode '{final_mode}'. Expected 'local' or 'api'."
         )
 
-    model_path = cfg.get("model_path", "models/Qwen3-Embedding-0.6B")
+    model_path = _resolve_local_model_path(
+        os.getenv(ENV_QWEN3_MODEL_PATH, cfg.get("model_path", "models/Qwen3-Embedding-0.6B")),
+        source_path=source_path,
+    )
     return Qwen3LocalEmbedding(
-        model_path=os.getenv(ENV_QWEN3_MODEL_PATH, model_path),
+        model_path=model_path,
         dim=dim,
         device=os.getenv(ENV_QWEN3_DEVICE, cfg.get("device", "auto")),
         max_length=_get_int_env(ENV_QWEN3_MAX_LENGTH, int(cfg.get("max_length", 8192))),

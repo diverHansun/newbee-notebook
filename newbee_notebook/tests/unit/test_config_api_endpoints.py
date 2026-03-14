@@ -116,7 +116,7 @@ def test_put_llm_updates_store_and_resets_singleton(monkeypatch):
         "/api/v1/config/llm",
         json={
             "provider": "zhipu",
-            "model": "glm-4.7-flash",
+            "model": "glm-4.7",
             "temperature": 0.5,
             "max_tokens": 2048,
             "top_p": 0.9,
@@ -124,8 +124,32 @@ def test_put_llm_updates_store_and_resets_singleton(monkeypatch):
     )
     assert response.status_code == 200
     assert store["llm.provider"] == "zhipu"
-    assert store["llm.model"] == "glm-4.7-flash"
+    assert store["llm.model"] == "glm-4.7"
     llm_reset.assert_called_once()
+
+
+def test_get_available_models_exposes_glm_4_7_preset(monkeypatch):
+    client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.get("/api/v1/config/models/available")
+
+    assert response.status_code == 200
+    presets = response.json()["llm"]["presets"]
+    assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-4.7"}
+
+
+def test_get_available_models_reads_local_models_from_repo_models_dir(monkeypatch, tmp_path):
+    client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    models_dir = tmp_path / "models"
+    model_dir = models_dir / "Qwen3-Embedding-0.6B"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(config_router, "get_models_directory", lambda: models_dir)
+
+    response = client.get("/api/v1/config/models/available")
+
+    assert response.status_code == 200
+    assert response.json()["embedding"]["local_models"] == ["Qwen3-Embedding-0.6B"]
 
 
 def test_put_embedding_rejects_invalid_mode(monkeypatch):

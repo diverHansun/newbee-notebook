@@ -20,6 +20,50 @@ from sqlalchemy import text
 _schema_checked = False
 
 
+def get_runtime_schema_statements() -> list[str]:
+    return [
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)
+        """,
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP
+        """,
+        """
+        ALTER TABLE IF EXISTS documents
+        ADD COLUMN IF NOT EXISTS processing_meta TEXT
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at
+        ON documents(stage_updated_at)
+        """,
+        """
+        ALTER TABLE IF EXISTS sessions
+        ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
+        """,
+        """
+        UPDATE messages SET mode = 'agent' WHERE mode = 'chat'
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        DROP CONSTRAINT IF EXISTS messages_mode_check
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        ADD CONSTRAINT messages_mode_check
+        CHECK (mode IN ('agent','ask','conclude','explain'))
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key         VARCHAR(128) PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+    ]
+
+
 def get_database_url() -> str:
     """
     Get the database URL from environment variables.
@@ -56,80 +100,45 @@ class Database:
         self._url = url or get_database_url()
         self._engine: AsyncEngine = None
         self._session_factory: async_sessionmaker = None
+
+    @property
+    def is_connected(self) -> bool:
+        return self._engine is not None and self._session_factory is not None
     
     async def connect(self) -> None:
         """Initialize the database connection."""
         global _schema_checked
-        self._engine = create_async_engine(
+        if self.is_connected:
+            return
+
+        engine = create_async_engine(
             self._url,
             echo=False,  # Set to True for SQL debugging
             poolclass=NullPool,  # Disable connection pooling for serverless
         )
-        if not _schema_checked:
-            await self._ensure_runtime_schema()
-            _schema_checked = True
-        self._session_factory = async_sessionmaker(
-            bind=self._engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+        self._engine = engine
+        try:
+            if not _schema_checked:
+                await self._ensure_runtime_schema()
+                _schema_checked = True
+            self._session_factory = async_sessionmaker(
+                bind=self._engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+        except Exception:
+            self._session_factory = None
+            self._engine = None
+            await engine.dispose()
+            raise
 
     async def _ensure_runtime_schema(self) -> None:
         """Best-effort schema backfill for additive columns used by new releases."""
         if not self._engine:
             return
         async with self._engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS documents
-                    ADD COLUMN IF NOT EXISTS processing_meta TEXT
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_documents_stage_updated_at
-                    ON documents(stage_updated_at)
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS sessions
-                    ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS app_settings (
-                        key         VARCHAR(128) PRIMARY KEY,
-                        value       TEXT NOT NULL,
-                        updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
-                    )
-                    """
-                )
-            )
+            for statement in get_runtime_schema_statements():
+                await conn.execute(text(statement))
     
     async def disconnect(self) -> None:
         """Close the database connection."""
@@ -179,6 +188,7 @@ async def get_database() -> Database:
     global _database
     if _database is None:
         _database = Database()
+    if not _database.is_connected:
         await _database.connect()
     return _database
 

@@ -7,43 +7,41 @@ Handles chat-related API endpoints including streaming responses.
 import asyncio
 import json
 from contextlib import suppress
-from typing import Optional, AsyncGenerator, Literal
+from typing import Optional, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from newbee_notebook.api.dependencies import get_session_service, get_chat_service
-from newbee_notebook.api.models.requests import ChatContext
-from newbee_notebook.application.services.session_service import SessionService, SessionNotFoundError
+from newbee_notebook.api.models.requests import ChatRequest
+from newbee_notebook.application.services.session_service import (
+    SessionLimitExceededError,
+    SessionService,
+    SessionNotFoundError,
+)
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.exceptions import DocumentProcessingError
 
 
 router = APIRouter(prefix="/chat")
 SSE_HEARTBEAT_INTERVAL_SECONDS = 10
 
 
-# =============================================================================
-# Request/Response Models
-# =============================================================================
-
-class ChatRequest(BaseModel):
-    """Request model for chat."""
-    message: str = Field(..., min_length=1, description="User message")
-    mode: Literal["chat", "ask", "explain", "conclude"] = Field(
-        "chat", description="Chat mode"
-    )
-    session_id: Optional[str] = Field(None, description="Session ID (optional)")
-    context: Optional[ChatContext] = Field(None, description="Selected text context")
-    include_ec_context: Optional[bool] = Field(
-        None,
-        description="Optional override for including recent explain/conclude context in chat/ask requests.",
-    )
-    source_document_ids: Optional[list[str]] = Field(
-        None,
-        description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
-    )
+def _session_limit_detail(exc: SessionLimitExceededError) -> dict:
+    return {
+        "error_code": "E3001",
+        "message": str(exc),
+        "details": {
+            "current_count": exc.current_count,
+            "max_count": exc.max_count,
+            "suggestions": [
+                "Delete unused sessions",
+                "Create a new notebook",
+            ],
+        },
+    }
 
 
 class ChatResponse(BaseModel):
@@ -53,6 +51,7 @@ class ChatResponse(BaseModel):
     content: str
     mode: str
     sources: list = Field(default_factory=list)
+    warnings: list = Field(default_factory=list)
 
 
 # =============================================================================
@@ -78,6 +77,17 @@ class SSEEvent:
     @staticmethod
     def thinking(stage: str = "thinking") -> str:
         return SSEEvent.format("thinking", {"stage": stage})
+
+    @staticmethod
+    def phase(stage: str) -> str:
+        return SSEEvent.format("phase", {"stage": stage})
+
+    @staticmethod
+    def warning(code: str, message: str, details: Optional[dict] = None) -> str:
+        payload = {"code": code, "message": message}
+        if details:
+            payload["details"] = details
+        return SSEEvent.format("warning", payload)
     
     @staticmethod
     def sources(sources: list, sources_type: Optional[str] = None) -> str:
@@ -112,7 +122,7 @@ async def chat_stream_generator(
     Generate streaming chat response.
     
     This is a placeholder implementation that simulates streaming.
-    The actual implementation will integrate with SessionManager and ModeSelector.
+    The production path uses the batch-2 runtime session orchestrator.
     
     Args:
         session_id: Session ID.
@@ -224,18 +234,23 @@ async def chat(
             raise HTTPException(status_code=404, detail="Session not found")
     else:
         # Create a new session
-        session = await session_service.create(notebook_id)
-        request.session_id = session.session_id
+        try:
+            session = await session_service.create(notebook_id)
+            request.session_id = session.session_id
+        except SessionLimitExceededError as exc:
+            raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
     
     try:
         result = await chat_service.chat(
             session_id=request.session_id,
             message=request.message,
             mode=request.mode,
-            context=request.context.dict() if request.context else None,
+            context=request.context.model_dump() if request.context else None,
             include_ec_context=request.include_ec_context,
             source_document_ids=request.source_document_ids,
         )
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=e.http_status, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -255,6 +270,7 @@ async def chat(
         content=result.content,
         mode=result.mode.value,
         sources=[s.__dict__ for s in result.sources],
+        warnings=result.warnings,
     )
 
 
@@ -282,16 +298,21 @@ async def chat_stream(
         except SessionNotFoundError:
             raise HTTPException(status_code=404, detail="Session not found")
     else:
-        session = await session_service.create(notebook_id)
-        request.session_id = session.session_id
+        try:
+            session = await session_service.create(notebook_id)
+            request.session_id = session.session_id
+        except SessionLimitExceededError as exc:
+            raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
 
     try:
         # Pre-validate to fail fast for conclude/explain
         await chat_service.prevalidate_mode_requirements(
             session_id=request.session_id,
             mode=request.mode,
-            context=request.context.dict() if request.context else None,
+            context=request.context.model_dump() if request.context else None,
         )
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=e.http_status, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -302,7 +323,7 @@ async def chat_stream(
         session_id=request.session_id,
         message=request.message,
         mode=request.mode,
-        context=request.context.dict() if request.context else None,
+        context=request.context.model_dump() if request.context else None,
         include_ec_context=request.include_ec_context,
         source_document_ids=request.source_document_ids,
     )
@@ -358,6 +379,11 @@ async def sse_adapter(
     async for event in stream:
         event_type = event.get("type")
         payload = {k: v for k, v in event.items() if k != "type"}
+        if event_type == "phase":
+            stage = str(payload.get("stage") or "thinking")
+            yield SSEEvent.phase(stage)
+            yield SSEEvent.thinking(stage)
+            continue
         yield SSEEvent.format(event_type, payload)
 
 

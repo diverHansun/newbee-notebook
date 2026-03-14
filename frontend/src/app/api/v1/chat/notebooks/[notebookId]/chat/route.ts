@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const BACKEND_URL = process.env.INTERNAL_API_URL || "http://localhost:8000";
+const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
 
 export async function POST(
   request: NextRequest,

@@ -31,7 +31,3 @@ elasticsearch:
   index_name: newbee_notebook_docs
   # api_key: ${ELASTICSEARCH_API_KEY:}
   # cloud_id: ${ELASTICSEARCH_CLOUD_ID:}
-
-chat_sessions:
-  table_sessions: chat_sessions
-  table_messages: chat_messages

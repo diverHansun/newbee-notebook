@@ -182,7 +182,7 @@ export function useChatSession(notebookId: string) {
     queryFn: async () => {
       if (!currentSessionId) return [];
       const response = await listSessionMessages(currentSessionId, {
-        mode: "chat,ask",
+        mode: "agent,ask",
         limit: 100,
         offset: 0,
       });
@@ -310,7 +310,7 @@ export function useChatSession(notebookId: string) {
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
-      if (mode === "chat" || mode === "ask") {
+      if (mode === "agent" || mode === "ask") {
         addMessage({
           id: userMessageId,
           role: "user",
@@ -370,7 +370,7 @@ export function useChatSession(notebookId: string) {
                 status: "done",
                 messageId: fallback.message_id,
                 sources: normalizeSources(fallback.sources),
-                sourcesType: mode === "chat" ? "tool_results" : "retrieval",
+                sourcesType: mode === "agent" ? "tool_results" : "retrieval",
               });
             } catch (fallbackError) {
               const fallbackApiError = fallbackError as ApiError;
