@@ -1,6 +1,0 @@
-# Redis configuration
-host: ${REDIS_HOST:localhost}
-port: ${REDIS_PORT:6379}
-db: ${REDIS_DB:0}
-password: ${REDIS_PASSWORD:}
-ssl: ${REDIS_SSL:false}

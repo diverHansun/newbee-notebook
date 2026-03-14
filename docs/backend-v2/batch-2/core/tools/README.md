@@ -24,8 +24,8 @@ core/tools/
     registry.py              ToolRegistry：统一工具注册中心
     builtin_provider.py      BuiltinToolProvider：内置工具按模式分发
     knowledge_base.py        knowledge_base 工具（HybridRetriever: pgvector + ES）
-    tavily_tools.py          Tavily Web 搜索工具（保持）
-    zhipu_tools.py           Zhipu Web 搜索工具（保持）
+    tavily_tools.py          内置 Tavily Web 搜索辅助工具（当前 runtime 未注入）
+    zhipu_tools.py           内置 Zhipu Web 搜索辅助工具（当前 runtime 未注入）
     time.py                  时间工具（保持）
 ```
 

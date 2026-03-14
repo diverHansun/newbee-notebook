@@ -40,5 +40,6 @@ document_processing:
   fail_threshold: ${MINERU_FAIL_THRESHOLD:5}
   cooldown_seconds: ${MINERU_COOLDOWN_SECONDS:120}
 
-  # Root directory for stored markdown; falls back to DOCUMENTS_DIR env or data/documents.
+  # Local working directory used by converters, temporary artifacts, and recovery flows.
+  # Persistent document reads/writes use the configured storage backend rather than this path.
   documents_dir: ${DOCUMENTS_DIR:data/documents}

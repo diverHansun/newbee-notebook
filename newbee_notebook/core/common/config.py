@@ -67,45 +67,6 @@ def get_embedding_provider():
     return "qwen3-embedding"
 
 
-def get_embedding_dimension():
-    """Get embedding dimension based on the selected provider.
-
-    Priority order:
-    1. configs/embeddings.yaml (provider-specific dim)
-    2. EMBEDDING_DIMENSION environment variable
-    3. Default based on provider:
-       - qwen3-embedding: 1024
-       - zhipu: 1024
-
-    Returns:
-        int: Embedding dimension
-    """
-    # Try to get from YAML config first
-    embeddings_config = get_embeddings_config()
-    if embeddings_config and 'embeddings' in embeddings_config:
-        provider = get_embedding_provider()
-        provider_config = embeddings_config['embeddings'].get(provider, {})
-        if 'dim' in provider_config:
-            return provider_config['dim']
-
-    # Fall back to environment variable
-    dim = os.getenv("EMBEDDING_DIMENSION")
-    if dim and dim.isdigit():
-        return int(dim)
-
-    # Default (both supported providers are 1024-dim)
-    return 1024
-
-
-def get_embedding_model():
-    """Get embedding model name from environment variables or default to embedding-3.
-    
-    Returns:
-        str: Embedding model name
-    """
-    return os.getenv("EMBEDDING_MODEL", "embedding-3")
-
-
 def get_embeddings_config():
     """Get embeddings configuration from YAML file.
     
@@ -114,16 +75,6 @@ def get_embeddings_config():
     """
     return load_yaml_config(CONFIG_DIR / "embeddings.yaml")
 
-
-def get_rag_config():
-    """Get RAG configuration from YAML file.
-    
-    Returns:
-        dict: RAG configuration
-    """
-    return load_yaml_config(CONFIG_DIR / "rag.yaml")
-
-
 def get_llm_config():
     """Get LLM configuration from YAML file.
     
@@ -131,70 +82,6 @@ def get_llm_config():
         dict: LLM configuration
     """
     return load_yaml_config(CONFIG_DIR / "llm.yaml")
-
-
-def get_memory_config():
-    """Get memory configuration from YAML file.
-    
-    Returns:
-        dict: Memory configuration
-    """
-    return load_yaml_config(CONFIG_DIR / "memory.yaml")
-
-
-def get_memory_token_limit():
-    """Get memory token limit with priority: YAML config > environment variable > default.
-    
-    Priority order:
-    1. configs/memory.yaml (memory.token_limit)
-    2. MEMORY_TOKEN_LIMIT environment variable
-    3. Default: 64000
-    
-    Returns:
-        int: Token limit for memory buffer
-    """
-    # Try YAML config first
-    memory_config = get_memory_config()
-    if memory_config and 'memory' in memory_config:
-        token_limit = memory_config['memory'].get('token_limit')
-        if token_limit:
-            return int(token_limit)
-    
-    # Fall back to environment variable
-    token_limit = os.getenv("MEMORY_TOKEN_LIMIT")
-    if token_limit and token_limit.isdigit():
-        return int(token_limit)
-    
-    # Default
-    return 64000
-
-
-def get_memory_summarize_prompt():
-    """Get memory summarize prompt with priority: YAML config > environment variable > None.
-    
-    Priority order:
-    1. configs/memory.yaml (memory.summarize_prompt)
-    2. MEMORY_SUMMARIZE_PROMPT environment variable
-    3. None (runtime summary prompt defaults apply)
-    
-    Returns:
-        str or None: Summarize prompt for memory
-    """
-    # Try YAML config first
-    memory_config = get_memory_config()
-    if memory_config and 'memory' in memory_config:
-        prompt = memory_config['memory'].get('summarize_prompt')
-        if prompt and prompt.strip():
-            return prompt.strip()
-    
-    # Fall back to environment variable
-    prompt = os.getenv("MEMORY_SUMMARIZE_PROMPT")
-    if prompt and prompt.strip():
-        return prompt.strip()
-    
-    # No custom prompt
-    return None
-
 
 def get_llm_provider() -> str:
     """Get LLM provider with priority: env > YAML > default."""
@@ -273,52 +160,6 @@ def get_llm_top_p():
         except ValueError:
             pass
     return 0.7
-
-
-def get_llm_system_prompt():
-    """Get LLM system prompt for current provider."""
-    cfg = _get_llm_provider_config()
-    if "system_prompt" in cfg:
-        prompt = cfg["system_prompt"]
-        if prompt and str(prompt).strip():
-            return str(prompt).strip()
-    prompt = os.getenv("LLM_SYSTEM_PROMPT")
-    if prompt and prompt.strip():
-        return prompt.strip()
-    return None
-
-
-def get_index_directory():
-    """Get index directory based on the selected embedding provider.
-
-    Priority order:
-    1. configs/embeddings.yaml (provider-specific index_dir)
-    2. INDEX_DIR environment variable
-    3. Default based on provider:
-       - qwen3-embedding: data/indexes/qwen3_embedding
-       - zhipu: data/indexes/zhipu
-
-    Returns:
-        str: Index directory path
-    """
-    # Try to get from YAML config first
-    embeddings_config = get_embeddings_config()
-    if embeddings_config and 'embeddings' in embeddings_config:
-        provider = get_embedding_provider()
-        provider_config = embeddings_config['embeddings'].get(provider, {})
-        if 'index_dir' in provider_config:
-            return provider_config['index_dir']
-
-    # Fall back to environment variable
-    index_dir = os.getenv("INDEX_DIR")
-    if index_dir:
-        return index_dir
-
-    # Default directory based on provider
-    if get_embedding_provider() == "qwen3-embedding":
-        return "data/indexes/qwen3_embedding"
-    return "data/indexes/zhipu"
-
 
 def get_documents_directory():
     """Get documents directory from environment variable or default.
@@ -452,36 +293,6 @@ def get_pgvector_config_for_provider(provider: str = None) -> dict:
     }
 
 
-def get_modes_config():
-    """Get modes configuration from YAML file or defaults.
-
-    Returns:
-        dict: Modes configuration
-    """
-    return load_yaml_config(CONFIG_DIR / "modes.yaml")
-
-
-def get_explain_skip_condense() -> bool:
-    """Compatibility helper retained while modes.yaml is repurposed for runtime policy."""
-    cfg = get_modes_config()
-    return bool(cfg.get("modes", {}).get("explain", {}).get("skip_condense", True))
-
-
-def get_conclude_skip_condense() -> bool:
-    """Compatibility helper retained while modes.yaml is repurposed for runtime policy."""
-    cfg = get_modes_config()
-    return bool(cfg.get("modes", {}).get("conclude", {}).get("skip_condense", True))
-
-
-def get_zhipu_tools_config() -> dict:
-    """Get Zhipu tools configuration from YAML file.
-
-    Returns:
-        dict: Zhipu tools configuration
-    """
-    return load_yaml_config(CONFIG_DIR / "zhipu_tools.yaml")
-
-
 def get_document_processing_config() -> dict:
     """Get document processing configuration."""
     cfg = load_yaml_config(CONFIG_DIR / "document_processing.yaml")
@@ -500,31 +311,25 @@ def get_document_processing_config() -> dict:
     return cfg
 
 
+def get_zhipu_tools_config() -> dict:
+    """Get built-in Zhipu search tool configuration."""
+    return load_yaml_config(CONFIG_DIR / "zhipu_tools.yaml")
+
+
 def get_config():
-    """Get all configuration as a dictionary.
-    
-    Returns:
-        dict: Configuration values
-    """
+    """Get active runtime configuration as a dictionary."""
     return {
         "zhipu_api_key": get_zhipu_api_key(),
-        "embedding_dimension": get_embedding_dimension(),
-        "embedding_model": get_embedding_model(),
-        "index_directory": get_index_directory(),
         "documents_directory": get_documents_directory(),
+        "embedding_provider": get_embedding_provider(),
         "llm_provider": get_llm_provider(),
         "llm_model": get_llm_model(),
         "llm_temperature": get_llm_temperature(),
         "llm_max_tokens": get_llm_max_tokens(),
         "llm_top_p": get_llm_top_p(),
-        "memory_token_limit": get_memory_token_limit(),
         "embeddings": get_embeddings_config(),
-        "rag": get_rag_config(),
         "llm": get_llm_config(),
-        "memory": get_memory_config(),
         "storage": get_storage_config(),
-        "modes": get_modes_config(),
-        "zhipu_tools": get_zhipu_tools_config(),
         "document_processing": get_document_processing_config(),
     }
 

@@ -5,9 +5,8 @@ embeddings:
   # Can be overridden by EMBEDDING_PROVIDER
   provider: qwen3-embedding
 
-  # Qwen3 text embedding (default)
+  # Qwen3 text embedding (default).
   qwen3-embedding:
-    enabled: true
     mode: local                         # local | api
     # Environment overrides:
     # - QWEN3_EMBEDDING_MODE
@@ -23,15 +22,12 @@ embeddings:
     max_length: 8192
     dim: 1024
     embed_batch_size: 32
-    index_dir: data/indexes/qwen3_embedding
 
-    # API mode options (used when mode=api)
+    # API mode options (used when mode=api).
     api_model: text-embedding-v4
     api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
 
-  # ZhipuAI embedding (fallback option)
+  # ZhipuAI embedding (fallback option).
   zhipu:
-    enabled: true
     model: embedding-3
     dim: 1024
-    index_dir: data/indexes/zhipu

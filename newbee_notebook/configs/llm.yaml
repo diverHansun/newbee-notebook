@@ -5,39 +5,25 @@ llm:
   # Can be overridden by LLM_PROVIDER
   provider: qwen
 
-  # ZhipuAI GLM family (default)
+  # Runtime defaults used by the batch-2 OpenAI-compatible LLM client.
   zhipu:
     model: glm-4.7
     temperature: 0.7
     max_tokens: 32768
     top_p: 0.8
     api_base: https://open.bigmodel.cn/api/paas/v4
-    request_timeout: 60.0
-    max_retries: 3
-    streaming: false
-    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
 
-  # Alibaba Cloud DashScope Qwen via OpenAI-compatible endpoint
+  # Alibaba Cloud DashScope Qwen via OpenAI-compatible endpoint.
   qwen:
     model: qwen3.5-plus
     temperature: 0.7
     max_tokens: 32768
     top_p: 0.8
     api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
-    request_timeout: 60.0
-    max_retries: 3
-    streaming: false
-    enable_search: false
-    enable_thinking: true
-    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
 
-  # Native OpenAI models
+  # Native OpenAI models.
   openai:
     model: gpt-4o-mini
     temperature: 0.2
     max_tokens: 4096
     top_p: 1.0
-    request_timeout: 60.0
-    max_retries: 3
-    streaming: false
-    system_prompt: "newbee-notebook is our project name. You are a helpful assistant who helps people better understand their documents in our newbee-notebook project."
