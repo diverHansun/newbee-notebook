@@ -375,11 +375,12 @@ async def test_agent_loop_disables_provider_thinking_for_runtime_calls():
 
 
 @pytest.mark.anyio
-async def test_agent_loop_open_loop_forces_synthesis_after_two_low_quality_knowledge_base_results():
+async def test_agent_loop_open_loop_forces_synthesis_after_three_low_quality_knowledge_base_results():
     llm = _FakeLLMClient(
         chat_responses=[
             _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "paper title"})]),
             _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "title"})]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "document"})]),
         ],
         stream_chunks=[_stream_chunk("Insufficient"), _stream_chunk(" evidence")],
     )
@@ -397,9 +398,59 @@ async def test_agent_loop_open_loop_forces_synthesis_after_two_low_quality_knowl
     result = await loop.run(message="question", chat_history=[])
 
     assert result.response == "Insufficient evidence"
-    assert result.tool_calls_made == ["knowledge_base", "knowledge_base"]
-    assert len(llm.chat_calls) == 2
+    assert result.tool_calls_made == ["knowledge_base", "knowledge_base", "knowledge_base"]
+    assert len(llm.chat_calls) == 3
     assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_open_loop_allows_third_knowledge_base_attempt_before_low_quality_synthesis():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "title of the paper"})]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "paper title"})]),
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "document", "search_type": "semantic", "max_results": 5})]),
+            _chat_response(content="The paper title is The response of flow duration curves to afforestation."),
+        ],
+        stream_chunks=[],
+    )
+    follow_up_tool = _recording_tool(
+        "knowledge_base",
+        [
+            ToolCallResult(content="no evidence", sources=[], quality_meta=_quality("empty")),
+            ToolCallResult(content="no evidence", sources=[], quality_meta=_quality("empty")),
+            ToolCallResult(
+                content="title evidence",
+                sources=[
+                    SourceItem(
+                        document_id="doc-1",
+                        chunk_id="chunk-1",
+                        title="demo1.pdf",
+                        text="The response of flow duration curves to afforestation",
+                        score=0.51,
+                    )
+                ],
+                quality_meta=ToolQualityMeta(
+                    scope_used="document",
+                    search_type="semantic",
+                    result_count=2,
+                    max_score=0.51,
+                    quality_band="medium",
+                    scope_relaxation_recommended=False,
+                ),
+            ),
+        ],
+        [],
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[follow_up_tool])
+    loop = AgentLoop(llm_client=llm, tools=[follow_up_tool], mode_config=config)
+
+    result = await loop.run(message="what is the paper title?", chat_history=[])
+
+    assert result.response == "The paper title is The response of flow duration curves to afforestation."
+    assert result.tool_calls_made == ["knowledge_base", "knowledge_base", "knowledge_base"]
+    assert len(llm.chat_calls) == 4
+    assert len(llm.stream_calls) == 0
 
 
 @pytest.mark.anyio

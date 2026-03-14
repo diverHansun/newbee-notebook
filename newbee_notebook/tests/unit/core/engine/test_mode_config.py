@@ -31,7 +31,7 @@ def test_mode_config_factory_builds_open_loop_agent_policy():
     assert config.mode_name == "agent"
     assert config.loop_policy.execution_style == "open_loop"
     assert config.loop_policy.require_tool_every_iteration is False
-    assert config.loop_policy.max_low_quality_tool_streak == 2
+    assert config.loop_policy.max_low_quality_tool_streak == 3
     assert config.loop_policy.low_quality_tool_name == "knowledge_base"
     assert config.loop_policy.low_quality_bands == ("low", "empty")
     assert config.tool_policy.allowed_tool_names == ["knowledge_base", "time"]

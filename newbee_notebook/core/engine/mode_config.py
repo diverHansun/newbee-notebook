@@ -68,7 +68,7 @@ class ModeConfigFactory:
                     max_total_iterations=50,
                     low_quality_tool_name="knowledge_base",
                     low_quality_bands=("low", "empty"),
-                    max_low_quality_tool_streak=2,
+                    max_low_quality_tool_streak=3,
                 ),
                 tool_policy=ToolPolicy(
                     allowed_tool_names=allowed_tool_names,
