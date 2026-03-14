@@ -61,7 +61,26 @@ class ElasticsearchStore:
             es_api_key=self.config.api_key,
             es_cloud_id=self.config.cloud_id,
             retrieval_strategy=AsyncBM25Strategy(),
+            metadata_mappings={
+                "source_document_id": {"type": "keyword"},
+                "document_id": {"type": "keyword"},
+                "doc_id": {"type": "keyword"},
+                "ref_doc_id": {"type": "keyword"},
+            },
         )
+        if await self._store.client.indices.exists(index=self.config.index_name):
+            await self._store.client.indices.put_mapping(
+                index=self.config.index_name,
+                body={
+                    "properties": {
+                        "metadata": {
+                            "properties": {
+                                "source_document_id": {"type": "keyword"},
+                            }
+                        }
+                    }
+                },
+            )
     
     def initialize_sync(self) -> None:
         """Initialize the Elasticsearch store synchronously.

@@ -1,4 +1,4 @@
-"""Tool registry builder for chat/agent modes."""
+"""Legacy tool registry builder retained for backward compatibility."""
 
 from typing import List, Optional, Sequence
 import os
@@ -8,7 +8,6 @@ from newbee_notebook.core.tools.tavily_tools import (
     build_tavily_news_tool,
     build_tavily_crawl_tool,
 )
-from newbee_notebook.core.tools.es_search_tool import ElasticsearchSearchTool
 from newbee_notebook.core.tools.zhipu_tools import (
     build_zhipu_web_search_tool,
     build_zhipu_web_crawl_tool,
@@ -44,22 +43,6 @@ def build_tool_registry(
             print("[Tools] Tavily web search/news/crawl enabled")
         except Exception as e:
             print(f"[Tools] Warning: Failed to initialize Tavily tools: {e}")
-
-    # Enable ES BM25 tool when Elasticsearch URL is configured
-    es_url = os.getenv("ELASTICSEARCH_URL", None)
-    if es_url:
-        try:
-            es_tool_wrapper = ElasticsearchSearchTool(
-                index_name=es_index_name or "newbee_notebook_docs",
-                es_url=es_url,
-                allowed_doc_ids=list(allowed_doc_ids) if allowed_doc_ids is not None else None,
-            )
-            es_tool = es_tool_wrapper.get_tool()
-            setattr(es_tool, "_newbee_es_search_wrapper", es_tool_wrapper)
-            tools.append(es_tool)
-            print("[Tools] Elasticsearch knowledge_base_search enabled for Chat")
-        except Exception as e:
-            print(f"[Tools] Warning: Failed to initialize Elasticsearch tool: {e}")
 
     # Enable Zhipu tools when API key and config allow
     if os.getenv("ZHIPU_API_KEY"):

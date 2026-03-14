@@ -98,3 +98,4 @@ def test_load_markdown_nodes_downloads_remote_content_before_reading(monkeypatch
     assert not Path(observed["reader_path"]).exists()
     assert [node.metadata["chunk_index"] for node in nodes] == [0, 1]
     assert all(node.metadata["document_id"] == "doc-md-1" for node in nodes)
+    assert all(node.metadata["source_document_id"] == "doc-md-1" for node in nodes)

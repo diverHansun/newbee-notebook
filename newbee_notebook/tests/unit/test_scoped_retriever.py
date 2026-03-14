@@ -18,7 +18,8 @@ class _DummyRetriever:
 
 def _make_result(doc_id: str):
     metadata = {
-        "_node_content": json.dumps({"metadata": {"document_id": doc_id}})
+        "_node_content": json.dumps({"metadata": {"document_id": doc_id}}),
+        "source_document_id": doc_id,
     }
     node = TextNode(text=f"text-{doc_id}", metadata=metadata)
     return NodeWithScore(node=node, score=1.0)
@@ -51,3 +52,16 @@ def test_scoped_retriever_supports_empty_scope():
 
     scoped = retriever.retrieve("query")
     assert scoped == []
+
+
+def test_extract_document_id_prefers_stable_source_document_id():
+    metadata = {
+        "source_document_id": "doc-stable",
+        "document_id": "llama-parent-id",
+        "doc_id": "llama-parent-id",
+        "ref_doc_id": "llama-parent-id",
+        "_node_content": json.dumps({"metadata": {"document_id": "doc-original"}}),
+    }
+    node = TextNode(text="text", metadata=metadata)
+
+    assert extract_document_id(node) == "doc-stable"

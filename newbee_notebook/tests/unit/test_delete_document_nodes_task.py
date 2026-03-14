@@ -1,12 +1,15 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+from llama_index.core.vector_stores import FilterOperator
 
 from newbee_notebook.infrastructure.tasks import document_tasks
 
 
-def test_delete_document_nodes_task_calls_delete_ref_doc(monkeypatch):
-    mock_pg = MagicMock()
-    mock_es = MagicMock()
+def test_delete_document_nodes_task_deletes_by_stable_source_document_id(monkeypatch):
+    mock_pg_store = MagicMock()
+    mock_es_store = MagicMock()
+    mock_pg = MagicMock(vector_store=mock_pg_store)
+    mock_es = MagicMock(vector_store=mock_es_store)
 
     class _DummySessionContext:
         async def __aenter__(self):
@@ -37,5 +40,11 @@ def test_delete_document_nodes_task_calls_delete_ref_doc(monkeypatch):
 
     asyncio.run(document_tasks._delete_document_nodes_async("doc-123"))
 
-    mock_pg.delete_ref_doc.assert_called_once_with("doc-123")
-    mock_es.delete_ref_doc.assert_called_once_with("doc-123")
+    pg_filters = mock_pg_store.delete_nodes.call_args.kwargs["filters"]
+    es_filters = mock_es_store.delete_nodes.call_args.kwargs["filters"]
+    assert pg_filters.filters[0].key == "source_document_id"
+    assert pg_filters.filters[0].operator == FilterOperator.EQ
+    assert pg_filters.filters[0].value == "doc-123"
+    assert es_filters.filters[0].key == "source_document_id"
+    assert es_filters.filters[0].operator == FilterOperator.EQ
+    assert es_filters.filters[0].value == "doc-123"

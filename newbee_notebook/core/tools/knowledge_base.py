@@ -8,6 +8,7 @@ from typing import Any
 from llama_index.core.schema import QueryBundle
 
 from newbee_notebook.core.common.node_utils import extract_document_id
+from newbee_notebook.core.rag.retrieval.filters import build_document_filters
 from newbee_notebook.core.rag.retrieval import build_hybrid_retriever
 from newbee_notebook.core.rag.retrieval.scoped_retriever import ScopedRetriever
 from newbee_notebook.core.tools.contracts import (
@@ -16,7 +17,7 @@ from newbee_notebook.core.tools.contracts import (
     ToolDefinition,
     ToolQualityMeta,
 )
-from newbee_notebook.core.tools.es_search_tool import _es_search_with_raw
+from newbee_notebook.core.rag.retrieval.es_keyword import es_search_with_raw
 
 
 SearchPayload = dict[str, Any]
@@ -134,7 +135,7 @@ async def keyword_search_executor(
     index_name: str = "newbee_notebook_docs",
     es_url: str | None = None,
 ) -> list[SearchResult]:
-    raw_results, _ = _es_search_with_raw(
+    raw_results, _ = es_search_with_raw(
         query=payload["query"],
         index_name=index_name,
         max_results=int(payload["max_results"]),
@@ -186,13 +187,16 @@ async def semantic_search_executor(
     *,
     pgvector_index: Any,
 ) -> list[SearchResult]:
+    pg_filters, _es_filters, allowed_doc_ids = build_document_filters(
+        payload.get("allowed_document_ids")
+    )
     base_retriever = pgvector_index.as_retriever(
         similarity_top_k=int(payload["max_results"]),
-        filters=None,
+        filters=pg_filters,
     )
     scoped_retriever = ScopedRetriever(
         base_retriever=base_retriever,
-        allowed_doc_ids=payload.get("allowed_document_ids"),
+        allowed_doc_ids=allowed_doc_ids,
         top_k=int(payload["max_results"]),
     )
     results = await scoped_retriever.aretrieve(QueryBundle(str(payload["query"])))
@@ -205,13 +209,18 @@ async def hybrid_search_executor(
     pgvector_index: Any,
     es_index: Any,
 ) -> list[SearchResult]:
+    pg_filters, es_filters, allowed_doc_ids = build_document_filters(
+        payload.get("allowed_document_ids")
+    )
     retriever = build_hybrid_retriever(
         pgvector_index=pgvector_index,
         es_index=es_index,
         pgvector_top_k=int(payload["max_results"]),
         es_top_k=int(payload["max_results"]),
         final_top_k=int(payload["max_results"]),
-        allowed_doc_ids=payload.get("allowed_document_ids"),
+        pg_filters=pg_filters,
+        es_filters=es_filters,
+        allowed_doc_ids=allowed_doc_ids,
     )
     results = await retriever.aretrieve(QueryBundle(str(payload["query"])))
     return _normalize_search_results([_node_to_result(item) for item in results])

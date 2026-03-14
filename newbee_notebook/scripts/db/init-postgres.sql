@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS data_documents_qwen3_embedding (
 );
 CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_idx_1
     ON data_documents_qwen3_embedding ((metadata_->>'ref_doc_id'));
+CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_source_document_id_idx
+    ON data_documents_qwen3_embedding ((metadata_->>'source_document_id'));
 */
 
 -- ZhipuAI vector store table (1024 dimensions)
@@ -171,7 +173,19 @@ CREATE TABLE IF NOT EXISTS data_documents_zhipu (
 );
 CREATE INDEX IF NOT EXISTS documents_zhipu_idx_1
     ON data_documents_zhipu ((metadata_->>'ref_doc_id'));
+CREATE INDEX IF NOT EXISTS documents_zhipu_source_document_id_idx
+    ON data_documents_zhipu ((metadata_->>'source_document_id'));
 */
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'data_documents_qwen3_embedding') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_source_document_id_idx ON data_documents_qwen3_embedding ((metadata_->>''source_document_id''))';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'data_documents_zhipu') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS documents_zhipu_source_document_id_idx ON data_documents_zhipu ((metadata_->>''source_document_id''))';
+    END IF;
+END $$;
 
 -- Log successful initialization
 DO $$

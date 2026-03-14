@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Iterable
 from uuid import uuid4
 
+from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
 from llama_index.readers.file import MarkdownReader
 
 from newbee_notebook.core.common.config import (
@@ -609,6 +610,7 @@ async def _load_markdown_nodes(
         docs = reader.load_data(
             file=str(content_abs_path),
             extra_info={
+                "source_document_id": document.document_id,
                 "ref_doc_id": document.document_id,
                 "doc_id": document.document_id,
                 "document_id": document.document_id,
@@ -623,6 +625,7 @@ async def _load_markdown_nodes(
         meta = getattr(node, "metadata", {}) or {}
         meta["chunk_index"] = idx
         meta["chunk_id"] = getattr(node, "node_id", "")
+        meta["source_document_id"] = document.document_id
         meta["ref_doc_id"] = document.document_id
         meta["doc_id"] = document.document_id
         meta["document_id"] = document.document_id
@@ -875,7 +878,16 @@ async def _delete_document_nodes_async(document_id: str):
         try:
             pg_index = await load_pgvector_index(embed_model, pg_config)
             try:
-                pg_index.delete_ref_doc(document_id)
+                filters = MetadataFilters(
+                    filters=[
+                        MetadataFilter(
+                            key="source_document_id",
+                            value=document_id,
+                            operator=FilterOperator.EQ,
+                        )
+                    ]
+                )
+                pg_index.vector_store.delete_nodes(filters=filters)
             finally:
                 await _close_vector_index(pg_index)
         except Exception as exc:  # noqa: BLE001
@@ -891,7 +903,16 @@ async def _delete_document_nodes_async(document_id: str):
         try:
             es_index = await load_es_index(embed_model, es_config)
             try:
-                es_index.delete_ref_doc(document_id)
+                filters = MetadataFilters(
+                    filters=[
+                        MetadataFilter(
+                            key="source_document_id",
+                            value=document_id,
+                            operator=FilterOperator.EQ,
+                        )
+                    ]
+                )
+                es_index.vector_store.delete_nodes(filters=filters)
             finally:
                 await _close_vector_index(es_index)
         except Exception as exc:  # noqa: BLE001

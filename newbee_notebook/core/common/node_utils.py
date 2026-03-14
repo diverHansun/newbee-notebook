@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 def _get_doc_id(meta: dict) -> Optional[str]:
     """Return the first present document id key from metadata dict."""
-    for key in ("document_id", "doc_id", "ref_doc_id"):
+    for key in ("source_document_id", "document_id", "doc_id", "ref_doc_id"):
         value = meta.get(key)
         if value:
             return value
@@ -30,7 +30,12 @@ def extract_document_id(node: Any) -> Optional[str]:
     node_obj = getattr(node, "node", node)
     metadata = getattr(node_obj, "metadata", {}) or {}
 
-    # 1) Prefer _node_content.metadata.*
+    # 1) Prefer stable top-level source_document_id if present.
+    doc_id = metadata.get("source_document_id")
+    if doc_id:
+        return str(doc_id)
+
+    # 2) Prefer _node_content.metadata.*
     node_content = metadata.get("_node_content")
     if node_content:
         if isinstance(node_content, str):
@@ -44,5 +49,5 @@ def extract_document_id(node: Any) -> Optional[str]:
             if doc_id:
                 return doc_id
 
-    # 2) Fallback to top-level metadata (may be overwritten)
+    # 3) Fallback to top-level metadata (may be overwritten)
     return _get_doc_id(metadata)
