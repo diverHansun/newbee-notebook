@@ -82,7 +82,7 @@ Date: `2026-03-14`
 - [x] Feature branch contains only intended batch-2-core commits
 - [x] Worktree code is clean except untracked `docs/backend-v2/batch-2/implement/`
 - [x] Batch-2 completion checklist written
-- [ ] Code review completed with no blocking findings
-- [ ] Merged into `stage/backend-v2`
-- [ ] Batch-2 marked complete on base branch history
+- [x] Code review completed with no blocking findings
+- [x] Merged into `stage/backend-v2`
+- [x] Batch-2 marked complete on base branch history
 

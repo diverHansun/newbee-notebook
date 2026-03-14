@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from newbee_notebook.api import dependencies
+from newbee_notebook.core.common.project_paths import get_configs_directory
 from newbee_notebook.core.mcp.config import load_mcp_config
 
 
@@ -93,8 +94,9 @@ def test_runtime_mcp_singleton_uses_repo_level_configs_path(monkeypatch: pytest.
     manager = dependencies.get_mcp_client_manager_singleton()
 
     try:
+        expected = get_configs_directory() / "mcp.json"
+        assert manager._config_path == expected
         assert manager._config_path.name == "mcp.json"
         assert manager._config_path.parent.name == "configs"
-        assert manager._config_path.parent.parent.name == "batch-2-core"
     finally:
         monkeypatch.setattr(dependencies, "_mcp_client_manager", None)
