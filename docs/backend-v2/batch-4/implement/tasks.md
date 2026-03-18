@@ -12,6 +12,16 @@
 - In Progress: 0
 - Remaining: 41
 
+## Alignment Notes
+- 数据库物理主键统一使用 `id`，领域/API 层映射为 `diagram_id`
+- `diagrams.notebook_id` 外键应指向现有表结构 `notebooks(id)`
+- 存储抽象对齐现有 `StorageBackend`：读取用 `get_text()`，删除用 `delete_file()`；文本写入需在 service 内部基于 `save_file()` 封装
+- `DiagramRepository` 更新内容后的数据库回写建议只做元数据更新，不再设计伪造的 `update_content_path()` 合同
+- batch-4 前端依赖 `@xyflow/react`、`@dagrejs/dagre`、`html2canvas`、`mermaid` 当前尚未安装，Vitest/前端测试脚本也尚未存在，需要先补基建
+- Diagram skill 的确认流复用 batch-3：SSE 事件展示 `args_summary`，确认接口为 `POST /api/v1/chat/{session_id}/confirm`
+- 代码目录沿用当前项目分层：领域实体/仓储放 `domain/`，服务放 `application/services/`，仓储实现放 `infrastructure/persistence/repositories/`，skill 放 `skills/diagram/`
+- 前端目录沿用现状：hooks 放 `frontend/src/lib/hooks/`，store 放 `frontend/src/stores/`
+
 ---
 
 ## Phase 1: 数据库迁移
@@ -26,8 +36,8 @@
   ```sql
   -- diagrams: agent 生成的可视化图表（mindmap 等）
   CREATE TABLE diagrams (
-      diagram_id      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      notebook_id     UUID        NOT NULL REFERENCES notebooks(notebook_id) ON DELETE CASCADE,
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      notebook_id     UUID        NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
       title           TEXT        NOT NULL,
       diagram_type    TEXT        NOT NULL,
       -- 已注册类型：'mindmap'；新类型由应用层 DiagramTypeRegistry 控制，无需 CHECK 约束
@@ -55,7 +65,7 @@
 ### Task 2: Diagram 领域实体
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/entities.py`
+- Create: `newbee_notebook/domain/entities/diagram.py`
 
 - [ ] T002 定义 `Diagram` dataclass
 
@@ -84,8 +94,8 @@
 ### Task 3: DiagramTypeDescriptor + 异常类型
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/exceptions.py`
-- Create: `newbee_notebook/core/diagrams/registry.py`（仅 DiagramTypeDescriptor 定义部分）
+- Create: `newbee_notebook/application/services/diagram_service.py`（异常类型）
+- Create: `newbee_notebook/skills/diagram/registry.py`（仅 DiagramTypeDescriptor 定义部分）
 
 - [ ] T003 定义 4 个异常类 + DiagramTypeDescriptor dataclass
 
@@ -123,14 +133,14 @@
 ### Task 4: validate_reactflow_schema + DIAGRAM_TYPE_REGISTRY
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/registry.py`（补充 validator + registry）
+- Modify: `newbee_notebook/skills/diagram/registry.py`（补充 validator + registry）
 
 TDD 周期：
 
 - [ ] T004-Red 为 `validate_reactflow_schema` 写单元测试
 
   ```python
-  # tests/core/diagrams/test_registry.py
+  # newbee_notebook/tests/unit/skills/diagram/test_registry.py
 
   def test_valid_reactflow_json_passes():
       content = '{"nodes":[{"id":"root","label":"主题"},{"id":"n1","label":"子主题"}],"edges":[{"source":"root","target":"n1"}]}'
@@ -239,7 +249,7 @@ TDD 周期：
 ### Task 5: DiagramRepository Protocol
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/repositories.py`
+- Create: `newbee_notebook/domain/repositories/diagram_repository.py`
 
 - [ ] T005 定义 `DiagramRepository` Protocol（6 个方法签名）
 
@@ -254,11 +264,11 @@ TDD 周期：
           notebook_id: str,
           document_id: str | None = None,
       ) -> list[Diagram]: ...
-      async def update_content_path(
+      async def update_metadata(
           self,
           diagram_id: str,
-          content_path: str,
-          title: str | None,
+          *,
+          title: str | None = None,
       ) -> Diagram: ...
       async def update_positions(
           self,
@@ -275,7 +285,7 @@ TDD 周期：
 ### Task 6: PostgresDiagramRepository 实现
 
 **Files:**
-- Create: `newbee_notebook/infrastructure/db/postgres_diagram_repository.py`
+- Create: `newbee_notebook/infrastructure/persistence/repositories/diagram_repo_impl.py`
 
 - [ ] T006 实现 `PostgresDiagramRepository`，覆盖 Protocol 所有方法
 
@@ -292,13 +302,13 @@ TDD 周期：
 ### Task 7: list_diagrams + get_diagram
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/service.py`（骨架 + 这两个方法）
-- Create: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Create: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T007-Red
 
   ```python
-  # tests/core/diagrams/test_diagram_service.py
+  # newbee_notebook/tests/unit/application/services/test_diagram_service.py
   import pytest
   from unittest.mock import AsyncMock
   from newbee_notebook.core.diagrams.service import DiagramService
@@ -340,8 +350,8 @@ TDD 周期：
 ### Task 8: get_diagram_content
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/service.py`
-- Modify: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Modify: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T008-Red
 
@@ -349,11 +359,11 @@ TDD 周期：
   async def test_get_diagram_content_reads_minio(service, mock_repo, mock_storage):
       fake_diagram = make_fake_diagram(content_path="diagrams/nb-1/d1.json")
       mock_repo.find_by_id.return_value = fake_diagram
-      mock_storage.read_text.return_value = '{"nodes":[],"edges":[]}'
+      mock_storage.get_text.return_value = '{"nodes":[],"edges":[]}'
 
       content = await service.get_diagram_content("d1")
 
-      mock_storage.read_text.assert_called_once_with("diagrams/nb-1/d1.json")
+      mock_storage.get_text.assert_called_once_with("diagrams/nb-1/d1.json")
       assert content == '{"nodes":[],"edges":[]}'
 
   async def test_get_diagram_content_not_found(service, mock_repo):
@@ -369,8 +379,8 @@ TDD 周期：
 ### Task 9: create_diagram
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/service.py`
-- Modify: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Modify: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T009-Red
 
@@ -387,7 +397,7 @@ TDD 周期：
           content=VALID_CONTENT,
           document_ids=["doc-1"],
       )
-      mock_storage.write_text.assert_called_once()
+      mock_storage.save_file.assert_called_once()
       mock_repo.save.assert_called_once()
       assert result.diagram_type == "mindmap"
 
@@ -397,7 +407,7 @@ TDD 周期：
               notebook_id="nb-1", title="x",
               diagram_type="mindmap", content=INVALID_CONTENT, document_ids=[],
           )
-      mock_storage.write_text.assert_not_called()
+      mock_storage.save_file.assert_not_called()
       mock_repo.save.assert_not_called()
 
   async def test_create_diagram_unknown_type_raises(service, mock_repo, mock_storage):
@@ -416,7 +426,11 @@ TDD 周期：
       descriptor.validator(content)               # 格式非法则抛出，无 storage 副作用
       diagram_id = str(uuid4())
       content_path = f"diagrams/{notebook_id}/{diagram_id}{descriptor.file_extension}"
-      await self._storage.write_text(content_path, content)
+      await self._storage.save_file(
+          content_path,
+          BytesIO(content.encode("utf-8")),
+          content_type="application/json" if descriptor.output_format == "reactflow_json" else "text/plain; charset=utf-8",
+      )
       diagram = Diagram(
           diagram_id=diagram_id, notebook_id=notebook_id,
           title=title, diagram_type=diagram_type, format=descriptor.output_format,
@@ -431,8 +445,8 @@ TDD 周期：
 ### Task 10: update_diagram_content
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/service.py`
-- Modify: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Modify: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T010-Red
 
@@ -440,14 +454,14 @@ TDD 周期：
   async def test_update_content_overwrites_minio(service, mock_repo, mock_storage):
       fake = make_fake_diagram(node_positions={"root": {"x": 10, "y": 20}})
       mock_repo.find_by_id.return_value = fake
-      mock_repo.update_content_path.return_value = fake
+      mock_repo.update_metadata.return_value = fake
 
       await service.update_diagram_content("d1", VALID_CONTENT)
 
-      mock_storage.write_text.assert_called_once_with(fake.content_path, VALID_CONTENT)
+      mock_storage.save_file.assert_called_once()
       # node_positions 不应被清除
-      call_kwargs = mock_repo.update_content_path.call_args
-      assert call_kwargs  # update_content_path 被调用
+      call_kwargs = mock_repo.update_metadata.call_args
+      assert call_kwargs  # update_metadata 被调用
 
   async def test_update_content_invalid_raises(service, mock_repo):
       mock_repo.find_by_id.return_value = make_fake_diagram()
@@ -462,8 +476,8 @@ TDD 周期：
 ### Task 11: update_node_positions + format mismatch
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/service.py`
-- Modify: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Modify: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T011-Red
 
@@ -489,8 +503,8 @@ TDD 周期：
 ### Task 12: delete_diagram
 
 **Files:**
-- Modify: `newbee_notebook/core/diagrams/service.py`
-- Modify: `tests/core/diagrams/test_diagram_service.py`
+- Modify: `newbee_notebook/application/services/diagram_service.py`
+- Modify: `newbee_notebook/tests/unit/application/services/test_diagram_service.py`
 
 - [ ] T012-Red
 
@@ -499,7 +513,7 @@ TDD 周期：
       fake = make_fake_diagram()
       mock_repo.find_by_id.return_value = fake
       call_order = []
-      mock_storage.delete.side_effect = lambda _: call_order.append("storage")
+      mock_storage.delete_file.side_effect = lambda _: call_order.append("storage")
       mock_repo.delete.side_effect = lambda _: call_order.append("repo")
 
       await service.delete_diagram("d1")
@@ -515,7 +529,7 @@ TDD 周期：
       """MinIO 文件已不存在时，仍应继续删除数据库记录"""
       fake = make_fake_diagram()
       mock_repo.find_by_id.return_value = fake
-      mock_storage.delete.side_effect = Exception("file not found")
+      mock_storage.delete_file.side_effect = Exception("file not found")
 
       await service.delete_diagram("d1")  # 不应抛出
 
@@ -533,7 +547,7 @@ TDD 周期：
 ### Task 13: Pydantic 请求/响应模型
 
 **Files:**
-- Create: `newbee_notebook/api/schemas/diagram_schemas.py`
+- Create: `newbee_notebook/api/models/diagram_models.py`
 
 - [ ] T013 定义所有 Pydantic 模型
 
@@ -618,13 +632,13 @@ TDD 周期：
 ### Task 18: 5 个 Agent 工具工厂函数
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/skill_tools.py`
-- Create: `tests/core/diagrams/test_diagram_skill_tools.py`
+- Create: `newbee_notebook/skills/diagram/tools.py`
+- Create: `newbee_notebook/tests/unit/skills/diagram/test_tools.py`
 
 - [ ] T018-Red
 
   ```python
-  # tests/core/diagrams/test_diagram_skill_tools.py
+  # newbee_notebook/tests/unit/skills/diagram/test_tools.py
 
   @pytest.fixture
   def mock_service():
@@ -670,7 +684,7 @@ TDD 周期：
 ### Task 19: DiagramSkillProvider 类
 
 **Files:**
-- Create: `newbee_notebook/core/diagrams/skill_provider.py`
+- Create: `newbee_notebook/skills/diagram/provider.py`
 
 - [ ] T019 实现 `DiagramSkillProvider`（继承 `SkillProvider`）
 
@@ -768,7 +782,7 @@ TDD 周期：
 ### Task 24: TanStack Query Hooks
 
 **Files:**
-- Create: `frontend/src/hooks/use-diagrams.ts`
+- Create: `frontend/src/lib/hooks/use-diagrams.ts`
 
 - [ ] T024 实现 5 个 Query/Mutation Hooks
 
@@ -796,13 +810,13 @@ TDD 周期：
 ### Task 25: Zustand store 扩展
 
 **Files:**
-- Modify: `frontend/src/store/studio-store.ts`（或现有 studio 相关 store）
+- Modify: `frontend/src/stores/studio-store.ts`（或现有 studio 相关 store）
 
 - [ ] T025 扩展 studioView 联合类型，新增 `activeDiagramId` 状态
 
   ```typescript
   // 在现有 studioView 类型中新增
-  studioView: "home" | "notes" | "note-editor" | "diagrams" | "diagram-detail"
+  studioView: "home" | "notes" | "note-detail" | "diagrams" | "diagram-detail"
   activeDiagramId: string | null
   setActiveDiagram: (id: string) => void
   clearActiveDiagram: () => void
@@ -1185,7 +1199,7 @@ TDD 周期：
 ### Task 37: SSE done 事件后刷新图表列表
 
 **Files:**
-- Modify: `frontend/src/hooks/use-chat-stream.ts`（或 SSE 事件处理器）
+- Modify: `frontend/src/lib/hooks/useChatStream.ts`（或 SSE 事件处理器）
 
 - [ ] T037 在 SSE `done` 事件处理逻辑中，检测本次会话的 `active_skill` 是否为图表类型
 
@@ -1198,7 +1212,7 @@ TDD 周期：
 ### Task 38: Notebook 删除级联清理 MinIO
 
 **Files:**
-- Modify: `newbee_notebook/core/notebooks/service.py`（或 Notebook 删除逻辑）
+- Modify: `newbee_notebook/application/services/notebook_service.py`（或 Notebook 删除逻辑）
 
 - [ ] T038 在 Notebook 删除流程中，先列出所有关联图表，逐一删除 MinIO 文件，再依赖数据库 CASCADE 清除 `diagrams` 表记录
 
@@ -1207,7 +1221,7 @@ TDD 周期：
 ### Task 39: Document 删除 → 从 document_ids 移除
 
 **Files:**
-- Modify: `newbee_notebook/core/documents/service.py`（或 Document 删除逻辑）
+- Modify: `newbee_notebook/application/services/document_service.py`（或 Document 删除逻辑）
 
 - [ ] T039 在 Document 删除后，执行 `UPDATE diagrams SET document_ids = array_remove(document_ids, $1) WHERE $1 = ANY(document_ids)` 移除关联
 
@@ -1216,7 +1230,7 @@ TDD 周期：
 ### Task 40: E2E 冒烟测试
 
 **Files:**
-- Create: `tests/e2e/test_diagram_smoke.py`
+- Create: `newbee_notebook/tests/e2e/test_diagram_smoke.py`
 
 - [ ] T040 编写端到端冒烟测试（后端集成测试）
 
@@ -1237,16 +1251,16 @@ TDD 周期：
 
   后端：
   ```bash
-  cd newbee_notebook
-  python -m pytest tests/core/diagrams/ tests/api/test_diagrams.py tests/e2e/test_diagram_smoke.py -v
-  mypy newbee_notebook/core/diagrams/ newbee_notebook/api/routers/diagrams.py
+  python -m pytest newbee_notebook/tests/unit/application/services/test_diagram_service.py newbee_notebook/tests/unit/skills/diagram/ newbee_notebook/tests/e2e/test_diagram_smoke.py -v
+  mypy newbee_notebook/application/services/diagram_service.py newbee_notebook/skills/diagram/ newbee_notebook/api/routers/diagrams.py
   ```
 
   前端：
   ```bash
+  # 先补齐 package.json 依赖与测试脚本
   cd frontend
   npx tsc --noEmit
-  npx eslint src/types/diagram.ts src/hooks/use-diagrams.ts src/lib/diagram/ src/components/studio/diagrams/
+  npx eslint src/types/diagram.ts src/lib/hooks/use-diagrams.ts src/lib/diagram/ src/components/studio/diagrams/
   npx vitest run src/lib/diagram/
   ```
 

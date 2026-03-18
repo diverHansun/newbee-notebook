@@ -13,6 +13,14 @@
 - In Progress: 0
 - Remaining: 48
 
+## Alignment Notes
+- 数据库物理主键统一沿用现有表风格，使用 `id`，领域/API 层再映射为 `mark_id` / `note_id`
+- 外键统一指向现有结构：`documents(id)`、`notes(id)`、`marks(id)`、`notebooks(id)`
+- REST 接口优先采用嵌套路由：`/documents/{document_id}/marks`、`/notebooks/{notebook_id}/notes`
+- `note_mark_refs` 通过 `PATCH /api/v1/notes/{note_id}` 时后端解析 `[[mark:id]]` 自动同步，不单独暴露写接口
+- Skill 确认回传接口统一为 `POST /api/v1/chat/{session_id}/confirm`
+- 前端测试脚本和 Vitest 基建目前尚未存在，进入前端任务前需要先补测试基础设施
+
 ---
 
 ## Phase 1: 数据库迁移
@@ -27,8 +35,8 @@
   ```sql
   -- marks: document-level bookmarks (char_offset-based)
   CREATE TABLE marks (
-      mark_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      document_id  UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      document_id  UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       anchor_text  TEXT NOT NULL,
       char_offset  INTEGER NOT NULL CHECK (char_offset >= 0),
       context_text TEXT,
@@ -39,7 +47,7 @@
 
   -- notes: global, free-floating knowledge entries
   CREATE TABLE notes (
-      note_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       title       TEXT NOT NULL DEFAULT '',
       content     TEXT NOT NULL DEFAULT '',
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -48,18 +56,20 @@
 
   -- note_document_tags: note ↔ document many-to-many
   CREATE TABLE note_document_tags (
-      note_id     UUID NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
-      document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      note_id     UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+      document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       tagged_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (note_id, document_id)
+      UNIQUE (note_id, document_id)
   );
   CREATE INDEX idx_note_document_tags_document ON note_document_tags(document_id);
 
   -- note_mark_refs: [[mark:id]] references inside note content
   CREATE TABLE note_mark_refs (
-      note_id  UUID NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
-      mark_id  UUID NOT NULL REFERENCES marks(mark_id) ON DELETE CASCADE,
-      PRIMARY KEY (note_id, mark_id)
+      id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      note_id  UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+      mark_id  UUID NOT NULL REFERENCES marks(id) ON DELETE CASCADE,
+      UNIQUE (note_id, mark_id)
   );
   CREATE INDEX idx_note_mark_refs_mark ON note_mark_refs(mark_id);
   ```
@@ -111,8 +121,6 @@
       note_id:      str
       title:        str
       content:      str                 # raw Markdown text
-      document_ids: list[str] = field(default_factory=list)
-      mark_ids:     list[str] = field(default_factory=list)
       created_at:   datetime = field(default_factory=datetime.utcnow)
       updated_at:   datetime = field(default_factory=datetime.utcnow)
   ```
@@ -332,7 +340,7 @@
 - [ ] T018 Define Pydantic request/response models for Mark API
 
   `MarkResponse`: mark_id, document_id, anchor_text, char_offset, context_text, created_at, updated_at
-  `CreateMarkRequest`: document_id, anchor_text, char_offset, context_text (optional)
+  `CreateMarkRequest`: anchor_text, char_offset, context_text (optional)
   `MarkListResponse`: marks: list[MarkResponse], total: int
 
 - [ ] T019 Define Pydantic request/response models for Note API
@@ -351,9 +359,10 @@
 - [ ] T020 Implement marks router with the following endpoints
 
   ```
-  POST   /api/v1/marks                      → create mark
-  GET    /api/v1/marks?document_id=X        → list marks by document
-  DELETE /api/v1/marks/{mark_id}            → delete mark
+  POST   /api/v1/documents/{document_id}/marks         → create mark
+  GET    /api/v1/documents/{document_id}/marks         → list marks by document
+  GET    /api/v1/notebooks/{notebook_id}/marks         → list notebook marks
+  DELETE /api/v1/marks/{mark_id}                       → delete mark
   ```
 
   Follow the router pattern in `newbee_notebook/api/routers/notebooks.py`.
@@ -366,16 +375,17 @@
 - [ ] T021 Implement notes router
 
   ```
-  POST   /api/v1/notes                                    → create note
-  GET    /api/v1/notes?notebook_id=X[&document_id=Y]     → list notes
-  GET    /api/v1/notes/{note_id}                          → get note
-  PUT    /api/v1/notes/{note_id}                          → update note (content+title)
-  DELETE /api/v1/notes/{note_id}                          → delete note
-  POST   /api/v1/notes/{note_id}/documents                → tag document
-  DELETE /api/v1/notes/{note_id}/documents/{document_id}  → untag document
+  POST   /api/v1/notes                                     → create note
+  GET    /api/v1/notebooks/{notebook_id}/notes            → list notes
+  GET    /api/v1/notebooks/{notebook_id}/notes?document_id=Y → list notes by document
+  GET    /api/v1/notes/{note_id}                           → get note
+  PATCH  /api/v1/notes/{note_id}                           → update note (content+title)
+  DELETE /api/v1/notes/{note_id}                           → delete note
+  POST   /api/v1/notes/{note_id}/documents                 → tag document
+  DELETE /api/v1/notes/{note_id}/documents/{document_id}   → untag document
   ```
 
-  On `PUT` (update content), call `note_service.sync_mark_refs(note_id)` after updating.
+  On `PATCH` (update content), call `note_service.sync_mark_refs(note_id)` after updating.
 
 ### Task 12: 依赖注入注册
 
@@ -444,19 +454,22 @@
 - [ ] T028 Write failing tests for SkillRegistry
 
   ```python
-  async def test_match_command_returns_provider(registry, mock_provider):
+  async def test_match_command_returns_provider_and_cleaned_message(registry, mock_provider):
       # mock_provider.slash_commands = ["/note"]
       registry.register(mock_provider)
       result = registry.match_command("/note do something")
-      assert result == mock_provider
+      provider, activated_command, cleaned = result
+      assert provider == mock_provider
+      assert activated_command == "/note"
+      assert cleaned == "do something"
 
   async def test_match_command_returns_none_for_non_slash(registry):
       result = registry.match_command("regular message")
       assert result is None
 
-  async def test_match_command_case_insensitive(registry, mock_provider):
+  async def test_match_command_is_case_sensitive(registry, mock_provider):
       registry.register(mock_provider)
-      assert registry.match_command("/NOTE do something") is not None
+      assert registry.match_command("/NOTE do something") is None
   ```
 
   Run: `pytest newbee_notebook/tests/core/skills/test_skill_registry.py -v`
@@ -472,17 +485,15 @@
       def register(self, provider: SkillProvider) -> None:
           self._providers.append(provider)
 
-      def match_command(self, message: str) -> SkillProvider | None:
+      def match_command(self, message: str) -> tuple[SkillProvider, str, str] | None:
           stripped = message.strip()
           for provider in self._providers:
               for cmd in provider.slash_commands:
-                  if stripped.lower().startswith(cmd.lower()):
-                      return provider
+                  if stripped == cmd:
+                      return provider, cmd, ""
+                  if stripped.startswith(cmd + " "):
+                      return provider, cmd, stripped[len(cmd):].strip()
           return None
-
-      def extract_command(self, message: str) -> tuple[str, str]:
-          """Returns (slash_command, cleaned_message)."""
-          ...
   ```
 
 - [ ] T030 Run SkillRegistry tests — verify pass
@@ -797,6 +808,7 @@
 - [ ] T050 Implement mark hooks: `useMarks(documentId)`, `useCreateMark()`, `useDeleteMark()`
 
   `useMarks`: `GET /api/v1/marks?document_id={id}`, QueryKey `["marks", documentId]`
+  实际路由为 `GET /api/v1/documents/{documentId}/marks`
   `useCreateMark`: POST, invalidates `["marks", documentId]` on success
   `useDeleteMark`: DELETE, invalidates `["marks", documentId]` on success
 

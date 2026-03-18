@@ -8,9 +8,9 @@
 1. 用户输入: "/note 帮我把第3章的要点整理成笔记"
 2. 前端: 检测 /note 前缀，正常发送到 chat endpoint
 3. ChatService: 调用 SkillRegistry.match_command(message)
-   -> 返回 ("note", "帮我把第3章的要点整理成笔记")
+   -> 返回 (provider, "/note", "帮我把第3章的要点整理成笔记")
 4. ChatService: 获取 NoteSkillProvider，构建 SkillManifest
-5. ChatService: 将 manifest.description 追加到 system prompt
+5. ChatService: 将 manifest.system_prompt_addition 追加到 system prompt
 6. ChatService: 将 manifest.tools 作为 external_tools 传入 ToolRegistry
 7. ChatService: 将 manifest.confirmation_required 传入 AgentLoop
 8. AgentLoop: 正常执行，agent 可看到 note 工具并决策调用
@@ -22,14 +22,14 @@
 SkillRegistry.match_command 的匹配和清理逻辑：
 
 ```python
-def match_command(self, message: str) -> tuple[str, str] | None:
+def match_command(self, message: str) -> tuple[SkillProvider, str, str] | None:
     stripped = message.strip()
-    for name, provider in self._skills.items():
-        cmd = provider.slash_command  # e.g. "/note"
-        if stripped == cmd:
-            return (name, "")
-        if stripped.startswith(cmd + " "):
-            return (name, stripped[len(cmd):].strip())
+    for provider in self._providers:
+        for cmd in provider.slash_commands:
+            if stripped == cmd:
+                return (provider, cmd, "")
+            if stripped.startswith(cmd + " "):
+                return (provider, cmd, stripped[len(cmd):].strip())
     return None
 ```
 
@@ -44,16 +44,16 @@ def match_command(self, message: str) -> tuple[str, str] | None:
 
 ```
 ---
-当前已激活技能：笔记管理
+当前已激活技能：/note
 你可以使用以下工具操作笔记和查询书签。在执行修改或删除操作前，请先向用户说明你的计划。
 ---
 ```
 
-该段落帮助 agent 理解当前具备的额外能力和使用规范。
+该段落来自 `SkillManifest.system_prompt_addition`，帮助 agent 理解当前具备的额外能力和使用规范。
 
-### 1.4 /note 不修改 mode
+### 1.4 /note 自动切换到 agent mode
 
-Slash 命令不改变请求的 mode。/note 仍然在 agent mode 下执行（agent mode 是唯一支持 external_tools 的模式）。如果当前不是 agent mode，ChatService 应自动切换到 agent mode。
+Slash 命令不要求前端手动切换 mode。`/note` 一律在 agent mode 下执行；如果当前请求不是 agent mode，ChatService 应自动切换到 agent mode，因为只有 agent mode 会注入 external_tools。
 
 ## 2. 确认机制
 
@@ -76,9 +76,9 @@ confirmation_required=frozenset({
 2. AgentLoop 检查: "update_note" in confirmation_required -> 是
 3. AgentLoop 产出 ConfirmationRequestEvent:
    {
-     "type": "confirmation_request",
+     "event": "confirmation_request",
      "tool_name": "update_note",
-     "tool_args": {"note_id": "xxx", "content": "..."},
+     "args_summary": {"note_id": "xxx"},
      "description": "更新笔记 [标题] 的内容"
    }
 4. AgentLoop 暂停当前工具执行，等待确认
@@ -97,11 +97,12 @@ confirmation_required=frozenset({
 ```python
 @dataclass(frozen=True)
 class ConfirmationRequestEvent:
-    type: str = "confirmation_request"
-    tool_name: str = ""
-    tool_args: dict = field(default_factory=dict)
-    description: str = ""
     request_id: str = field(default_factory=generate_uuid)
+    tool_name: str = ""
+    args_summary: dict = field(default_factory=dict)
+    description: str = ""
+    event: str = "confirmation_request"
+```
 ```
 
 ### 2.4 确认回传机制
@@ -113,15 +114,14 @@ class ConfirmationRequestEvent:
 前端在收到 confirmation_request 后，通过现有 chat endpoint 发送确认消息：
 
 ```
-POST /api/v1/chat/confirm
+POST /api/v1/chat/{session_id}/confirm
 {
-    "session_id": "xxx",
     "request_id": "confirmation_request.request_id",
     "approved": true
 }
 ```
 
-AgentLoop 通过 asyncio.Event 或 asyncio.Queue 等待确认结果。ChatService 在收到确认请求时将结果传递给等待中的 AgentLoop。
+AgentLoop 通过 `ConfirmationGateway` 等待确认结果。Chat router 在收到确认请求时调用 `confirmation_gateway.resolve(request_id, approved)`，将结果传递给等待中的 AgentLoop。
 
 **方案 B：工具返回预览**
 
@@ -159,11 +159,11 @@ Agent 收到后可以：
 
 ### 3.1 Skill 工具只在 agent mode 可用
 
-ToolRegistry.get_tools 已有模式过滤：external_tools 只在 agent/chat mode 下注入。其他模式（ask、explain、conclude）即使收到 /note 前缀也不会注入工具。
+ToolRegistry.get_tools 已支持 `external_tools` 参数，但 skill 工具仅在 ChatService 强制切换到 agent mode 后注入。`ask` / `explain` / `conclude` 不直接承载 skill 会话。
 
 ### 3.2 Notebook 作用域限制
 
-NoteSkillProvider 构建工具时通过闭包绑定 notebook_id。agent 的工具调用自动限定在当前 notebook 的文档范围内，无法操作其他 notebook 的数据。
+NoteSkillProvider 构建工具时通过闭包绑定 `notebook_id` 和可选 `selected_document_ids`。agent 的工具调用自动限定在当前 notebook 的文档范围内，无法操作其他 notebook 的数据。
 
 ### 3.3 确认机制不可绕过
 

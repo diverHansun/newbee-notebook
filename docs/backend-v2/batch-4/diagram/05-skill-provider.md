@@ -14,6 +14,12 @@
 
 以上组件在 batch-3 实现，batch-4 直接复用，不重新实现。
 
+对齐说明：
+
+- `SkillContext` 采用 batch-3 收敛后的字段：`notebook_id`、`activated_command`、`selected_document_ids`
+- Diagram skill 的确认事件摘要字段统一为 `args_summary`
+- 用户确认接口统一为 `POST /api/v1/chat/{session_id}/confirm`
+
 ## DiagramSkillProvider
 
 ```python
@@ -330,7 +336,7 @@ AgentLoop 执行：
 复用 batch-3 ConfirmationGateway，流程与 Note 操作一致：
 
 1. AgentLoop 检测到工具名在 `confirmation_required` 集合中
-2. 暂停执行，yield `ConfirmationRequestEvent`（含 request_id、tool_name、args 摘要）
+2. 暂停执行，yield `ConfirmationRequestEvent`（含 request_id、tool_name、args_summary）
 3. 前端收到 SSE 事件，在消息流中渲染内联确认卡片
 4. 用户点击确认或取消，前端调用 `POST /api/v1/chat/{session_id}/confirm`
 5. ConfirmationGateway 释放 asyncio.Event，AgentLoop 恢复执行

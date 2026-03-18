@@ -4,6 +4,12 @@
 
 前端测试分为三层：组件单元测试、交互集成测试、端到端场景测试。
 
+对齐说明：
+
+- batch-3 前端测试建立在“先补 Vitest + React Testing Library 基建”的前提上
+- `StudioView` 命名统一使用 `"home" | "notes" | "note-detail"`
+- `[[mark:id]]` 的 preview 点击联动属于后续增强，不纳入 batch-3 必测范围
+
 ## 2. 组件单元测试
 
 使用 Vitest + React Testing Library。
@@ -45,7 +51,7 @@
 | 测试用例 | 验证点 |
 |---------|--------|
 | 渲染卡片网格 | Notes & Marks 卡片可见 |
-| 点击可用卡片 | navigateTo("notes-marks") 被调用 |
+| 点击可用卡片 | navigateTo("notes") 被调用 |
 | 不可用卡片不可点击 | Mind Map 卡片灰显，点击无响应 |
 | 卡片网格 2 列布局 | grid-template-columns 为 2 列 |
 
@@ -114,7 +120,7 @@
 |---------|--------|
 | Reader 书签图标点击 | studioStore.activeMarkId 更新 |
 | Studio mark 点击 | Reader 打开文档并滚动 |
-| Note 中 [[mark:id]] 点击（preview） | Reader 滚动到 mark 位置 |
+| 非当前视图收到 activeMarkId | Studio 自动切到 notes 视图并展开 marks 区 |
 
 ### 3.4 Note 编辑与 Mark 引用
 

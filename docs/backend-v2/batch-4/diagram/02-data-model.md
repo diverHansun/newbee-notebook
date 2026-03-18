@@ -2,10 +2,16 @@
 
 ## 数据库表：diagrams
 
+对齐说明：
+
+- 数据库层沿用现有表风格，主键统一使用 `id`
+- 外键统一指向现有结构中的 `notebooks(id)`
+- 领域实体和 API 响应继续暴露 `diagram_id`，通过 repository / schema 映射数据库列 `id`
+
 ```sql
 CREATE TABLE diagrams (
-    diagram_id      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    notebook_id     UUID        NOT NULL REFERENCES notebooks(notebook_id) ON DELETE CASCADE,
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    notebook_id     UUID        NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
     title           TEXT        NOT NULL,
     diagram_type    TEXT        NOT NULL,
     -- 已注册类型：'mindmap'
@@ -113,6 +119,6 @@ class Diagram:
 |---------|------|
 | 获取 notebook 下所有图表 | `WHERE notebook_id = ?` |
 | 获取关联某文档的所有图表 | `WHERE ? = ANY(document_ids)` + GIN 索引 |
-| 获取单张图表元数据 | `WHERE diagram_id = ?` |
+| 获取单张图表元数据 | `WHERE id = ?` |
 | 获取图表内容 | 从 MinIO 读取 `content_path` 对应文件 |
-| 更新节点坐标 | `UPDATE diagrams SET node_positions = ?, updated_at = ? WHERE diagram_id = ?` |
+| 更新节点坐标 | `UPDATE diagrams SET node_positions = ?, updated_at = ? WHERE id = ?` |

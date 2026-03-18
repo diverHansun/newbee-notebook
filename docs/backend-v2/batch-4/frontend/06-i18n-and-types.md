@@ -2,6 +2,11 @@
 
 ## TypeScript 类型定义
 
+对齐说明：
+
+- 图表 hooks 目录沿用当前前端结构，放在 `frontend/src/lib/hooks/`
+- 相关依赖和测试基建需在 batch-4 前端阶段先补齐，再执行本文档中的 hooks / Vitest 任务
+
 ```typescript
 // frontend/src/types/diagram.ts
 
@@ -124,7 +129,7 @@ slashCommands: {
 ## TanStack Query Hooks
 
 ```typescript
-// frontend/src/hooks/use-diagrams.ts
+// frontend/src/lib/hooks/use-diagrams.ts
 
 /**
  * 获取 notebook 下的图表列表，可按文档 ID 过滤。

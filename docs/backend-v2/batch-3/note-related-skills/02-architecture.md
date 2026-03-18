@@ -13,18 +13,21 @@
           SkillRegistry
               |  返回 (SkillManifest, "帮我创建一个关于第3章的笔记")
               v
+          SessionManager.chat_stream(...)
+              |  透传 external_tools / system_prompt_addition / confirmation_required
+              v
           ToolRegistry.get_tools(external_tools=manifest.tools)
               |  将 skill 工具注入到本次请求的 agent 工具列表
               v
           AgentLoop
-              |  agent 看到 note 工具 + 工具描述
+              |  agent 看到 note 工具 + system prompt 补充说明
               |  决策调用 create_note / list_marks 等
               v
           ToolDefinition.execute()
               |  调用 NoteService / MarkService
               |  如果工具在 confirmation_required 集合中
               |  -> 产出 ConfirmationRequestEvent
-              |  -> 等待确认 -> 执行或取消
+              |  -> 通过 ConfirmationGateway 等待确认 -> 执行或取消
               v
           StreamEvent 序列 -> 前端
 ```
@@ -40,6 +43,7 @@ class SkillManifest:
     slash_command: str
     description: str
     tools: list[ToolDefinition]
+    system_prompt_addition: str = ""
     confirmation_required: frozenset[str]
 ```
 
@@ -49,8 +53,9 @@ class SkillManifest:
 |------|------|
 | name | skill 标识符，如 "note" |
 | slash_command | 触发命令，如 "/note" |
-| description | skill 描述，可注入 system prompt 帮助 agent 理解能力范围 |
+| description | skill 描述，用于内部标识与日志 |
 | tools | 该 skill 提供的 ToolDefinition 列表 |
+| system_prompt_addition | 注入到当次会话 system prompt 末尾的说明文本 |
 | confirmation_required | 需要用户确认的工具名称集合 |
 
 SkillManifest 是不可变的值对象。每次请求由 Provider 根据上下文重新构建。
@@ -65,15 +70,12 @@ class SkillRegistry:
     def register(self, provider: SkillProvider) -> None
         """注册一个 SkillProvider"""
 
-    def match_command(self, message: str) -> tuple[str, str] | None
+    def match_command(self, message: str) -> tuple[SkillProvider, str, str] | None
         """
         匹配消息中的 slash 命令前缀。
-        返回 (skill_name, cleaned_message) 或 None。
+        返回 (provider, activated_command, cleaned_message) 或 None。
         匹配规则：消息以 "/<skill_name>" 开头，后跟空格或结尾。
         """
-
-    def get_provider(self, skill_name: str) -> SkillProvider | None
-        """获取指定 skill 的 Provider"""
 ```
 
 设计要点：
@@ -92,7 +94,7 @@ class SkillProvider(ABC):
 
     @property
     @abstractmethod
-    def slash_command(self) -> str: ...
+    def slash_commands(self) -> list[str]: ...
 
     @abstractmethod
     def build_manifest(self, context: SkillContext) -> SkillManifest: ...
@@ -106,10 +108,11 @@ SkillProvider 是构建 SkillManifest 的工厂。每个 skill 实现一个 Prov
 @dataclass(frozen=True)
 class SkillContext:
     notebook_id: str
-    session_id: str
+    activated_command: str
+    selected_document_ids: list[str] = field(default_factory=list)
 ```
 
-请求级上下文，传递给 Provider 用于构建工具定义（例如 list_notes 需要知道 notebook_id 来限定查询范围）。
+请求级上下文，传递给 Provider 用于构建工具定义。当前实现只要求 notebook 作用域、触发命令和用户已选文档，不额外引入 session 级状态。
 
 ### 2.5 NoteSkillProvider
 
@@ -127,14 +130,15 @@ class NoteSkillProvider(SkillProvider):
         return "note"
 
     @property
-    def slash_command(self) -> str:
-        return "/note"
+    def slash_commands(self) -> list[str]:
+        return ["/note"]
 
     def build_manifest(self, context: SkillContext) -> SkillManifest:
         return SkillManifest(
             name="note",
             slash_command="/note",
-            description="笔记和书签管理技能。可以查询、创建、编辑、删除笔记，查询书签，管理笔记与文档的关联。",
+            description="笔记和书签管理技能",
+            system_prompt_addition="当前已激活 /note。你可以查询、创建、编辑、删除笔记，查询书签，并在修改性操作前等待用户确认。",
             tools=self._build_tools(context),
             confirmation_required=frozenset({"update_note", "delete_note", "disassociate_note_document"}),
         )
@@ -150,14 +154,20 @@ ChatService 是 skill 激活的入口。在处理用户消息时增加 skill 检
 # ChatService.handle_chat_request() 中
 skill_match = self._skill_registry.match_command(user_message)
 if skill_match:
-    skill_name, cleaned_message = skill_match
-    provider = self._skill_registry.get_provider(skill_name)
-    context = SkillContext(notebook_id=notebook_id, session_id=session_id)
+    provider, activated_command, cleaned_message = skill_match
+    context = SkillContext(
+        notebook_id=notebook_id,
+        activated_command=activated_command,
+        selected_document_ids=source_document_ids or [],
+    )
     manifest = provider.build_manifest(context)
     # cleaned_message 替换原始消息
+    # 强制使用 agent mode
     # manifest.tools 通过 external_tools 注入
-    # manifest.description 追加到 system prompt
+    # manifest.system_prompt_addition 追加到 system prompt
 ```
+
+对齐到现有代码后，ChatService 负责 slash 检测和参数组装，SessionManager 负责透传运行时配置，SkillRegistry 不直接依赖 session 对象。
 
 ### 3.2 ToolRegistry 集成
 
@@ -182,10 +192,10 @@ AgentLoop 在执行工具调用时需要检查是否需要确认：
 if tool_name in active_skill_confirmation_set:
     yield ConfirmationRequestEvent(
         tool_name=tool_name,
-        tool_args=tool_args,
+        args_summary=safe_args_summary,
         description="agent 想要执行的操作描述",
     )
-    confirmation = await wait_for_confirmation()
+    confirmation = await confirmation_gateway.wait(request_id)
     if not confirmation.approved:
         # 将拒绝信息反馈给 agent
         tool_result = ToolCallResult(content="用户拒绝了此操作", error="user_rejected")
@@ -193,7 +203,7 @@ if tool_name in active_skill_confirmation_set:
         tool_result = await tool.execute(tool_args)
 ```
 
-confirmation_required 集合通过 SkillManifest 传递给 AgentLoop。
+confirmation_required 集合通过 SkillManifest 传递给 AgentLoop；真正的等待与解析由 `ConfirmationGateway` 承担。
 
 ## 4. 与 batch-4 的延续关系
 
@@ -202,6 +212,6 @@ confirmation_required 集合通过 SkillManifest 传递给 AgentLoop。
 | SkillManifest | 硬编码在 NoteSkillProvider 中 | 从 SKILL.md frontmatter 解析生成 |
 | SkillRegistry | 启动时手动注册 NoteSkillProvider | 扫描 skills/ 目录自动发现和注册 |
 | SkillProvider | 只有 NoteSkillProvider | 多个 Provider（思维导图、summarize 等） |
-| SkillContext | notebook_id + session_id | 可扩展更多上下文字段 |
+| SkillContext | notebook_id + activated_command + selected_document_ids | 可扩展更多上下文字段 |
 | 确认机制 | 基于 frozenset 声明 | 可扩展为更细粒度的权限模型 |
 | slash 命令 | 仅 /note | 支持 /mindmap、/summarize 等 |

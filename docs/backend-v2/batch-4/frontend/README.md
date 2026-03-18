@@ -4,7 +4,13 @@
 
 本模块负责 Newbee Notebook 前端中图表功能的全部 UI 实现，包含 Studio 图表卡片、图表列表与详情视图、React Flow 交互式渲染、节点坐标持久化、PNG 导出，以及 slash 命令触发入口。
 
-技术栈：Next.js 15、React 19、TypeScript、Tailwind CSS、@xyflow/react、@dagrejs/dagre、html2canvas、mermaid（预装，batch-N 启用）。
+技术栈目标：Next.js 15、React 19、TypeScript、Tailwind CSS、`@xyflow/react`、`@dagrejs/dagre`、`html2canvas`，以及预留给后续批次的 `mermaid`。
+
+当前代码库对齐说明：
+
+- `frontend/package.json` 目前尚未安装 `@xyflow/react`、`@dagrejs/dagre`、`html2canvas`、`mermaid`
+- 前端测试脚本和 Vitest 基建目前也尚未接入，batch-4 前端任务需要先补这部分基础设施
+- Mermaid 在 batch-4 仅作为格式与接口预留，不应假定“已预装可直接渲染”
 
 ## 文档索引
 

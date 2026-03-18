@@ -6,6 +6,12 @@
 /api/v1/diagrams
 ```
 
+对齐说明：
+
+- REST 层保持平铺式 `diagrams` 资源路由，`notebook_id` 通过 query 参数传入
+- 数据库物理主键为 `diagrams.id`，API 响应继续暴露 `diagram_id`
+- 图表创建和内容更新仍只走 skill 工具链路，不新增 REST 写接口
+
 ## 端点列表
 
 | 方法 | 路径 | 描述 | 调用方 |

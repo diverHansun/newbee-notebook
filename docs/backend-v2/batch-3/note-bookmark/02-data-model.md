@@ -23,6 +23,12 @@ Document (已有)
 
 ## 2. 新增表定义
 
+对齐说明：
+
+- 数据库层沿用现有 ORM/DDL 风格，主键统一使用 `id`
+- 领域实体和 API 响应仍可暴露 `mark_id` / `note_id`，由 repository / schema 做字段映射
+- 关联外键统一指向现有表结构中的 `documents(id)`、`notes(id)`、`marks(id)`、`notebooks(id)`
+
 ### 2.1 marks
 
 ```sql
@@ -31,7 +37,7 @@ CREATE TABLE marks (
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     anchor_text TEXT NOT NULL,
     char_offset INTEGER NOT NULL,
-    comment     TEXT,
+    context_text TEXT,
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -48,7 +54,7 @@ CREATE INDEX idx_marks_created_at ON marks(created_at);
 | document_id | UUID | FK, NOT NULL | 归属文档，级联删除 |
 | anchor_text | TEXT | NOT NULL | 用户选中的文本内容，截断上限 500 字符 |
 | char_offset | INTEGER | NOT NULL | 选中文本在原始 Markdown 内容中的起始字符偏移量 |
-| comment | TEXT | 可选 | 用户对该书签的短评 |
+| context_text | TEXT | 可选 | 选区附近的上下文片段，用于 UI 预览和二次定位 |
 | created_at | TIMESTAMP | NOT NULL | 创建时间 |
 | updated_at | TIMESTAMP | NOT NULL | 更新时间 |
 
@@ -62,7 +68,7 @@ CREATE INDEX idx_marks_created_at ON marks(created_at);
 ```sql
 CREATE TABLE notes (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title      VARCHAR(500) NOT NULL,
+    title      VARCHAR(500) NOT NULL DEFAULT '',
     content    TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -132,7 +138,7 @@ class Mark(Entity):
     document_id: str = ""
     anchor_text: str = ""
     char_offset: int = 0
-    comment: str | None = None
+    context_text: str | None = None
 
 @dataclass
 class Note(Entity):
@@ -152,6 +158,13 @@ class NoteMarkRef(Entity):
     note_id: str = ""
     mark_id: str = ""
 ```
+
+补充约定：
+
+- `Mark.mark_id` 映射数据库列 `marks.id`
+- `Note.note_id` 映射数据库列 `notes.id`
+- `NoteDocumentTag.tag_id` 和 `NoteMarkRef.ref_id` 分别映射其表的 `id`
+- API 层不要直接暴露数据库内部 `id` 字段名，统一输出语义化标识
 
 ## 4. 级联删除规则
 

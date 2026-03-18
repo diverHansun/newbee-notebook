@@ -4,6 +4,12 @@
 
 将 Studio Panel 从 "Coming Soon" 占位状态升级为功能面板，采用卡片网格首屏 + 功能详情视图的分层导航模式。Batch-3 实现 Notes & Marks 功能卡片，为 batch-4 的 Mind Map 等功能预留扩展位。
 
+对齐说明：
+
+- `studioView` 统一使用 `"home" | "notes" | "note-detail"`
+- Notes / Marks 数据请求遵循 batch-3 API 文档中的嵌套路由
+- `[[mark:id]]` 的关联同步只通过 `PATCH /api/v1/notes/{noteId}` 触发，前端不维护独立的 note-mark 写接口
+
 ## 2. 整体结构
 
 ### 2.1 分层导航
@@ -249,7 +255,7 @@ PATCH /api/v1/notes/{noteId}
 新建 Zustand store：
 
 ```typescript
-type StudioView = "home" | "notes-marks" | "note-editor";
+type StudioView = "home" | "notes" | "note-detail";
 
 type StudioState = {
   studioView: StudioView;
@@ -290,9 +296,9 @@ export function removeNoteDocument(noteId: string, documentId: string) { ... }
 // lib/api/marks.ts
 export function listMarksByDocument(documentId: string) { ... }
   // GET /api/v1/documents/{documentId}/marks
-export function listMarksByNotebook(notebookId: string) { ... }
-  // GET /api/v1/notebooks/{notebookId}/marks
-export function createMark(documentId: string, input: { anchor_text: string; char_offset: number }) { ... }
+export function listMarksByNotebook(notebookId: string, params?: { document_id?: string }) { ... }
+  // GET /api/v1/notebooks/{notebookId}/marks?document_id=xxx
+export function createMark(documentId: string, input: { anchor_text: string; char_offset: number; context_text?: string }) { ... }
   // POST /api/v1/documents/{documentId}/marks
 export function deleteMark(markId: string) { ... }
   // DELETE /api/v1/marks/{markId}

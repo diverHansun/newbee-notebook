@@ -4,13 +4,19 @@
 
 DiagramService 是 diagram 模块的核心业务逻辑层，负责协调 DiagramTypeRegistry、DiagramRepository 和 MinIO 存储，向上层（API 路由和 Skill 工具）提供统一接口。
 
+存储接口对齐现有代码：
+
+- 读取文本：`storage.get_text(object_key)`
+- 删除对象：`storage.delete_file(object_key)`
+- 写入文本时可在 service 内部复用现有 backend 能力封装 `save_file` / `save_from_path`
+
 ```python
 class DiagramService:
 
     def __init__(
         self,
         repository: DiagramRepository,
-        storage: StorageService,   # MinIO 服务，与现有 DocumentService 使用相同抽象
+        storage: StorageBackend,   # 复用现有存储抽象（local/minio 均实现）
     ) -> None:
         self._repo = repository
         self._storage = storage
@@ -44,7 +50,7 @@ class DiagramService:
         图表不存在时抛出 DiagramNotFoundError。
         """
         diagram = await self.get_diagram(diagram_id)
-        return await self._storage.read_text(diagram.content_path)
+        return await self._storage.get_text(diagram.content_path)
 
     # -----------------------------------------------------------------------
     # Agent 写操作（通过 Skill 工具调用，破坏性操作需确认机制介入）
@@ -149,13 +155,13 @@ class DiagramRepository(Protocol):
         """
         ...
 
-    async def update_content_path(
+    async def update_metadata(
         self,
         diagram_id: str,
-        content_path: str,
-        title: str | None,
+        *,
+        title: str | None = None,
     ) -> Diagram:
-        """更新 content_path（文件已覆写后调用）和可选的 title，同步更新 updated_at。"""
+        """文件覆写后更新数据库元数据（title / updated_at），不改动 node_positions。"""
         ...
 
     async def update_positions(
@@ -167,7 +173,7 @@ class DiagramRepository(Protocol):
         ...
 
     async def delete(self, diagram_id: str) -> None:
-        """删除图表记录。MinIO 文件由 DiagramService 在调用此方法前删除。"""
+        """删除图表记录。对象文件由 DiagramService 在调用此方法前删除。"""
         ...
 ```
 

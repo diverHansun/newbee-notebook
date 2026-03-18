@@ -11,13 +11,11 @@
 | 测试用例 | 验证点 |
 |---------|--------|
 | register 并 match_command | 注册后能正确匹配 slash 命令 |
-| match_command 完整消息 | "/note 帮我创建笔记" -> ("note", "帮我创建笔记") |
-| match_command 仅命令 | "/note" -> ("note", "") |
+| match_command 完整消息 | `"/note 帮我创建笔记"` -> `(provider, "/note", "帮我创建笔记")` |
+| match_command 仅命令 | `"/note"` -> `(provider, "/note", "")` |
 | match_command 无匹配 | "普通消息" -> None |
 | match_command 前缀不完整 | "/notebook 查询" -> None（不匹配 /note） |
 | match_command 大小写 | "/Note 创建" -> None（区分大小写） |
-| get_provider 已注册 | 返回对应 Provider |
-| get_provider 未注册 | 返回 None |
 
 ### 2.2 SkillManifest
 
@@ -95,7 +93,7 @@
 | update_note 触发确认事件 | AgentLoop 产出 ConfirmationRequestEvent |
 | 用户确认后执行 | 工具正常执行，返回结果 |
 | 用户拒绝后反馈 | ToolCallResult.error = "user_rejected" |
-| 确认超时 | 60 秒后自动取消，返回超时信息 |
+| 确认超时 | 180 秒后自动取消，返回超时信息 |
 | 非确认工具直接执行 | list_notes、create_note 不触发确认 |
 
 ### 4.2 ChatService 集成
@@ -106,14 +104,14 @@
 | 普通消息不触发 | 工具列表不变 |
 | /note 在非 agent mode | 自动切换到 agent mode |
 | /note 消息清理 | agent 收到清理后的消息，不含前缀 |
-| manifest.description 注入 | system prompt 包含 skill 描述段 |
+| manifest.system_prompt_addition 注入 | system prompt 包含 skill 补充说明 |
 
 ### 4.3 确认回传 API
 
 | 测试用例 | 验证点 |
 |---------|--------|
-| POST /chat/confirm 正常确认 | AgentLoop 收到确认，继续执行 |
-| POST /chat/confirm 拒绝 | AgentLoop 收到拒绝，返回拒绝结果 |
+| POST /chat/{session_id}/confirm 正常确认 | AgentLoop 收到确认，继续执行 |
+| POST /chat/{session_id}/confirm 拒绝 | AgentLoop 收到拒绝，返回拒绝结果 |
 | request_id 不匹配 | 返回 404 |
 | 重复确认 | 幂等，返回已处理 |
 

@@ -4,6 +4,12 @@
 
 为 Chat 面板增加 Skill 交互能力：slash 命令提示、确认事件处理、确认回传。前端不解析 slash 命令语义（由后端 SkillRegistry 处理），仅提供输入辅助和确认 UI。
 
+对齐说明：
+
+- 后端流事件 dataclass 使用 `event="confirmation_request"`，经 chat SSE adapter 转成前端 `type: "confirmation_request"`
+- 前端确认卡片只展示 `args_summary`，不直接暴露完整工具参数
+- 确认回传接口统一为 `POST /api/v1/chat/{session_id}/confirm`
+
 ## 2. Slash 命令提示
 
 ### 2.1 触发条件
@@ -94,7 +100,7 @@ export type SseEventConfirmation = {
   type: "confirmation_request";
   request_id: string;
   tool_name: string;
-  tool_args: Record<string, unknown>;
+  args_summary: Record<string, unknown>;
   description: string;
 };
 
@@ -118,7 +124,7 @@ export type SseEvent =
   "type": "confirmation_request",
   "request_id": "uuid",
   "tool_name": "update_note",
-  "tool_args": {"note_id": "xxx", "content": "..."},
+  "args_summary": {"note_id": "xxx"},
   "description": "更新笔记[标题]的内容"
 }
 ```
@@ -134,7 +140,7 @@ if (event.type === "confirmation_request") {
       pendingConfirmation: {
         requestId: event.request_id,
         toolName: event.tool_name,
-        toolArgs: event.tool_args,
+        argsSummary: event.args_summary,
         description: event.description,
         status: "pending",
       },
@@ -184,7 +190,7 @@ window.clearTimeout(timer);
 type PendingConfirmation = {
   requestId: string;
   toolName: string;
-  toolArgs: Record<string, unknown>;
+  argsSummary: Record<string, unknown>;
   description: string;
   status: "pending" | "confirmed" | "rejected" | "timeout";
 };
@@ -311,9 +317,12 @@ export function confirmAction(params: {
   request_id: string;
   approved: boolean;
 }) {
-  return apiFetch<void>("/chat/confirm", {
+  return apiFetch<void>(`/chat/${params.session_id}/confirm`, {
     method: "POST",
-    body: params,
+    body: {
+      request_id: params.request_id,
+      approved: params.approved,
+    },
   });
 }
 ```

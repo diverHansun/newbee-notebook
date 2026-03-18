@@ -115,6 +115,13 @@ confirmation: {
 
 ## 3. TypeScript 类型定义
 
+对齐说明：
+
+- `Mark` 使用 `context_text`，不再使用 `comment`
+- 确认事件与消息状态使用 `args_summary` / `argsSummary`
+- `StudioView` 统一为 `"home" | "notes" | "note-detail"`
+- 确认回传接口统一为 `POST /api/v1/chat/{session_id}/confirm`
+
 ### 3.1 API 响应类型
 
 在 `types.ts` 中新增：
@@ -175,7 +182,7 @@ export type Mark = {
   document_id: string;
   anchor_text: string;
   char_offset: number;
-  comment: string | null;
+  context_text: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -184,7 +191,7 @@ export type Mark = {
 export type MarkCreateInput = {
   anchor_text: string;
   char_offset: number;
-  comment?: string;
+  context_text?: string;
 };
 
 // --- SSE Event ---
@@ -193,7 +200,7 @@ export type SseEventConfirmation = {
   type: "confirmation_request";
   request_id: string;
   tool_name: string;
-  tool_args: Record<string, unknown>;
+  args_summary: Record<string, unknown>;
   description: string;
 };
 
@@ -213,7 +220,7 @@ export type SseEvent =
 export type PendingConfirmation = {
   requestId: string;
   toolName: string;
-  toolArgs: Record<string, unknown>;
+  argsSummary: Record<string, unknown>;
   description: string;
   status: "pending" | "confirmed" | "rejected" | "timeout";
 };
@@ -224,7 +231,7 @@ export type PendingConfirmation = {
 studio-store 类型：
 
 ```typescript
-type StudioView = "home" | "notes-marks" | "note-editor";
+type StudioView = "home" | "notes" | "note-detail";
 
 type StudioState = {
   studioView: StudioView;
@@ -327,8 +334,11 @@ export function getNoteDocuments(noteId: string): Promise<{ documents: NoteDocum
 // GET /api/v1/documents/{documentId}/marks
 export function listMarksByDocument(documentId: string): Promise<{ marks: Mark[]; total: number }>
 
-// GET /api/v1/notebooks/{notebookId}/marks
-export function listMarksByNotebook(notebookId: string): Promise<{ marks: Mark[]; total: number }>
+// GET /api/v1/notebooks/{notebookId}/marks?document_id=xxx
+export function listMarksByNotebook(
+  notebookId: string,
+  params?: { document_id?: string },
+): Promise<{ marks: Mark[]; total: number }>
 
 // POST /api/v1/documents/{documentId}/marks
 export function createMark(documentId: string, input: MarkCreateInput): Promise<Mark>
@@ -340,7 +350,7 @@ export function deleteMark(markId: string): Promise<void>
 ### 4.3 chat.ts 扩展
 
 ```typescript
-// POST /api/v1/chat/confirm
+// POST /api/v1/chat/{session_id}/confirm
 export function confirmAction(params: {
   session_id: string;
   request_id: string;

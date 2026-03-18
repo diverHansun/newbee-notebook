@@ -12,6 +12,11 @@ DiagramTypeRegistry 是图表类型的注册中心，负责集中管理每种图
 
 新增图表类型只需在注册表中添加一条 DiagramTypeDescriptor，DiagramService 和 DiagramSkillProvider 无需修改。
 
+对齐说明：
+
+- 注册表代码路径按当前仓库分层放在 `newbee_notebook/skills/diagram/registry.py`
+- `DiagramValidationError` / `DiagramTypeNotFoundError` 在实现时应与 `DiagramService` 所在模块保持同一来源，避免再造一套平行异常定义
+
 ## DiagramTypeDescriptor
 
 ```python
@@ -56,7 +61,7 @@ class DiagramTypeDescriptor:
 
 ```python
 from pydantic import BaseModel
-from newbee_notebook.core.diagrams.exceptions import DiagramValidationError
+from newbee_notebook.application.services.diagram_service import DiagramValidationError
 import json
 
 
@@ -138,7 +143,7 @@ class DiagramTypeNotFoundError(Exception):
 ## DIAGRAM_TYPE_REGISTRY
 
 ```python
-# newbee_notebook/core/diagrams/registry.py
+# newbee_notebook/skills/diagram/registry.py
 
 DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
     "mindmap": DiagramTypeDescriptor(
