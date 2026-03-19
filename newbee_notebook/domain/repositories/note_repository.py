@@ -15,7 +15,11 @@ class NoteRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_notebook(self, notebook_id: str) -> list[Note]:
+    async def list_by_notebook(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+    ) -> list[Note]:
         """List notes for one notebook."""
         pass
 
@@ -37,4 +41,14 @@ class NoteRepository(ABC):
     @abstractmethod
     async def sync_mark_refs(self, note_id: str, mark_ids: list[str]) -> None:
         """Replace parsed mark references for a note."""
+        pass
+
+    @abstractmethod
+    async def add_document_tag(self, note_id: str, document_id: str) -> None:
+        """Attach a document tag to a note."""
+        pass
+
+    @abstractmethod
+    async def remove_document_tag(self, note_id: str, document_id: str) -> bool:
+        """Remove a document tag from a note."""
         pass

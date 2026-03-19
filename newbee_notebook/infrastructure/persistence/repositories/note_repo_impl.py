@@ -47,12 +47,23 @@ class NoteRepositoryImpl(NoteRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def list_by_notebook(self, notebook_id: str) -> list[Note]:
-        result = await self._session.execute(
+    async def list_by_notebook(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+    ) -> list[Note]:
+        query = (
             self._query()
             .where(NoteModel.notebook_id == uuid.UUID(notebook_id))
             .order_by(NoteModel.updated_at.desc(), NoteModel.created_at.desc())
         )
+        if document_id is not None:
+            query = query.join(
+                NoteDocumentTagModel,
+                NoteDocumentTagModel.note_id == NoteModel.id,
+            ).where(NoteDocumentTagModel.document_id == uuid.UUID(document_id))
+
+        result = await self._session.execute(query)
         return [self._to_entity(model) for model in result.scalars().all()]
 
     async def create(self, note: Note) -> Note:
@@ -112,3 +123,32 @@ class NoteRepositoryImpl(NoteRepository):
                 )
 
         await self._session.flush()
+
+    async def add_document_tag(self, note_id: str, document_id: str) -> None:
+        note_uuid = uuid.UUID(note_id)
+        document_uuid = uuid.UUID(document_id)
+        result = await self._session.execute(
+            select(NoteDocumentTagModel).where(
+                NoteDocumentTagModel.note_id == note_uuid,
+                NoteDocumentTagModel.document_id == document_uuid,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            self._session.add(
+                NoteDocumentTagModel(
+                    note_id=note_uuid,
+                    document_id=document_uuid,
+                )
+            )
+            await self._session.flush()
+
+    async def remove_document_tag(self, note_id: str, document_id: str) -> bool:
+        result = await self._session.execute(
+            delete(NoteDocumentTagModel).where(
+                NoteDocumentTagModel.note_id == uuid.UUID(note_id),
+                NoteDocumentTagModel.document_id == uuid.UUID(document_id),
+            )
+        )
+        await self._session.flush()
+        return result.rowcount > 0

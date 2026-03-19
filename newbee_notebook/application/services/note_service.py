@@ -5,6 +5,9 @@ from typing import Optional
 
 from newbee_notebook.domain.entities.note import Note
 from newbee_notebook.domain.repositories.note_repository import NoteRepository
+from newbee_notebook.domain.repositories.reference_repository import (
+    NotebookDocumentRefRepository,
+)
 
 
 MARK_REF_PATTERN = re.compile(r"\[\[mark:([A-Za-z0-9-]+)\]\]")
@@ -17,14 +20,20 @@ class NoteNotFoundError(Exception):
 class NoteService:
     """CRUD-style service for notebook notes."""
 
-    def __init__(self, note_repo: NoteRepository):
+    def __init__(
+        self,
+        note_repo: NoteRepository,
+        ref_repo: Optional[NotebookDocumentRefRepository] = None,
+    ):
         self.note_repo = note_repo
+        self.ref_repo = ref_repo
 
     async def create(
         self,
         notebook_id: str,
         title: str = "",
         content: str = "",
+        document_ids: Optional[list[str]] = None,
     ) -> Note:
         note = Note(
             notebook_id=notebook_id,
@@ -32,6 +41,10 @@ class NoteService:
             content=content,
         )
         created = await self.note_repo.create(note)
+        for document_id in document_ids or []:
+            await self._ensure_document_in_notebook(notebook_id, document_id)
+            await self.note_repo.add_document_tag(created.note_id, document_id)
+        created.document_ids = list(document_ids or [])
         mark_ids = self._extract_mark_ids(created.content)
         await self.note_repo.sync_mark_refs(created.note_id, mark_ids)
         created.mark_ids = mark_ids
@@ -46,8 +59,17 @@ class NoteService:
             raise NoteNotFoundError(f"Note not found: {note_id}")
         return note
 
-    async def list_by_notebook(self, notebook_id: str) -> list[Note]:
-        return await self.note_repo.list_by_notebook(notebook_id)
+    async def list_by_notebook(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+    ) -> list[Note]:
+        if document_id is None:
+            return await self.note_repo.list_by_notebook(notebook_id)
+        return await self.note_repo.list_by_notebook(
+            notebook_id,
+            document_id=document_id,
+        )
 
     async def update(
         self,
@@ -72,5 +94,23 @@ class NoteService:
         await self.get_or_raise(note_id)
         return await self.note_repo.delete(note_id)
 
+    async def add_document_tag(self, note_id: str, document_id: str) -> None:
+        note = await self.get_or_raise(note_id)
+        await self._ensure_document_in_notebook(note.notebook_id, document_id)
+        await self.note_repo.add_document_tag(note_id, document_id)
+
+    async def remove_document_tag(self, note_id: str, document_id: str) -> bool:
+        await self.get_or_raise(note_id)
+        return await self.note_repo.remove_document_tag(note_id, document_id)
+
     def _extract_mark_ids(self, content: str) -> list[str]:
         return list(dict.fromkeys(MARK_REF_PATTERN.findall(content)))
+
+    async def _ensure_document_in_notebook(self, notebook_id: str, document_id: str) -> None:
+        if self.ref_repo is None:
+            return
+        existing = await self.ref_repo.get_by_notebook_and_document(notebook_id, document_id)
+        if existing is None:
+            raise ValueError(
+                f"Document {document_id} is not associated with notebook {notebook_id}"
+            )

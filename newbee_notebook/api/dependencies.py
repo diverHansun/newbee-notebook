@@ -17,6 +17,8 @@ from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl 
 from newbee_notebook.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.reference_repo_impl import ReferenceRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.message_repo_impl import MessageRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.mark_repo_impl import MarkRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.note_repo_impl import NoteRepositoryImpl
 from newbee_notebook.application.services.library_service import LibraryService
 from newbee_notebook.application.services.notebook_service import NotebookService
 from newbee_notebook.application.services.session_service import SessionService
@@ -24,6 +26,8 @@ from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
+from newbee_notebook.application.services.mark_service import MarkService
+from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.mcp import MCPClientManager
@@ -99,6 +103,16 @@ async def get_reference_repo(session=Depends(get_db_session)) -> ReferenceReposi
 async def get_message_repo(session=Depends(get_db_session)) -> MessageRepositoryImpl:
     """Get MessageRepository instance."""
     return MessageRepositoryImpl(session)
+
+
+async def get_mark_repo(session=Depends(get_db_session)) -> MarkRepositoryImpl:
+    """Get MarkRepository instance."""
+    return MarkRepositoryImpl(session)
+
+
+async def get_note_repo(session=Depends(get_db_session)) -> NoteRepositoryImpl:
+    """Get NoteRepository instance."""
+    return NoteRepositoryImpl(session)
 
 
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
@@ -413,6 +427,30 @@ async def get_notebook_document_service(
     return NotebookDocumentService(
         notebook_repo=notebook_repo,
         document_repo=document_repo,
+        ref_repo=ref_repo,
+    )
+
+
+async def get_mark_service(
+    mark_repo: MarkRepositoryImpl = Depends(get_mark_repo),
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+) -> MarkService:
+    """Get MarkService instance."""
+    return MarkService(
+        mark_repo=mark_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+    )
+
+
+async def get_note_service(
+    note_repo: NoteRepositoryImpl = Depends(get_note_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+) -> NoteService:
+    """Get NoteService instance."""
+    return NoteService(
+        note_repo=note_repo,
         ref_repo=ref_repo,
     )
 

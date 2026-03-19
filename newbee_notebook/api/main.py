@@ -23,6 +23,8 @@ from newbee_notebook.api.routers import (
     library,
     notebooks,
     notebook_documents,
+    notes,
+    marks,
     sessions,
     settings,
     health,
@@ -91,6 +93,8 @@ def create_app() -> FastAPI:
     app.include_router(library.router, prefix="/api/v1", tags=["Library"])
     app.include_router(notebooks.router, prefix="/api/v1", tags=["Notebooks"])
     app.include_router(notebook_documents.router, prefix="/api/v1", tags=["Notebook Documents"])
+    app.include_router(marks.router, prefix="/api/v1", tags=["Marks"])
+    app.include_router(notes.router, prefix="/api/v1", tags=["Notes"])
     app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
     app.include_router(settings.router, prefix="/api/v1", tags=["Settings"])
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
