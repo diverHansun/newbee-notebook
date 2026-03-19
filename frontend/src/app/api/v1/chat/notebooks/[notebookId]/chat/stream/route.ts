@@ -10,6 +10,12 @@ import { NextRequest, NextResponse } from "next/server";
  *
  * This route takes priority over the rewrite rule and pipes the backend
  * ReadableStream directly to the client without buffering.
+ *
+ * NOTE: We intentionally avoid passing `request.signal` directly to the
+ * backend fetch. In Next.js App Router dev mode, the incoming request signal
+ * can enter an inconsistent state (due to HMR / turbopack lifecycle), causing
+ * the internal fetch to hang indefinitely. Instead we create our own
+ * AbortController and wire the client disconnect to it manually.
  */
 
 export const runtime = "nodejs";
@@ -22,15 +28,26 @@ const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8000").tr
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ notebookId: string }> }
+  { params }: { params: Promise<{ notebookId: string }> },
 ) {
   const { notebookId } = await params;
   const targetUrl = `${BACKEND_URL}/api/v1/chat/notebooks/${notebookId}/chat/stream`;
 
-  try {
-    // Chat request JSON is small; buffering request body here is acceptable.
-    const bodyText = await request.text();
+  console.log("[SSE proxy] route entered, notebookId=%s", notebookId);
 
+  // Manual abort controller — avoids passing request.signal directly to fetch.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min
+
+  // If the client disconnects, cancel the backend request.
+  const onClientAbort = () => controller.abort();
+  request.signal.addEventListener("abort", onClientAbort);
+
+  try {
+    const bodyText = await request.text();
+    console.log("[SSE proxy] request body read (%d bytes)", bodyText.length);
+
+    console.log("[SSE proxy] backend fetch start -> %s", targetUrl);
     const backendResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
@@ -39,8 +56,9 @@ export async function POST(
       },
       body: bodyText,
       cache: "no-store",
-      signal: request.signal,
+      signal: controller.signal,
     });
+    console.log("[SSE proxy] backend response received, status=%d", backendResponse.status);
 
     // For non-2xx or missing body, forward as normal HTTP response.
     if (!backendResponse.ok || !backendResponse.body) {
@@ -56,7 +74,9 @@ export async function POST(
       });
     }
 
-    // Pipe the backend ReadableStream directly to the browser. Do not read it.
+    console.log("[SSE proxy] streaming to client...");
+
+    // Pipe the backend ReadableStream directly to the browser.
     return new Response(backendResponse.body, {
       status: backendResponse.status,
       headers: {
@@ -70,7 +90,7 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      // Client disconnected or replaced the request while streaming.
+      console.log("[SSE proxy] aborted (client disconnect or timeout)");
       return new NextResponse(null, { status: 499 });
     }
 
@@ -83,7 +103,10 @@ export async function POST(
             ? error.message
             : "Failed to proxy SSE stream to backend",
       },
-      { status: 502 }
+      { status: 502 },
     );
+  } finally {
+    clearTimeout(timeout);
+    request.signal.removeEventListener("abort", onClientAbort);
   }
 }
