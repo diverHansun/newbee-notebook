@@ -53,6 +53,7 @@ from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.skills.note import NoteSkillProvider
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,6 @@ _runtime_builtin_tool_provider = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
-_runtime_skill_registry = None
 _runtime_confirmation_gateway = None
 
 
@@ -264,13 +264,6 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
     if _runtime_session_lock_manager is None:
         _runtime_session_lock_manager = RuntimeSessionLockManager()
     return _runtime_session_lock_manager
-
-
-def get_runtime_skill_registry_singleton() -> SkillRegistry:
-    global _runtime_skill_registry
-    if _runtime_skill_registry is None:
-        _runtime_skill_registry = SkillRegistry()
-    return _runtime_skill_registry
 
 
 def get_runtime_confirmation_gateway_singleton() -> ConfirmationGateway:
@@ -357,10 +350,6 @@ def get_runtime_tool_registry_dep() -> ToolRegistry:
     return get_runtime_tool_registry_singleton()
 
 
-def get_runtime_skill_registry_dep() -> SkillRegistry:
-    return get_runtime_skill_registry_singleton()
-
-
 def get_confirmation_gateway_dep() -> ConfirmationGateway:
     return get_runtime_confirmation_gateway_singleton()
 
@@ -405,33 +394,6 @@ async def get_pg_index_dep():
 # =============================================================================
 # Service Dependencies (continued)
 # =============================================================================
-
-async def get_chat_service(
-    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
-    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
-    reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
-    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
-    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
-    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
-    session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
-    pg_index=Depends(get_pg_index_dep),
-    skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
-) -> ChatService:
-    """Get ChatService instance."""
-    return ChatService(
-        session_repo=session_repo,
-        notebook_repo=notebook_repo,
-        reference_repo=reference_repo,
-        document_repo=document_repo,
-        ref_repo=ref_repo,
-        message_repo=message_repo,
-        session_manager=session_manager,
-        vector_index=pg_index,
-        skill_registry=skill_registry,
-        confirmation_gateway=confirmation_gateway,
-    )
-
 
 async def get_document_service(
     document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
@@ -484,5 +446,46 @@ async def get_note_service(
     return NoteService(
         note_repo=note_repo,
         ref_repo=ref_repo,
+    )
+
+
+async def get_runtime_skill_registry_dep(
+    note_service: NoteService = Depends(get_note_service),
+    mark_service: MarkService = Depends(get_mark_service),
+) -> SkillRegistry:
+    registry = SkillRegistry()
+    registry.register(
+        NoteSkillProvider(
+            note_service=note_service,
+            mark_service=mark_service,
+        )
+    )
+    return registry
+
+
+async def get_chat_service(
+    session_repo: SessionRepositoryImpl = Depends(get_session_repo),
+    notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
+    reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
+    document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
+    pg_index=Depends(get_pg_index_dep),
+    skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
+    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+) -> ChatService:
+    """Get ChatService instance."""
+    return ChatService(
+        session_repo=session_repo,
+        notebook_repo=notebook_repo,
+        reference_repo=reference_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=session_manager,
+        vector_index=pg_index,
+        skill_registry=skill_registry,
+        confirmation_gateway=confirmation_gateway,
     )
 

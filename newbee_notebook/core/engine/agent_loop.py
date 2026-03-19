@@ -427,12 +427,12 @@ class AgentLoop:
                         request_id=request_id,
                         tool_name=tool_name,
                         args_summary=self._confirmation_args_summary(effective_arguments),
-                        description=f"Agent 请求执行 {tool_name}",
+                        description=f"Agent requested to run {tool_name}",
                     )
                     approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
                     if not approved:
                         rejection_result = ToolCallResult(
-                            content="用户未确认此操作，工具调用已取消。",
+                            content="The user did not approve this action. The tool call was cancelled.",
                             error="user_rejected",
                         )
                         messages.append(self._tool_result_message(str(tool_call.get("id") or ""), rejection_result))

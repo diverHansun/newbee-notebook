@@ -46,7 +46,7 @@ def test_stream_event_types_and_payloads_are_stable():
         request_id="req-1",
         tool_name="delete_note",
         args_summary={"note_id": "n1"},
-        description="Agent 请求执行 delete_note",
+        description="Agent requested to run delete_note",
     )
 
     assert start.event == "start"

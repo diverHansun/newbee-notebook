@@ -264,7 +264,7 @@ async def test_ask_builds_runtime_message_with_notebook_scope_hint():
 
     await manager.start_session(session_id="s1")
     await manager.chat(
-        message="这个文档主要讨论什么？",
+        message="What is this document mainly about?",
         mode_type=ModeType.ASK,
         allowed_document_ids=["doc-1"],
     )
@@ -272,7 +272,7 @@ async def test_ask_builds_runtime_message_with_notebook_scope_hint():
     call = RecordingLoop.instances[-1].calls[-1]
     assert "current notebook already contains 1 completed document" in call.message
     assert "knowledge_base" in call.message
-    assert "这个文档主要讨论什么？" in call.message
+    assert "What is this document mainly about?" in call.message
 
 
 @pytest.mark.anyio

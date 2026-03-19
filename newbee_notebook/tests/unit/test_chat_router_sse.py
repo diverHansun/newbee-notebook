@@ -23,11 +23,11 @@ def test_sse_event_phase_formats_stage():
 def test_sse_event_warning_formats_payload():
     assert SSEEvent.warning(
         "partial_documents",
-        "1 个文档正在处理中，当前检索范围不包含这些文档",
+        "1 document is still processing; the current retrieval scope excludes it.",
         {"blocking_document_ids": ["doc-2"]},
     ) == (
         'data: {"type": "warning", "code": "partial_documents", '
-        '"message": "1 个文档正在处理中，当前检索范围不包含这些文档", '
+        '"message": "1 document is still processing; the current retrieval scope excludes it.", '
         '"details": {"blocking_document_ids": ["doc-2"]}}\n\n'
     )
 
@@ -39,12 +39,12 @@ def test_sse_event_confirmation_request_formats_payload():
             "request_id": "req-1",
             "tool_name": "delete_note",
             "args_summary": {"note_id": "n1"},
-            "description": "Agent 请求执行 delete_note",
+            "description": "Agent requested to run delete_note",
         },
     ) == (
         'data: {"type": "confirmation_request", "request_id": "req-1", '
         '"tool_name": "delete_note", "args_summary": {"note_id": "n1"}, '
-        '"description": "Agent 请求执行 delete_note"}\n\n'
+        '"description": "Agent requested to run delete_note"}\n\n'
     )
 
 
@@ -66,7 +66,9 @@ def _build_client(chat_service: AsyncMock, session_service: AsyncMock) -> TestCl
 def test_chat_endpoint_returns_409_for_document_processing_error():
     chat_service = AsyncMock()
     chat_service.chat = AsyncMock(
-        side_effect=DocumentProcessingError("所有文档正在处理中，暂无可用的检索数据")
+        side_effect=DocumentProcessingError(
+            "All documents are still processing; no searchable data is available yet."
+        )
     )
     session_service = AsyncMock()
     session_service.get_or_raise = AsyncMock(return_value=object())
@@ -78,13 +80,17 @@ def test_chat_endpoint_returns_409_for_document_processing_error():
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "所有文档正在处理中，暂无可用的检索数据"
+    assert response.json()["detail"] == (
+        "All documents are still processing; no searchable data is available yet."
+    )
 
 
 def test_chat_stream_endpoint_returns_409_for_document_processing_error():
     chat_service = AsyncMock()
     chat_service.prevalidate_mode_requirements = AsyncMock(
-        side_effect=DocumentProcessingError("该文档索引尚未构建完成，暂时无法进行解释/总结")
+        side_effect=DocumentProcessingError(
+            "This document index is not ready yet, so explain/conclude is unavailable."
+        )
     )
     session_service = AsyncMock()
     session_service.get_or_raise = AsyncMock(return_value=object())
@@ -101,7 +107,9 @@ def test_chat_stream_endpoint_returns_409_for_document_processing_error():
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "该文档索引尚未构建完成，暂时无法进行解释/总结"
+    assert response.json()["detail"] == (
+        "This document index is not ready yet, so explain/conclude is unavailable."
+    )
 
 
 def test_chat_endpoint_returns_400_for_session_limit_exceeded():

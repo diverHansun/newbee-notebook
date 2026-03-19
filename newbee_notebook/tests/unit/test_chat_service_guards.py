@@ -312,7 +312,7 @@ def test_build_blocking_warning_returns_payload_for_partial_scope():
     assert warning == {
         "type": "warning",
         "code": "partial_documents",
-        "message": "2 个文档正在处理中，当前检索范围不包含这些文档",
+        "message": "2 document(s) are still processing; the current retrieval scope excludes them.",
         "details": {
             "blocking_document_ids": ["doc-2", "doc-3"],
             "available_document_count": 1,
@@ -484,7 +484,7 @@ def test_chat_returns_warnings_for_partial_documents_in_nonstream_mode():
         {
             "type": "warning",
             "code": "partial_documents",
-            "message": "1 个文档正在处理中，当前检索范围不包含这些文档",
+            "message": "1 document(s) are still processing; the current retrieval scope excludes them.",
             "details": {
                 "blocking_document_ids": ["doc-2"],
                 "available_document_count": 1,
@@ -746,14 +746,14 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
     result = asyncio.run(
         service.chat(
             session_id="session-1",
-            message="/note 列出所有笔记",
+            message="/note list all notes",
             mode="chat",
             source_document_ids=["doc-1"],
         )
     )
 
     assert result.mode == ModeType.AGENT
-    assert runtime_manager.chat_kwargs["message"] == "列出所有笔记"
+    assert runtime_manager.chat_kwargs["message"] == "list all notes"
     assert runtime_manager.chat_kwargs["mode_type"] == ModeType.AGENT
     assert runtime_manager.chat_kwargs["external_tools"] == [tool]
     assert runtime_manager.chat_kwargs["system_prompt_addition"] == "note skill prompt"

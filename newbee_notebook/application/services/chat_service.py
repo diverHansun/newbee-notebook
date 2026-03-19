@@ -594,7 +594,7 @@ class ChatService:
         rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
         if mode_enum in rag_modes and not allowed_doc_ids and (blocking_document_ids or []):
             raise DocumentProcessingError(
-                message="所有文档正在处理中，暂无可用的检索数据",
+                message="All documents are still processing; no searchable data is available yet.",
                 details={
                     "mode": mode_enum.value,
                     "notebook_id": notebook_id,
@@ -616,7 +616,7 @@ class ChatService:
                 target_doc_id = context["document_id"]
                 if target_doc_id not in set(allowed_doc_ids):
                     raise DocumentProcessingError(
-                        message="该文档索引尚未构建完成，暂时无法进行解释/总结",
+                        message="This document index is not ready yet, so explain/conclude is unavailable.",
                         details={
                             "mode": mode_enum.value,
                             "document_id": target_doc_id,
@@ -653,7 +653,10 @@ class ChatService:
         return {
             "type": "warning",
             "code": "partial_documents",
-            "message": f"{len(blocking_doc_ids)} 个文档正在处理中，当前检索范围不包含这些文档",
+            "message": (
+                f"{len(blocking_doc_ids)} document(s) are still processing; "
+                "the current retrieval scope excludes them."
+            ),
             "details": {
                 "blocking_document_ids": blocking_doc_ids,
                 "available_document_count": len(allowed_doc_ids),
