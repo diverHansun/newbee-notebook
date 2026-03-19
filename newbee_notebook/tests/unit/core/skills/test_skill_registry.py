@@ -47,3 +47,16 @@ def test_match_command_returns_empty_cleaned_message_for_exact_command():
     matched = registry.match_command("/note")
 
     assert matched == (provider, "/note", "")
+
+
+def test_match_command_supports_diagram_single_entry():
+    registry = SkillRegistry()
+    provider = _FakeProvider(skill_name="diagram", slash_commands=["/diagram"])
+    registry.register(provider)
+
+    matched = registry.match_command("/diagram build a hierarchy map")
+
+    assert matched is not None
+    _, activated_command, cleaned_message = matched
+    assert activated_command == "/diagram"
+    assert cleaned_message == "build a hierarchy map"

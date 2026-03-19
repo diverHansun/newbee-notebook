@@ -15,6 +15,7 @@ import {
   updateNote,
 } from "@/lib/api/notes";
 import type { Mark, Note, NotebookDocumentItem } from "@/lib/api/types";
+import { useDeleteDiagram, useDiagram, useDiagramContent, useDiagrams } from "@/lib/hooks/use-diagrams";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -59,13 +60,16 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const {
     studioView,
     activeNoteId,
+    activeDiagramId,
     activeMarkId,
     noteDocFilter,
     markDocFilter,
     navigateTo,
     openNoteEditor,
+    openDiagramDetail,
     backToHome,
     backToList,
+    backToDiagramList,
     setActiveMarkId,
     setNoteDocFilter,
     setMarkDocFilter,
@@ -75,6 +79,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const [draftContent, setDraftContent] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [pendingDeleteNote, setPendingDeleteNote] = useState<Note | null>(null);
+  const [pendingDeleteDiagramId, setPendingDeleteDiagramId] = useState<string | null>(null);
   const [selectedDocumentIdToAdd, setSelectedDocumentIdToAdd] = useState("");
   const [copiedMarkId, setCopiedMarkId] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -101,11 +106,20 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     queryFn: () => getNote(activeNoteId!),
     enabled: Boolean(activeNoteId) && studioView === "note-detail",
   });
+  const diagramsQuery = useDiagrams(notebookId, null);
+  const activeDiagramQuery = useDiagram(activeDiagramId);
+  const activeDiagramContentQuery = useDiagramContent(activeDiagramId);
 
   const documents = useMemo(() => documentsQuery.data?.data ?? [], [documentsQuery.data?.data]);
   const notes = useMemo(() => notesQuery.data?.notes ?? [], [notesQuery.data?.notes]);
   const notebookMarks = useMemo(() => marksQuery.data?.marks ?? [], [marksQuery.data?.marks]);
   const activeNote = activeNoteQuery.data ?? null;
+  const diagrams = useMemo(
+    () => diagramsQuery.data?.diagrams ?? [],
+    [diagramsQuery.data?.diagrams]
+  );
+  const activeDiagram = activeDiagramQuery.data ?? null;
+  const activeDiagramContent = activeDiagramContentQuery.data ?? "";
   const documentMap = useMemo(
     () => new Map(documents.map((item) => [item.document_id, item])),
     [documents]
@@ -184,6 +198,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       void queryClient.invalidateQueries({ queryKey: ["marks", "document"] });
     },
   });
+  const deleteDiagramMutation = useDeleteDiagram(notebookId);
 
   const clearSaveTimer = useCallback(() => {
     if (saveTimerRef.current !== null) {
@@ -291,14 +306,15 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           </span>
         </div>
       </div>
-      <div className="card" style={{ padding: 16, minHeight: 100, opacity: 0.6 }}>
+      <div
+        className="card card-interactive"
+        style={{ padding: 16, minHeight: 100 }}
+        onClick={() => navigateTo("diagrams")}
+      >
         <div className="stack-sm">
-          <strong>{t(uiStrings.studio.mindMap)}</strong>
+          <strong>{t(uiStrings.studio.diagrams)}</strong>
           <span className="muted" style={{ fontSize: 12 }}>
-            {t(uiStrings.studio.mindMapDescription)}
-          </span>
-          <span className="badge badge-default" style={{ width: "fit-content" }}>
-            {t(uiStrings.studio.comingSoon)}
+            {t(uiStrings.studio.diagramsDescription)}
           </span>
         </div>
       </div>
@@ -487,6 +503,121 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     </div>
   );
 
+  const renderDiagramsList = () => (
+    <div className="stack-md" style={{ height: "100%", padding: 0 }}>
+      <div className="row-between" style={{ gap: 8, alignItems: "center" }}>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={backToHome}>
+          {t(uiStrings.studio.backToStudio)}
+        </button>
+        <span className="muted" style={{ fontSize: 11 }}>
+          {`${diagrams.length} ${t(uiStrings.studio.diagrams)}`}
+        </span>
+      </div>
+
+      {diagramsQuery.isLoading ? (
+        <div className="empty-state" style={{ padding: "24px 12px" }}>
+          <span>{t(uiStrings.common.loading)}</span>
+        </div>
+      ) : diagrams.length === 0 ? (
+        <div className="empty-state" style={{ padding: "24px 12px" }}>
+          <span>{t(uiStrings.studio.diagramEmptyState)}</span>
+        </div>
+      ) : (
+        <div className="stack-sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          {diagrams.map((diagram) => (
+            <button
+              key={diagram.diagram_id}
+              type="button"
+              className="list-item"
+              style={{ width: "100%", textAlign: "left", padding: 12 }}
+              onClick={() => openDiagramDetail(diagram.diagram_id)}
+            >
+              <div className="stack-sm" style={{ width: "100%" }}>
+                <strong>{diagram.title}</strong>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <span className="chip">{diagram.diagram_type || t(uiStrings.studio.diagramTypeMindmap)}</span>
+                  <span className="chip">{diagram.format}</span>
+                  <span className="chip">{`${diagram.document_ids.length} docs`}</span>
+                </div>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  {ti(uiStrings.notes.updatedAt, {
+                    date: formatTimestamp(diagram.updated_at, locale),
+                  })}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDiagramDetail = () => {
+    if (activeDiagramQuery.isLoading) {
+      return (
+        <div className="empty-state" style={{ padding: 24 }}>
+          <span>{t(uiStrings.common.loading)}</span>
+        </div>
+      );
+    }
+
+    if (!activeDiagram) {
+      return (
+        <div className="empty-state" style={{ padding: 24 }}>
+          <span>{t(uiStrings.studio.diagramEmptyState)}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="stack-md" style={{ height: "100%", padding: 0 }}>
+        <div className="row-between" style={{ gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={backToDiagramList}>
+            {t(uiStrings.studio.backToList)}
+          </button>
+          <button
+            className="btn btn-danger-ghost btn-sm"
+            type="button"
+            onClick={() => setPendingDeleteDiagramId(activeDiagram.diagram_id)}
+          >
+            {t(uiStrings.common.delete)}
+          </button>
+        </div>
+        <div className="card" style={{ padding: 12 }}>
+          <div className="stack-sm">
+            <strong>{activeDiagram.title}</strong>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span className="chip">{activeDiagram.diagram_type}</span>
+              <span className="chip">{activeDiagram.format}</span>
+              <span className="chip">{`${activeDiagram.document_ids.length} docs`}</span>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "auto" }}>
+          <strong style={{ display: "block", marginBottom: 8 }}>{t(uiStrings.studio.diagramView)}</strong>
+          {activeDiagramContentQuery.isLoading ? (
+            <span className="muted">{t(uiStrings.common.loading)}</span>
+          ) : activeDiagramContentQuery.isError ? (
+            <span className="muted">{t(uiStrings.common.retry)}</span>
+          ) : (
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontFamily: "\"Cascadia Code\", monospace",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              {activeDiagramContent}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderNoteDetail = () => {
     if (!activeNote) {
       return (
@@ -660,7 +791,9 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     <>
       {studioView === "home" ? renderHome() : null}
       {studioView === "notes" ? renderNotesList() : null}
+      {studioView === "diagrams" ? renderDiagramsList() : null}
       {studioView === "note-detail" ? renderNoteDetail() : null}
+      {studioView === "diagram-detail" ? renderDiagramDetail() : null}
 
       <ConfirmDialog
         open={Boolean(pendingDeleteNote)}
@@ -672,6 +805,20 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         onConfirm={() => {
           if (!pendingDeleteNote) return;
           return deleteNoteMutation.mutateAsync(pendingDeleteNote.note_id);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteDiagramId)}
+        title={t(uiStrings.studio.deleteDiagram)}
+        message={t(uiStrings.studio.deleteDiagramConfirm)}
+        variant="danger"
+        confirmDisabled={deleteDiagramMutation.isPending}
+        onCancel={() => setPendingDeleteDiagramId(null)}
+        onConfirm={async () => {
+          if (!pendingDeleteDiagramId) return;
+          await deleteDiagramMutation.mutateAsync(pendingDeleteDiagramId);
+          setPendingDeleteDiagramId(null);
+          backToDiagramList();
         }}
       />
     </>

@@ -42,4 +42,37 @@ describe("ChatInput", () => {
     expect(input).toHaveValue("/note ");
     expect(onModeChange).toHaveBeenCalledWith("agent");
   });
+
+  it("shows diagram slash command and completes /diagram", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        mode="ask"
+        isStreaming={false}
+        askBlocked={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Ask a question (document search)...");
+    await user.type(input, "/d");
+
+    expect(
+      screen.getByRole("button", { name: /generate a diagram \(mind map \/ flowchart \/ sequence\)/i })
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /generate a diagram \(mind map \/ flowchart \/ sequence\)/i })
+    );
+
+    expect(input).toHaveValue("/diagram ");
+    expect(onModeChange).toHaveBeenCalledWith("agent");
+  });
 });

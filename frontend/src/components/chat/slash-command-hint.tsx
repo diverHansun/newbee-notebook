@@ -36,9 +36,9 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
         available: true,
       },
       {
-        command: "/mindmap",
-        description: t(uiStrings.slashCommand.mindmapDescription),
-        available: false,
+        command: "/diagram",
+        description: t(uiStrings.slashCommand.diagramDescription),
+        available: true,
       },
     ],
     [t]

@@ -179,6 +179,30 @@ export type NoteUpdateInput = {
   content?: string;
 };
 
+export type DiagramFormat = "reactflow_json" | "mermaid";
+export type DiagramType = "mindmap" | string;
+
+export type Diagram = {
+  diagram_id: string;
+  notebook_id: string;
+  title: string;
+  diagram_type: DiagramType;
+  format: DiagramFormat;
+  document_ids: string[];
+  node_positions: Record<string, { x: number; y: number }> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DiagramListResponse = {
+  diagrams: Diagram[];
+  total: number;
+};
+
+export type DiagramUpdatePositionsInput = {
+  positions: Record<string, { x: number; y: number }>;
+};
+
 export type Session = {
   session_id: string;
   notebook_id: string;

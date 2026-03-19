@@ -7,6 +7,7 @@ describe("studio-store", () => {
     useStudioStore.setState({
       studioView: "home",
       activeNoteId: null,
+      activeDiagramId: null,
       activeMarkId: null,
       noteDocFilter: null,
       markDocFilter: null,
@@ -31,5 +32,18 @@ describe("studio-store", () => {
 
     expect(useStudioStore.getState().studioView).toBe("notes");
     expect(useStudioStore.getState().activeMarkId).toBe("mark-1");
+  });
+
+  it("navigates into diagram detail and back to diagram list", () => {
+    useStudioStore.getState().navigateTo("diagrams");
+    useStudioStore.getState().openDiagramDetail("diagram-1");
+
+    expect(useStudioStore.getState().studioView).toBe("diagram-detail");
+    expect(useStudioStore.getState().activeDiagramId).toBe("diagram-1");
+
+    useStudioStore.getState().backToDiagramList();
+
+    expect(useStudioStore.getState().studioView).toBe("diagrams");
+    expect(useStudioStore.getState().activeDiagramId).toBeNull();
   });
 });

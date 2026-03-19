@@ -14,6 +14,7 @@ import {
   SseEventConfirmation,
 } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
+import { DIAGRAMS_QUERY_KEY } from "@/lib/hooks/use-diagrams";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
@@ -25,6 +26,11 @@ const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] 
 const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
 const CONFIRMATION_TIMEOUT_MS = 180_000;
+
+function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
+  if (mode !== "agent") return false;
+  return message.trim().toLowerCase().startsWith("/diagram");
+}
 
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
@@ -394,6 +400,7 @@ export function useChatSession(notebookId: string) {
       const createdAt = new Date().toISOString();
       const userMessageId = `local-user-${Date.now()}`;
       const streamStartedAtMs = Date.now();
+      const isDiagramRequest = isDiagramCommandMessage(message, mode);
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
@@ -472,6 +479,11 @@ export function useChatSession(notebookId: string) {
               clearThinkingTimeout();
               setStreaming(false, null);
               activeAssistantIdRef.current = null;
+              if (isDiagramRequest) {
+                queryClient.invalidateQueries({
+                  queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
+                });
+              }
               queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
             }
           })();
@@ -534,6 +546,11 @@ export function useChatSession(notebookId: string) {
                 }
                 setStreaming(false, null);
                 activeAssistantIdRef.current = null;
+                if (isDiagramRequest) {
+                  queryClient.invalidateQueries({
+                    queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
+                  });
+                }
                 return;
               }
               if (event.type === "error") {
@@ -743,6 +760,11 @@ export function useChatSession(notebookId: string) {
             })();
           },
           onDone: () => {
+            if (isDiagramRequest) {
+              queryClient.invalidateQueries({
+                queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
+              });
+            }
             queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
           },
         }

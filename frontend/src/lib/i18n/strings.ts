@@ -222,7 +222,10 @@ export const uiStrings = {
   slashCommand: {
     hint: { zh: "输入 / 查看可用命令", en: "Type / to see available commands" },
     noteDescription: { zh: "笔记和书签管理", en: "Notes & Marks management" },
-    mindmapDescription: { zh: "思维导图", en: "Mind Map" },
+    diagramDescription: {
+      zh: "生成图表（思维导图/流程图/时序图）",
+      en: "Generate a diagram (mind map / flowchart / sequence)",
+    },
     comingSoon: { zh: "即将推出", en: "Coming soon" },
   },
   confirmation: {
@@ -253,8 +256,19 @@ export const uiStrings = {
     title: { zh: "Studio", en: "Studio" },
     notesAndMarks: { zh: "笔记与书签", en: "Notes & Marks" },
     notesAndMarksDescription: { zh: "管理笔记、关联文档和书签", en: "Manage notes, linked documents, and bookmarks" },
-    mindMap: { zh: "思维导图", en: "Mind Map" },
-    mindMapDescription: { zh: "结构化梳理当前 Notebook", en: "Structure the current notebook visually" },
+    diagrams: { zh: "图表", en: "Diagrams" },
+    diagramsDescription: { zh: "在 Studio 中查看与管理图表", en: "View and manage generated diagrams in Studio" },
+    diagramEmptyState: {
+      zh: "在对话框输入 /diagram 开始创建图表",
+      en: "Type /diagram in chat to create a diagram",
+    },
+    diagramTypeMindmap: { zh: "思维导图", en: "Mind Map" },
+    diagramView: { zh: "图表详情", en: "Diagram detail" },
+    deleteDiagram: { zh: "删除图表", en: "Delete diagram" },
+    deleteDiagramConfirm: {
+      zh: "确定要删除这张图表吗？删除后将无法恢复。",
+      en: "Delete this diagram? This action cannot be undone.",
+    },
     backToStudio: { zh: "返回 Studio", en: "Back to Studio" },
     backToList: { zh: "返回列表", en: "Back to list" },
     allFilter: { zh: "全部", en: "All" },
