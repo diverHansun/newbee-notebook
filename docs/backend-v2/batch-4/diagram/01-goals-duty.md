@@ -4,7 +4,11 @@
 
 ### 目标一：可扩展的图表类型体系
 
-通过 DiagramTypeRegistry 注册机制，将图表类型（mindmap、flowchart、sequence 等）的元数据（格式、校验器、Agent 生成指令）与业务逻辑解耦。batch-4 仅注册 mindmap 类型，新增其他类型时无需修改 DiagramService 主体代码。
+通过 DiagramTypeRegistry 注册机制，将图表类型（mindmap、flowchart、sequence 等）的元数据（格式、校验器、Agent 生成指令）与业务逻辑解耦。batch-4 先落地 mindmap，新增其他类型时无需修改 DiagramService 主体代码。
+
+### 目标一补充：单入口 slash，降低上手成本
+
+图表技能统一使用 `/diagram` 单入口。用户不需要先记住多个命令；类型由 Agent 从 prompt 判断。若用户意图不明确，Agent 先触发确认卡片（复用 batch-3 confirmation 流）确认图表类型，再执行创建。
 
 ### 目标二：内容与坐标分离存储
 
@@ -24,7 +28,7 @@ diagram 模块负责：
 
 - 维护 `diagrams` 数据库表的 CRUD 操作
 - 通过 MinIO 服务存取图表内容文件
-- 向 Agent 暴露 5 个 Skill 工具（list、read、create、update、delete）
+- 向 Agent 暴露 6 个 Skill 工具（list、read、confirm_type、create、update、delete）
 - 通过 DiagramTypeRegistry 管理图表类型注册与格式校验
 - 向前端暴露 REST API（列表、内容读取、坐标更新、删除）
 

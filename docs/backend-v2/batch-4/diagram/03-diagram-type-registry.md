@@ -8,14 +8,15 @@ DiagramTypeRegistry 是图表类型的注册中心，负责集中管理每种图
 - 文件扩展名
 - 格式校验器
 - Agent 生成指令模板（注入 system prompt）
-- 触发的 slash 命令
+- 类型识别提示词（用于 Agent 在 `/diagram` 单命令下判断目标图表类型）
 
-新增图表类型只需在注册表中添加一条 DiagramTypeDescriptor，DiagramService 和 DiagramSkillProvider 无需修改。
+新增图表类型只需在注册表中添加一条 `DiagramTypeDescriptor`，DiagramService 和 DiagramSkillProvider 无需修改。
 
 对齐说明：
 
 - 注册表代码路径按当前仓库分层放在 `newbee_notebook/skills/diagram/registry.py`
 - `DiagramValidationError` / `DiagramTypeNotFoundError` 在实现时应与 `DiagramService` 所在模块保持同一来源，避免再造一套平行异常定义
+- slash 命令策略统一为单入口 `/diagram`，不再按类型拆分 `/mindmap`、`/flowchart`、`/sequence`
 
 ## DiagramTypeDescriptor
 
@@ -29,10 +30,6 @@ class DiagramTypeDescriptor:
     name: str
     # 图表类型标识，与数据库 diagram_type 字段值一致
     # 示例："mindmap"
-
-    slash_command: str
-    # 触发该图表类型的 slash 命令
-    # 示例："/mindmap"
 
     output_format: str
     # "reactflow_json" 或 "mermaid"
@@ -48,6 +45,10 @@ class DiagramTypeDescriptor:
     agent_system_prompt: str
     # 激活该图表类型时注入 AgentLoop system prompt 的补充指令
     # 包含输出格式要求、结构约束、示例
+
+    intent_hints: tuple[str, ...]
+    # 用户意图关键词提示（用于 /diagram 下的类型识别）
+    # 示例：("mind map", "mindmap", "思维导图", "脑图")
 
     validator: Callable[[str], None]
     # 格式校验函数，接收原始文本，校验失败时抛出 DiagramValidationError
@@ -148,7 +149,6 @@ class DiagramTypeNotFoundError(Exception):
 DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
     "mindmap": DiagramTypeDescriptor(
         name="mindmap",
-        slash_command="/mindmap",
         output_format="reactflow_json",
         file_extension=".json",
         description="思维导图",
@@ -166,27 +166,28 @@ DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
             '{"nodes": [{"id": "root", "label": "主题"}, {"id": "n1", "label": "子主题"}], '
             '"edges": [{"source": "root", "target": "n1"}]}'
         ),
+        intent_hints=("mind map", "mindmap", "思维导图", "脑图"),
         validator=validate_reactflow_schema,
     ),
 
     # 预留扩展位（未来 batch 注册时取消注释并补充实现）
     # "flowchart": DiagramTypeDescriptor(
     #     name="flowchart",
-    #     slash_command="/flowchart",
     #     output_format="mermaid",
     #     file_extension=".mmd",
     #     description="流程图",
     #     agent_system_prompt="...",
+    #     intent_hints=("flowchart", "流程图"),
     #     validator=validate_mermaid_syntax,
     # ),
     #
     # "sequence": DiagramTypeDescriptor(
     #     name="sequence",
-    #     slash_command="/sequence",
     #     output_format="mermaid",
     #     file_extension=".mmd",
     #     description="时序图",
     #     agent_system_prompt="...",
+    #     intent_hints=("sequence diagram", "时序图"),
     #     validator=validate_mermaid_syntax,
     # ),
 }
@@ -208,7 +209,21 @@ def get_descriptor(diagram_type: str) -> DiagramTypeDescriptor:
     return descriptor
 
 
-def get_all_slash_commands() -> list[str]:
-    """返回所有已注册图表类型的 slash 命令列表，用于前端命令选择器。"""
-    return [d.slash_command for d in DIAGRAM_TYPE_REGISTRY.values()]
+def infer_diagram_type_from_prompt(prompt: str) -> str | None:
+    """
+    根据用户提示词粗粒度识别图表类型。
+    识别失败返回 None，由上层触发确认流。
+    """
+    normalized = str(prompt or "").lower()
+    for diagram_type, descriptor in DIAGRAM_TYPE_REGISTRY.items():
+        for hint in descriptor.intent_hints:
+            if hint.lower() in normalized:
+                return diagram_type
+    return None
 ```
+
+## 与单命令 `/diagram` 的关系
+
+- DiagramTypeRegistry 不负责 slash 命令路由，路由由 `DiagramSkillProvider.slash_commands = ["/diagram"]` 统一处理。
+- Registry 只负责“类型能力定义”和“类型识别辅助”。
+- 当用户未明确类型时，Agent 应通过确认卡片（`confirm_diagram_type` 工具）与用户确认后再调用 `create_diagram`。

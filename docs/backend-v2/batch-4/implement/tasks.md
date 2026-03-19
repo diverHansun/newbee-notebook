@@ -1,4 +1,4 @@
-# Tasks — Batch-4: Diagram Module (Mind Map)
+# Tasks — Batch-4: Diagram Module
 
 ## Metadata
 - Created: 2026-03-18
@@ -17,8 +17,9 @@
 - `diagrams.notebook_id` 外键应指向现有表结构 `notebooks(id)`
 - 存储抽象对齐现有 `StorageBackend`：读取用 `get_text()`，删除用 `delete_file()`；文本写入需在 service 内部基于 `save_file()` 封装
 - `DiagramRepository` 更新内容后的数据库回写建议只做元数据更新，不再设计伪造的 `update_content_path()` 合同
-- batch-4 前端依赖 `@xyflow/react`、`@dagrejs/dagre`、`html2canvas`、`mermaid` 当前尚未安装，Vitest/前端测试脚本也尚未存在，需要先补基建
+- batch-4 前端依赖 `@xyflow/react`、`@dagrejs/dagre`、`html2canvas`、`mermaid` 需补齐；当前仓库已具备 Vitest 基础脚本
 - Diagram skill 的确认流复用 batch-3：SSE 事件展示 `args_summary`，确认接口为 `POST /api/v1/chat/{session_id}/confirm`
+- slash 命令策略改为单入口 `/diagram`；类型由 Agent 判断，不明确时通过确认卡片（`confirm_diagram_type`）确认
 - 代码目录沿用当前项目分层：领域实体/仓储放 `domain/`，服务放 `application/services/`，仓储实现放 `infrastructure/persistence/repositories/`，skill 放 `skills/diagram/`
 - 前端目录沿用现状：hooks 放 `frontend/src/lib/hooks/`，store 放 `frontend/src/stores/`
 
@@ -122,11 +123,11 @@
   @dataclass(frozen=True)
   class DiagramTypeDescriptor:
       name:                str
-      slash_command:       str
       output_format:       str   # "reactflow_json" | "mermaid"
       file_extension:      str   # ".json" | ".mmd"
       description:         str
       agent_system_prompt: str
+      intent_hints:        tuple[str, ...]
       validator:           Callable[[str], None]
   ```
 
@@ -170,11 +171,12 @@ TDD 周期：
       with pytest.raises(DiagramTypeNotFoundError):
           get_descriptor("unknown_type")
 
-  def test_get_all_slash_commands_contains_mindmap():
-      assert "/mindmap" in get_all_slash_commands()
+  def test_infer_diagram_type_from_prompt():
+      assert infer_diagram_type_from_prompt("请生成思维导图") == "mindmap"
+      assert infer_diagram_type_from_prompt("please visualize this") is None
   ```
 
-- [ ] T004-Green 实现 `validate_reactflow_schema`（Pydantic）、`DIAGRAM_TYPE_REGISTRY`（mindmap 条目）、`get_descriptor()`、`get_all_slash_commands()`
+- [ ] T004-Green 实现 `validate_reactflow_schema`（Pydantic）、`DIAGRAM_TYPE_REGISTRY`（mindmap 条目）、`get_descriptor()`、`infer_diagram_type_from_prompt()`
 
   ```python
   # registry.py（完整实现）
@@ -211,7 +213,6 @@ TDD 周期：
   DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
       "mindmap": DiagramTypeDescriptor(
           name="mindmap",
-          slash_command="/mindmap",
           output_format="reactflow_json",
           file_extension=".json",
           description="思维导图",
@@ -228,6 +229,7 @@ TDD 周期：
               '示例：{"nodes":[{"id":"root","label":"主题"},{"id":"n1","label":"子主题"}],'
               '"edges":[{"source":"root","target":"n1"}]}'
           ),
+          intent_hints=("mind map", "mindmap", "思维导图", "脑图"),
           validator=validate_reactflow_schema,
       ),
   }
@@ -240,8 +242,13 @@ TDD 周期：
           )
       return descriptor
 
-  def get_all_slash_commands() -> list[str]:
-      return [d.slash_command for d in DIAGRAM_TYPE_REGISTRY.values()]
+  def infer_diagram_type_from_prompt(prompt: str) -> str | None:
+      normalized = str(prompt or "").lower()
+      for diagram_type, descriptor in DIAGRAM_TYPE_REGISTRY.items():
+          for hint in descriptor.intent_hints:
+              if hint.lower() in normalized:
+                  return diagram_type
+      return None
   ```
 
 - [ ] T004-Refactor 确认所有测试通过后整理代码
@@ -629,7 +636,7 @@ TDD 周期：
 
 ## Phase 6: DiagramSkillProvider (TDD)
 
-### Task 18: 5 个 Agent 工具工厂函数
+### Task 18: 6 个 Agent 工具工厂函数
 
 **Files:**
 - Create: `newbee_notebook/skills/diagram/tools.py`
@@ -646,9 +653,10 @@ TDD 周期：
 
   async def test_create_tool_success(mock_service):
       mock_service.create_diagram.return_value = make_fake_diagram(diagram_id="d-new")
-      tool = _build_create_diagram_tool(mock_service, "nb-1", "mindmap")
+      tool = _build_create_diagram_tool(mock_service, "nb-1")
       result = await tool.execute({
           "title": "测试导图",
+          "diagram_type": "mindmap",
           "content": VALID_CONTENT,
           "document_ids": ["doc-1"],
       })
@@ -657,8 +665,10 @@ TDD 周期：
 
   async def test_create_tool_validation_error(mock_service):
       mock_service.create_diagram.side_effect = DiagramValidationError("缺少 nodes 字段")
-      tool = _build_create_diagram_tool(mock_service, "nb-1", "mindmap")
-      result = await tool.execute({"title": "x", "content": "bad", "document_ids": []})
+      tool = _build_create_diagram_tool(mock_service, "nb-1")
+      result = await tool.execute(
+          {"title": "x", "diagram_type": "mindmap", "content": "bad", "document_ids": []}
+      )
       assert result.error is not None
       assert result.content == ""
 
@@ -677,7 +687,7 @@ TDD 周期：
       assert "diagram_id" in items[0]
   ```
 
-- [ ] T018-Green 实现 5 个工厂函数：`_build_list_diagrams_tool`、`_build_read_diagram_tool`、`_build_create_diagram_tool`、`_build_update_diagram_tool`、`_build_delete_diagram_tool`（参见设计文档 `diagram/05-skill-provider.md`）
+- [ ] T018-Green 实现 6 个工厂函数：`_build_list_diagrams_tool`、`_build_read_diagram_tool`、`_build_confirm_diagram_type_tool`、`_build_create_diagram_tool`、`_build_update_diagram_tool`、`_build_delete_diagram_tool`（参见设计文档 `diagram/05-skill-provider.md`）
 
 - [ ] T018-Refactor
 
@@ -689,10 +699,10 @@ TDD 周期：
 - [ ] T019 实现 `DiagramSkillProvider`（继承 `SkillProvider`）
 
   关键：
-  - `slash_commands` 属性返回 `get_all_slash_commands()`
-  - `build_manifest(context)` 中通过 `context.activated_command.lstrip("/")` 查注册表取 descriptor
-  - `confirmation_required=frozenset({"update_diagram", "delete_diagram"})`
-  - 工具通过 `_build_tools(context, diagram_type)` 按需构建（闭包注入 notebook_id 和 diagram_type）
+  - `slash_commands` 固定返回 `["/diagram"]`
+  - `build_manifest(context)` 使用统一 `system_prompt_addition` 约束 Agent：先判断类型，类型不明确先确认
+  - `confirmation_required=frozenset({"confirm_diagram_type", "update_diagram", "delete_diagram"})`
+  - 工具通过 `_build_tools(context)` 构建，`create_diagram` 从 tool args 接收 `diagram_type`
 
 ### Task 20: 注册 DiagramSkillProvider 到 SkillRegistry
 
@@ -725,7 +735,7 @@ TDD 周期：
     updated_at: string;
   }
 
-  export type DiagramType = "mindmap" | "flowchart" | "sequence" | "gantt";
+  export type DiagramType = "mindmap" | string;
   export type DiagramFormat = "reactflow_json" | "mermaid";
 
   export interface ReactFlowDiagramContent {
@@ -750,12 +760,12 @@ TDD 周期：
 
   新增键值（中英双语）：
   - `studio.diagrams.cardTitle`、`cardDescription`、`emptyState`
-  - `studio.diagrams.types.mindmap/flowchart/sequence/gantt`
+  - `studio.diagrams.types.mindmap`（当前必需）
+  - `studio.diagrams.types.<type>`（预留可扩展键，供后续新类型注册时追加）
   - `studio.diagrams.exportButton`、`deleteButton`、`deleteConfirm.title/message`
   - `studio.diagrams.unsupportedFormat`、`loadError`、`exportError`
-  - `slashCommands.mindmap.label/description`
-  - `slashCommands.flowchart.label/description`
-  - `slashCommands.sequence.label/description`
+  - `slashCommand.diagramDescription`
+  - `studio.diagrams.typeConfirmTitle`、`studio.diagrams.typeConfirmDesc`
 
 ### Task 23: API 客户端函数
 
@@ -840,7 +850,7 @@ TDD 周期：
 
   - 加载中：骨架屏（2-3 行占位）
   - 加载失败：错误提示
-  - 空状态：引导文案（含 `/mindmap` 提示）
+  - 空状态：引导文案（含 `/diagram` 提示）
   - 正常列表：每项含标题、类型 badge（DiagramType）、关联文档数
   - 按文档过滤：下拉选择器，选中后重新调用 `useDiagrams(notebookId, documentId)`
   - 点击列表项：`setActiveDiagram(id)` + `setStudioView("diagram-detail")`
@@ -1168,32 +1178,19 @@ TDD 周期：
 
 ## Phase 11: Slash 命令集成 + QueryKey 失效
 
-### Task 36: /mindmap 等命令条目注册
+### Task 36: /diagram 命令条目注册
 
 **Files:**
-- Modify: `frontend/src/lib/slash-commands/registry.ts`（或现有 slash 命令注册文件）
+- Modify: `frontend/src/components/chat/slash-command-hint.tsx`（现有 slash 命令注册位置）
 
-- [ ] T036 在现有 slash 命令注册表中追加图表命令条目
+- [ ] T036 在现有 slash 命令注册表中追加 `/diagram` 命令条目
 
   ```typescript
   {
-    command: "/mindmap",
-    label: t(uiStrings.slashCommands.mindmap.label),
-    description: t(uiStrings.slashCommands.mindmap.description),
+    command: "/diagram",
+    description: t(uiStrings.slashCommand.diagramDescription),
     available: true,
-  },
-  {
-    command: "/flowchart",
-    label: t(uiStrings.slashCommands.flowchart.label),
-    description: t(uiStrings.slashCommands.flowchart.description),
-    available: false,   // 显示为"即将推出"，不可点击
-  },
-  {
-    command: "/sequence",
-    label: t(uiStrings.slashCommands.sequence.label),
-    description: t(uiStrings.slashCommands.sequence.description),
-    available: false,
-  },
+  }
   ```
 
 ### Task 37: SSE done 事件后刷新图表列表
@@ -1201,9 +1198,9 @@ TDD 周期：
 **Files:**
 - Modify: `frontend/src/lib/hooks/useChatStream.ts`（或 SSE 事件处理器）
 
-- [ ] T037 在 SSE `done` 事件处理逻辑中，检测本次会话的 `active_skill` 是否为图表类型
+- [ ] T037 在 SSE `done` 事件处理逻辑中，检测本次请求是否由 `/diagram` 触发（前端本地记录）
 
-  若 `active_skill` 属于 `["mindmap", "flowchart", "sequence"]`，则 invalidate `["diagrams", notebookId]` queryKey，触发图表列表自动刷新。
+  若本次请求为 diagram skill 请求，则 invalidate `["diagrams", notebookId]` queryKey，触发图表列表自动刷新。
 
 ---
 

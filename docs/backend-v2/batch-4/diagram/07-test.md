@@ -35,8 +35,10 @@ get_descriptor()
   - 已注册类型 "mindmap" → 返回 DiagramTypeDescriptor
   - 未注册类型 "unknown" → DiagramTypeNotFoundError
 
-get_all_slash_commands()
-  - 返回列表包含 "/mindmap"
+infer_diagram_type_from_prompt()
+  - "请生成思维导图" → 返回 "mindmap"
+  - "draw a flowchart"（未注册时）→ 返回 None
+  - 无明确类型关键词 → 返回 None
 ```
 
 ### DiagramService
@@ -65,6 +67,11 @@ delete_diagram()
 ### Agent 工具 execute 函数
 
 ```
+confirm_diagram_type tool
+  - 被调用时触发 confirmation_request 事件（args_summary 含 diagram_type/reason）
+  - 用户确认后返回 ToolCallResult，metadata 含 diagram_type
+  - 用户拒绝时 AgentLoop 返回 user_rejected
+
 create_diagram tool
   - service.create_diagram 成功 → ToolCallResult.error 为 None，metadata 含 diagram_id
   - service 抛出 DiagramValidationError → ToolCallResult.error 非空，content 为空
@@ -99,6 +106,11 @@ Agent 第二次输出合法 JSON → 创建成功
 （模拟 2 次调用，验证错误信息能正确传递给 Agent）
 
 Agent 连续 3 次输出非法内容 → 第 3 次仍失败，AgentLoop 进入 synthesizing 告知用户
+
+用户意图不明确场景：
+  - Agent 先调用 confirm_diagram_type（建议类型为 mindmap）
+  - 用户确认后 Agent 再调用 create_diagram
+  - 用户拒绝后 Agent 不应直接创建图表
 ```
 
 ## API 测试

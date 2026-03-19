@@ -67,8 +67,8 @@ studio: {
       en: "Generate mind maps, flowcharts, and more",
     },
     emptyState: {
-      zh: "在对话框中输入 /mindmap 开始创建图表",
-      en: "Type /mindmap in the chat to create a diagram",
+      zh: "在对话框中输入 /diagram 开始创建图表",
+      en: "Type /diagram in the chat to create a diagram",
     },
     types: {
       mindmap: { zh: "思维导图", en: "Mind Map" },
@@ -98,30 +98,21 @@ studio: {
       en: "Export failed, please try again",
     },
   },
+  typeConfirmTitle: {
+    zh: "确认图表类型",
+    en: "Confirm diagram type",
+  },
+  typeConfirmDesc: {
+    zh: "未明确图表类型，请先确认后再生成。",
+    en: "Diagram type is ambiguous. Please confirm before generation.",
+  },
 },
 
-slashCommands: {
-  // ... 现有 /note 条目
-  mindmap: {
-    label: { zh: "/mindmap", en: "/mindmap" },
-    description: {
-      zh: "生成思维导图",
-      en: "Generate a mind map",
-    },
-  },
-  flowchart: {
-    label: { zh: "/flowchart", en: "/flowchart" },
-    description: {
-      zh: "生成流程图（即将推出）",
-      en: "Generate a flowchart (coming soon)",
-    },
-  },
-  sequence: {
-    label: { zh: "/sequence", en: "/sequence" },
-    description: {
-      zh: "生成时序图（即将推出）",
-      en: "Generate a sequence diagram (coming soon)",
-    },
+slashCommand: {
+  // ... 现有键值
+  diagramDescription: {
+    zh: "生成图表（思维导图/流程图/时序图）",
+    en: "Generate a diagram (mind map / flowchart / sequence)",
   },
 },
 ```
@@ -211,4 +202,4 @@ export function useDeleteDiagram() {
 | 用户删除图表 | `["diagrams"]`，移除 `["diagram", id]` 和 `["diagram-content", id]` |
 | 用户拖拽保存坐标 | `["diagram", diagramId]` |
 
-Agent 操作完成后触发列表刷新的时机：监听 SSE `done` 事件，并判断本次消息是否经由图表 skill（根据 session 中的 active_skill 状态），若是则 invalidate 图表列表 QueryKey。
+Agent 操作完成后触发列表刷新的时机：监听 SSE `done` 事件，并判断本次消息是否经由 `/diagram` 发起。当前推荐做法是在前端发送消息时记录 `isDiagramCommand`，`done` 时按该标记触发 invalidate。
