@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listDocumentsInNotebook } from "@/lib/api/documents";
-import { listMarksByNotebook } from "@/lib/api/marks";
+import { deleteMark, listMarksByNotebook } from "@/lib/api/marks";
 import {
   addNoteDocument,
   createNote,
@@ -175,6 +175,14 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     },
   });
 
+  const deleteMarkMutation = useMutation({
+    mutationFn: (markId: string) => deleteMark(markId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["marks", "notebook", notebookId] });
+      void queryClient.invalidateQueries({ queryKey: ["marks", "document"] });
+    },
+  });
+
   const clearSaveTimer = useCallback(() => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
@@ -272,8 +280,8 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   );
 
   const renderHome = () => (
-    <div className="stack-md" style={{ padding: 16 }}>
-      <div className="card card-interactive" style={{ padding: 16 }} onClick={() => navigateTo("notes")}>
+    <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="card card-interactive" style={{ padding: 16, minHeight: 100 }} onClick={() => navigateTo("notes")}>
         <div className="stack-sm">
           <strong>{t(uiStrings.studio.notesAndMarks)}</strong>
           <span className="muted" style={{ fontSize: 12 }}>
@@ -281,7 +289,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           </span>
         </div>
       </div>
-      <div className="card" style={{ padding: 16, opacity: 0.6 }}>
+      <div className="card" style={{ padding: 16, minHeight: 100, opacity: 0.6 }}>
         <div className="stack-sm">
           <strong>{t(uiStrings.studio.mindMap)}</strong>
           <span className="muted" style={{ fontSize: 12 }}>
@@ -421,7 +429,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
                           </span>
                         </div>
                       </button>
-                      <div className="row" style={{ justifyContent: "flex-end", marginTop: 8 }}>
+                      <div className="row" style={{ justifyContent: "flex-end", marginTop: 8, gap: 4 }}>
                         <button
                           className="btn btn-ghost btn-sm"
                           type="button"
@@ -433,6 +441,16 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
                           {copiedMarkId === mark.mark_id
                             ? t(uiStrings.marks.referenceCopied)
                             : t(uiStrings.marks.copyReference)}
+                        </button>
+                        <button
+                          className="btn btn-danger-ghost btn-sm"
+                          type="button"
+                          disabled={deleteMarkMutation.isPending}
+                          onClick={() => {
+                            void deleteMarkMutation.mutateAsync(mark.mark_id);
+                          }}
+                        >
+                          {t(uiStrings.marks.deleteMark)}
                         </button>
                       </div>
                     </div>

@@ -49,21 +49,13 @@
 }
 
 .btn-ghost {
-  border-color: transparent;
+  border-color: hsl(var(--border));
   background: transparent;
   box-shadow: none;
 }
 
 .btn-ghost:hover {
   background: hsl(var(--accent));
-  border-color: transparent;
-}
-
-.dark .btn-ghost {
-  border-color: hsl(var(--border));
-}
-
-.dark .btn-ghost:hover {
   border-color: hsl(var(--ring));
 }
 

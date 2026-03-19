@@ -21,9 +21,12 @@
   position: relative;
 }
 
-.markdown-content .markdown-chunk[data-active-mark="true"] {
-  background: hsl(var(--bee-yellow-light));
-  border-radius: 8px;
+.mark-text-highlight {
+  background: hsl(var(--bee-yellow) / 0.4);
+  border-radius: 2px;
+  padding: 0 1px;
+  color: inherit;
+  cursor: default;
 }
 
 .mark-anchor-button {

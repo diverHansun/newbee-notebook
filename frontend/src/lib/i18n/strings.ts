@@ -295,6 +295,7 @@ export const uiStrings = {
     fromDocument: { zh: "来自《{title}》", en: "From \"{title}\"" },
     copyReference: { zh: "复制引用", en: "Copy reference" },
     referenceCopied: { zh: "引用已复制", en: "Reference copied" },
+    deleteMark: { zh: "删除", en: "Delete" },
     bookmarkCreated: { zh: "书签已创建", en: "Bookmark created" },
     bookmarkCreateFailed: { zh: "书签创建失败", en: "Failed to create bookmark" },
   },

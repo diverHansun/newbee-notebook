@@ -53,6 +53,8 @@ export function DocumentReader({
   const [isCompactReader, setIsCompactReader] = useState(false);
   const [visibleChunkCount, setVisibleChunkCount] = useState(1);
   const [markFeedback, setMarkFeedback] = useState<string | null>(null);
+  const activeHighlightCleanupRef = useRef<(() => void) | null>(null);
+  const activeMarkIdRef = useRef<string | null>(null);
 
   const documentQuery = useQuery({
     queryKey: ["document", documentId],
@@ -269,6 +271,20 @@ export function DocumentReader({
     });
   }, [activeMarkId, chunkOffsets, marksQuery.data?.marks, setReaderActiveMarkId, setStudioActiveMarkId, t, visibleChunkCount]);
 
+  // Keep activeMarkIdRef in sync for stable closure in pointerdown handler
+  useEffect(() => {
+    activeMarkIdRef.current = activeMarkId;
+  }, [activeMarkId]);
+
+  // Clean up text highlight whenever activeMarkId changes
+  useEffect(() => {
+    return () => {
+      activeHighlightCleanupRef.current?.();
+      activeHighlightCleanupRef.current = null;
+    };
+  }, [activeMarkId]);
+
+  // Precise scroll-to-text + transient highlight
   useEffect(() => {
     if (!activeMarkId || !marksQuery.data?.marks?.length) return;
     const targetMark = marksQuery.data.marks.find((item) => item.mark_id === activeMarkId);
@@ -278,26 +294,53 @@ export function DocumentReader({
     const requiredVisibleChunks = Math.min(totalChunkCount, chunkIndex + 1);
     if (visibleChunkCount < requiredVisibleChunks) {
       setVisibleChunkCount(requiredVisibleChunks);
+      return;
     }
 
     let attempt = 0;
     const scrollToMark = () => {
-      const target = viewerRef.current?.querySelector<HTMLElement>(
+      const chunkEl = viewerRef.current?.querySelector<HTMLElement>(
         `[data-chunk-index="${chunkIndex}"]`
       );
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!chunkEl) {
+        if (attempt < 10) {
+          attempt += 1;
+          window.requestAnimationFrame(scrollToMark);
+        }
         return;
       }
 
-      if (attempt < 10) {
-        attempt += 1;
-        window.requestAnimationFrame(scrollToMark);
+      // Clean up previous highlight before creating a new one
+      activeHighlightCleanupRef.current?.();
+      activeHighlightCleanupRef.current = null;
+
+      const result = highlightTextInChunk(chunkEl, targetMark.anchor_text);
+      if (result) {
+        activeHighlightCleanupRef.current = result.cleanup;
+        result.scrollIntoView(scrollContainerRef.current);
+      } else {
+        chunkEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     };
 
     scrollToMark();
   }, [activeMarkId, chunkOffsets, marksQuery.data?.marks, totalChunkCount, visibleChunkCount]);
+
+  // Clear active mark when user clicks anywhere in the reader (except on the mark itself)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!activeMarkIdRef.current) return;
+      const target = event.target as Element;
+      if (target.closest(".mark-anchor-button") || target.closest(".mark-text-highlight")) return;
+      setReaderActiveMarkId(null);
+    };
+
+    container.addEventListener("pointerdown", handlePointerDown);
+    return () => container.removeEventListener("pointerdown", handlePointerDown);
+  }, [setReaderActiveMarkId]);
 
   const renderBody = () => {
     if (documentQuery.isLoading) {
@@ -481,4 +524,64 @@ function contentErrorMessage(
     errorCode: err.errorCode || "E_UNKNOWN",
     message: err.message || "Unknown error",
   });
+}
+
+/**
+ * Find anchor_text in the rendered DOM of a chunk and wrap it in a <mark> element.
+ * Returns cleanup + scrollIntoView helpers, or null if text not found / wrapping fails.
+ */
+function highlightTextInChunk(
+  chunkEl: HTMLElement,
+  anchorText: string,
+): { cleanup: () => void; scrollIntoView: (container: HTMLElement | null) => void } | null {
+  // Use first 30 chars as the search snippet (avoids multi-element boundary issues)
+  const searchSnippet = anchorText.slice(0, 30).trim();
+  if (!searchSnippet) return null;
+
+  const walker = document.createTreeWalker(chunkEl, NodeFilter.SHOW_TEXT);
+  let textNode: Text | null;
+
+  while ((textNode = walker.nextNode() as Text | null)) {
+    const content = textNode.textContent ?? "";
+    const idx = content.indexOf(searchSnippet);
+    if (idx < 0) continue;
+
+    try {
+      const range = document.createRange();
+      range.setStart(textNode, idx);
+      range.setEnd(textNode, Math.min(idx + anchorText.length, content.length));
+
+      const markEl = document.createElement("mark");
+      markEl.className = "mark-text-highlight";
+      range.surroundContents(markEl);
+
+      const cleanup = () => {
+        if (!markEl.isConnected) return;
+        const parent = markEl.parentNode;
+        if (!parent) return;
+        while (markEl.firstChild) parent.insertBefore(markEl.firstChild, markEl);
+        parent.removeChild(markEl);
+        if ("normalize" in parent) (parent as Element).normalize();
+      };
+
+      const scrollIntoView = (container: HTMLElement | null) => {
+        if (!container) {
+          markEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        const rect = markEl.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const scrollTarget =
+          container.scrollTop + rect.top - containerRect.top - containerRect.height / 2 + rect.height / 2;
+        container.scrollTo({ top: scrollTarget, behavior: "smooth" });
+      };
+
+      return { cleanup, scrollIntoView };
+    } catch {
+      // surroundContents failed (range spans element boundaries) — fall back to chunk scroll
+      return null;
+    }
+  }
+
+  return null;
 }
