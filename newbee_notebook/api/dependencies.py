@@ -19,6 +19,7 @@ from newbee_notebook.infrastructure.persistence.repositories.reference_repo_impl
 from newbee_notebook.infrastructure.persistence.repositories.message_repo_impl import MessageRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.mark_repo_impl import MarkRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.note_repo_impl import NoteRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl import DiagramRepositoryImpl
 from newbee_notebook.application.services.library_service import LibraryService
 from newbee_notebook.application.services.notebook_service import NotebookService
 from newbee_notebook.application.services.session_service import SessionService
@@ -28,6 +29,7 @@ from newbee_notebook.application.services.notebook_document_service import Noteb
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
+from newbee_notebook.application.services.diagram_service import DiagramService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.mcp import MCPClientManager
@@ -54,6 +56,7 @@ from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 from newbee_notebook.skills.note import NoteSkillProvider
+from newbee_notebook.skills.diagram import DiagramSkillProvider
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +119,11 @@ async def get_mark_repo(session=Depends(get_db_session)) -> MarkRepositoryImpl:
 async def get_note_repo(session=Depends(get_db_session)) -> NoteRepositoryImpl:
     """Get NoteRepository instance."""
     return NoteRepositoryImpl(session)
+
+
+async def get_diagram_repo(session=Depends(get_db_session)) -> DiagramRepositoryImpl:
+    """Get DiagramRepository instance."""
+    return DiagramRepositoryImpl(session)
 
 
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
@@ -449,15 +457,33 @@ async def get_note_service(
     )
 
 
+async def get_diagram_service(
+    diagram_repo: DiagramRepositoryImpl = Depends(get_diagram_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+) -> DiagramService:
+    """Get DiagramService instance."""
+    return DiagramService(
+        diagram_repo=diagram_repo,
+        storage=get_storage(),
+        ref_repo=ref_repo,
+    )
+
+
 async def get_runtime_skill_registry_dep(
     note_service: NoteService = Depends(get_note_service),
     mark_service: MarkService = Depends(get_mark_service),
+    diagram_service: DiagramService = Depends(get_diagram_service),
 ) -> SkillRegistry:
     registry = SkillRegistry()
     registry.register(
         NoteSkillProvider(
             note_service=note_service,
             mark_service=mark_service,
+        )
+    )
+    registry.register(
+        DiagramSkillProvider(
+            diagram_service=diagram_service,
         )
     )
     return registry

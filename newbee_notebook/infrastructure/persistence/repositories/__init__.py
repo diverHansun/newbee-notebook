@@ -8,6 +8,7 @@ from newbee_notebook.infrastructure.persistence.repositories.session_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl import DocumentRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.notebook_document_ref_repo_impl import NotebookDocumentRefRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.message_repo_impl import MessageRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl import DiagramRepositoryImpl
 
 __all__ = [
     "LibraryRepositoryImpl",
@@ -16,6 +17,7 @@ __all__ = [
     "DocumentRepositoryImpl",
     "NotebookDocumentRefRepositoryImpl",
     "MessageRepositoryImpl",
+    "DiagramRepositoryImpl",
 ]
 
 

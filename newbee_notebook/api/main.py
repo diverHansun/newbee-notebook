@@ -31,6 +31,7 @@ from newbee_notebook.api.routers import (
     chat,
     documents,
     admin,
+    diagrams,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(settings.router, prefix="/api/v1", tags=["Settings"])
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
+    app.include_router(diagrams.router, prefix="/api/v1", tags=["Diagrams"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
 
     if is_model_switch_enabled():

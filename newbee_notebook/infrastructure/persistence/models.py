@@ -19,7 +19,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
 from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
@@ -87,6 +87,11 @@ class NotebookModel(Base):
     )
     notes = relationship(
         "NoteModel",
+        back_populates="notebook",
+        cascade="all, delete-orphan",
+    )
+    diagrams = relationship(
+        "DiagramModel",
         back_populates="notebook",
         cascade="all, delete-orphan",
     )
@@ -419,4 +424,48 @@ class NoteMarkRefModel(Base):
         UniqueConstraint("note_id", "mark_id", name="uq_note_mark_ref"),
         Index("idx_note_mark_refs_note_id", "note_id"),
         Index("idx_note_mark_refs_mark_id", "mark_id"),
+    )
+
+
+class DiagramModel(Base):
+    """Notebook-scoped diagram metadata."""
+
+    __tablename__ = "diagrams"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    notebook_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notebooks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    diagram_type: Mapped[str] = mapped_column(Text, nullable=False)
+    format: Mapped[str] = mapped_column(Text, nullable=False)
+    content_path: Mapped[str] = mapped_column(Text, nullable=False)
+    document_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        default=list,
+    )
+    node_positions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    notebook = relationship("NotebookModel", back_populates="diagrams")
+
+    __table_args__ = (
+        CheckConstraint(
+            "format IN ('reactflow_json', 'mermaid')",
+            name="ck_diagrams_format",
+        ),
+        Index("idx_diagrams_notebook_id", "notebook_id"),
+        Index("idx_diagrams_document_ids", "document_ids", postgresql_using="gin"),
     )

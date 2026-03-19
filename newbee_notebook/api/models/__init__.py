@@ -22,6 +22,11 @@ from newbee_notebook.api.models.responses import (
     PaginationInfo,
     ErrorResponse,
 )
+from newbee_notebook.api.models.diagram_models import (
+    DiagramResponse,
+    DiagramListResponse,
+    UpdateDiagramPositionsRequest,
+)
 
 __all__ = [
     # Requests
@@ -42,6 +47,9 @@ __all__ = [
     "NotebookDocumentListResponse",
     "PaginationInfo",
     "ErrorResponse",
+    "DiagramResponse",
+    "DiagramListResponse",
+    "UpdateDiagramPositionsRequest",
 ]
 
 

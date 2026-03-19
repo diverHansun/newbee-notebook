@@ -82,6 +82,25 @@ def test_batch3_migration_sql_exists_with_notes_and_marks_tables():
     assert "UNIQUE(note_id, mark_id)" in sql
 
 
+def test_batch4_migration_sql_exists_with_diagrams_table():
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "migrations"
+        / "batch4_diagrams.sql"
+    )
+
+    assert migration_path.exists()
+
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS diagrams (" in sql
+    assert "format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid'))" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_diagrams_notebook_id" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_diagrams_document_ids" in sql
+
+
 def test_init_postgres_declares_batch3_tables():
     sql_path = (
         Path(__file__).resolve().parents[2]
@@ -98,6 +117,7 @@ def test_init_postgres_declares_batch3_tables():
     assert "REFERENCES notebooks(id) ON DELETE CASCADE" in sql
     assert "CREATE TABLE IF NOT EXISTS note_document_tags (" in sql
     assert "CREATE TABLE IF NOT EXISTS note_mark_refs (" in sql
+    assert "CREATE TABLE IF NOT EXISTS diagrams (" in sql
 
 
 def test_runtime_schema_statements_backfill_batch3_tables():
@@ -109,6 +129,9 @@ def test_runtime_schema_statements_backfill_batch3_tables():
     assert "CREATE INDEX IF NOT EXISTS idx_notes_notebook_id" in statements
     assert "CREATE TABLE IF NOT EXISTS note_document_tags (" in statements
     assert "CREATE TABLE IF NOT EXISTS note_mark_refs (" in statements
+    assert "CREATE TABLE IF NOT EXISTS diagrams (" in statements
+    assert "CREATE INDEX IF NOT EXISTS idx_diagrams_notebook_id" in statements
+    assert "CREATE INDEX IF NOT EXISTS idx_diagrams_document_ids" in statements
 
 
 def test_batch3_models_are_present_in_sqlalchemy_metadata():
@@ -118,3 +141,4 @@ def test_batch3_models_are_present_in_sqlalchemy_metadata():
     assert "notes" in table_names
     assert "note_document_tags" in table_names
     assert "note_mark_refs" in table_names
+    assert "diagrams" in table_names

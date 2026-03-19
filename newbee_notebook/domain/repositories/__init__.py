@@ -11,6 +11,7 @@ from newbee_notebook.domain.repositories.reference_repository import (
     ReferenceRepository,
 )
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
+from newbee_notebook.domain.repositories.diagram_repository import DiagramRepository
 
 __all__ = [
     "LibraryRepository",
@@ -20,6 +21,7 @@ __all__ = [
     "NotebookDocumentRefRepository",
     "ReferenceRepository",
     "MessageRepository",
+    "DiagramRepository",
 ]
 
 
