@@ -3,6 +3,8 @@
 import { memo, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { renderMarkdownToHtml } from "@/components/reader/markdown-pipeline";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import {
   getInitialVisibleChunkCount,
   LARGE_DOC_THRESHOLD_CHARS,
@@ -102,6 +104,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   visibleChunkCount,
   onVisibleChunkCountChange,
 }: MarkdownViewerProps) {
+  const { t } = useLang();
   const fallbackRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const htmlCacheRef = useRef<Map<number, string>>(new Map());
@@ -235,12 +238,13 @@ export const MarkdownViewer = memo(function MarkdownViewer({
         <section
           key={`chunk-${documentId ?? "doc"}-${idx}`}
           className="markdown-chunk"
+          data-chunk-index={idx}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       ))}
       {hasMoreChunks ? (
         <div ref={sentinelRef} className="markdown-load-more">
-          {"\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9..."}
+          {t(uiStrings.reader.moreContentLoading)}
         </div>
       ) : null}
     </div>

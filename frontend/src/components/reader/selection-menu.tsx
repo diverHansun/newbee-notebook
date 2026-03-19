@@ -8,9 +8,10 @@ import { uiStrings } from "@/lib/i18n/strings";
 type SelectionMenuProps = {
   onExplain: (payload: { documentId: string; selectedText: string }) => void;
   onConclude: (payload: { documentId: string; selectedText: string }) => void;
+  onMark: (payload: { documentId: string; selectedText: string }) => void;
 };
 
-export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
+export function SelectionMenu({ onExplain, onConclude, onMark }: SelectionMenuProps) {
   const { t } = useLang();
   const { selection, isMenuVisible, menuPosition, hideMenu } = useReaderStore();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -65,6 +66,19 @@ export function SelectionMenu({ onExplain, onConclude }: SelectionMenuProps) {
         }}
       >
         📝 {t(uiStrings.selectionMenu.conclude)}
+      </button>
+      <button
+        className="btn btn-ghost btn-sm"
+        type="button"
+        onClick={() => {
+          hideMenu();
+          onMark({
+            documentId: selection.documentId,
+            selectedText: selection.selectedText,
+          });
+        }}
+      >
+        🔖 {t(uiStrings.selectionMenu.bookmark)}
       </button>
     </div>
   );

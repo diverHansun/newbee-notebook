@@ -4,6 +4,7 @@
 }
 
 .chat-input-container {
+  position: relative;
   width: 100%;
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
@@ -133,6 +134,123 @@
   background: hsl(var(--destructive));
   color: hsl(var(--destructive-foreground));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.slash-command-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 8px);
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px 10px 0 0;
+  background: hsl(var(--card));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 30;
+}
+
+.slash-command-panel-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.slash-command-panel-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.slash-command-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 150ms ease-out;
+}
+
+.slash-command-row:hover,
+.slash-command-row.is-active {
+  background: hsl(var(--accent));
+}
+
+.slash-command-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.slash-command-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.slash-command-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.slash-command-description,
+.slash-command-status {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.confirmation-card {
+  margin-top: 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--accent));
+  padding: 12px;
+}
+
+.confirmation-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.confirmation-card-description {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirmation-card-summary {
+  margin: 12px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.confirmation-card-summary-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.confirmation-card-summary-row dt {
+  color: hsl(var(--muted-foreground));
+}
+
+.confirmation-card-summary-row dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.confirmation-card-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 

@@ -199,6 +199,34 @@ async def test_ask_loop_repairs_first_turn_without_tool_call_once():
 
 
 @pytest.mark.anyio
+async def test_agent_loop_can_require_a_first_turn_tool_call_for_skill_runs():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("list_notes", {})]),
+            _chat_response(content="I found the note and can continue."),
+        ],
+        stream_chunks=[_stream_chunk("I found the note and can continue.")],
+    )
+    tool = _tool(
+        "list_notes",
+        ToolCallResult(content="Found 1 note", quality_meta=_quality("medium")),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[tool],
+        mode_config=config,
+        force_first_tool_call=True,
+    )
+
+    result = await loop.run(message="delete the note", chat_history=[])
+
+    assert result.tool_calls_made == ["list_notes"]
+    assert llm.chat_calls[0]["tool_choice"] == "required"
+    assert llm.chat_calls[1]["tool_choice"] is None
+
+
+@pytest.mark.anyio
 async def test_agent_loop_early_synthesizes_when_quality_gate_is_high():
     llm = _FakeLLMClient(
         chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],

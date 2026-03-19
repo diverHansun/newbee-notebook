@@ -1,5 +1,8 @@
 "use client";
 
+"use client";
+
+import { ConfirmationCard } from "@/components/chat/confirmation-card";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard, ToolResultsCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
@@ -9,6 +12,7 @@ import { ChatMessage } from "@/stores/chat-store";
 type MessageItemProps = {
   message: ChatMessage;
   onOpenDocument: (documentId: string) => void;
+  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
@@ -70,7 +74,11 @@ function ThinkingIndicator({
   );
 }
 
-export function MessageItem({ message, onOpenDocument }: MessageItemProps) {
+export function MessageItem({
+  message,
+  onOpenDocument,
+  onResolveConfirmation,
+}: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
   const showThinkingIndicator =
@@ -149,6 +157,13 @@ export function MessageItem({ message, onOpenDocument }: MessageItemProps) {
             )}
           </div>
         )}
+        {!isUser && message.pendingConfirmation ? (
+          <ConfirmationCard
+            confirmation={message.pendingConfirmation}
+            onConfirm={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, true)}
+            onReject={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, false)}
+          />
+        ) : null}
       </div>
     </div>
   );

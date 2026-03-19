@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useMemo, useState } from "react";
 
+import { SlashCommandHint, shouldShowSlashCommandHint } from "@/components/chat/slash-command-hint";
 import { SourceSelector } from "@/components/chat/source-selector";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { NotebookDocumentItem } from "@/lib/api/types";
@@ -62,6 +63,7 @@ export function ChatInput({
   const [input, setInput] = useState("");
   const [sourceDocs, setSourceDocs] = useState<NotebookDocumentItem[]>([]);
   const [sourceDocsTotal, setSourceDocsTotal] = useState(0);
+  const showSlashCommandHint = shouldShowSlashCommandHint(input);
 
   const submitCurrentInput = () => {
     const content = input.trim();
@@ -96,6 +98,15 @@ export function ChatInput({
     setSourceDocs(items);
     setSourceDocsTotal(total);
   }, []);
+  const handleSlashCommandSelect = useCallback(
+    (command: string) => {
+      setInput(`${command} `);
+      if (mode !== "agent") {
+        onModeChange("agent");
+      }
+    },
+    [mode, onModeChange]
+  );
 
   return (
     <form onSubmit={submit} className="chat-input-shell">
@@ -149,6 +160,9 @@ export function ChatInput({
             }
           }}
         />
+        {showSlashCommandHint ? (
+          <SlashCommandHint input={input} onSelect={handleSlashCommandSelect} />
+        ) : null}
 
         <div className="chat-input-toolbar">
           <div className="chat-input-toolbar-left">

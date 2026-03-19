@@ -77,7 +77,16 @@ class NoteRepositoryImpl(NoteRepository):
         )
         self._session.add(model)
         await self._session.flush()
-        return self._to_entity(model)
+        return Note(
+            note_id=str(model.id),
+            notebook_id=str(model.notebook_id),
+            title=model.title,
+            content=model.content,
+            document_ids=[],
+            mark_ids=[],
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
 
     async def update(self, note: Note) -> Note:
         result = await self._session.execute(

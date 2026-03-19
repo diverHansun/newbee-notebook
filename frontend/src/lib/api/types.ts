@@ -120,6 +120,65 @@ export type DocumentContentResponse = {
   content_size: number;
 };
 
+export type Mark = {
+  mark_id: string;
+  document_id: string;
+  anchor_text: string;
+  char_offset: number;
+  context_text: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarkListResponse = {
+  marks: Mark[];
+  total: number;
+};
+
+export type MarkCreateInput = {
+  anchor_text: string;
+  char_offset: number;
+  context_text?: string;
+};
+
+export type Note = {
+  note_id: string;
+  notebook_id: string;
+  title: string;
+  content: string;
+  document_ids: string[];
+  mark_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type NoteListItem = {
+  note_id: string;
+  notebook_id: string;
+  title: string;
+  document_ids: string[];
+  mark_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NoteListResponse = {
+  notes: NoteListItem[];
+  total: number;
+};
+
+export type NoteCreateInput = {
+  notebook_id: string;
+  title?: string;
+  content?: string;
+  document_ids?: string[];
+};
+
+export type NoteUpdateInput = {
+  title?: string;
+  content?: string;
+};
+
 export type Session = {
   session_id: string;
   notebook_id: string;
@@ -211,6 +270,14 @@ export type SseEventHeartbeat = {
   type: "heartbeat";
 };
 
+export type SseEventConfirmation = {
+  type: "confirmation_request";
+  request_id: string;
+  tool_name: string;
+  args_summary: Record<string, unknown>;
+  description: string;
+};
+
 export type SseEvent =
   | SseEventStart
   | SseEventContent
@@ -218,7 +285,8 @@ export type SseEvent =
   | SseEventSources
   | SseEventDone
   | SseEventError
-  | SseEventHeartbeat;
+  | SseEventHeartbeat
+  | SseEventConfirmation;
 
 export type ApiErrorPayload = {
   error_code?: string;

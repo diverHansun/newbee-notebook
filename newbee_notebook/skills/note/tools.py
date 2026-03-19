@@ -32,7 +32,7 @@ def _format_notes(notes: list[Note]) -> str:
         document_text = ", ".join(note.document_ids) if note.document_ids else "No linked documents"
         updated_text = note.updated_at.strftime("%Y-%m-%d %H:%M")
         lines.append(
-            f"{index}. [{_note_label(note)}] - linked documents: {document_text} - updated at {updated_text}"
+            f"{index}. [{_note_label(note)}] - note ID: {note.note_id} - linked documents: {document_text} - updated at {updated_text}"
         )
     return "\n".join(lines)
 

@@ -54,6 +54,7 @@ async def test_build_list_notes_tool_formats_notebook_notes(note_service):
     assert result.error is None
     assert "Found 1 note(s)" in result.content
     assert "Chapter 3" in result.content
+    assert "note-1" in result.content
     note_service.list_by_notebook.assert_awaited_once_with("nb-1", document_id=None)
 
 
@@ -171,6 +172,7 @@ def test_note_skill_provider_builds_manifest_with_expected_tools(note_service, m
     assert manifest.confirmation_required == frozenset(
         {"update_note", "delete_note", "disassociate_note_document"}
     )
+    assert manifest.force_first_tool_call is True
     assert [tool.name for tool in manifest.tools] == [
         "list_notes",
         "read_note",
@@ -181,3 +183,6 @@ def test_note_skill_provider_builds_manifest_with_expected_tools(note_service, m
         "associate_note_document",
         "disassociate_note_document",
     ]
+    assert "use the available note and mark tools" in manifest.system_prompt_addition.lower()
+    assert "do not ask the user to confirm in plain text" in manifest.system_prompt_addition.lower()
+    assert "runtime confirmation flow" in manifest.system_prompt_addition.lower()

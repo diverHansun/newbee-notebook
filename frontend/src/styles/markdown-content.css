@@ -12,11 +12,38 @@
   color: hsl(var(--foreground));
   word-wrap: break-word;
   overflow-wrap: break-word;
+  padding-left: 20px;
 }
 
 .markdown-content .markdown-chunk {
   content-visibility: auto;
   contain-intrinsic-size: auto 1000px;
+  position: relative;
+}
+
+.markdown-content .markdown-chunk[data-active-mark="true"] {
+  background: hsl(var(--bee-yellow-light));
+  border-radius: 8px;
+}
+
+.mark-anchor-button {
+  position: absolute;
+  top: 4px;
+  left: -22px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.mark-anchor-button:hover {
+  opacity: 1;
+  background: hsl(var(--accent));
 }
 
 .markdown-load-more {

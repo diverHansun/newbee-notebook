@@ -38,8 +38,12 @@ class NoteSkillProvider:
             system_prompt_addition=(
                 "---\n"
                 "Active skill: /note\n"
-                "You can use the available tools to manage notes and inspect marks. "
-                "Before editing or deleting data, explain the intended action to the user.\n"
+                "Use the available note and mark tools for every note or mark lookup, creation, update, "
+                "delete, and association change.\n"
+                "Do not ask the user to confirm in plain text, and do not tell the user to perform note "
+                "changes manually when the tools can do it.\n"
+                "When the user requests an update, delete, or disassociation, call the corresponding tool "
+                "directly. The runtime confirmation flow will request approval for protected actions.\n"
                 "---"
             ),
             tools=[
@@ -55,4 +59,5 @@ class NoteSkillProvider:
             confirmation_required=frozenset(
                 {"update_note", "delete_note", "disassociate_note_document"}
             ),
+            force_first_tool_call=True,
         )

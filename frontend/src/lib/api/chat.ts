@@ -2,6 +2,15 @@ import { ApiError, apiFetch, buildError } from "@/lib/api/client";
 import { ApiErrorPayload, ChatRequest, ChatResponse, SseEvent } from "@/lib/api/types";
 import { parseSseStream } from "@/lib/utils/sse-parser";
 
+type ConfirmActionRequest = {
+  request_id: string;
+  approved: boolean;
+};
+
+type ConfirmActionResponse = {
+  status: "resolved";
+};
+
 type StreamOptions = {
   signal?: AbortSignal;
   onEvent: (event: SseEvent) => void;
@@ -57,5 +66,12 @@ export async function chatStream(
 export function cancelChatStream(messageId: number) {
   return apiFetch<void>(`/chat/stream/${messageId}/cancel`, {
     method: "POST",
+  });
+}
+
+export function confirmChatAction(sessionId: string, request: ConfirmActionRequest) {
+  return apiFetch<ConfirmActionResponse>(`/chat/${sessionId}/confirm`, {
+    method: "POST",
+    body: request,
   });
 }

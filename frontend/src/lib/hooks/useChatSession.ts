@@ -4,8 +4,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { chatOnce } from "@/lib/api/chat";
-import { ApiListResponse, ChatContext, MessageMode, Session, SessionMessage } from "@/lib/api/types";
+import { chatOnce, confirmChatAction } from "@/lib/api/chat";
+import {
+  ApiListResponse,
+  ChatContext,
+  MessageMode,
+  Session,
+  SessionMessage,
+  SseEventConfirmation,
+} from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
@@ -17,6 +24,7 @@ const SESSION_QUERY_KEY = (notebookId: string) => ["sessions", notebookId] as co
 const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] as const;
 const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
+const CONFIRMATION_TIMEOUT_MS = 180_000;
 
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
@@ -30,17 +38,19 @@ function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   }));
 }
 
-function generateDefaultSessionTitle(sessions: Session[]): string {
+function generateDefaultSessionTitle(sessions: Session[], pattern: string): string {
   const existingTitles = new Set(
     sessions.map((session) => session.title?.trim()).filter((title): title is string => Boolean(title))
   );
 
   let nextIndex = sessions.length + 1;
-  while (existingTitles.has(`会话 ${nextIndex}`)) {
+  let nextTitle = pattern.replace("{n}", String(nextIndex));
+  while (existingTitles.has(nextTitle)) {
     nextIndex += 1;
+    nextTitle = pattern.replace("{n}", String(nextIndex));
   }
 
-  return `会话 ${nextIndex}`;
+  return nextTitle;
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -108,6 +118,7 @@ export function useChatSession(notebookId: string) {
   const stream = useChatStream();
   const activeAssistantIdRef = useRef<string | null>(null);
   const thinkingTimeoutRef = useRef<number | null>(null);
+  const confirmationTimersRef = useRef<Map<string, number>>(new Map());
 
   const {
     currentSessionId,
@@ -134,6 +145,75 @@ export function useChatSession(notebookId: string) {
       thinkingTimeoutRef.current = null;
     }
   }, []);
+
+  const clearConfirmationTimer = useCallback((requestId: string) => {
+    const timerId = confirmationTimersRef.current.get(requestId);
+    if (typeof timerId === "number") {
+      window.clearTimeout(timerId);
+      confirmationTimersRef.current.delete(requestId);
+    }
+  }, []);
+
+  const clearAllConfirmationTimers = useCallback(() => {
+    confirmationTimersRef.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    confirmationTimersRef.current.clear();
+  }, []);
+
+  const findMessageByConfirmationRequest = useCallback((requestId: string) => {
+    return useChatStore
+      .getState()
+      .messages.find((item) => item.pendingConfirmation?.requestId === requestId);
+  }, []);
+
+  const trackPendingConfirmation = useCallback(
+    (assistantLocalId: string, event: SseEventConfirmation) => {
+      const pendingConfirmation = {
+        requestId: event.request_id,
+        toolName: event.tool_name,
+        argsSummary: event.args_summary,
+        description: event.description,
+        status: "pending" as const,
+        expiresAt: Date.now() + CONFIRMATION_TIMEOUT_MS,
+      };
+
+      updateMessage(assistantLocalId, {
+        pendingConfirmation,
+      });
+
+      clearConfirmationTimer(event.request_id);
+      const timerId = window.setTimeout(() => {
+        const message = findMessageByConfirmationRequest(event.request_id);
+        if (!message?.pendingConfirmation || message.pendingConfirmation.status !== "pending") {
+          confirmationTimersRef.current.delete(event.request_id);
+          return;
+        }
+
+        updateMessage(message.id, {
+          pendingConfirmation: {
+            ...message.pendingConfirmation,
+            status: "timeout",
+          },
+        });
+        confirmationTimersRef.current.delete(event.request_id);
+      }, CONFIRMATION_TIMEOUT_MS);
+      confirmationTimersRef.current.set(event.request_id, timerId);
+    },
+    [clearConfirmationTimer, findMessageByConfirmationRequest, updateMessage]
+  );
+
+  const clearConfirmationForMessage = useCallback(
+    (assistantLocalId: string | null) => {
+      if (!assistantLocalId) return;
+      const message = useChatStore.getState().messages.find((item) => item.id === assistantLocalId);
+      const requestId = message?.pendingConfirmation?.requestId;
+      if (requestId) {
+        clearConfirmationTimer(requestId);
+      }
+    },
+    [clearConfirmationTimer]
+  );
 
   const scheduleThinkingTimeout = useCallback(
     (assistantLocalId: string | null) => {
@@ -195,6 +275,13 @@ export function useChatSession(notebookId: string) {
     if (!messageQuery.data) return;
     setMessages(mapMessages(messageQuery.data));
   }, [messageQuery.data, setMessages]);
+
+  useEffect(() => {
+    return () => {
+      clearThinkingTimeout();
+      clearAllConfirmationTimers();
+    };
+  }, [clearAllConfirmationTimers, clearThinkingTimeout]);
 
   const createSessionMutation = useMutation({
     mutationFn: (title?: string) =>
@@ -431,9 +518,16 @@ export function useChatSession(notebookId: string) {
                 }
                 return;
               }
+              if (event.type === "confirmation_request") {
+                if (activeAssistantIdRef.current) {
+                  trackPendingConfirmation(activeAssistantIdRef.current, event);
+                }
+                return;
+              }
               if (event.type === "done") {
                 streamReceivedDone = true;
                 clearThinkingTimeout();
+                clearConfirmationForMessage(activeAssistantIdRef.current);
                 if (activeAssistantIdRef.current) {
                   updateThinkingStage(activeAssistantIdRef.current, null);
                   updateMessage(activeAssistantIdRef.current, { status: "done" });
@@ -451,6 +545,7 @@ export function useChatSession(notebookId: string) {
                 }
                 streamReceivedErrorEvent = true;
                 clearThinkingTimeout();
+                clearConfirmationForMessage(activeAssistantIdRef.current);
                 if (activeAssistantIdRef.current) {
                   updateThinkingStage(activeAssistantIdRef.current, null);
                   updateMessage(activeAssistantIdRef.current, {
@@ -473,6 +568,7 @@ export function useChatSession(notebookId: string) {
               const err = error as ApiError;
               if (!assistantLocalId || !shouldAttemptStreamFallback(error)) {
                 if (assistantLocalId) {
+                  clearConfirmationForMessage(assistantLocalId);
                   updateThinkingStage(assistantLocalId, null);
                   updateMessage(assistantLocalId, {
                     status: "error",
@@ -656,6 +752,7 @@ export function useChatSession(notebookId: string) {
       addMessage,
       appendExplainContent,
       appendMessageContent,
+      clearConfirmationForMessage,
       clearThinkingTimeout,
       currentSessionId,
       ensureSession,
@@ -668,9 +765,34 @@ export function useChatSession(notebookId: string) {
       setStreaming,
       scheduleThinkingTimeout,
       stream,
+      trackPendingConfirmation,
       updateMessage,
       t,
     ]
+  );
+
+  const resolveConfirmation = useCallback(
+    async (requestId: string, approved: boolean) => {
+      const sessionId = currentSessionId;
+      if (!sessionId) return;
+
+      const message = findMessageByConfirmationRequest(requestId);
+      if (!message?.pendingConfirmation) return;
+
+      clearConfirmationTimer(requestId);
+      updateMessage(message.id, {
+        pendingConfirmation: {
+          ...message.pendingConfirmation,
+          status: approved ? "confirmed" : "rejected",
+        },
+      });
+
+      await confirmChatAction(sessionId, {
+        request_id: requestId,
+        approved,
+      });
+    },
+    [clearConfirmationTimer, currentSessionId, findMessageByConfirmationRequest, updateMessage]
   );
 
   const cancelStream = useCallback(async () => {
@@ -678,6 +800,7 @@ export function useChatSession(notebookId: string) {
     clearThinkingTimeout();
     if (activeAssistantIdRef.current) {
       const assistantLocalId = activeAssistantIdRef.current;
+      clearConfirmationForMessage(assistantLocalId);
       const activeAssistantMessage = messages.find((msg) => msg.id === assistantLocalId);
       updateThinkingStage(assistantLocalId, null);
       if (!activeAssistantMessage?.content?.trim()) {
@@ -694,6 +817,7 @@ export function useChatSession(notebookId: string) {
     }
     setStreaming(false, null);
   }, [
+    clearConfirmationForMessage,
     clearThinkingTimeout,
     explainCard,
     messages,
@@ -717,10 +841,11 @@ export function useChatSession(notebookId: string) {
   const createNewSession = useCallback(
     async (title?: string) => {
       const normalizedTitle = title?.trim();
-      const resolvedTitle = normalizedTitle || generateDefaultSessionTitle(sessions);
+      const resolvedTitle =
+        normalizedTitle || generateDefaultSessionTitle(sessions, t(uiStrings.chat.defaultSessionTitle));
       await createSessionMutation.mutateAsync(resolvedTitle);
     },
-    [createSessionMutation, sessions]
+    [createSessionMutation, sessions, t]
   );
 
   const removeSession = useCallback(
@@ -744,6 +869,7 @@ export function useChatSession(notebookId: string) {
     createSession: createNewSession,
     deleteSession: removeSession,
     closeExplainCard: () => setExplainCard(null),
+    resolveConfirmation,
     refreshSessions: () => queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) }),
   };
 }

@@ -12,6 +12,8 @@ import { StudioPanel } from "@/components/studio/studio-panel";
 import { getNotebook } from "@/lib/api/notebooks";
 import { MessageMode, NotebookDocumentItem } from "@/lib/api/types";
 import { useChatSession } from "@/lib/hooks/useChatSession";
+import { useLang } from "@/lib/hooks/useLang";
+import { uiStrings } from "@/lib/i18n/strings";
 import { useReaderStore } from "@/stores/reader-store";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -19,7 +21,10 @@ type NotebookWorkspaceProps = {
   notebookId: string;
 };
 
-function buildRagHint(documents: NotebookDocumentItem[]): string | null {
+function buildRagHint(
+  documents: NotebookDocumentItem[],
+  ti: ReturnType<typeof useLang>["ti"]
+): string | null {
   const blocking = documents.filter((item) =>
     ["uploaded", "pending", "processing", "converted"].includes(item.status)
   );
@@ -32,10 +37,15 @@ function buildRagHint(documents: NotebookDocumentItem[]): string | null {
     converted: blocking.filter((d) => d.status === "converted").length,
   };
 
-  return `文档处理中，RAG 暂不可用：等待 ${counts.uploaded + counts.pending}，处理中 ${counts.processing}，已转换待索引 ${counts.converted}。可先使用 Agent 模式。`;
+  return ti(uiStrings.workspace.ragHint, {
+    queued: counts.uploaded + counts.pending,
+    processing: counts.processing,
+    converted: counts.converted,
+  });
 }
 
 export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
+  const { t, ti } = useLang();
   const notebookQuery = useQuery({
     queryKey: ["notebook", notebookId],
     queryFn: () => getNotebook(notebookId),
@@ -46,11 +56,11 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
   const readerStore = useReaderStore();
   const uiStore = useUiStore();
 
-  const ragHint = useMemo(() => buildRagHint(documents), [documents]);
+  const ragHint = useMemo(() => buildRagHint(documents, ti), [documents, ti]);
   const askBlocked = Boolean(ragHint);
 
-  const openDocument = (documentId: string) => {
-    readerStore.openDocument(documentId);
+  const openDocument = (documentId: string, markId?: string | null) => {
+    readerStore.openDocument(documentId, markId);
     uiStore.setMainView("reader");
   };
 
@@ -72,13 +82,13 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
           uiStore.setMainView("chat");
         }}
         onExplain={({ documentId, selectedText }) =>
-          sendByMode("请解释这段内容", "explain", {
+          sendByMode(t(uiStrings.workspace.explainPrompt), "explain", {
             document_id: documentId,
             selected_text: selectedText,
           })
         }
         onConclude={({ documentId, selectedText }) =>
-          sendByMode("请总结这段内容", "conclude", {
+          sendByMode(t(uiStrings.workspace.concludePrompt), "conclude", {
             document_id: documentId,
             selected_text: selectedText,
           })
@@ -101,6 +111,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         onCreateSession={chat.createSession}
         onDeleteSession={chat.deleteSession}
         onOpenDocument={openDocument}
+        onResolveConfirmation={chat.resolveConfirmation}
       />
     );
 
@@ -115,7 +126,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         />
       }
       main={mainContent}
-      right={<StudioPanel />}
+      right={<StudioPanel notebookId={notebookId} onOpenDocument={openDocument} />}
       mainOverlay={<ExplainCard card={chat.explainCard} />}
     />
   );

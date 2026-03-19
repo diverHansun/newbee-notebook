@@ -243,6 +243,7 @@ class SessionManager:
         external_tools: list[Any] | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        force_first_tool_call: bool = False,
     ):
         effective_confirmation_gateway = confirmation_gateway or self._confirmation_gateway
         tools = await self._tool_registry.get_tools(mode.value, external_tools=external_tools)
@@ -253,7 +254,7 @@ class SessionManager:
             allowed_document_ids=allowed_document_ids,
             context=context,
         )
-        return self._agent_loop_cls(
+        loop_kwargs = dict(
             llm_client=self._llm_client,
             tools=tools,
             mode_config=mode_config,
@@ -261,6 +262,9 @@ class SessionManager:
             confirmation_required=confirmation_required,
             confirmation_gateway=effective_confirmation_gateway,
         )
+        if force_first_tool_call:
+            loop_kwargs["force_first_tool_call"] = True
+        return self._agent_loop_cls(**loop_kwargs)
 
     async def chat_stream(
         self,
@@ -274,6 +278,7 @@ class SessionManager:
         system_prompt_addition: str = "",
         confirmation_required: frozenset[str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        force_first_tool_call: bool = False,
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
@@ -289,6 +294,7 @@ class SessionManager:
             external_tools=external_tools,
             confirmation_required=confirmation_required,
             confirmation_gateway=confirmation_gateway,
+            force_first_tool_call=force_first_tool_call,
         )
         runtime_message = self._build_runtime_message(
             mode=mode,
@@ -315,6 +321,7 @@ class SessionManager:
         system_prompt_addition: str = "",
         confirmation_required: frozenset[str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        force_first_tool_call: bool = False,
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -330,6 +337,7 @@ class SessionManager:
             system_prompt_addition=system_prompt_addition,
             confirmation_required=confirmation_required,
             confirmation_gateway=confirmation_gateway,
+            force_first_tool_call=force_first_tool_call,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)

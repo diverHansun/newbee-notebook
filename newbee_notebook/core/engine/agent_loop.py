@@ -45,6 +45,7 @@ class AgentLoop:
         tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        force_first_tool_call: bool = False,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -56,6 +57,7 @@ class AgentLoop:
         }
         self._confirmation_required = confirmation_required or frozenset()
         self._confirmation_gateway = confirmation_gateway
+        self._force_first_tool_call = force_first_tool_call
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -323,7 +325,9 @@ class AgentLoop:
         repair_attempts = 0
         first_turn_repair_attempts = 0
         force_synthesis = False
-        forced_tool_choice: dict[str, Any] | None = None
+        forced_tool_choice: dict[str, Any] | str | None = (
+            "required" if self._force_first_tool_call and tool_specs else None
+        )
 
         yield StartEvent(message_id="runtime")
 

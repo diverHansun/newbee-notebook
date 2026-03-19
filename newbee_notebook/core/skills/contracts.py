@@ -23,6 +23,7 @@ class SkillManifest:
     tools: list[ToolDefinition]
     system_prompt_addition: str = ""
     confirmation_required: frozenset[str] = field(default_factory=frozenset)
+    force_first_tool_call: bool = False
 
 
 class SkillProvider(Protocol):

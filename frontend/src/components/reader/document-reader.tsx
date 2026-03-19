@@ -1,11 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { SelectionMenu } from "@/components/reader/selection-menu";
 import { TocSidebar } from "@/components/reader/toc-sidebar";
+import { createMark, listMarksByDocument } from "@/lib/api/marks";
 import { getDocument, getDocumentContent } from "@/lib/api/documents";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -15,12 +16,14 @@ import {
 } from "@/lib/hooks/use-toc";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+import { computeChunkOffsets, findChunkIndexByOffset } from "@/lib/reader/chunk-marks";
 import {
   getInitialVisibleChunkCount,
   splitMarkdownIntoChunks,
 } from "@/lib/reader/markdown-chunking";
 import { useTextSelection } from "@/lib/hooks/useTextSelection";
 import { useReaderStore } from "@/stores/reader-store";
+import { useStudioStore } from "@/stores/studio-store";
 
 type DocumentReaderProps = {
   documentId: string;
@@ -36,15 +39,20 @@ export function DocumentReader({
   onConclude,
 }: DocumentReaderProps) {
   const { t, ti } = useLang();
+  const queryClient = useQueryClient();
   const viewerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const readerBodyRef = useRef<HTMLDivElement>(null);
   const isSelecting = useReaderStore((state) => state.isSelecting);
+  const activeMarkId = useReaderStore((state) => state.activeMarkId);
+  const setReaderActiveMarkId = useReaderStore((state) => state.setActiveMarkId);
   const isTocOpen = useReaderStore((state) => state.isTocOpen);
   const setTocOpen = useReaderStore((state) => state.setTocOpen);
   const toggleToc = useReaderStore((state) => state.toggleToc);
+  const setStudioActiveMarkId = useStudioStore((state) => state.setActiveMarkId);
   const [isCompactReader, setIsCompactReader] = useState(false);
   const [visibleChunkCount, setVisibleChunkCount] = useState(1);
+  const [markFeedback, setMarkFeedback] = useState<string | null>(null);
 
   const documentQuery = useQuery({
     queryKey: ["document", documentId],
@@ -81,15 +89,43 @@ export function DocumentReader({
   const shouldShowToc = tocItems.length > 0;
   const effectiveTocOpen = shouldShowToc && isTocOpen && !isCompactReader;
   const markdownChunks = useMemo(() => splitMarkdownIntoChunks(markdownContent), [markdownContent]);
+  const chunkOffsets = useMemo(
+    () => computeChunkOffsets(markdownContent, markdownChunks),
+    [markdownChunks, markdownContent]
+  );
   const totalChunkCount = markdownChunks.length;
   const initialVisibleChunkCount = useMemo(
     () => getInitialVisibleChunkCount(totalChunkCount),
     [totalChunkCount]
   );
+  const marksQuery = useQuery({
+    queryKey: ["marks", "document", documentId],
+    queryFn: () => listMarksByDocument(documentId),
+    enabled: Boolean(documentId) && canReadByStatus,
+  });
+
+  const createMarkMutation = useMutation({
+    mutationFn: (input: { anchorText: string; charOffset: number; contextText?: string }) =>
+      createMark(documentId, {
+        anchor_text: input.anchorText,
+        char_offset: input.charOffset,
+        context_text: input.contextText,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["marks", "document", documentId] });
+      void queryClient.invalidateQueries({ queryKey: ["marks", "notebook"] });
+    },
+  });
 
   useEffect(() => {
     setVisibleChunkCount(initialVisibleChunkCount);
   }, [documentId, markdownContent, initialVisibleChunkCount]);
+
+  useEffect(() => {
+    if (!markFeedback) return;
+    const timerId = window.setTimeout(() => setMarkFeedback(null), 2500);
+    return () => window.clearTimeout(timerId);
+  }, [markFeedback]);
 
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
@@ -137,6 +173,131 @@ export function DocumentReader({
   const onVisibleChunkCountChange = useCallback((next: number) => {
     setVisibleChunkCount((prev) => (prev === next ? prev : next));
   }, []);
+
+  const handleMark = useCallback(
+    async ({ documentId: selectedDocumentId, selectedText }: { documentId: string; selectedText: string }) => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+
+      const range = selection.getRangeAt(0);
+      const startNode =
+        range.startContainer instanceof Element
+          ? range.startContainer
+          : range.startContainer.parentElement;
+      const chunkElement = startNode?.closest<HTMLElement>("[data-chunk-index]");
+      const chunkIndex = Number(chunkElement?.dataset.chunkIndex ?? "0");
+      const chunk = chunkOffsets[chunkIndex];
+      if (!chunk) return;
+
+      const positionInChunk = chunk.content.indexOf(selectedText);
+      const charOffset = chunk.startChar + Math.max(0, positionInChunk);
+
+      try {
+        const mark = await createMarkMutation.mutateAsync({
+          anchorText: selectedText,
+          charOffset,
+          contextText: selectedText,
+        });
+        setReaderActiveMarkId(mark.mark_id);
+        setStudioActiveMarkId(mark.mark_id);
+        setMarkFeedback(t(uiStrings.reader.bookmarkCreated));
+      } catch {
+        setMarkFeedback(t(uiStrings.reader.bookmarkCreateFailed));
+      }
+    },
+    [chunkOffsets, createMarkMutation, setReaderActiveMarkId, setStudioActiveMarkId, t]
+  );
+
+  useEffect(() => {
+    const container = viewerRef.current;
+    if (!container) return;
+
+    const marks = marksQuery.data?.marks ?? [];
+    const sections = Array.from(container.querySelectorAll<HTMLElement>("[data-chunk-index]"));
+
+    sections.forEach((section) => {
+      const chunkIndex = Number(section.dataset.chunkIndex ?? "-1");
+      const chunk = chunkOffsets[chunkIndex];
+      const existingButton = section.querySelector<HTMLButtonElement>(":scope > .mark-anchor-button");
+
+      if (!chunk) {
+        existingButton?.remove();
+        section.removeAttribute("data-mark-ids");
+        section.removeAttribute("data-active-mark");
+        return;
+      }
+
+      const nextChunk = chunkOffsets[chunkIndex + 1];
+      const chunkEnd = nextChunk ? nextChunk.startChar : chunk.startChar + chunk.content.length;
+      const marksInChunk = marks.filter(
+        (mark) => mark.char_offset >= chunk.startChar && mark.char_offset < chunkEnd
+      );
+
+      if (marksInChunk.length === 0) {
+        section.removeAttribute("data-mark-ids");
+        section.removeAttribute("data-active-mark");
+        existingButton?.remove();
+        return;
+      }
+
+      const markIds = marksInChunk.map((mark) => mark.mark_id);
+      section.dataset.markIds = markIds.join(",");
+      if (activeMarkId && markIds.includes(activeMarkId)) {
+        section.dataset.activeMark = "true";
+      } else {
+        section.removeAttribute("data-active-mark");
+      }
+
+      const button = existingButton ?? document.createElement("button");
+      button.type = "button";
+      button.className = "mark-anchor-button";
+      button.dataset.markIds = markIds.join(",");
+      button.title = marksInChunk.map((mark) => mark.anchor_text).join(" | ");
+      button.setAttribute("aria-label", t(uiStrings.marks.title));
+      button.textContent = "🔖";
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const primaryMarkId = markIds[0];
+        setReaderActiveMarkId(primaryMarkId);
+        setStudioActiveMarkId(primaryMarkId);
+      };
+
+      if (!existingButton) {
+        section.prepend(button);
+      }
+    });
+  }, [activeMarkId, chunkOffsets, marksQuery.data?.marks, setReaderActiveMarkId, setStudioActiveMarkId, t, visibleChunkCount]);
+
+  useEffect(() => {
+    if (!activeMarkId || !marksQuery.data?.marks?.length) return;
+    const targetMark = marksQuery.data.marks.find((item) => item.mark_id === activeMarkId);
+    if (!targetMark) return;
+
+    const chunkIndex = findChunkIndexByOffset(chunkOffsets, targetMark.char_offset);
+    const requiredVisibleChunks = Math.min(totalChunkCount, chunkIndex + 1);
+    if (visibleChunkCount < requiredVisibleChunks) {
+      setVisibleChunkCount(requiredVisibleChunks);
+    }
+
+    let attempt = 0;
+    const scrollToMark = () => {
+      const target = viewerRef.current?.querySelector<HTMLElement>(
+        `[data-chunk-index="${chunkIndex}"]`
+      );
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
+      if (attempt < 10) {
+        attempt += 1;
+        window.requestAnimationFrame(scrollToMark);
+      }
+    };
+
+    scrollToMark();
+  }, [activeMarkId, chunkOffsets, marksQuery.data?.marks, totalChunkCount, visibleChunkCount]);
 
   const renderBody = () => {
     if (documentQuery.isLoading) {
@@ -200,6 +361,11 @@ export function DocumentReader({
 
     return (
       <div style={{ padding: "8px 24px 24px" }}>
+        {markFeedback ? (
+          <div className="badge badge-default" style={{ marginBottom: 12 }}>
+            {markFeedback}
+          </div>
+        ) : null}
         <MarkdownViewer
           content={markdownContent}
           documentId={documentId}
@@ -262,7 +428,7 @@ export function DocumentReader({
         </div>
       </div>
 
-      <SelectionMenu onExplain={onExplain} onConclude={onConclude} />
+      <SelectionMenu onExplain={onExplain} onConclude={onConclude} onMark={handleMark} />
     </div>
   );
 }

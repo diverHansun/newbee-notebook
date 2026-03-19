@@ -727,6 +727,7 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
                 tools=[tool],
                 system_prompt_addition="note skill prompt",
                 confirmation_required=frozenset({"update_note"}),
+                force_first_tool_call=True,
             )
         )
     )
@@ -758,6 +759,7 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
     assert runtime_manager.chat_kwargs["external_tools"] == [tool]
     assert runtime_manager.chat_kwargs["system_prompt_addition"] == "note skill prompt"
     assert runtime_manager.chat_kwargs["confirmation_required"] == frozenset({"update_note"})
+    assert runtime_manager.chat_kwargs["force_first_tool_call"] is True
     assert runtime_manager.chat_kwargs["confirmation_gateway"] is confirmation_gateway
 
 

@@ -162,6 +162,7 @@ class ChatService:
             external_tools,
             system_prompt_addition,
             confirmation_required,
+            force_first_tool_call,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -209,6 +210,7 @@ class ChatService:
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
             confirmation_required=confirmation_required,
+            force_first_tool_call=force_first_tool_call,
             confirmation_gateway=self._confirmation_gateway,
         )
         response_content = runtime_result.content
@@ -325,6 +327,7 @@ class ChatService:
             external_tools,
             system_prompt_addition,
             confirmation_required,
+            force_first_tool_call,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -378,6 +381,7 @@ class ChatService:
                 external_tools=external_tools,
                 system_prompt_addition=system_prompt_addition,
                 confirmation_required=confirmation_required,
+                force_first_tool_call=force_first_tool_call,
                 confirmation_gateway=self._confirmation_gateway,
             )
             while True:
@@ -528,13 +532,13 @@ class ChatService:
         message: str,
         runtime_mode: ModeType,
         source_document_ids: Optional[List[str]],
-    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str]]:
+    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], bool]:
         if not self._skill_registry:
-            return message, runtime_mode, None, "", frozenset()
+            return message, runtime_mode, None, "", frozenset(), False
 
         matched = self._skill_registry.match_command(message)
         if not matched:
-            return message, runtime_mode, None, "", frozenset()
+            return message, runtime_mode, None, "", frozenset(), False
 
         provider, activated_command, cleaned_message = matched
         manifest = provider.build_manifest(
@@ -550,6 +554,7 @@ class ChatService:
             list(manifest.tools),
             manifest.system_prompt_addition,
             manifest.confirmation_required,
+            manifest.force_first_tool_call,
         )
 
     async def confirm_action(self, session_id: str, request_id: str, approved: bool) -> bool:

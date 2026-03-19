@@ -5,6 +5,17 @@ import { create } from "zustand";
 import { MessageMode, MessageRole } from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
+export type PendingConfirmationStatus = "pending" | "confirmed" | "rejected" | "timeout";
+
+export type PendingConfirmation = {
+  requestId: string;
+  toolName: string;
+  argsSummary: Record<string, unknown>;
+  description: string;
+  status: PendingConfirmationStatus;
+  expiresAt: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: MessageRole;
@@ -16,6 +27,7 @@ export type ChatMessage = {
   sourcesType?: "tool_results" | "retrieval" | "none";
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
+  pendingConfirmation?: PendingConfirmation;
 };
 
 export type ExplainCardState = {

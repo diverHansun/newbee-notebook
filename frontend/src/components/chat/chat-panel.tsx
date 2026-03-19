@@ -26,6 +26,7 @@ type ChatPanelProps = {
   onCreateSession: (title?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onOpenDocument: (documentId: string) => void;
+  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
 };
 
 export function ChatPanel({
@@ -44,6 +45,7 @@ export function ChatPanel({
   onCreateSession,
   onDeleteSession,
   onOpenDocument,
+  onResolveConfirmation,
 }: ChatPanelProps) {
   const { t, ti } = useLang();
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
@@ -201,7 +203,12 @@ export function ChatPanel({
           </div>
         ) : (
           messages.map((message) => (
-            <MessageItem key={message.id} message={message} onOpenDocument={onOpenDocument} />
+            <MessageItem
+              key={message.id}
+              message={message}
+              onOpenDocument={onOpenDocument}
+              onResolveConfirmation={onResolveConfirmation}
+            />
           ))
         )}
         <div ref={messagesEndRef} style={{ height: 0 }} aria-hidden />

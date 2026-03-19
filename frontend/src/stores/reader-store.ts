@@ -14,13 +14,15 @@ type MenuPosition = {
 
 type ReaderState = {
   currentDocumentId: string | null;
+  activeMarkId: string | null;
   selection: SelectionState | null;
   isSelecting: boolean;
   isTocOpen: boolean;
   isMenuVisible: boolean;
   menuPosition: MenuPosition | null;
-  openDocument: (documentId: string) => void;
+  openDocument: (documentId: string, markId?: string | null) => void;
   closeDocument: () => void;
+  setActiveMarkId: (markId: string | null) => void;
   setSelection: (selection: SelectionState | null) => void;
   setIsSelecting: (value: boolean) => void;
   setTocOpen: (open: boolean) => void;
@@ -31,14 +33,16 @@ type ReaderState = {
 
 export const useReaderStore = create<ReaderState>((set) => ({
   currentDocumentId: null,
+  activeMarkId: null,
   selection: null,
   isSelecting: false,
   isTocOpen: true,
   isMenuVisible: false,
   menuPosition: null,
-  openDocument: (documentId) =>
+  openDocument: (documentId, markId = null) =>
     set({
       currentDocumentId: documentId,
+      activeMarkId: markId,
       selection: null,
       isSelecting: false,
       isMenuVisible: false,
@@ -47,11 +51,13 @@ export const useReaderStore = create<ReaderState>((set) => ({
   closeDocument: () =>
     set({
       currentDocumentId: null,
+      activeMarkId: null,
       selection: null,
       isSelecting: false,
       isMenuVisible: false,
       menuPosition: null,
     }),
+  setActiveMarkId: (markId) => set({ activeMarkId: markId }),
   setSelection: (selection) => set({ selection }),
   setIsSelecting: (value) => set({ isSelecting: value }),
   setTocOpen: (open) => set({ isTocOpen: open }),

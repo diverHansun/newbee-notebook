@@ -2,10 +2,12 @@ from unittest.mock import AsyncMock
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from newbee_notebook.application.services.note_service import NoteNotFoundError, NoteService
 from newbee_notebook.domain.entities.note import Note
 from newbee_notebook.infrastructure.persistence.models import (
+    Base,
     NoteDocumentTagModel,
     NoteMarkRefModel,
     NoteModel,
@@ -94,3 +96,30 @@ def test_note_repository_impl_maps_model_to_entity_with_related_ids():
     assert entity.content == "Body"
     assert entity.document_ids == [str(document_id)]
     assert entity.mark_ids == [str(mark_id)]
+
+
+@pytest.mark.anyio
+async def test_note_repository_create_returns_note_without_lazy_loading():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with session_factory() as session:
+            repo = NoteRepositoryImpl(session)
+            created = await repo.create(
+                Note(
+                    notebook_id="00000000-0000-0000-0000-000000000001",
+                    title="",
+                    content="",
+                )
+            )
+    finally:
+        await engine.dispose()
+
+    assert created.title == ""
+    assert created.content == ""
+    assert created.document_ids == []
+    assert created.mark_ids == []
