@@ -85,6 +85,11 @@ class NotebookModel(Base):
         back_populates="notebook",
         cascade="all, delete-orphan"
     )
+    notes = relationship(
+        "NoteModel",
+        back_populates="notebook",
+        cascade="all, delete-orphan",
+    )
 
 
 class DocumentModel(Base):
@@ -131,6 +136,11 @@ class DocumentModel(Base):
     # Relationships
     library = relationship("LibraryModel", back_populates="documents")
     notebook = relationship("NotebookModel", back_populates="documents")
+    marks = relationship(
+        "MarkModel",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
     
     __table_args__ = (
         CheckConstraint(
@@ -264,4 +274,149 @@ class AppSettingModel(Base):
         DateTime,
         default=datetime.now,
         onupdate=datetime.now,
+    )
+
+
+class MarkModel(Base):
+    """Reader mark anchored to a document character offset."""
+
+    __tablename__ = "marks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    anchor_text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    context_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    document = relationship("DocumentModel", back_populates="marks")
+    note_refs = relationship(
+        "NoteMarkRefModel",
+        back_populates="mark",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint("char_offset >= 0", name="ck_marks_char_offset_nonnegative"),
+        Index("idx_marks_document_id", "document_id"),
+        Index("idx_marks_created_at", "created_at"),
+    )
+
+
+class NoteModel(Base):
+    """Notebook note stored as plain text content."""
+
+    __tablename__ = "notes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    notebook_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notebooks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    notebook = relationship("NotebookModel", back_populates="notes")
+    document_tags = relationship(
+        "NoteDocumentTagModel",
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
+    mark_refs = relationship(
+        "NoteMarkRefModel",
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("idx_notes_notebook_id", "notebook_id"),
+        Index("idx_notes_updated_at", "updated_at"),
+    )
+
+
+class NoteDocumentTagModel(Base):
+    """Explicit document associations for notes."""
+
+    __tablename__ = "note_document_tags"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    note = relationship("NoteModel", back_populates="document_tags")
+    document = relationship("DocumentModel")
+
+    __table_args__ = (
+        UniqueConstraint("note_id", "document_id", name="uq_note_document_tag"),
+        Index("idx_note_document_tags_note_id", "note_id"),
+        Index("idx_note_document_tags_document_id", "document_id"),
+    )
+
+
+class NoteMarkRefModel(Base):
+    """Parsed mark references extracted from note content."""
+
+    __tablename__ = "note_mark_refs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mark_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("marks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    note = relationship("NoteModel", back_populates="mark_refs")
+    mark = relationship("MarkModel", back_populates="note_refs")
+
+    __table_args__ = (
+        UniqueConstraint("note_id", "mark_id", name="uq_note_mark_ref"),
+        Index("idx_note_mark_refs_note_id", "note_id"),
+        Index("idx_note_mark_refs_mark_id", "mark_id"),
     )
