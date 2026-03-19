@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from newbee_notebook.api.dependencies import get_session_service, get_chat_service
+from newbee_notebook.api.models.confirm_models import ConfirmActionRequest
 from newbee_notebook.api.models.requests import ChatRequest
 from newbee_notebook.application.services.session_service import (
     SessionLimitExceededError,
@@ -52,6 +53,10 @@ class ChatResponse(BaseModel):
     mode: str
     sources: list = Field(default_factory=list)
     warnings: list = Field(default_factory=list)
+
+
+class ConfirmActionResponse(BaseModel):
+    status: str
 
 
 # =============================================================================
@@ -364,6 +369,26 @@ async def cancel_stream(
         "message_id": message_id,
         "status": "cancelled",
     }
+
+
+@router.post("/{session_id}/confirm", response_model=ConfirmActionResponse)
+async def confirm_action(
+    session_id: str,
+    request: ConfirmActionRequest,
+    chat_service: ChatService = Depends(get_chat_service),
+):
+    try:
+        resolved = await chat_service.confirm_action(
+            session_id=session_id,
+            request_id=request.request_id,
+            approved=request.approved,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    if not resolved:
+        raise HTTPException(status_code=404, detail="Confirmation request not found")
+    return ConfirmActionResponse(status="resolved")
 
 
 # =============================================================================

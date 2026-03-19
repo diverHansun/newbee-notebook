@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from newbee_notebook.core.engine.stream_events import (
+    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
@@ -41,15 +42,23 @@ def test_stream_event_types_and_payloads_are_stable():
     done = DoneEvent()
     error = ErrorEvent(code="tool_error", message="failed", retriable=False)
     start = StartEvent(message_id="msg-1")
+    confirmation = ConfirmationRequestEvent(
+        request_id="req-1",
+        tool_name="delete_note",
+        args_summary={"note_id": "n1"},
+        description="Agent 请求执行 delete_note",
+    )
 
     assert start.event == "start"
     assert warning.event == "warning"
     assert phase.event == "phase"
     assert tool_call.event == "tool_call"
     assert tool_result.event == "tool_result"
+    assert confirmation.event == "confirmation_request"
     assert sources.event == "sources"
     assert content.event == "content"
     assert done.event == "done"
     assert error.event == "error"
     assert phase.stage == "retrieving"
+    assert confirmation.request_id == "req-1"
     assert tool_result.quality_meta.quality_band == "high"

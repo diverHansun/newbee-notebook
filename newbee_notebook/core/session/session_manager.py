@@ -14,6 +14,7 @@ from newbee_notebook.core.context import (
     StoredMessage,
     TokenCounter,
 )
+from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.stream_events import (
@@ -65,6 +66,7 @@ class SessionManager:
         lock_manager: SessionLockManager | None = None,
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ):
         self._session_repo = session_repo
         self._message_repo = message_repo
@@ -73,6 +75,7 @@ class SessionManager:
         self._lock_manager = lock_manager or SessionLockManager()
         self._agent_loop_cls = agent_loop_cls
         self._system_prompt_provider = system_prompt_provider or self._default_system_prompt
+        self._confirmation_gateway = confirmation_gateway
         self._current_session: Session | None = None
         self._current_mode: ModeType = ModeType.AGENT
         self._memory = SessionMemory()
@@ -139,16 +142,23 @@ class SessionManager:
     def _default_system_prompt(mode: ModeType) -> str:
         return _load_mode_prompt(mode)
 
-    def _build_chat_history(self, mode: ModeType) -> list[dict[str, str]]:
+    def _build_chat_history(
+        self,
+        mode: ModeType,
+        system_prompt_addition: str = "",
+    ) -> list[dict[str, str]]:
         builder = ContextBuilder(
             memory=self._memory,
             token_counter=TokenCounter(),
             compressor=Compressor(token_counter=TokenCounter()),
         )
         track = "side" if mode in self.SIDE_TRACK_MODES else "main"
+        system_prompt = self._system_prompt_provider(mode)
+        if system_prompt_addition.strip():
+            system_prompt = f"{system_prompt}\n\n{system_prompt_addition.strip()}"
         return builder.build(
             track=track,
-            system_prompt=self._system_prompt_provider(mode),
+            system_prompt=system_prompt,
             current_message="",
             budget=ContextBudget(
                 total=4096,
@@ -230,8 +240,12 @@ class SessionManager:
         mode: ModeType,
         allowed_document_ids: list[str] | None,
         context: dict | None,
+        external_tools: list[Any] | None = None,
+        confirmation_required: frozenset[str] | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ):
-        tools = await self._tool_registry.get_tools(mode.value)
+        effective_confirmation_gateway = confirmation_gateway or self._confirmation_gateway
+        tools = await self._tool_registry.get_tools(mode.value, external_tools=external_tools)
         mode_config = ModeConfigFactory.build(mode, tools)
         tool_argument_defaults = self._build_tool_argument_defaults(
             mode=mode,
@@ -244,6 +258,8 @@ class SessionManager:
             tools=tools,
             mode_config=mode_config,
             tool_argument_defaults=tool_argument_defaults,
+            confirmation_required=confirmation_required,
+            confirmation_gateway=effective_confirmation_gateway,
         )
 
     async def chat_stream(
@@ -254,6 +270,10 @@ class SessionManager:
         allowed_document_ids: list[str] | None = None,
         context: dict | None = None,
         include_ec_context: bool = False,
+        external_tools: list[Any] | None = None,
+        system_prompt_addition: str = "",
+        confirmation_required: frozenset[str] | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
@@ -261,11 +281,14 @@ class SessionManager:
 
         mode = normalize_runtime_mode(mode_type or self._current_mode)
         self._current_mode = mode
-        chat_history = self._build_chat_history(mode)
+        chat_history = self._build_chat_history(mode, system_prompt_addition=system_prompt_addition)
         loop = await self._build_loop(
             mode=mode,
             allowed_document_ids=allowed_document_ids,
             context=context,
+            external_tools=external_tools,
+            confirmation_required=confirmation_required,
+            confirmation_gateway=confirmation_gateway,
         )
         runtime_message = self._build_runtime_message(
             mode=mode,
@@ -288,6 +311,10 @@ class SessionManager:
         allowed_document_ids: list[str] | None = None,
         context: dict | None = None,
         include_ec_context: bool = False,
+        external_tools: list[Any] | None = None,
+        system_prompt_addition: str = "",
+        confirmation_required: frozenset[str] | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -299,6 +326,10 @@ class SessionManager:
             allowed_document_ids=allowed_document_ids,
             context=context,
             include_ec_context=include_ec_context,
+            external_tools=external_tools,
+            system_prompt_addition=system_prompt_addition,
+            confirmation_required=confirmation_required,
+            confirmation_gateway=confirmation_gateway,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)

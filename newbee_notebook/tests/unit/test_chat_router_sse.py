@@ -32,6 +32,22 @@ def test_sse_event_warning_formats_payload():
     )
 
 
+def test_sse_event_confirmation_request_formats_payload():
+    assert SSEEvent.format(
+        "confirmation_request",
+        {
+            "request_id": "req-1",
+            "tool_name": "delete_note",
+            "args_summary": {"note_id": "n1"},
+            "description": "Agent 请求执行 delete_note",
+        },
+    ) == (
+        'data: {"type": "confirmation_request", "request_id": "req-1", '
+        '"tool_name": "delete_note", "args_summary": {"note_id": "n1"}, '
+        '"description": "Agent 请求执行 delete_note"}\n\n'
+    )
+
+
 def _build_client(chat_service: AsyncMock, session_service: AsyncMock) -> TestClient:
     app = FastAPI()
     app.include_router(chat_router.router, prefix="/api/v1")
@@ -151,6 +167,36 @@ def test_chat_endpoint_accepts_agent_mode():
 
     assert response.status_code == 200
     assert response.json()["mode"] == "agent"
+
+
+def test_confirm_endpoint_returns_200_when_request_is_resolved():
+    chat_service = AsyncMock()
+    chat_service.confirm_action = AsyncMock(return_value=True)
+    session_service = AsyncMock()
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/session-1/confirm",
+        json={"request_id": "req-1", "approved": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "resolved"}
+
+
+def test_confirm_endpoint_returns_404_when_request_is_missing():
+    chat_service = AsyncMock()
+    chat_service.confirm_action = AsyncMock(return_value=False)
+    session_service = AsyncMock()
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/session-1/confirm",
+        json={"request_id": "missing", "approved": False},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Confirmation request not found"
 
 
 def test_sse_adapter_emits_phase_and_thinking_compat_events():

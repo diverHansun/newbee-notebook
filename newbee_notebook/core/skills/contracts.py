@@ -1,0 +1,35 @@
+"""Request-scoped skill contracts for runtime slash command activation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from newbee_notebook.core.tools.contracts import ToolDefinition
+
+
+@dataclass(frozen=True)
+class SkillContext:
+    notebook_id: str
+    activated_command: str
+    selected_document_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SkillManifest:
+    name: str
+    slash_command: str
+    description: str
+    tools: list[ToolDefinition]
+    system_prompt_addition: str = ""
+    confirmation_required: frozenset[str] = field(default_factory=frozenset)
+
+
+class SkillProvider(Protocol):
+    @property
+    def skill_name(self) -> str: ...
+
+    @property
+    def slash_commands(self) -> list[str]: ...
+
+    def build_manifest(self, context: SkillContext) -> SkillManifest: ...

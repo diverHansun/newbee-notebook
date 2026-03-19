@@ -45,6 +45,15 @@ class ToolResultEvent:
 
 
 @dataclass(frozen=True)
+class ConfirmationRequestEvent:
+    request_id: str
+    tool_name: str
+    args_summary: dict
+    description: str
+    event: str = "confirmation_request"
+
+
+@dataclass(frozen=True)
 class SourceEvent:
     sources: list[SourceItem] = field(default_factory=list)
     event: str = "sources"

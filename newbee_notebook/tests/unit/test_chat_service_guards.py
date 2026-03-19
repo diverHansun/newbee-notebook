@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,8 +8,9 @@ import pytest
 
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.core.engine.stream_events import ContentEvent, DoneEvent, PhaseEvent, SourceEvent
+from newbee_notebook.core.skills import SkillContext, SkillManifest
 from newbee_notebook.core.session import SessionRunResult
-from newbee_notebook.core.tools.contracts import SourceItem
+from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
 from newbee_notebook.exceptions import DocumentProcessingError
@@ -87,7 +89,49 @@ class _DummyRuntimeSessionManager:
         yield DoneEvent()
 
 
-def _build_service(ref_repo=None, document_repo=None):
+@dataclass
+class _DummySkillProvider:
+    manifest: SkillManifest
+
+    @property
+    def skill_name(self) -> str:
+        return self.manifest.name
+
+    @property
+    def slash_commands(self) -> list[str]:
+        return [self.manifest.slash_command]
+
+    def build_manifest(self, context: SkillContext) -> SkillManifest:
+        assert context.notebook_id == "nb-1"
+        assert context.activated_command == "/note"
+        assert context.selected_document_ids == ["doc-1"]
+        return self.manifest
+
+
+class _DummySkillRegistry:
+    def __init__(self, provider: _DummySkillProvider | None = None):
+        self.provider = provider
+        self.messages: list[str] = []
+
+    def match_command(self, message: str):
+        self.messages.append(message)
+        if self.provider and message.startswith("/note"):
+            cleaned = message[len("/note") :].strip()
+            return self.provider, "/note", cleaned
+        return None
+
+
+class _DummyConfirmationGateway:
+    def __init__(self, *, resolve_result: bool = True):
+        self.calls: list[tuple[str, bool]] = []
+        self.resolve_result = resolve_result
+
+    def resolve(self, request_id: str, approved: bool) -> bool:
+        self.calls.append((request_id, approved))
+        return self.resolve_result
+
+
+def _build_service(ref_repo=None, document_repo=None, session_manager=None, skill_registry=None, confirmation_gateway=None):
     return ChatService(
         session_repo=AsyncMock(),
         notebook_repo=AsyncMock(),
@@ -95,7 +139,9 @@ def _build_service(ref_repo=None, document_repo=None):
         document_repo=document_repo or AsyncMock(),
         ref_repo=ref_repo or AsyncMock(),
         message_repo=AsyncMock(),
-        session_manager=_DummyRuntimeSessionManager(),
+        session_manager=session_manager or _DummyRuntimeSessionManager(),
+        skill_registry=skill_registry,
+        confirmation_gateway=confirmation_gateway,
     )
 
 
@@ -644,3 +690,93 @@ def test_chat_routes_explain_to_runtime_manager_with_selected_text_context():
     assert result.mode == ModeType.EXPLAIN
     assert service._session_manager.chat_kwargs["mode_type"] == ModeType.EXPLAIN
     assert service._session_manager.chat_kwargs["context"]["selected_text"] == "focus"
+
+
+def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_overrides():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+    ]
+    document_repo.get.return_value = SimpleNamespace(document_id="doc-1")
+
+    async def _noop(_: dict) -> ToolCallResult:
+        return ToolCallResult(content="ok")
+
+    tool = ToolDefinition(
+        name="list_notes",
+        description="list notes",
+        parameters={"type": "object", "properties": {}},
+        execute=_noop,
+    )
+    confirmation_gateway = _DummyConfirmationGateway()
+    skill_registry = _DummySkillRegistry(
+        _DummySkillProvider(
+            manifest=SkillManifest(
+                name="note",
+                slash_command="/note",
+                description="notes",
+                tools=[tool],
+                system_prompt_addition="note skill prompt",
+                confirmation_required=frozenset({"update_note"}),
+            )
+        )
+    )
+    runtime_manager = _DummyRuntimeSessionManager()
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=runtime_manager,
+        skill_registry=skill_registry,
+        confirmation_gateway=confirmation_gateway,
+    )
+
+    result = asyncio.run(
+        service.chat(
+            session_id="session-1",
+            message="/note 列出所有笔记",
+            mode="chat",
+            source_document_ids=["doc-1"],
+        )
+    )
+
+    assert result.mode == ModeType.AGENT
+    assert runtime_manager.chat_kwargs["message"] == "列出所有笔记"
+    assert runtime_manager.chat_kwargs["mode_type"] == ModeType.AGENT
+    assert runtime_manager.chat_kwargs["external_tools"] == [tool]
+    assert runtime_manager.chat_kwargs["system_prompt_addition"] == "note skill prompt"
+    assert runtime_manager.chat_kwargs["confirmation_required"] == frozenset({"update_note"})
+    assert runtime_manager.chat_kwargs["confirmation_gateway"] is confirmation_gateway
+
+
+def test_confirm_action_resolves_pending_confirmation_for_existing_session():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(session_id="session-1", notebook_id="nb-1")
+    confirmation_gateway = _DummyConfirmationGateway(resolve_result=True)
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=AsyncMock(),
+        ref_repo=AsyncMock(),
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+        confirmation_gateway=confirmation_gateway,
+    )
+
+    resolved = asyncio.run(service.confirm_action("session-1", "req-1", True))
+
+    assert resolved is True
+    assert confirmation_gateway.calls == [("req-1", True)]

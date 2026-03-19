@@ -24,6 +24,7 @@ from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.core.engine.stream_events import (
+    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
@@ -34,9 +35,11 @@ from newbee_notebook.core.engine.stream_events import (
     ToolResultEvent,
     WarningEvent,
 )
+from newbee_notebook.core.skills import SkillContext, SkillRegistry
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
+from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,8 @@ class ChatService:
         message_repo: MessageRepository,
         session_manager: SessionManager,
         vector_index: Any = None,
+        skill_registry: SkillRegistry | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
@@ -96,6 +101,8 @@ class ChatService:
         self._message_repo = message_repo
         self._session_manager = session_manager
         self._vector_index = vector_index
+        self._skill_registry = skill_registry
+        self._confirmation_gateway = confirmation_gateway
 
     @staticmethod
     def _source_items_to_dicts(items: List[Any]) -> List[dict]:
@@ -149,6 +156,19 @@ class ChatService:
 
         runtime_mode_enum = normalize_runtime_mode(mode_enum)
         await self._session_manager.start_session(session_id=session_id)
+        (
+            runtime_message,
+            runtime_mode_enum,
+            external_tools,
+            system_prompt_addition,
+            confirmation_required,
+        ) = self._resolve_skill_runtime(
+            notebook_id=session.notebook_id,
+            message=message,
+            runtime_mode=runtime_mode_enum,
+            source_document_ids=source_document_ids,
+        )
+        mode_enum = runtime_mode_enum
 
         # Notebook scope documents
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
@@ -181,11 +201,15 @@ class ChatService:
         context_chunks = await self._get_context_chunks(context) if context else []
 
         runtime_result = await self._session_manager.chat(
-            message=message,
+            message=runtime_message,
             mode_type=runtime_mode_enum,
             allowed_document_ids=allowed_doc_ids,
             context=mode_context,
             include_ec_context=effective_include_ec_context,
+            external_tools=external_tools,
+            system_prompt_addition=system_prompt_addition,
+            confirmation_required=confirmation_required,
+            confirmation_gateway=self._confirmation_gateway,
         )
         response_content = runtime_result.content
         sources = self._source_items_to_dicts(runtime_result.sources)
@@ -295,6 +319,19 @@ class ChatService:
             else bool(getattr(session, "include_ec_context", False))
         )
         await self._session_manager.start_session(session_id=session_id)
+        (
+            runtime_message,
+            runtime_mode_enum,
+            external_tools,
+            system_prompt_addition,
+            confirmation_required,
+        ) = self._resolve_skill_runtime(
+            notebook_id=session.notebook_id,
+            message=message,
+            runtime_mode=runtime_mode_enum,
+            source_document_ids=source_document_ids,
+        )
+        mode_enum = runtime_mode_enum
         allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
         allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
         allowed_doc_id_set = set(allowed_doc_ids)
@@ -333,11 +370,15 @@ class ChatService:
 
         try:
             stream = self._session_manager.chat_stream(
-                message=message,
+                message=runtime_message,
                 mode_type=runtime_mode_enum,
                 allowed_document_ids=allowed_doc_ids,
                 context=mode_context,
                 include_ec_context=effective_include_ec_context,
+                external_tools=external_tools,
+                system_prompt_addition=system_prompt_addition,
+                confirmation_required=confirmation_required,
+                confirmation_gateway=self._confirmation_gateway,
             )
             while True:
                 try:
@@ -372,6 +413,15 @@ class ChatService:
                         "success": event.success,
                         "content_preview": event.content_preview,
                         "quality_meta": asdict(event.quality_meta) if event.quality_meta else None,
+                    }
+                    continue
+                if isinstance(event, ConfirmationRequestEvent):
+                    yield {
+                        "type": "confirmation_request",
+                        "request_id": event.request_id,
+                        "tool_name": event.tool_name,
+                        "args_summary": event.args_summary,
+                        "description": event.description,
                     }
                     continue
                 if isinstance(event, ContentEvent):
@@ -470,6 +520,45 @@ class ChatService:
         except Exception as exc:
             logger.error(f"Stream error for session {session_id}: {exc}")
             yield {"type": "error", "error_code": "internal_error", "message": str(exc)}
+
+    def _resolve_skill_runtime(
+        self,
+        *,
+        notebook_id: str,
+        message: str,
+        runtime_mode: ModeType,
+        source_document_ids: Optional[List[str]],
+    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str]]:
+        if not self._skill_registry:
+            return message, runtime_mode, None, "", frozenset()
+
+        matched = self._skill_registry.match_command(message)
+        if not matched:
+            return message, runtime_mode, None, "", frozenset()
+
+        provider, activated_command, cleaned_message = matched
+        manifest = provider.build_manifest(
+            SkillContext(
+                notebook_id=notebook_id,
+                activated_command=activated_command,
+                selected_document_ids=list(source_document_ids or []),
+            )
+        )
+        return (
+            cleaned_message,
+            ModeType.AGENT,
+            list(manifest.tools),
+            manifest.system_prompt_addition,
+            manifest.confirmation_required,
+        )
+
+    async def confirm_action(self, session_id: str, request_id: str, approved: bool) -> bool:
+        session = await self._session_repo.get(session_id)
+        if not session:
+            raise ValueError(f"Session not found: {session_id}")
+        if not self._confirmation_gateway:
+            return False
+        return bool(self._confirmation_gateway.resolve(request_id, approved))
 
     async def prevalidate_mode_requirements(
         self,

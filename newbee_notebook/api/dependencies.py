@@ -31,8 +31,10 @@ from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.mcp import MCPClientManager
+from newbee_notebook.core.skills import SkillRegistry
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
+from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
@@ -186,6 +188,8 @@ _runtime_builtin_tool_provider = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
+_runtime_skill_registry = None
+_runtime_confirmation_gateway = None
 
 
 def get_llm_singleton():
@@ -260,6 +264,20 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
     if _runtime_session_lock_manager is None:
         _runtime_session_lock_manager = RuntimeSessionLockManager()
     return _runtime_session_lock_manager
+
+
+def get_runtime_skill_registry_singleton() -> SkillRegistry:
+    global _runtime_skill_registry
+    if _runtime_skill_registry is None:
+        _runtime_skill_registry = SkillRegistry()
+    return _runtime_skill_registry
+
+
+def get_runtime_confirmation_gateway_singleton() -> ConfirmationGateway:
+    global _runtime_confirmation_gateway
+    if _runtime_confirmation_gateway is None:
+        _runtime_confirmation_gateway = ConfirmationGateway()
+    return _runtime_confirmation_gateway
 
 
 def get_mcp_client_manager_singleton() -> MCPClientManager:
@@ -339,6 +357,14 @@ def get_runtime_tool_registry_dep() -> ToolRegistry:
     return get_runtime_tool_registry_singleton()
 
 
+def get_runtime_skill_registry_dep() -> SkillRegistry:
+    return get_runtime_skill_registry_singleton()
+
+
+def get_confirmation_gateway_dep() -> ConfirmationGateway:
+    return get_runtime_confirmation_gateway_singleton()
+
+
 async def get_mcp_client_manager_dep(
     settings_service: AppSettingsService = Depends(get_app_settings_service),
 ) -> MCPClientManager:
@@ -358,6 +384,7 @@ async def get_runtime_session_manager_dep(
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
+    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
     del mcp_manager
@@ -367,6 +394,7 @@ async def get_runtime_session_manager_dep(
         llm_client=llm_client,
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
+        confirmation_gateway=confirmation_gateway,
     )
 
 
@@ -387,6 +415,8 @@ async def get_chat_service(
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
     pg_index=Depends(get_pg_index_dep),
+    skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
+    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
 ) -> ChatService:
     """Get ChatService instance."""
     return ChatService(
@@ -398,6 +428,8 @@ async def get_chat_service(
         message_repo=message_repo,
         session_manager=session_manager,
         vector_index=pg_index,
+        skill_registry=skill_registry,
+        confirmation_gateway=confirmation_gateway,
     )
 
 

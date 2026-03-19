@@ -7,9 +7,12 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
+from uuid import uuid4
 
+from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.engine.mode_config import ModeConfig
 from newbee_notebook.core.engine.stream_events import (
+    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
@@ -40,6 +43,8 @@ class AgentLoop:
         mode_config: ModeConfig,
         llm_retry_attempts: int = 1,
         tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
+        confirmation_required: frozenset[str] | None = None,
+        confirmation_gateway: ConfirmationGateway | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -49,6 +54,8 @@ class AgentLoop:
             str(name): dict(values)
             for name, values in (tool_argument_defaults or {}).items()
         }
+        self._confirmation_required = confirmation_required or frozenset()
+        self._confirmation_gateway = confirmation_gateway
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -259,6 +266,10 @@ class AgentLoop:
             ),
         }
 
+    @staticmethod
+    def _confirmation_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in arguments.items() if key != "content"}
+
     def _first_turn_tool_repair_message(self) -> dict[str, str]:
         tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name or "the relevant tool"
         return {
@@ -290,7 +301,16 @@ class AgentLoop:
         message: str,
         chat_history: list[dict[str, Any]],
     ) -> AsyncGenerator[
-        StartEvent | WarningEvent | PhaseEvent | ToolCallEvent | ToolResultEvent | SourceEvent | ContentEvent | DoneEvent | ErrorEvent,
+        StartEvent
+        | WarningEvent
+        | PhaseEvent
+        | ConfirmationRequestEvent
+        | ToolCallEvent
+        | ToolResultEvent
+        | SourceEvent
+        | ContentEvent
+        | DoneEvent
+        | ErrorEvent,
         None,
     ]:
         messages = list(chat_history) + [{"role": "user", "content": message}]
@@ -398,13 +418,38 @@ class AgentLoop:
                 except json.JSONDecodeError:
                     parsed_arguments = {}
                 effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
+                tool = self._tools[tool_name]
+
+                if tool_name in self._confirmation_required and self._confirmation_gateway:
+                    request_id = str(uuid4())
+                    self._confirmation_gateway.create(request_id)
+                    yield ConfirmationRequestEvent(
+                        request_id=request_id,
+                        tool_name=tool_name,
+                        args_summary=self._confirmation_args_summary(effective_arguments),
+                        description=f"Agent 请求执行 {tool_name}",
+                    )
+                    approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
+                    if not approved:
+                        rejection_result = ToolCallResult(
+                            content="用户未确认此操作，工具调用已取消。",
+                            error="user_rejected",
+                        )
+                        messages.append(self._tool_result_message(str(tool_call.get("id") or ""), rejection_result))
+                        yield ToolResultEvent(
+                            tool_name=tool_name,
+                            tool_call_id=str(tool_call.get("id") or ""),
+                            success=False,
+                            content_preview=rejection_result.content[:200],
+                            quality_meta=None,
+                        )
+                        continue
 
                 yield ToolCallEvent(
                     tool_name=tool_name,
                     tool_call_id=str(tool_call.get("id") or ""),
                     tool_input=effective_arguments,
                 )
-                tool = self._tools[tool_name]
                 result = await tool.execute(effective_arguments)
                 tool_calls_made.append(tool_name)
                 collected_sources.extend(result.sources)

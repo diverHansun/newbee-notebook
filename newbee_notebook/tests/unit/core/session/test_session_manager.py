@@ -9,7 +9,7 @@ from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
 from newbee_notebook.core.session.session_manager import SessionManager
-from newbee_notebook.core.tools.contracts import SourceItem
+from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
@@ -26,12 +26,24 @@ class RecordingLoop:
     instances: list["RecordingLoop"] = []
     stream_events: list = []
 
-    def __init__(self, *, llm_client, tools, mode_config, llm_retry_attempts=1, tool_argument_defaults=None):
+    def __init__(
+        self,
+        *,
+        llm_client,
+        tools,
+        mode_config,
+        llm_retry_attempts=1,
+        tool_argument_defaults=None,
+        confirmation_required=None,
+        confirmation_gateway=None,
+    ):
         self.llm_client = llm_client
         self.tools = tools
         self.mode_config = mode_config
         self.llm_retry_attempts = llm_retry_attempts
         self.tool_argument_defaults = tool_argument_defaults
+        self.confirmation_required = confirmation_required
+        self.confirmation_gateway = confirmation_gateway
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
@@ -345,6 +357,61 @@ def test_agent_prompt_explains_knowledge_base_argument_strategy():
     assert "Avoid generic queries" in prompt
     assert "public web information" in prompt
     assert "instead of relying on memory" in prompt
+
+
+@pytest.mark.anyio
+async def test_session_manager_threads_skill_runtime_settings_into_loop():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_by_session.side_effect = [[], []]
+
+    class _TrackingToolRegistry:
+        def __init__(self):
+            self.calls: list[tuple[str, list[str]]] = []
+
+        async def get_tools(self, mode, external_tools=None):
+            names = [tool.name for tool in list(external_tools or [])]
+            self.calls.append((str(mode), names))
+            return list(external_tools or [])
+
+    async def _noop(_: dict) -> ToolCallResult:
+        return ToolCallResult(content="ok")
+
+    external_tool = ToolDefinition(
+        name="list_notes",
+        description="list notes",
+        parameters={"type": "object", "properties": {}},
+        execute=_noop,
+    )
+    confirmation_gateway = object()
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=_TrackingToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="list notes",
+        mode_type=ModeType.AGENT,
+        external_tools=[external_tool],
+        system_prompt_addition="skill prompt",
+        confirmation_required=frozenset({"update_note"}),
+        confirmation_gateway=confirmation_gateway,
+    )
+
+    loop = RecordingLoop.instances[-1]
+    call = loop.calls[-1]
+    assert call.chat_history[0] == {"role": "system", "content": "prompt:agent\n\nskill prompt"}
+    assert [tool.name for tool in loop.tools] == ["list_notes"]
+    assert loop.confirmation_required == frozenset({"update_note"})
+    assert loop.confirmation_gateway is confirmation_gateway
 
 
 def test_explain_and_conclude_prompts_explain_document_scoped_retrieval_arguments():
