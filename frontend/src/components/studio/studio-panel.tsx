@@ -306,7 +306,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   );
 
   const renderNotesList = () => (
-    <div className="stack-md" style={{ height: "100%", padding: 16 }}>
+    <div className="stack-md" style={{ height: "100%", padding: 0 }}>
       <div className="row-between" style={{ gap: 8, alignItems: "center" }}>
         <button className="btn btn-ghost btn-sm" type="button" onClick={backToHome}>
           {t(uiStrings.studio.backToStudio)}
@@ -314,9 +314,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         <button
           className="btn btn-sm"
           type="button"
-          onClick={() => {
-            void createNoteMutation.mutateAsync();
-          }}
+          onClick={() => { void createNoteMutation.mutateAsync(); }}
         >
           {t(uiStrings.notes.createNote)}
         </button>
@@ -499,14 +497,12 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     }
 
     return (
-      <div className="stack-md" style={{ height: "100%", padding: 16 }}>
+      <div className="stack-md" style={{ height: "100%", padding: 0 }}>
         <div className="row-between" style={{ gap: 8 }}>
           <button
             className="btn btn-ghost btn-sm"
             type="button"
-            onClick={() => {
-              void runSave().finally(() => backToList());
-            }}
+            onClick={() => { void runSave().finally(() => backToList()); }}
           >
             {t(uiStrings.studio.backToList)}
           </button>
