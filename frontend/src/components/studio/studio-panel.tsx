@@ -60,13 +60,15 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     studioView,
     activeNoteId,
     activeMarkId,
-    docFilter,
+    noteDocFilter,
+    markDocFilter,
     navigateTo,
     openNoteEditor,
     backToHome,
     backToList,
     setActiveMarkId,
-    setDocFilter,
+    setNoteDocFilter,
+    setMarkDocFilter,
   } = useStudioStore();
   const [marksExpanded, setMarksExpanded] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
@@ -85,13 +87,13 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   });
 
   const notesQuery = useQuery({
-    queryKey: ["notes", notebookId, docFilter ?? "all"],
-    queryFn: () => listNotes(notebookId, docFilter ? { document_id: docFilter } : undefined),
+    queryKey: ["notes", notebookId, noteDocFilter ?? "all"],
+    queryFn: () => listNotes(notebookId, noteDocFilter ? { document_id: noteDocFilter } : undefined),
   });
 
   const marksQuery = useQuery({
-    queryKey: ["marks", "notebook", notebookId, docFilter ?? "all"],
-    queryFn: () => listMarksByNotebook(notebookId, docFilter ? { document_id: docFilter } : undefined),
+    queryKey: ["marks", "notebook", notebookId, markDocFilter ?? "all"],
+    queryFn: () => listMarksByNotebook(notebookId, markDocFilter ? { document_id: markDocFilter } : undefined),
   });
 
   const activeNoteQuery = useQuery({
@@ -117,7 +119,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         notebook_id: notebookId,
         title: "",
         content: "",
-        document_ids: docFilter ? [docFilter] : [],
+        document_ids: noteDocFilter ? [noteDocFilter] : [],
       }),
     onSuccess: (note) => {
       queryClient.setQueryData(["note", note.note_id], note);
@@ -320,30 +322,30 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         </button>
       </div>
 
-      <div className="stack-sm" style={{ minHeight: 0 }}>
-        <label className="muted" style={{ fontSize: 11 }}>
-          {t(uiStrings.studio.documentsFilter)}
-        </label>
-        <select
-          className="select"
-          value={docFilter ?? ""}
-          onChange={(event) => setDocFilter(event.target.value || null)}
-        >
-          <option value="">{t(uiStrings.studio.allDocuments)}</option>
-          {documents.map((document) => (
-            <option key={document.document_id} value={document.document_id}>
-              {document.title}
-            </option>
-          ))}
-        </select>
-      </div>
-
+      {/* ── Notes section ── */}
       <div className="stack-sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         <div className="row-between">
           <strong>{t(uiStrings.notes.title)}</strong>
           <span className="muted" style={{ fontSize: 11 }}>
             {ti(uiStrings.notes.noteCount, { n: notes.length })}
           </span>
+        </div>
+        <div className="relative">
+          <select
+            className="w-full appearance-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 pr-8 text-xs text-[hsl(var(--foreground))] transition-colors hover:border-[hsl(var(--ring))] focus:border-[hsl(var(--ring))] focus:outline-none"
+            value={noteDocFilter ?? ""}
+            onChange={(e) => setNoteDocFilter(e.target.value || null)}
+          >
+            <option value="">{t(uiStrings.studio.allFilter)}</option>
+            {documents.map((doc) => (
+              <option key={doc.document_id} value={doc.document_id}>
+                {doc.title}
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-[hsl(var(--muted-foreground))]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
         </div>
         {notes.length === 0 ? (
           <div className="empty-state" style={{ padding: "24px 12px" }}>
@@ -378,6 +380,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         )}
       </div>
 
+      {/* ── Marks section ── */}
       <div className="card" style={{ padding: 12 }}>
         <button
           className="row-between"
@@ -391,7 +394,29 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           </span>
         </button>
         {marksExpanded ? (
-          <div className="stack-sm" style={{ marginTop: 12, maxHeight: 220, overflow: "auto" }}>
+          <div className="stack-sm" style={{ marginTop: 12, maxHeight: 280, overflow: "auto" }}>
+            <div className="chip-filter-bar">
+              <button
+                type="button"
+                className="chip-filter"
+                data-active={markDocFilter === null}
+                onClick={() => setMarkDocFilter(null)}
+              >
+                {t(uiStrings.studio.allFilter)}
+              </button>
+              {documents.map((doc) => (
+                <button
+                  key={doc.document_id}
+                  type="button"
+                  className="chip-filter"
+                  data-active={markDocFilter === doc.document_id}
+                  onClick={() => setMarkDocFilter(markDocFilter === doc.document_id ? null : doc.document_id)}
+                  title={doc.title}
+                >
+                  {truncate(doc.title, 18)}
+                </button>
+              ))}
+            </div>
             {groupedMarks.size === 0 ? (
               <div className="empty-state" style={{ padding: "16px 12px" }}>
                 <span>{t(uiStrings.marks.noMarks)}</span>

@@ -8,7 +8,8 @@ describe("studio-store", () => {
       studioView: "home",
       activeNoteId: null,
       activeMarkId: null,
-      docFilter: null,
+      noteDocFilter: null,
+      markDocFilter: null,
     });
   });
 

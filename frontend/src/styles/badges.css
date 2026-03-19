@@ -112,4 +112,54 @@
   border-color: hsl(var(--bee-yellow) / 0.24);
 }
 
+/* ================================================================
+   Chip Filter Bar
+   ================================================================ */
 
+.chip-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.chip-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 150ms ease-out;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-filter:hover {
+  border-color: hsl(var(--ring));
+  color: hsl(var(--foreground));
+}
+
+.chip-filter[data-active="true"] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border-color: hsl(var(--foreground));
+}
+
+.chip-filter[data-active="true"]:hover {
+  opacity: 0.85;
+}
+
+.dark .chip-filter[data-active="true"] {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border-color: hsl(var(--foreground));
+}

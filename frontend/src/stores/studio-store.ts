@@ -8,20 +8,25 @@ type StudioState = {
   studioView: StudioView;
   activeNoteId: string | null;
   activeMarkId: string | null;
-  docFilter: string | null;
+  /** Filter notes by associated document ID (null = show all) */
+  noteDocFilter: string | null;
+  /** Filter marks by document ID within current notebook (null = show all) */
+  markDocFilter: string | null;
   navigateTo: (view: StudioView) => void;
   openNoteEditor: (noteId: string) => void;
   backToList: () => void;
   backToHome: () => void;
   setActiveMarkId: (markId: string | null) => void;
-  setDocFilter: (documentId: string | null) => void;
+  setNoteDocFilter: (documentId: string | null) => void;
+  setMarkDocFilter: (documentId: string | null) => void;
 };
 
 export const useStudioStore = create<StudioState>((set) => ({
   studioView: "home",
   activeNoteId: null,
   activeMarkId: null,
-  docFilter: null,
+  noteDocFilter: null,
+  markDocFilter: null,
   navigateTo: (view) => set({ studioView: view }),
   openNoteEditor: (noteId) =>
     set({
@@ -44,5 +49,6 @@ export const useStudioStore = create<StudioState>((set) => ({
       studioView: "notes",
       activeMarkId: markId,
     }),
-  setDocFilter: (documentId) => set({ docFilter: documentId }),
+  setNoteDocFilter: (documentId) => set({ noteDocFilter: documentId }),
+  setMarkDocFilter: (documentId) => set({ markDocFilter: documentId }),
 }));

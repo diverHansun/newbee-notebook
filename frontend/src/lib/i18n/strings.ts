@@ -257,8 +257,9 @@ export const uiStrings = {
     mindMapDescription: { zh: "结构化梳理当前 Notebook", en: "Structure the current notebook visually" },
     backToStudio: { zh: "返回 Studio", en: "Back to Studio" },
     backToList: { zh: "返回列表", en: "Back to list" },
-    documentsFilter: { zh: "文档筛选", en: "Document filter" },
-    allDocuments: { zh: "全部文档", en: "All documents" },
+    allFilter: { zh: "全部", en: "All" },
+    thisNotebook: { zh: "本 Notebook", en: "This Notebook" },
+    filterByDocument: { zh: "按文档筛选", en: "Filter by document" },
   },
   notes: {
     title: { zh: "笔记", en: "Notes" },
