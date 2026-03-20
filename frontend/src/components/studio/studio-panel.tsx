@@ -55,6 +55,19 @@ function groupMarksByDocument(marks: Mark[]): Map<string, Mark[]> {
   return groups;
 }
 
+function getDiagramTypeLabel(t: (value: { zh: string; en: string }) => string, diagramType: string): string {
+  switch (diagramType) {
+    case "flowchart":
+      return t(uiStrings.studio.diagramTypeFlowchart);
+    case "sequence":
+      return t(uiStrings.studio.diagramTypeSequence);
+    case "mindmap":
+      return t(uiStrings.studio.diagramTypeMindmap);
+    default:
+      return diagramType || t(uiStrings.studio.diagramTypeMindmap);
+  }
+}
+
 export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const { t, ti, lang } = useLang();
   const queryClient = useQueryClient();
@@ -83,6 +96,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const [pendingDeleteDiagramId, setPendingDeleteDiagramId] = useState<string | null>(null);
   const [selectedDocumentIdToAdd, setSelectedDocumentIdToAdd] = useState("");
   const [copiedMarkId, setCopiedMarkId] = useState<string | null>(null);
+  const [copiedDiagramId, setCopiedDiagramId] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const saveTimerRef = useRef<number | null>(null);
   const hydratedNoteIdRef = useRef<string | null>(null);
@@ -108,8 +122,8 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     enabled: Boolean(activeNoteId) && studioView === "note-detail",
   });
   const diagramsQuery = useDiagrams(notebookId, null);
-  const activeDiagramQuery = useDiagram(activeDiagramId);
-  const activeDiagramContentQuery = useDiagramContent(activeDiagramId);
+  const activeDiagramQuery = useDiagram(notebookId, activeDiagramId);
+  const activeDiagramContentQuery = useDiagramContent(notebookId, activeDiagramId);
 
   const documents = useMemo(() => documentsQuery.data?.data ?? [], [documentsQuery.data?.data]);
   const notes = useMemo(() => notesQuery.data?.notes ?? [], [notesQuery.data?.notes]);
@@ -256,6 +270,12 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     return () => window.clearTimeout(timerId);
   }, [copiedMarkId]);
 
+  useEffect(() => {
+    if (!copiedDiagramId) return;
+    const timerId = window.setTimeout(() => setCopiedDiagramId(null), 1500);
+    return () => window.clearTimeout(timerId);
+  }, [copiedDiagramId]);
+
   const availableMarks = useMemo(() => {
     if (!activeNote) return notebookMarks;
     if (activeNote.document_ids.length === 0) return notebookMarks;
@@ -295,6 +315,63 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       });
     },
     [draftContent, scheduleSave]
+  );
+
+  const copyDiagramId = useCallback(async (diagramId: string) => {
+    await navigator.clipboard.writeText(diagramId);
+    setCopiedDiagramId(diagramId);
+  }, []);
+
+  const renderDiagramIdControls = useCallback(
+    (diagramId: string, options?: { stopPropagation?: boolean }) => {
+      const stopPropagation = options?.stopPropagation ?? false;
+
+      return (
+        <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="chip"
+            aria-label={ti(uiStrings.studio.copyDiagramId, { id: diagramId })}
+            title={
+              copiedDiagramId === diagramId
+                ? t(uiStrings.studio.diagramIdCopied)
+                : t(uiStrings.studio.diagramId)
+            }
+            onClick={(event) => {
+              if (stopPropagation) {
+                event.stopPropagation();
+              }
+              void copyDiagramId(diagramId);
+            }}
+          >
+            {t(uiStrings.studio.copyDiagramIdShort)}
+          </button>
+          <code
+            className="chip"
+            data-testid={`diagram-id-text-${diagramId}`}
+            style={{
+              userSelect: "text",
+              cursor: "text",
+              fontFamily: "\"Cascadia Code\", monospace",
+            }}
+            title={t(uiStrings.studio.diagramId)}
+            onMouseDown={(event) => {
+              if (stopPropagation) {
+                event.stopPropagation();
+              }
+            }}
+            onClick={(event) => {
+              if (stopPropagation) {
+                event.stopPropagation();
+              }
+            }}
+          >
+            {diagramId}
+          </code>
+        </div>
+      );
+    },
+    [copiedDiagramId, copyDiagramId, t, ti]
   );
 
   const renderHome = () => (
@@ -526,19 +603,28 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       ) : (
         <div className="stack-sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           {diagrams.map((diagram) => (
-            <button
+            <div
               key={diagram.diagram_id}
-              type="button"
               className="list-item"
-              style={{ width: "100%", textAlign: "left", padding: 12 }}
+              role="button"
+              aria-label={diagram.title}
+              tabIndex={0}
+              style={{ width: "100%", textAlign: "left", padding: 12, cursor: "pointer" }}
               onClick={() => openDiagramDetail(diagram.diagram_id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openDiagramDetail(diagram.diagram_id);
+                }
+              }}
             >
               <div className="stack-sm" style={{ width: "100%" }}>
-                <strong>{diagram.title}</strong>
+                <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+                  <strong>{diagram.title}</strong>
+                  {renderDiagramIdControls(diagram.diagram_id, { stopPropagation: true })}
+                </div>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <span className="chip">{diagram.diagram_type || t(uiStrings.studio.diagramTypeMindmap)}</span>
-                  <span className="chip">{diagram.format}</span>
-                  <span className="chip">{`${diagram.document_ids.length} docs`}</span>
+                  <span className="chip">{getDiagramTypeLabel(t, diagram.diagram_type)}</span>
                 </div>
                 <span className="muted" style={{ fontSize: 11 }}>
                   {ti(uiStrings.notes.updatedAt, {
@@ -546,7 +632,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
                   })}
                 </span>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -586,11 +672,12 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         </div>
         <div className="card" style={{ padding: 12 }}>
           <div className="stack-sm">
-            <strong>{activeDiagram.title}</strong>
+            <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+              <strong>{activeDiagram.title}</strong>
+              {renderDiagramIdControls(activeDiagram.diagram_id)}
+            </div>
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <span className="chip">{activeDiagram.diagram_type}</span>
-              <span className="chip">{activeDiagram.format}</span>
-              <span className="chip">{`${activeDiagram.document_ids.length} docs`}</span>
+              <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
             </div>
           </div>
         </div>

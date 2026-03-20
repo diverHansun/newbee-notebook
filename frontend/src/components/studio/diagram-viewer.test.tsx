@@ -1,34 +1,18 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Diagram } from "@/lib/api/types";
 
-const { mermaidRender, mermaidInitialize } = vi.hoisted(() => ({
-  mermaidRender: vi.fn(async () => ({ svg: "<svg><text>Mermaid Diagram</text></svg>" })),
-  mermaidInitialize: vi.fn(),
-}));
-
-vi.mock("mermaid", () => ({
-  default: {
-    initialize: mermaidInitialize,
-    render: mermaidRender,
-  },
-}));
-
-vi.mock("@xyflow/react", () => ({
-  Background: () => <div data-testid="diagram-background" />,
-  Controls: () => <div data-testid="diagram-controls" />,
-  ReactFlow: ({ nodes }: { nodes: Array<{ id: string; data?: { label?: string } }> }) => (
-    <div data-testid="diagram-reactflow">
-      {nodes.map((node) => (
-        <span key={node.id}>{node.data?.label ?? node.id}</span>
-      ))}
-    </div>
+vi.mock("@/components/studio/reactflow-renderer", () => ({
+  ReactFlowRenderer: ({ diagram }: { diagram: Diagram }) => (
+    <div data-testid="diagram-reactflow">{diagram.title}</div>
   ),
-  Position: {
-    Left: "left",
-    Right: "right",
-  },
+}));
+
+vi.mock("@/components/studio/mermaid-renderer", () => ({
+  MermaidRenderer: ({ syntax }: { syntax: string }) => (
+    <div data-testid="diagram-mermaid">{syntax}</div>
+  ),
 }));
 
 import { DiagramViewer } from "@/components/studio/diagram-viewer";
@@ -61,11 +45,10 @@ describe("DiagramViewer", () => {
     );
 
     expect(screen.getByTestId("diagram-reactflow")).toBeInTheDocument();
-    expect(screen.getByText("Root")).toBeInTheDocument();
-    expect(screen.getByText("Child")).toBeInTheDocument();
+    expect(screen.getByText("Course Diagram")).toBeInTheDocument();
   });
 
-  it("renders mermaid content into svg markup", async () => {
+  it("renders mermaid content with the Mermaid renderer", () => {
     render(
       <DiagramViewer
         diagram={{
@@ -77,9 +60,8 @@ describe("DiagramViewer", () => {
       />
     );
 
-    await waitFor(() => {
-      expect(mermaidRender).toHaveBeenCalled();
-    });
-    expect(screen.getByText("Mermaid Diagram")).toBeInTheDocument();
+    expect(screen.getByTestId("diagram-mermaid")).toBeInTheDocument();
+    expect(screen.getByTestId("diagram-mermaid")).toHaveTextContent(/graph TD/);
+    expect(screen.getByTestId("diagram-mermaid")).toHaveTextContent(/Notebook/);
   });
 });
