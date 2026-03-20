@@ -222,8 +222,7 @@ export function ReactFlowRenderer({ diagram, content }: ReactFlowRendererProps) 
         minHeight: 440,
         borderRadius: 20,
         border: "1px solid hsl(var(--border))",
-        background:
-          "radial-gradient(circle at top left, rgba(122, 179, 106, 0.14), transparent 34%), linear-gradient(180deg, hsl(var(--background)) 0%, rgba(245, 249, 243, 0.98) 100%)",
+        background: "hsl(var(--background))",
         overflow: "hidden",
       }}
     >

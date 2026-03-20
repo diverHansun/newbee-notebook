@@ -129,20 +129,7 @@ export function MermaidRenderer({ syntax }: MermaidRendererProps) {
 
   if (svgMarkup.length > 0) {
     return (
-      <div
-        data-testid="diagram-mermaid"
-        style={{
-          minHeight: 240,
-          borderRadius: 18,
-          border: "1px solid hsl(var(--border))",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,246,0.98) 100%)",
-          padding: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
+      <div data-testid="diagram-mermaid" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
           <button type="button" className="btn btn-ghost btn-sm" aria-label="Zoom out" onClick={zoomOut}>
             -
@@ -156,11 +143,10 @@ export function MermaidRenderer({ syntax }: MermaidRendererProps) {
         </div>
         <div
           style={{
-            borderRadius: 12,
-            border: "1px solid hsl(var(--border))",
+            borderRadius: 8,
             background:
-              "radial-gradient(circle at top left, rgba(122, 179, 106, 0.12), transparent 32%), linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(247,250,246,0.95) 100%)",
-            minHeight: 280,
+              "linear-gradient(180deg, rgba(247,250,246,0.6) 0%, rgba(255,255,255,0.4) 100%)",
+            minHeight: 240,
             overflow: "hidden",
             position: "relative",
             cursor: dragStartRef.current ? "grabbing" : "grab",

@@ -73,7 +73,7 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
             </section>
           </Panel>
 
-          <Separator className="resize-handle" />
+          <Separator id="sep-sources-main" className="resize-handle" />
 
           {/* Main Panel — 50% default, min 30% */}
           <Panel id="main" defaultSize="50%" minSize="320px" style={{ overflow: "visible" }}>
@@ -100,7 +100,7 @@ export function AppShell({ title, left, main, right, mainOverlay }: AppShellProp
             </section>
           </Panel>
 
-          <Separator className="resize-handle" />
+          <Separator id="sep-main-studio" className="resize-handle" />
 
           {/* Studio Panel — 25% default, min 15% */}
           <Panel id="studio" defaultSize="25%" minSize="160px" maxSize="40%">

@@ -325,53 +325,30 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const renderDiagramIdControls = useCallback(
     (diagramId: string, options?: { stopPropagation?: boolean }) => {
       const stopPropagation = options?.stopPropagation ?? false;
+      const isCopied = copiedDiagramId === diagramId;
 
       return (
-        <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="chip"
-            aria-label={ti(uiStrings.studio.copyDiagramId, { id: diagramId })}
-            title={
-              copiedDiagramId === diagramId
-                ? t(uiStrings.studio.diagramIdCopied)
-                : t(uiStrings.studio.diagramId)
-            }
-            onClick={(event) => {
-              if (stopPropagation) {
-                event.stopPropagation();
-              }
-              void copyDiagramId(diagramId);
-            }}
-          >
-            {t(uiStrings.studio.copyDiagramIdShort)}
-          </button>
-          <code
-            className="chip"
-            data-testid={`diagram-id-text-${diagramId}`}
-            style={{
-              userSelect: "text",
-              cursor: "text",
-              fontFamily: "\"Cascadia Code\", monospace",
-            }}
-            title={t(uiStrings.studio.diagramId)}
-            onMouseDown={(event) => {
-              if (stopPropagation) {
-                event.stopPropagation();
-              }
-            }}
-            onClick={(event) => {
-              if (stopPropagation) {
-                event.stopPropagation();
-              }
-            }}
-          >
-            {diagramId}
-          </code>
-        </div>
+        <code
+          className="chip"
+          data-testid={`diagram-id-text-${diagramId}`}
+          style={{
+            cursor: "pointer",
+            fontFamily: "\"Cascadia Code\", monospace",
+          }}
+          title={isCopied ? t(uiStrings.studio.diagramIdCopied) : t(uiStrings.studio.diagramId)}
+          onClick={(event) => {
+            if (stopPropagation) event.stopPropagation();
+            void copyDiagramId(diagramId);
+          }}
+          onMouseDown={(event) => {
+            if (stopPropagation) event.stopPropagation();
+          }}
+        >
+          {isCopied ? t(uiStrings.studio.diagramIdCopied) : diagramId}
+        </code>
       );
     },
-    [copiedDiagramId, copyDiagramId, t, ti]
+    [copiedDiagramId, copyDiagramId, t]
   );
 
   const renderHome = () => (
