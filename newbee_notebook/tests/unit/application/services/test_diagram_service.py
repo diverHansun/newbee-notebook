@@ -78,12 +78,12 @@ async def test_create_diagram_accepts_flowchart_type(service, diagram_repo, stor
         notebook_id="nb-1",
         title="Login flow",
         diagram_type="flowchart",
-        content='{"nodes":[{"id":"start","label":"Start"},{"id":"end","label":"End"}],"edges":[{"source":"start","target":"end"}]}',
+        content="flowchart TD\nStart[Start] --> End[End]",
     )
 
     assert diagram.diagram_type == "flowchart"
-    assert diagram.format == "reactflow_json"
-    assert diagram.content_path.endswith(".json")
+    assert diagram.format == "mermaid"
+    assert diagram.content_path.endswith(".mmd")
     storage.save_file.assert_awaited_once()
 
 
@@ -141,6 +141,43 @@ async def test_get_diagram_raises_when_missing(service, diagram_repo):
 
     with pytest.raises(DiagramNotFoundError):
         await service.get_diagram("missing")
+
+
+@pytest.mark.anyio
+async def test_get_diagram_raises_when_notebook_scope_mismatches(service, diagram_repo):
+    diagram_repo.get.return_value = Diagram(
+        diagram_id="diag-1",
+        notebook_id="nb-2",
+        title="Other Notebook",
+        diagram_type="mindmap",
+        format="reactflow_json",
+        content_path="diagrams/nb-2/diag-1.json",
+    )
+
+    with pytest.raises(DiagramNotFoundError):
+        await service.get_diagram("diag-1", notebook_id="nb-1")
+
+
+@pytest.mark.anyio
+async def test_update_diagram_content_raises_when_notebook_scope_mismatches(
+    service,
+    diagram_repo,
+):
+    diagram_repo.get.return_value = Diagram(
+        diagram_id="diag-1",
+        notebook_id="nb-2",
+        title="Other Notebook",
+        diagram_type="mindmap",
+        format="reactflow_json",
+        content_path="diagrams/nb-2/diag-1.json",
+    )
+
+    with pytest.raises(DiagramNotFoundError):
+        await service.update_diagram_content(
+            "diag-1",
+            '{"nodes":[{"id":"root","label":"Root"}],"edges":[]}',
+            notebook_id="nb-1",
+        )
 
 
 @pytest.mark.anyio

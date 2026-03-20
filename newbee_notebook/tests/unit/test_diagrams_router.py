@@ -56,10 +56,11 @@ def test_get_diagram_returns_404_when_missing():
     service.get_diagram = AsyncMock(side_effect=DiagramNotFoundError("missing"))
 
     client = _build_client(service)
-    response = client.get("/api/v1/diagrams/missing")
+    response = client.get("/api/v1/diagrams/missing", params={"notebook_id": "nb-1"})
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Diagram not found"
+    service.get_diagram.assert_awaited_once_with("missing", notebook_id="nb-1")
 
 
 def test_get_diagram_content_returns_plain_text():
@@ -67,10 +68,11 @@ def test_get_diagram_content_returns_plain_text():
     service.get_diagram_content = AsyncMock(return_value='{"nodes":[],"edges":[]}')
 
     client = _build_client(service)
-    response = client.get("/api/v1/diagrams/diag-1/content")
+    response = client.get("/api/v1/diagrams/diag-1/content", params={"notebook_id": "nb-1"})
 
     assert response.status_code == 200
     assert response.text == '{"nodes":[],"edges":[]}'
+    service.get_diagram_content.assert_awaited_once_with("diag-1", notebook_id="nb-1")
 
 
 def test_patch_positions_returns_updated_diagram():
@@ -80,11 +82,17 @@ def test_patch_positions_returns_updated_diagram():
     client = _build_client(service)
     response = client.patch(
         "/api/v1/diagrams/diag-2/positions",
+        params={"notebook_id": "nb-1"},
         json={"positions": {"root": {"x": 100, "y": 50}}},
     )
 
     assert response.status_code == 200
     assert response.json()["diagram_id"] == "diag-2"
+    service.update_node_positions.assert_awaited_once_with(
+        "diag-2",
+        {"root": {"x": 100.0, "y": 50.0}},
+        notebook_id="nb-1",
+    )
 
 
 def test_delete_diagram_returns_204():
@@ -92,7 +100,7 @@ def test_delete_diagram_returns_204():
     service.delete_diagram = AsyncMock(return_value=True)
 
     client = _build_client(service)
-    response = client.delete("/api/v1/diagrams/diag-1")
+    response = client.delete("/api/v1/diagrams/diag-1", params={"notebook_id": "nb-1"})
 
     assert response.status_code == 204
-    service.delete_diagram.assert_awaited_once_with("diag-1")
+    service.delete_diagram.assert_awaited_once_with("diag-1", notebook_id="nb-1")

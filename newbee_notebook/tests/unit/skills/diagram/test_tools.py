@@ -61,13 +61,34 @@ async def test_list_diagrams_tool_formats_items(diagram_service):
 async def test_read_diagram_tool_returns_content_and_metadata(diagram_service):
     diagram_service.get_diagram.return_value = _make_diagram("diag-2")
     diagram_service.get_diagram_content.return_value = '{"nodes":[],"edges":[]}'
-    tool = _build_read_diagram_tool(service=diagram_service)
+    tool = _build_read_diagram_tool(service=diagram_service, notebook_id="nb-1")
 
     result = await tool.execute({"diagram_id": "diag-2"})
 
     assert result.error is None
     assert result.content == '{"nodes":[],"edges":[]}'
     assert result.metadata["diagram_type"] == "mindmap"
+    diagram_service.get_diagram.assert_awaited_once_with("diag-2", notebook_id="nb-1")
+    diagram_service.get_diagram_content.assert_awaited_once_with("diag-2", notebook_id="nb-1")
+
+
+@pytest.mark.anyio
+async def test_create_diagram_tool_returns_metadata_without_echoing_id(diagram_service):
+    diagram_service.create_diagram.return_value = _make_diagram("diag-2")
+    tool = _build_create_diagram_tool(service=diagram_service, notebook_id="nb-1")
+
+    result = await tool.execute(
+        {
+            "title": "Chapter Map",
+            "diagram_type": "mindmap",
+            "content": '{"nodes":[{"id":"root","label":"Root"}],"edges":[]}',
+            "document_ids": ["doc-1"],
+        }
+    )
+
+    assert result.error is None
+    assert result.metadata["diagram_id"] == "diag-2"
+    assert "ID:" not in result.content
 
 
 @pytest.mark.anyio
@@ -94,8 +115,8 @@ async def test_update_and_delete_diagram_tools(diagram_service):
     diagram_service.get_diagram.return_value = _make_diagram("diag-3")
     diagram_service.delete_diagram.return_value = True
 
-    update_tool = _build_update_diagram_tool(service=diagram_service)
-    delete_tool = _build_delete_diagram_tool(service=diagram_service)
+    update_tool = _build_update_diagram_tool(service=diagram_service, notebook_id="nb-1")
+    delete_tool = _build_delete_diagram_tool(service=diagram_service, notebook_id="nb-1")
 
     update_result = await update_tool.execute({"diagram_id": "diag-3", "content": '{"nodes":[],"edges":[]}'})
     delete_result = await delete_tool.execute({"diagram_id": "diag-3"})
@@ -104,12 +125,20 @@ async def test_update_and_delete_diagram_tools(diagram_service):
     assert "Diagram updated" in update_result.content
     assert delete_result.error is None
     assert "Diagram deleted" in delete_result.content
+    diagram_service.update_diagram_content.assert_awaited_once_with(
+        diagram_id="diag-3",
+        content='{"nodes":[],"edges":[]}',
+        title=None,
+        notebook_id="nb-1",
+    )
+    diagram_service.get_diagram.assert_awaited_once_with("diag-3", notebook_id="nb-1")
+    diagram_service.delete_diagram.assert_awaited_once_with("diag-3", notebook_id="nb-1")
 
 
 @pytest.mark.anyio
 async def test_update_positions_tool_returns_not_found(diagram_service):
     diagram_service.update_node_positions.side_effect = DiagramNotFoundError("missing")
-    tool = _build_update_diagram_positions_tool(service=diagram_service)
+    tool = _build_update_diagram_positions_tool(service=diagram_service, notebook_id="nb-1")
 
     result = await tool.execute({"diagram_id": "missing", "positions": {"root": {"x": 1, "y": 2}}})
 
@@ -154,7 +183,8 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
         {"confirm_diagram_type", "update_diagram", "delete_diagram"}
     )
     assert "create_diagram" in manifest.system_prompt_addition
-    assert "strict JSON" in manifest.system_prompt_addition
+    assert "Mermaid" in manifest.system_prompt_addition
+    assert "If notebook documents are unavailable" in manifest.system_prompt_addition
     assert "Do not output raw <tool_call>" in manifest.system_prompt_addition
     assert [tool.name for tool in manifest.tools] == [
         "list_diagrams",

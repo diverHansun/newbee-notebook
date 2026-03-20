@@ -9,6 +9,7 @@ from newbee_notebook.application.services.diagram_service import (
 from newbee_notebook.skills.diagram.registry import (
     get_descriptor,
     infer_diagram_type_from_prompt,
+    validate_mermaid_syntax,
     validate_reactflow_schema,
 )
 
@@ -36,6 +37,15 @@ def test_node_with_position_raises():
         validate_reactflow_schema(content)
 
 
+def test_valid_mermaid_syntax_passes():
+    validate_mermaid_syntax("flowchart TD\nA[Start] --> B[Finish]")
+
+
+def test_invalid_mermaid_syntax_raises():
+    with pytest.raises(DiagramValidationError, match="Mermaid"):
+        validate_mermaid_syntax("plain text without a diagram declaration")
+
+
 def test_get_descriptor_known_type():
     descriptor = get_descriptor("mindmap")
     assert descriptor.output_format == "reactflow_json"
@@ -45,8 +55,10 @@ def test_get_descriptor_flowchart_and_sequence():
     flowchart = get_descriptor("flowchart")
     sequence = get_descriptor("sequence")
 
-    assert flowchart.output_format == "reactflow_json"
-    assert sequence.output_format == "reactflow_json"
+    assert flowchart.output_format == "mermaid"
+    assert flowchart.file_extension == ".mmd"
+    assert sequence.output_format == "mermaid"
+    assert sequence.file_extension == ".mmd"
 
 
 def test_get_descriptor_unknown_type():
