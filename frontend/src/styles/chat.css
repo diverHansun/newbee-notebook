@@ -1,5 +1,5 @@
 ﻿.chat-input-shell {
-  padding: 12px 16px;
+  padding: 8px 12px;
   flex-shrink: 0;
 }
 
@@ -9,19 +9,19 @@
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
   background: hsl(var(--card));
-  padding: 8px 12px;
+  padding: 6px 10px;
   box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .chat-input-textarea {
   width: 100%;
-  min-height: 56px;
+  min-height: 40px;
   max-height: 120px;
   resize: none;
   border: none;
   box-shadow: none;
   background: transparent;
-  padding: 4px 2px 8px;
+  padding: 4px 2px 4px;
 }
 
 .chat-input-textarea:focus {

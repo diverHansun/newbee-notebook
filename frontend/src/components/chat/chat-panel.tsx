@@ -129,17 +129,16 @@ export function ChatPanel({
       <div
         className="row-between"
         style={{
-          padding: "10px 16px",
+          padding: "8px 16px",
           borderBottom: "1px solid hsl(var(--border))",
           flexShrink: 0,
-          flexWrap: "wrap",
           gap: 8,
         }}
       >
-        <div className="row">
+        <div className="row" style={{ flex: 1, minWidth: 0 }}>
           <select
             className="select"
-            style={{ minWidth: 160, maxWidth: 220 }}
+            style={{ minWidth: 120, maxWidth: 180 }}
             value={currentSessionId || ""}
             onChange={(event) => onSwitchSession(event.target.value)}
           >
@@ -162,18 +161,16 @@ export function ChatPanel({
             </button>
           )}
         </div>
-        <div className="row">
-          <button
-            className="btn btn-sm"
-            type="button"
-            onClick={() => onCreateSession()}
-          >
-            + {t(uiStrings.chat.newSession)}
-          </button>
-        </div>
-        <div className="muted" style={{ fontSize: 11, width: "100%" }}>
+        <button
+          className="btn btn-sm"
+          type="button"
+          onClick={() => onCreateSession()}
+        >
+          + {t(uiStrings.chat.newSession)}
+        </button>
+        <span className="muted" style={{ fontSize: 11, flexShrink: 0 }}>
           {ti(uiStrings.chat.sessionCount, { n: sessions.length })}
-        </div>
+        </span>
       </div>
 
       {/* RAG hint banner */}

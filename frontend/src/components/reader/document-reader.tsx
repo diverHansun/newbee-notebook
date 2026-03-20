@@ -428,7 +428,7 @@ export function DocumentReader({
       <div
         className="row-between"
         style={{
-          padding: "12px 16px",
+          padding: "8px 16px",
           borderBottom: "1px solid hsl(var(--border))",
           flexShrink: 0,
         }}
