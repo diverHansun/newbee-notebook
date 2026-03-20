@@ -35,6 +35,12 @@ def _build_diagram_content_key(notebook_id: str, diagram_id: str, extension: str
     return f"diagrams/{notebook_id}/{diagram_id}{normalized_extension}"
 
 
+def _content_type_for_format(output_format: str) -> str:
+    if output_format == "reactflow_json":
+        return "application/json"
+    return "text/plain; charset=utf-8"
+
+
 class DiagramService:
     """CRUD-style service for notebook diagrams."""
 
@@ -82,13 +88,13 @@ class DiagramService:
         await self._storage.save_file(
             object_key=diagram.content_path,
             data=BytesIO(content.encode("utf-8")),
-            content_type="text/plain; charset=utf-8",
+            content_type=_content_type_for_format(descriptor.output_format),
         )
         return await self._diagram_repo.create(diagram)
 
-    async def get_diagram(self, diagram_id: str) -> Diagram:
+    async def get_diagram(self, diagram_id: str, notebook_id: Optional[str] = None) -> Diagram:
         diagram = await self._diagram_repo.get(diagram_id)
-        if diagram is None:
+        if diagram is None or (notebook_id is not None and diagram.notebook_id != notebook_id):
             raise DiagramNotFoundError(f"Diagram not found: {diagram_id}")
         return diagram
 
@@ -102,8 +108,8 @@ class DiagramService:
             document_id=document_id,
         )
 
-    async def get_diagram_content(self, diagram_id: str) -> str:
-        diagram = await self.get_diagram(diagram_id)
+    async def get_diagram_content(self, diagram_id: str, notebook_id: Optional[str] = None) -> str:
+        diagram = await self.get_diagram(diagram_id, notebook_id=notebook_id)
         try:
             return await self._storage.get_text(diagram.content_path)
         except FileNotFoundError as exc:
@@ -116,15 +122,16 @@ class DiagramService:
         diagram_id: str,
         content: str,
         title: Optional[str] = None,
+        notebook_id: Optional[str] = None,
     ) -> Diagram:
-        diagram = await self.get_diagram(diagram_id)
+        diagram = await self.get_diagram(diagram_id, notebook_id=notebook_id)
         descriptor = self._get_descriptor(diagram.diagram_type)
         descriptor.validator(content)
 
         await self._storage.save_file(
             object_key=diagram.content_path,
             data=BytesIO(content.encode("utf-8")),
-            content_type="text/plain; charset=utf-8",
+            content_type=_content_type_for_format(descriptor.output_format),
         )
         if title is not None:
             diagram.title = title.strip() or diagram.title
@@ -135,8 +142,9 @@ class DiagramService:
         self,
         diagram_id: str,
         positions: dict[str, dict[str, float]],
+        notebook_id: Optional[str] = None,
     ) -> Diagram:
-        diagram = await self.get_diagram(diagram_id)
+        diagram = await self.get_diagram(diagram_id, notebook_id=notebook_id)
         if diagram.format != "reactflow_json":
             raise DiagramFormatMismatchError(
                 f"Diagram {diagram_id} uses format {diagram.format}; node positions are unsupported."
@@ -145,8 +153,8 @@ class DiagramService:
         diagram.touch()
         return await self._diagram_repo.update(diagram)
 
-    async def delete_diagram(self, diagram_id: str) -> bool:
-        diagram = await self.get_diagram(diagram_id)
+    async def delete_diagram(self, diagram_id: str, notebook_id: Optional[str] = None) -> bool:
+        diagram = await self.get_diagram(diagram_id, notebook_id=notebook_id)
         deleted = await self._diagram_repo.delete(diagram_id)
         if deleted:
             try:

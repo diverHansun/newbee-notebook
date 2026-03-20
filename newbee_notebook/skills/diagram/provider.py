@@ -67,12 +67,16 @@ class DiagramSkillProvider:
                 "When type is explicit, call create_diagram directly with diagram_type.\n"
                 "When type is ambiguous, call confirm_diagram_type first and wait for user approval.\n"
                 "After confirmation is approved, call create_diagram immediately.\n"
-                "For create_diagram, content must be strict JSON with exactly two top-level arrays: "
+                "For mindmap, create_diagram content must be strict JSON with exactly two top-level arrays: "
                 "nodes and edges.\n"
-                "Each node must include id and label. Each edge must include source and target.\n"
-                "Use notebook evidence to build real node labels and structure. Do not use placeholders.\n"
+                "For flowchart and sequence, create_diagram content must be raw Mermaid syntax only.\n"
+                "When notebook documents are available, use notebook evidence to build real node labels and structure.\n"
+                "If notebook documents are unavailable, still generate a useful diagram from user intent only.\n"
+                "Do not use placeholders.\n"
                 "If no better title is available, provide a concise descriptive title.\n"
                 "Always use one of the supported types only.\n"
+                "Do not tell the user to open the notebook or echo raw diagram IDs unless the user explicitly asks. "
+                "The Studio UI already shows diagram IDs.\n"
                 "---"
             ),
             tools=[
@@ -80,15 +84,27 @@ class DiagramSkillProvider:
                     service=self._diagram_service,
                     notebook_id=context.notebook_id,
                 ),
-                _build_read_diagram_tool(service=self._diagram_service),
+                _build_read_diagram_tool(
+                    service=self._diagram_service,
+                    notebook_id=context.notebook_id,
+                ),
                 _build_confirm_diagram_type_tool(),
                 _build_create_diagram_tool(
                     service=self._diagram_service,
                     notebook_id=context.notebook_id,
                 ),
-                _build_update_diagram_tool(service=self._diagram_service),
-                _build_update_diagram_positions_tool(service=self._diagram_service),
-                _build_delete_diagram_tool(service=self._diagram_service),
+                _build_update_diagram_tool(
+                    service=self._diagram_service,
+                    notebook_id=context.notebook_id,
+                ),
+                _build_update_diagram_positions_tool(
+                    service=self._diagram_service,
+                    notebook_id=context.notebook_id,
+                ),
+                _build_delete_diagram_tool(
+                    service=self._diagram_service,
+                    notebook_id=context.notebook_id,
+                ),
             ],
             confirmation_required=frozenset(
                 {

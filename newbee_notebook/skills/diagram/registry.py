@@ -49,6 +49,20 @@ def validate_reactflow_schema(content: str) -> None:
             )
 
 
+def validate_mermaid_syntax(content: str) -> None:
+    """Validate a minimal Mermaid syntax header for supported diagram types."""
+
+    normalized = str(content or "").strip()
+    if not normalized:
+        raise DiagramValidationError("Mermaid syntax cannot be empty.")
+
+    first_line = next((line.strip() for line in normalized.splitlines() if line.strip()), "")
+    if not first_line.startswith(("flowchart ", "graph ", "sequenceDiagram")):
+        raise DiagramValidationError(
+            "Mermaid syntax must start with 'flowchart', 'graph', or 'sequenceDiagram'."
+        )
+
+
 @dataclass(frozen=True)
 class DiagramTypeDescriptor:
     name: str
@@ -79,37 +93,33 @@ DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
     ),
     "flowchart": DiagramTypeDescriptor(
         name="flowchart",
-        output_format="reactflow_json",
-        file_extension=".json",
+        output_format="mermaid",
+        file_extension=".mmd",
         description="Flow chart",
         agent_system_prompt=(
-            "Generate a flow chart in strict JSON format with only two top-level arrays: "
-            "'nodes' and 'edges'.\n"
-            "- Each node must include: id, label\n"
-            "- Each edge must include: source, target\n"
-            "- Keep graph flow direction clear from start to end.\n"
-            "- Do not output markdown fences or extra commentary.\n"
-            "- Do not include node position fields. Positioning is handled by frontend layout."
+            "Generate a Mermaid flowchart.\n"
+            "- Output raw Mermaid syntax only. Do not wrap it in markdown fences.\n"
+            "- Start with 'flowchart TD' unless another direction is clearly better.\n"
+            "- Keep the flow readable from start to end.\n"
+            "- Use concise node labels grounded in notebook evidence."
         ),
         intent_hints=("flow chart", "flowchart", "流程图", "流程"),
-        validator=validate_reactflow_schema,
+        validator=validate_mermaid_syntax,
     ),
     "sequence": DiagramTypeDescriptor(
         name="sequence",
-        output_format="reactflow_json",
-        file_extension=".json",
+        output_format="mermaid",
+        file_extension=".mmd",
         description="Sequence diagram",
         agent_system_prompt=(
-            "Generate a sequence-style graph in strict JSON format with only two top-level arrays: "
-            "'nodes' and 'edges'.\n"
-            "- Each node must include: id, label\n"
-            "- Each edge must include: source, target\n"
-            "- Use node labels to represent actors/components and ordered interaction steps.\n"
-            "- Do not output markdown fences or extra commentary.\n"
-            "- Do not include node position fields. Positioning is handled by frontend layout."
+            "Generate a Mermaid sequence diagram.\n"
+            "- Output raw Mermaid syntax only. Do not wrap it in markdown fences.\n"
+            "- Start with 'sequenceDiagram'.\n"
+            "- Use participants and messages grounded in notebook evidence.\n"
+            "- Keep the interaction order concise and readable."
         ),
         intent_hints=("sequence diagram", "sequence", "时序图", "时序"),
-        validator=validate_reactflow_schema,
+        validator=validate_mermaid_syntax,
     ),
 }
 

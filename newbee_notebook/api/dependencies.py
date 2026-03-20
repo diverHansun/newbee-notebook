@@ -157,6 +157,7 @@ async def get_notebook_service(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    diagram_repo: DiagramRepositoryImpl = Depends(get_diagram_repo),
 ) -> NotebookService:
     """
     Get NotebookService instance.
@@ -168,6 +169,8 @@ async def get_notebook_service(
         document_repo=document_repo,
         session_repo=session_repo,
         ref_repo=ref_repo,
+        diagram_repo=diagram_repo,
+        storage=get_storage(),
     )
 
 
@@ -409,6 +412,7 @@ async def get_document_service(
     notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     reference_repo: ReferenceRepositoryImpl = Depends(get_reference_repo),
+    diagram_repo: DiagramRepositoryImpl = Depends(get_diagram_repo),
 ) -> DocumentService:
     """Get DocumentService instance."""
     return DocumentService(
@@ -417,6 +421,7 @@ async def get_document_service(
         notebook_repo=notebook_repo,
         ref_repo=ref_repo,
         reference_repo=reference_repo,
+        diagram_repo=diagram_repo,
     )
 
 

@@ -10,10 +10,13 @@ import logging
 from newbee_notebook.domain.entities.notebook import Notebook, MAX_SESSIONS_PER_NOTEBOOK
 from newbee_notebook.domain.entities.reference import NotebookDocumentRef
 from newbee_notebook.domain.entities.document import Document
+from newbee_notebook.domain.repositories.diagram_repository import DiagramRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.document_repository import DocumentRepository
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.reference_repository import NotebookDocumentRefRepository
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
+from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 
 logger = logging.getLogger(__name__)
@@ -50,11 +53,15 @@ class NotebookService:
         document_repo: DocumentRepository,
         session_repo: SessionRepository,
         ref_repo: NotebookDocumentRefRepository,
+        diagram_repo: Optional[DiagramRepository] = None,
+        storage: Optional[StorageBackend] = None,
     ):
         self.notebook_repo = notebook_repo
         self.document_repo = document_repo
         self.session_repo = session_repo
         self.ref_repo = ref_repo
+        self.diagram_repo = diagram_repo
+        self.storage = storage or get_runtime_storage_backend()
     
     async def create(
         self, 
@@ -177,7 +184,25 @@ class NotebookService:
             NotebookNotFoundError: If not found.
         """
         notebook = await self.get_or_raise(notebook_id)
-        
+
+        if self.diagram_repo is not None:
+            diagrams = await self.diagram_repo.list_by_notebook(notebook_id)
+            removed_files = 0
+            for diagram in diagrams:
+                try:
+                    await self.storage.delete_file(diagram.content_path)
+                    removed_files += 1
+                except FileNotFoundError:
+                    logger.warning(
+                        "Diagram content already missing during notebook cleanup: %s",
+                        diagram.content_path,
+                    )
+            logger.info(
+                "Removed %d diagram content file(s) from notebook %s",
+                removed_files,
+                notebook_id,
+            )
+
         # Delete references
         ref_count = await self.ref_repo.delete_by_notebook(notebook_id)
         logger.info(f"Deleted {ref_count} references from notebook {notebook_id}")

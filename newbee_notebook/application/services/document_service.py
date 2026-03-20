@@ -18,6 +18,7 @@ from fastapi import UploadFile
 
 from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.entities.base import generate_uuid
+from newbee_notebook.domain.repositories.diagram_repository import DiagramRepository
 from newbee_notebook.domain.repositories.document_repository import DocumentRepository
 from newbee_notebook.domain.repositories.library_repository import LibraryRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
@@ -60,12 +61,14 @@ class DocumentService:
         notebook_repo: NotebookRepository,
         ref_repo: NotebookDocumentRefRepository,
         reference_repo: ReferenceRepository,
+        diagram_repo: Optional[DiagramRepository] = None,
     ):
         self._document_repo = document_repo
         self._library_repo = library_repo
         self._notebook_repo = notebook_repo
         self._ref_repo = ref_repo
         self._reference_repo = reference_repo
+        self._diagram_repo = diagram_repo
 
     # ------------------------------------------------------------------ #
     # Registration and upload
@@ -211,6 +214,8 @@ class DocumentService:
             logger.warning("mark_source_deleted failed for %s: %s", document_id, exc)
 
         if refs:
+            if self._diagram_repo is not None:
+                await self._detach_document_from_diagrams(document_id, refs)
             await self._ref_repo.delete_by_document(document_id)
             for ref in refs:
                 await self._notebook_repo.increment_document_count(ref.notebook_id, -1)
@@ -376,6 +381,22 @@ class DocumentService:
             return signed_urls.get(object_key, match.group(0))
 
         return ASSET_API_URL_PATTERN.sub(_replace, content)
+
+    async def _detach_document_from_diagrams(self, document_id: str, refs) -> None:
+        notebook_ids = {ref.notebook_id for ref in refs}
+        for notebook_id in notebook_ids:
+            diagrams = await self._diagram_repo.list_by_notebook(
+                notebook_id=notebook_id,
+                document_id=document_id,
+            )
+            for diagram in diagrams:
+                diagram.document_ids = [
+                    current_document_id
+                    for current_document_id in diagram.document_ids
+                    if current_document_id != document_id
+                ]
+                diagram.touch()
+                await self._diagram_repo.update(diagram)
 
 
 def _markdown_to_text(markdown: str) -> str:

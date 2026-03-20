@@ -62,12 +62,12 @@ def _build_list_diagrams_tool(service: DiagramService, notebook_id: str) -> Tool
     )
 
 
-def _build_read_diagram_tool(service: DiagramService) -> ToolDefinition:
+def _build_read_diagram_tool(service: DiagramService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
         diagram_id = str(args.get("diagram_id") or "")
         try:
-            diagram = await service.get_diagram(diagram_id)
-            content = await service.get_diagram_content(diagram_id)
+            diagram = await service.get_diagram(diagram_id, notebook_id=notebook_id)
+            content = await service.get_diagram_content(diagram_id, notebook_id=notebook_id)
         except DiagramNotFoundError as exc:
             return _safe_error_result(str(exc), "diagram_not_found")
 
@@ -159,7 +159,7 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
             return _safe_error_result(f"Failed to create diagram: {exc}", "create_diagram_failed")
 
         return ToolCallResult(
-            content=f"Diagram created: [{diagram.title}], ID: {diagram.diagram_id}",
+            content=f"Diagram created: [{diagram.title}]",
             metadata={
                 "diagram_id": diagram.diagram_id,
                 "diagram_type": diagram.diagram_type,
@@ -170,8 +170,7 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
         name="create_diagram",
         description=(
             "Create a diagram with explicit diagram type and full content payload. "
-            "For mindmap, flowchart, and sequence diagrams, content must be strict JSON with "
-            "top-level nodes and edges arrays only."
+            "Use strict JSON for mindmap and raw Mermaid syntax for flowchart or sequence."
         ),
         parameters={
             "type": "object",
@@ -181,9 +180,8 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
                 "content": {
                     "type": "string",
                     "description": (
-                        "Full diagram content. Use strict JSON: "
-                        "{\"nodes\":[{\"id\":\"root\",\"label\":\"Topic\"}],"
-                        "\"edges\":[{\"source\":\"root\",\"target\":\"child\"}]}"
+                        "Full diagram content. For mindmap use strict JSON with top-level nodes and edges. "
+                        "For flowchart or sequence use raw Mermaid syntax."
                     ),
                 },
                 "document_ids": {
@@ -198,13 +196,14 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
     )
 
 
-def _build_update_diagram_tool(service: DiagramService) -> ToolDefinition:
+def _build_update_diagram_tool(service: DiagramService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
         try:
             diagram = await service.update_diagram_content(
                 diagram_id=str(args.get("diagram_id") or ""),
                 content=str(args.get("content") or ""),
                 title=(str(args["title"]) if "title" in args and args.get("title") is not None else None),
+                notebook_id=notebook_id,
             )
         except DiagramNotFoundError as exc:
             return _safe_error_result(str(exc), "diagram_not_found")
@@ -231,12 +230,12 @@ def _build_update_diagram_tool(service: DiagramService) -> ToolDefinition:
     )
 
 
-def _build_delete_diagram_tool(service: DiagramService) -> ToolDefinition:
+def _build_delete_diagram_tool(service: DiagramService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
         diagram_id = str(args.get("diagram_id") or "")
         try:
-            diagram = await service.get_diagram(diagram_id)
-            await service.delete_diagram(diagram_id)
+            diagram = await service.get_diagram(diagram_id, notebook_id=notebook_id)
+            await service.delete_diagram(diagram_id, notebook_id=notebook_id)
         except DiagramNotFoundError as exc:
             return _safe_error_result(str(exc), "diagram_not_found")
         except Exception as exc:
@@ -258,7 +257,7 @@ def _build_delete_diagram_tool(service: DiagramService) -> ToolDefinition:
     )
 
 
-def _build_update_diagram_positions_tool(service: DiagramService) -> ToolDefinition:
+def _build_update_diagram_positions_tool(service: DiagramService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
         try:
             positions_arg = args.get("positions") or {}
@@ -277,6 +276,7 @@ def _build_update_diagram_positions_tool(service: DiagramService) -> ToolDefinit
             diagram = await service.update_node_positions(
                 diagram_id=str(args.get("diagram_id") or ""),
                 positions=positions,
+                notebook_id=notebook_id,
             )
         except DiagramNotFoundError as exc:
             return _safe_error_result(str(exc), "diagram_not_found")

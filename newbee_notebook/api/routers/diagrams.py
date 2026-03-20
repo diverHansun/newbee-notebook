@@ -53,10 +53,11 @@ async def list_diagrams(
 @router.get("/diagrams/{diagram_id}", response_model=DiagramResponse)
 async def get_diagram(
     diagram_id: str = Path(..., description="Diagram ID"),
+    notebook_id: str = Query(..., min_length=1, description="Notebook ID"),
     service: DiagramService = Depends(get_diagram_service),
 ):
     try:
-        diagram = await service.get_diagram(diagram_id)
+        diagram = await service.get_diagram(diagram_id, notebook_id=notebook_id)
     except DiagramNotFoundError:
         raise HTTPException(status_code=404, detail="Diagram not found")
     return _to_diagram_response(diagram)
@@ -65,10 +66,11 @@ async def get_diagram(
 @router.get("/diagrams/{diagram_id}/content", response_class=PlainTextResponse)
 async def get_diagram_content(
     diagram_id: str = Path(..., description="Diagram ID"),
+    notebook_id: str = Query(..., min_length=1, description="Notebook ID"),
     service: DiagramService = Depends(get_diagram_service),
 ):
     try:
-        return await service.get_diagram_content(diagram_id)
+        return await service.get_diagram_content(diagram_id, notebook_id=notebook_id)
     except DiagramNotFoundError:
         raise HTTPException(status_code=404, detail="Diagram not found")
 
@@ -77,10 +79,15 @@ async def get_diagram_content(
 async def update_diagram_positions(
     request: UpdateDiagramPositionsRequest,
     diagram_id: str = Path(..., description="Diagram ID"),
+    notebook_id: str = Query(..., min_length=1, description="Notebook ID"),
     service: DiagramService = Depends(get_diagram_service),
 ):
     try:
-        diagram = await service.update_node_positions(diagram_id, request.positions)
+        diagram = await service.update_node_positions(
+            diagram_id,
+            request.positions,
+            notebook_id=notebook_id,
+        )
     except DiagramNotFoundError:
         raise HTTPException(status_code=404, detail="Diagram not found")
     except DiagramFormatMismatchError as exc:
@@ -91,10 +98,11 @@ async def update_diagram_positions(
 @router.delete("/diagrams/{diagram_id}", status_code=204)
 async def delete_diagram(
     diagram_id: str = Path(..., description="Diagram ID"),
+    notebook_id: str = Query(..., min_length=1, description="Notebook ID"),
     service: DiagramService = Depends(get_diagram_service),
 ):
     try:
-        await service.delete_diagram(diagram_id)
+        await service.delete_diagram(diagram_id, notebook_id=notebook_id)
     except DiagramNotFoundError:
         raise HTTPException(status_code=404, detail="Diagram not found")
     return Response(status_code=204)
