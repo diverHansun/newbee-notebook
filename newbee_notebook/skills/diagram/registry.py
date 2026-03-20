@@ -77,6 +77,40 @@ DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
         intent_hints=("mind map", "mindmap", "mind-map", "思维导图", "脑图"),
         validator=validate_reactflow_schema,
     ),
+    "flowchart": DiagramTypeDescriptor(
+        name="flowchart",
+        output_format="reactflow_json",
+        file_extension=".json",
+        description="Flow chart",
+        agent_system_prompt=(
+            "Generate a flow chart in strict JSON format with only two top-level arrays: "
+            "'nodes' and 'edges'.\n"
+            "- Each node must include: id, label\n"
+            "- Each edge must include: source, target\n"
+            "- Keep graph flow direction clear from start to end.\n"
+            "- Do not output markdown fences or extra commentary.\n"
+            "- Do not include node position fields. Positioning is handled by frontend layout."
+        ),
+        intent_hints=("flow chart", "flowchart", "流程图", "流程"),
+        validator=validate_reactflow_schema,
+    ),
+    "sequence": DiagramTypeDescriptor(
+        name="sequence",
+        output_format="reactflow_json",
+        file_extension=".json",
+        description="Sequence diagram",
+        agent_system_prompt=(
+            "Generate a sequence-style graph in strict JSON format with only two top-level arrays: "
+            "'nodes' and 'edges'.\n"
+            "- Each node must include: id, label\n"
+            "- Each edge must include: source, target\n"
+            "- Use node labels to represent actors/components and ordered interaction steps.\n"
+            "- Do not output markdown fences or extra commentary.\n"
+            "- Do not include node position fields. Positioning is handled by frontend layout."
+        ),
+        intent_hints=("sequence diagram", "sequence", "时序图", "时序"),
+        validator=validate_reactflow_schema,
+    ),
 }
 
 

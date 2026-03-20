@@ -60,6 +60,9 @@ class DiagramService:
         descriptor.validator(content)
 
         resolved_document_ids = list(document_ids or [])
+        if not resolved_document_ids and self._ref_repo is not None:
+            refs = await self._ref_repo.list_by_notebook(notebook_id)
+            resolved_document_ids = [ref.document_id for ref in refs]
         for document_id in resolved_document_ids:
             await self._ensure_document_in_notebook(notebook_id, document_id)
 

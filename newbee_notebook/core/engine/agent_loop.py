@@ -46,6 +46,7 @@ class AgentLoop:
         confirmation_required: frozenset[str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
+        required_tool_call_before_response: str | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -58,6 +59,7 @@ class AgentLoop:
         self._confirmation_required = confirmation_required or frozenset()
         self._confirmation_gateway = confirmation_gateway
         self._force_first_tool_call = force_first_tool_call
+        self._required_tool_call_before_response = required_tool_call_before_response
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -268,6 +270,16 @@ class AgentLoop:
             ),
         }
 
+    def _completion_tool_repair_message(self) -> dict[str, str]:
+        required = self._required_tool_call_before_response or "the required tool"
+        return {
+            "role": "system",
+            "content": (
+                f"Repair: before you answer the user, you must call {required}. "
+                f"Do not provide a prose-only reply yet. Generate a valid {required} tool call now."
+            ),
+        }
+
     @staticmethod
     def _confirmation_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in arguments.items() if key != "content"}
@@ -331,189 +343,304 @@ class AgentLoop:
 
         yield StartEvent(message_id="runtime")
 
-        while not force_synthesis:
-            if self._cancelled:
-                yield DoneEvent()
-                return
-            if iterations >= self._mode_config.loop_policy.max_total_iterations:
-                yield ErrorEvent(
-                    code="iteration_limit",
-                    message="maximum runtime iterations exceeded",
-                    retriable=False,
-                )
-                return
-
-            yield PhaseEvent(stage="reasoning")
-            response = await self._chat_with_retry(
-                messages=messages,
-                tools=tool_specs or None,
-                tool_choice=forced_tool_choice or self._required_tool_choice(),
-                disable_thinking=True,
-            )
-            iterations += 1
-
-            tool_calls = self._extract_tool_calls(response)
-            assistant_content = self._extract_message_content(response).strip()
-            if not tool_calls:
-                if (
-                    self._mode_config.loop_policy.require_tool_every_iteration
-                    and retrieval_iterations < self._mode_config.loop_policy.max_retrieval_iterations
-                ):
-                    if repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
-                        yield ErrorEvent(
-                            code="invalid_tool_output",
-                            message="required tool call was not produced",
-                            retriable=False,
-                        )
-                        return
-                    repair_attempts += 1
-                    messages.append(self._repair_message())
-                    continue
-                first_turn_tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name
-                if (
-                    first_turn_tool_name
-                    and iterations == 1
-                    and first_turn_repair_attempts < self._mode_config.loop_policy.first_turn_tool_repair_limit
-                ):
-                    first_turn_repair_attempts += 1
-                    messages.append(self._first_turn_tool_repair_message())
-                    if self._mode_config.loop_policy.first_turn_tool_repair_force_choice:
-                        forced_tool_choice = {
-                            "type": "function",
-                            "function": {"name": first_turn_tool_name},
-                        }
-                    continue
-                if assistant_content and not self._mode_config.loop_policy.require_tool_every_iteration:
-                    yield PhaseEvent(stage="synthesizing")
-                    yield ContentEvent(delta=assistant_content)
-                    self._last_sources = self._dedupe_sources(collected_sources)
-                    if self._last_sources:
-                        yield SourceEvent(sources=self._last_sources)
+        while True:
+            while not force_synthesis:
+                if self._cancelled:
                     yield DoneEvent()
                     return
-                break
+                if iterations >= self._mode_config.loop_policy.max_total_iterations:
+                    yield ErrorEvent(
+                        code="iteration_limit",
+                        message="maximum runtime iterations exceeded",
+                        retriable=False,
+                    )
+                    return
 
-            repair_attempts = 0
-            forced_tool_choice = None
-            messages.append(self._assistant_tool_message(tool_calls))
-            yield PhaseEvent(stage="retrieving")
+                yield PhaseEvent(stage="reasoning")
+                response = await self._chat_with_retry(
+                    messages=messages,
+                    tools=tool_specs or None,
+                    tool_choice=forced_tool_choice or self._required_tool_choice(),
+                    disable_thinking=True,
+                )
+                iterations += 1
 
-            for tool_call in tool_calls:
-                function_payload = tool_call.get("function") or {}
-                tool_name = str(function_payload.get("name") or "")
-                if (
-                    self._mode_config.loop_policy.require_tool_every_iteration
-                    and tool_name != self._mode_config.loop_policy.required_tool_name
-                ):
-                    if repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
-                        yield ErrorEvent(
-                            code="invalid_tool_output",
-                            message="unexpected tool used in retrieval-required mode",
-                            retriable=False,
-                        )
+                tool_calls = self._extract_tool_calls(response)
+                assistant_content = self._extract_message_content(response).strip()
+                if not tool_calls:
+                    if (
+                        self._mode_config.loop_policy.require_tool_every_iteration
+                        and retrieval_iterations < self._mode_config.loop_policy.max_retrieval_iterations
+                    ):
+                        if repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
+                            yield ErrorEvent(
+                                code="invalid_tool_output",
+                                message="required tool call was not produced",
+                                retriable=False,
+                            )
+                            return
+                        repair_attempts += 1
+                        messages.append(self._repair_message())
+                        continue
+                    first_turn_tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name
+                    if (
+                        first_turn_tool_name
+                        and iterations == 1
+                        and first_turn_repair_attempts < self._mode_config.loop_policy.first_turn_tool_repair_limit
+                    ):
+                        first_turn_repair_attempts += 1
+                        messages.append(self._first_turn_tool_repair_message())
+                        if self._mode_config.loop_policy.first_turn_tool_repair_force_choice:
+                            forced_tool_choice = {
+                                "type": "function",
+                                "function": {"name": first_turn_tool_name},
+                            }
+                        continue
+                    if (
+                        assistant_content
+                        and self._required_tool_call_before_response
+                        and self._required_tool_call_before_response not in tool_calls_made
+                    ):
+                        messages.append(self._completion_tool_repair_message())
+                        forced_tool_choice = {
+                            "type": "function",
+                            "function": {"name": self._required_tool_call_before_response},
+                        }
+                        continue
+                    if assistant_content and not self._mode_config.loop_policy.require_tool_every_iteration:
+                        yield PhaseEvent(stage="synthesizing")
+                        yield ContentEvent(delta=assistant_content)
+                        self._last_sources = self._dedupe_sources(collected_sources)
+                        if self._last_sources:
+                            yield SourceEvent(sources=self._last_sources)
+                        yield DoneEvent()
                         return
-                    repair_attempts += 1
-                    messages.append(self._repair_message())
                     break
 
-                raw_arguments = function_payload.get("arguments") or "{}"
-                try:
-                    parsed_arguments = json.loads(raw_arguments)
-                except json.JSONDecodeError:
-                    parsed_arguments = {}
-                effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
-                tool = self._tools[tool_name]
+                repair_attempts = 0
+                forced_tool_choice = None
+                messages.append(self._assistant_tool_message(tool_calls))
+                yield PhaseEvent(stage="retrieving")
 
-                if tool_name in self._confirmation_required and self._confirmation_gateway:
-                    request_id = str(uuid4())
-                    self._confirmation_gateway.create(request_id)
-                    yield ConfirmationRequestEvent(
-                        request_id=request_id,
-                        tool_name=tool_name,
-                        args_summary=self._confirmation_args_summary(effective_arguments),
-                        description=f"Agent requested to run {tool_name}",
-                    )
-                    approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
-                    if not approved:
-                        rejection_result = ToolCallResult(
-                            content="The user did not approve this action. The tool call was cancelled.",
-                            error="user_rejected",
-                        )
-                        messages.append(self._tool_result_message(str(tool_call.get("id") or ""), rejection_result))
-                        yield ToolResultEvent(
-                            tool_name=tool_name,
-                            tool_call_id=str(tool_call.get("id") or ""),
-                            success=False,
-                            content_preview=rejection_result.content[:200],
-                            quality_meta=None,
-                        )
-                        continue
-
-                yield ToolCallEvent(
-                    tool_name=tool_name,
-                    tool_call_id=str(tool_call.get("id") or ""),
-                    tool_input=effective_arguments,
-                )
-                result = await tool.execute(effective_arguments)
-                tool_calls_made.append(tool_name)
-                collected_sources.extend(result.sources)
-                messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
-                yield ToolResultEvent(
-                    tool_name=tool_name,
-                    tool_call_id=str(tool_call.get("id") or ""),
-                    success=result.error is None,
-                    content_preview=result.content[:200],
-                    quality_meta=result.quality_meta,
-                )
-                self._relax_scope_if_needed(tool_name, result)
-
-                if self._mode_config.loop_policy.require_tool_every_iteration:
-                    retrieval_iterations += 1
-                    if self._should_enter_synthesis(
-                        result,
-                        retrieval_iterations=retrieval_iterations,
-                    ):
-                        force_synthesis = True
-                        break
-                else:
-                    low_quality_tool_name = self._mode_config.loop_policy.low_quality_tool_name
-                    low_quality_bands = self._mode_config.loop_policy.low_quality_bands
-                    max_low_quality_tool_streak = self._mode_config.loop_policy.max_low_quality_tool_streak
-                    quality_band = getattr(result.quality_meta, "quality_band", None)
+                for tool_call in tool_calls:
+                    function_payload = tool_call.get("function") or {}
+                    tool_name = str(function_payload.get("name") or "")
                     if (
-                        max_low_quality_tool_streak > 0
-                        and tool_name == low_quality_tool_name
-                        and quality_band in low_quality_bands
+                        self._mode_config.loop_policy.require_tool_every_iteration
+                        and tool_name != self._mode_config.loop_policy.required_tool_name
                     ):
-                        low_quality_tool_streak += 1
-                    else:
-                        low_quality_tool_streak = 0
-                    if low_quality_tool_streak >= max_low_quality_tool_streak > 0:
-                        force_synthesis = True
+                        if repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
+                            yield ErrorEvent(
+                                code="invalid_tool_output",
+                                message="unexpected tool used in retrieval-required mode",
+                                retriable=False,
+                            )
+                            return
+                        repair_attempts += 1
+                        messages.append(self._repair_message())
                         break
-            else:
+
+                    raw_arguments = function_payload.get("arguments") or "{}"
+                    try:
+                        parsed_arguments = json.loads(raw_arguments)
+                    except json.JSONDecodeError:
+                        parsed_arguments = {}
+                    effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
+                    tool = self._tools[tool_name]
+
+                    if tool_name in self._confirmation_required and self._confirmation_gateway:
+                        request_id = str(uuid4())
+                        self._confirmation_gateway.create(request_id)
+                        yield ConfirmationRequestEvent(
+                            request_id=request_id,
+                            tool_name=tool_name,
+                            args_summary=self._confirmation_args_summary(effective_arguments),
+                            description=f"Agent requested to run {tool_name}",
+                        )
+                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
+                        if not approved:
+                            rejection_result = ToolCallResult(
+                                content="The user did not approve this action. The tool call was cancelled.",
+                                error="user_rejected",
+                            )
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                quality_meta=None,
+                            )
+                            continue
+
+                    yield ToolCallEvent(
+                        tool_name=tool_name,
+                        tool_call_id=str(tool_call.get("id") or ""),
+                        tool_input=effective_arguments,
+                    )
+                    result = await tool.execute(effective_arguments)
+                    tool_calls_made.append(tool_name)
+                    collected_sources.extend(result.sources)
+                    messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
+                    yield ToolResultEvent(
+                        tool_name=tool_name,
+                        tool_call_id=str(tool_call.get("id") or ""),
+                        success=result.error is None,
+                        content_preview=result.content[:200],
+                        quality_meta=result.quality_meta,
+                    )
+                    self._relax_scope_if_needed(tool_name, result)
+                    if (
+                        self._required_tool_call_before_response
+                        and tool_name != self._required_tool_call_before_response
+                        and result.error is None
+                    ):
+                        forced_tool_choice = {
+                            "type": "function",
+                            "function": {"name": self._required_tool_call_before_response},
+                        }
+
+                    if self._mode_config.loop_policy.require_tool_every_iteration:
+                        retrieval_iterations += 1
+                        if self._should_enter_synthesis(
+                            result,
+                            retrieval_iterations=retrieval_iterations,
+                        ):
+                            force_synthesis = True
+                            break
+                    else:
+                        low_quality_tool_name = self._mode_config.loop_policy.low_quality_tool_name
+                        low_quality_bands = self._mode_config.loop_policy.low_quality_bands
+                        max_low_quality_tool_streak = self._mode_config.loop_policy.max_low_quality_tool_streak
+                        quality_band = getattr(result.quality_meta, "quality_band", None)
+                        if (
+                            max_low_quality_tool_streak > 0
+                            and tool_name == low_quality_tool_name
+                            and quality_band in low_quality_bands
+                        ):
+                            low_quality_tool_streak += 1
+                        else:
+                            low_quality_tool_streak = 0
+                        if low_quality_tool_streak >= max_low_quality_tool_streak > 0:
+                            force_synthesis = True
+                            break
+                else:
+                    continue
+
+                if force_synthesis:
+                    break
+
+            yield PhaseEvent(stage="synthesizing")
+            stream = await self._resolve_stream(
+                self._llm_client.chat_stream(
+                    messages=messages,
+                    tools=None,
+                    tool_choice=None,
+                    disable_thinking=True,
+                )
+            )
+            synthesis_chunks: list[str] = []
+            async for chunk in stream:
+                delta = self._extract_stream_delta(chunk)
+                if delta:
+                    synthesis_chunks.append(delta)
+
+            synthesized_response = "".join(synthesis_chunks).strip()
+            synthesis_tool_calls = self._parse_textual_tool_calls(synthesized_response)
+            if synthesis_tool_calls:
+                messages.append(self._assistant_tool_message(synthesis_tool_calls))
+                yield PhaseEvent(stage="retrieving")
+
+                for tool_call in synthesis_tool_calls:
+                    function_payload = tool_call.get("function") or {}
+                    tool_name = str(function_payload.get("name") or "")
+                    raw_arguments = function_payload.get("arguments") or "{}"
+                    try:
+                        parsed_arguments = json.loads(raw_arguments)
+                    except json.JSONDecodeError:
+                        parsed_arguments = {}
+                    effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
+                    tool = self._tools[tool_name]
+
+                    if tool_name in self._confirmation_required and self._confirmation_gateway:
+                        request_id = str(uuid4())
+                        self._confirmation_gateway.create(request_id)
+                        yield ConfirmationRequestEvent(
+                            request_id=request_id,
+                            tool_name=tool_name,
+                            args_summary=self._confirmation_args_summary(effective_arguments),
+                            description=f"Agent requested to run {tool_name}",
+                        )
+                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
+                        if not approved:
+                            rejection_result = ToolCallResult(
+                                content="The user did not approve this action. The tool call was cancelled.",
+                                error="user_rejected",
+                            )
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                quality_meta=None,
+                            )
+                            continue
+
+                    yield ToolCallEvent(
+                        tool_name=tool_name,
+                        tool_call_id=str(tool_call.get("id") or ""),
+                        tool_input=effective_arguments,
+                    )
+                    result = await tool.execute(effective_arguments)
+                    tool_calls_made.append(tool_name)
+                    collected_sources.extend(result.sources)
+                    messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
+                    yield ToolResultEvent(
+                        tool_name=tool_name,
+                        tool_call_id=str(tool_call.get("id") or ""),
+                        success=result.error is None,
+                        content_preview=result.content[:200],
+                        quality_meta=result.quality_meta,
+                    )
+                    self._relax_scope_if_needed(tool_name, result)
+                    if (
+                        self._required_tool_call_before_response
+                        and tool_name != self._required_tool_call_before_response
+                        and result.error is None
+                    ):
+                        forced_tool_choice = {
+                            "type": "function",
+                            "function": {"name": self._required_tool_call_before_response},
+                        }
+
+                force_synthesis = False
                 continue
 
-            if force_synthesis:
-                break
+            if (
+                synthesized_response
+                and self._required_tool_call_before_response
+                and self._required_tool_call_before_response not in tool_calls_made
+            ):
+                messages.append(self._completion_tool_repair_message())
+                forced_tool_choice = {
+                    "type": "function",
+                    "function": {"name": self._required_tool_call_before_response},
+                }
+                force_synthesis = False
+                continue
 
-        yield PhaseEvent(stage="synthesizing")
-        stream = await self._resolve_stream(
-            self._llm_client.chat_stream(
-                messages=messages,
-                tools=None,
-                tool_choice=None,
-                disable_thinking=True,
-            )
-        )
-        async for chunk in stream:
-            delta = self._extract_stream_delta(chunk)
-            if delta:
-                yield ContentEvent(delta=delta)
-        self._last_sources = self._dedupe_sources(collected_sources)
-        if self._last_sources:
-            yield SourceEvent(sources=self._last_sources)
-        yield DoneEvent()
+            if synthesized_response:
+                yield ContentEvent(delta=synthesized_response)
+            self._last_sources = self._dedupe_sources(collected_sources)
+            if self._last_sources:
+                yield SourceEvent(sources=self._last_sources)
+            yield DoneEvent()
+            return
 
     @staticmethod
     def _dedupe_sources(sources: list[SourceItem]) -> list[SourceItem]:

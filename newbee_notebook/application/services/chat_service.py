@@ -163,6 +163,7 @@ class ChatService:
             system_prompt_addition,
             confirmation_required,
             force_first_tool_call,
+            required_tool_call_before_response,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -211,6 +212,7 @@ class ChatService:
             system_prompt_addition=system_prompt_addition,
             confirmation_required=confirmation_required,
             force_first_tool_call=force_first_tool_call,
+            required_tool_call_before_response=required_tool_call_before_response,
             confirmation_gateway=self._confirmation_gateway,
         )
         response_content = runtime_result.content
@@ -328,6 +330,7 @@ class ChatService:
             system_prompt_addition,
             confirmation_required,
             force_first_tool_call,
+            required_tool_call_before_response,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -382,6 +385,7 @@ class ChatService:
                 system_prompt_addition=system_prompt_addition,
                 confirmation_required=confirmation_required,
                 force_first_tool_call=force_first_tool_call,
+                required_tool_call_before_response=required_tool_call_before_response,
                 confirmation_gateway=self._confirmation_gateway,
             )
             while True:
@@ -532,13 +536,13 @@ class ChatService:
         message: str,
         runtime_mode: ModeType,
         source_document_ids: Optional[List[str]],
-    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], bool]:
+    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], bool, str | None]:
         if not self._skill_registry:
-            return message, runtime_mode, None, "", frozenset(), False
+            return message, runtime_mode, None, "", frozenset(), False, None
 
         matched = self._skill_registry.match_command(message)
         if not matched:
-            return message, runtime_mode, None, "", frozenset(), False
+            return message, runtime_mode, None, "", frozenset(), False, None
 
         provider, activated_command, cleaned_message = matched
         manifest = provider.build_manifest(
@@ -546,6 +550,7 @@ class ChatService:
                 notebook_id=notebook_id,
                 activated_command=activated_command,
                 selected_document_ids=list(source_document_ids or []),
+                request_message=cleaned_message,
             )
         )
         return (
@@ -555,6 +560,7 @@ class ChatService:
             manifest.system_prompt_addition,
             manifest.confirmation_required,
             manifest.force_first_tool_call,
+            manifest.required_tool_call_before_response,
         )
 
     async def confirm_action(self, session_id: str, request_id: str, approved: bool) -> bool:

@@ -13,6 +13,7 @@ class SkillContext:
     notebook_id: str
     activated_command: str
     selected_document_ids: list[str] = field(default_factory=list)
+    request_message: str = ""
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class SkillManifest:
     system_prompt_addition: str = ""
     confirmation_required: frozenset[str] = field(default_factory=frozenset)
     force_first_tool_call: bool = False
+    required_tool_call_before_response: str | None = None
 
 
 class SkillProvider(Protocol):

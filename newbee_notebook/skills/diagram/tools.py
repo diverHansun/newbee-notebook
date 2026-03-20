@@ -100,7 +100,10 @@ def _build_confirm_diagram_type_tool() -> ToolDefinition:
         title = str(args.get("title") or "")
         reason = str(args.get("reason") or "")
         return ToolCallResult(
-            content=f"Pending type confirmation: {diagram_type}",
+            content=(
+                f"Diagram type confirmed: {diagram_type}. "
+                "Proceed to create_diagram with this type."
+            ),
             metadata={
                 "diagram_type": diagram_type,
                 "title": title,
@@ -165,13 +168,24 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
 
     return ToolDefinition(
         name="create_diagram",
-        description="Create a diagram with explicit diagram type and full content payload.",
+        description=(
+            "Create a diagram with explicit diagram type and full content payload. "
+            "For mindmap, flowchart, and sequence diagrams, content must be strict JSON with "
+            "top-level nodes and edges arrays only."
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "Diagram title"},
                 "diagram_type": {"type": "string", "description": "Registered diagram type"},
-                "content": {"type": "string", "description": "Full diagram content"},
+                "content": {
+                    "type": "string",
+                    "description": (
+                        "Full diagram content. Use strict JSON: "
+                        "{\"nodes\":[{\"id\":\"root\",\"label\":\"Topic\"}],"
+                        "\"edges\":[{\"source\":\"root\",\"target\":\"child\"}]}"
+                    ),
+                },
                 "document_ids": {
                     "type": "array",
                     "items": {"type": "string"},
