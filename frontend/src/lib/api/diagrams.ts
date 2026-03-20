@@ -16,26 +16,31 @@ export function listDiagrams(
   return apiFetch<DiagramListResponse>(`/diagrams?${search.toString()}`);
 }
 
-export function getDiagram(diagramId: string) {
-  return apiFetch<Diagram>(`/diagrams/${diagramId}`);
+export function getDiagram(notebookId: string, diagramId: string) {
+  const search = new URLSearchParams({ notebook_id: notebookId });
+  return apiFetch<Diagram>(`/diagrams/${diagramId}?${search.toString()}`);
 }
 
-export function getDiagramContent(diagramId: string) {
-  return apiFetch<string>(`/diagrams/${diagramId}/content`);
+export function getDiagramContent(notebookId: string, diagramId: string) {
+  const search = new URLSearchParams({ notebook_id: notebookId });
+  return apiFetch<string>(`/diagrams/${diagramId}/content?${search.toString()}`);
 }
 
 export function updateDiagramPositions(
+  notebookId: string,
   diagramId: string,
   input: DiagramUpdatePositionsInput
 ) {
-  return apiFetch<Diagram>(`/diagrams/${diagramId}/positions`, {
+  const search = new URLSearchParams({ notebook_id: notebookId });
+  return apiFetch<Diagram>(`/diagrams/${diagramId}/positions?${search.toString()}`, {
     method: "PATCH",
     body: input,
   });
 }
 
-export function deleteDiagram(diagramId: string) {
-  return apiFetch<void>(`/diagrams/${diagramId}`, {
+export function deleteDiagram(notebookId: string, diagramId: string) {
+  const search = new URLSearchParams({ notebook_id: notebookId });
+  return apiFetch<void>(`/diagrams/${diagramId}?${search.toString()}`, {
     method: "DELETE",
   });
 }

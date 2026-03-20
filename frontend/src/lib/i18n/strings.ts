@@ -263,6 +263,12 @@ export const uiStrings = {
       en: "Type /diagram in chat to create a diagram",
     },
     diagramTypeMindmap: { zh: "思维导图", en: "Mind Map" },
+    diagramTypeFlowchart: { zh: "流程图", en: "Flowchart" },
+    diagramTypeSequence: { zh: "时序图", en: "Sequence Diagram" },
+    diagramId: { zh: "图表 ID", en: "Diagram ID" },
+    copyDiagramIdShort: { zh: "复制 ID", en: "Copy ID" },
+    copyDiagramId: { zh: "复制图表 ID {id}", en: "Copy diagram ID {id}" },
+    diagramIdCopied: { zh: "图表 ID 已复制", en: "Diagram ID copied" },
     diagramView: { zh: "图表详情", en: "Diagram detail" },
     deleteDiagram: { zh: "删除图表", en: "Delete diagram" },
     deleteDiagramConfirm: {

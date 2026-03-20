@@ -24,19 +24,19 @@ export function useDiagrams(notebookId: string, documentId?: string | null) {
   });
 }
 
-export function useDiagram(diagramId: string | null) {
+export function useDiagram(notebookId: string, diagramId: string | null) {
   return useQuery({
-    queryKey: ["diagram", diagramId] as const,
-    queryFn: () => getDiagram(diagramId!),
-    enabled: Boolean(diagramId),
+    queryKey: ["diagram", notebookId, diagramId] as const,
+    queryFn: () => getDiagram(notebookId, diagramId!),
+    enabled: Boolean(diagramId && notebookId),
   });
 }
 
-export function useDiagramContent(diagramId: string | null) {
+export function useDiagramContent(notebookId: string, diagramId: string | null) {
   return useQuery({
-    queryKey: ["diagram-content", diagramId] as const,
-    queryFn: () => getDiagramContent(diagramId!),
-    enabled: Boolean(diagramId),
+    queryKey: ["diagram-content", notebookId, diagramId] as const,
+    queryFn: () => getDiagramContent(notebookId, diagramId!),
+    enabled: Boolean(diagramId && notebookId),
     staleTime: 60_000,
   });
 }
@@ -45,12 +45,12 @@ export function useUpdateDiagramPositions(notebookId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ diagramId, positions }: { diagramId: string; positions: Record<string, { x: number; y: number }> }) =>
-      updateDiagramPositions(diagramId, { positions }),
+      updateDiagramPositions(notebookId, diagramId, { positions }),
     onSuccess: async (diagram) => {
       await queryClient.invalidateQueries({
         queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
       });
-      queryClient.setQueryData(["diagram", diagram.diagram_id], diagram);
+      queryClient.setQueryData(["diagram", notebookId, diagram.diagram_id], diagram);
     },
   });
 }
@@ -58,13 +58,13 @@ export function useUpdateDiagramPositions(notebookId: string) {
 export function useDeleteDiagram(notebookId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (diagramId: string) => deleteDiagram(diagramId),
+    mutationFn: (diagramId: string) => deleteDiagram(notebookId, diagramId),
     onSuccess: async (_, diagramId) => {
       await queryClient.invalidateQueries({
         queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
       });
-      queryClient.removeQueries({ queryKey: ["diagram", diagramId] });
-      queryClient.removeQueries({ queryKey: ["diagram-content", diagramId] });
+      queryClient.removeQueries({ queryKey: ["diagram", notebookId, diagramId] });
+      queryClient.removeQueries({ queryKey: ["diagram-content", notebookId, diagramId] });
     },
   });
 }

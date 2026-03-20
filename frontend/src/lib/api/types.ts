@@ -180,7 +180,7 @@ export type NoteUpdateInput = {
 };
 
 export type DiagramFormat = "reactflow_json" | "mermaid";
-export type DiagramType = "mindmap" | string;
+export type DiagramType = "mindmap" | "flowchart" | "sequence" | string;
 
 export type Diagram = {
   diagram_id: string;
