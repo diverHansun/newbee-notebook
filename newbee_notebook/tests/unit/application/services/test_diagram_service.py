@@ -30,8 +30,13 @@ def storage():
 
 
 @pytest.fixture
-def service(diagram_repo, storage):
-    return DiagramService(diagram_repo=diagram_repo, storage=storage)
+def ref_repo():
+    return AsyncMock()
+
+
+@pytest.fixture
+def service(diagram_repo, storage, ref_repo):
+    return DiagramService(diagram_repo=diagram_repo, storage=storage, ref_repo=ref_repo)
 
 
 @pytest.mark.anyio
@@ -60,6 +65,52 @@ async def test_create_diagram_persists_metadata_and_content(service, diagram_rep
     assert created_diagram is not None
     assert created_diagram.title == "Chapter 3 map"
     storage.save_file.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_create_diagram_accepts_flowchart_type(service, diagram_repo, storage):
+    async def _create(diagram: Diagram) -> Diagram:
+        return diagram
+
+    diagram_repo.create.side_effect = _create
+
+    diagram = await service.create_diagram(
+        notebook_id="nb-1",
+        title="Login flow",
+        diagram_type="flowchart",
+        content='{"nodes":[{"id":"start","label":"Start"},{"id":"end","label":"End"}],"edges":[{"source":"start","target":"end"}]}',
+    )
+
+    assert diagram.diagram_type == "flowchart"
+    assert diagram.format == "reactflow_json"
+    assert diagram.content_path.endswith(".json")
+    storage.save_file.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_create_diagram_defaults_to_notebook_documents_when_document_ids_missing(
+    service,
+    diagram_repo,
+    ref_repo,
+):
+    async def _create(diagram: Diagram) -> Diagram:
+        return diagram
+
+    ref_repo.list_by_notebook.return_value = [
+        type("NotebookDocumentRef", (), {"document_id": "doc-1"})(),
+        type("NotebookDocumentRef", (), {"document_id": "doc-2"})(),
+    ]
+    diagram_repo.create.side_effect = _create
+
+    diagram = await service.create_diagram(
+        notebook_id="nb-1",
+        title="Curriculum Map",
+        diagram_type="mindmap",
+        content='{"nodes":[{"id":"root","label":"Plan"}],"edges":[]}',
+    )
+
+    assert diagram.document_ids == ["doc-1", "doc-2"]
+    ref_repo.list_by_notebook.assert_awaited_once_with("nb-1")
 
 
 @pytest.mark.anyio

@@ -531,6 +531,189 @@ async def test_agent_loop_parses_textual_tool_call_markup_from_content():
 
 
 @pytest.mark.anyio
+async def test_agent_loop_executes_textual_tool_call_emitted_during_final_synthesis():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "teaching plan"})]),
+            _chat_response(content=""),
+            _chat_response(content="Diagram created successfully."),
+        ],
+        stream_chunks=[
+            _stream_chunk(
+                '<tool_call>create_diagram'
+                '<arg_key>title</arg_key><arg_value>Teaching Plan</arg_value>'
+                '<arg_key>diagram_type</arg_key><arg_value>mindmap</arg_value>'
+                '<arg_key>content</arg_key><arg_value>{"nodes":[{"id":"root","label":"Plan"}],"edges":[]}</arg_value>'
+                '</tool_call>'
+            )
+        ],
+    )
+    create_payloads: list[dict] = []
+    knowledge_tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="teaching plan evidence",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Plan",
+                    text="teaching plan evidence",
+                    score=0.88,
+                )
+            ],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    create_tool = _recording_tool(
+        "create_diagram",
+        [ToolCallResult(content="Diagram created: [Teaching Plan], ID: diag-1")],
+        create_payloads,
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[knowledge_tool, create_tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[knowledge_tool, create_tool],
+        mode_config=config,
+    )
+
+    result = await loop.run(message="create a diagram", chat_history=[])
+
+    assert result.response == "Diagram created successfully."
+    assert result.tool_calls_made == ["knowledge_base", "create_diagram"]
+    assert create_payloads == [
+        {
+            "title": "Teaching Plan",
+            "diagram_type": "mindmap",
+            "content": {"nodes": [{"id": "root", "label": "Plan"}], "edges": []},
+        }
+    ]
+    assert len(llm.stream_calls) == 1
+
+
+@pytest.mark.anyio
+async def test_agent_loop_requires_completion_tool_before_open_loop_response():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "plan"})]),
+            _chat_response(content="Here is a summary of the notebook."),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "create_diagram",
+                        {
+                            "title": "Teaching Plan",
+                            "diagram_type": "mindmap",
+                            "content": '{"nodes":[{"id":"root","label":"Plan"}],"edges":[]}',
+                        },
+                    )
+                ]
+            ),
+            _chat_response(content="Diagram created successfully."),
+        ],
+        stream_chunks=[],
+    )
+    create_payloads: list[dict] = []
+    knowledge_tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="plan evidence",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Plan",
+                    text="plan evidence",
+                    score=0.8,
+                )
+            ],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    create_tool = _recording_tool(
+        "create_diagram",
+        [ToolCallResult(content="Diagram created: [Teaching Plan], ID: diag-1")],
+        create_payloads,
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[knowledge_tool, create_tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[knowledge_tool, create_tool],
+        mode_config=config,
+        required_tool_call_before_response="create_diagram",
+    )
+
+    result = await loop.run(message="create a diagram", chat_history=[])
+
+    assert result.response == "Diagram created successfully."
+    assert result.tool_calls_made == ["knowledge_base", "create_diagram"]
+    assert create_payloads[0]["title"] == "Teaching Plan"
+    assert llm.chat_calls[2]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "create_diagram"},
+    }
+
+
+@pytest.mark.anyio
+async def test_agent_loop_forces_completion_tool_after_supporting_tool_call():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "plan"})]),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "create_diagram",
+                        {
+                            "title": "Teaching Plan",
+                            "diagram_type": "mindmap",
+                            "content": '{"nodes":[{"id":"root","label":"Plan"}],"edges":[]}',
+                        },
+                    )
+                ]
+            ),
+            _chat_response(content="Diagram created successfully."),
+        ],
+        stream_chunks=[],
+    )
+    knowledge_tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="plan evidence",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Plan",
+                    text="plan evidence",
+                    score=0.8,
+                )
+            ],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    create_tool = _recording_tool(
+        "create_diagram",
+        [ToolCallResult(content="Diagram created: [Teaching Plan], ID: diag-1")],
+        [],
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[knowledge_tool, create_tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[knowledge_tool, create_tool],
+        mode_config=config,
+        required_tool_call_before_response="create_diagram",
+    )
+
+    result = await loop.run(message="create a diagram", chat_history=[])
+
+    assert result.response == "Diagram created successfully."
+    assert llm.chat_calls[1]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "create_diagram"},
+    }
+
+
+@pytest.mark.anyio
 async def test_agent_loop_accepts_real_llm_client_stream_shape():
     llm = _RealShapedLLMClient(
         chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],

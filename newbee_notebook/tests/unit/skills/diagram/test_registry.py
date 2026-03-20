@@ -41,6 +41,14 @@ def test_get_descriptor_known_type():
     assert descriptor.output_format == "reactflow_json"
 
 
+def test_get_descriptor_flowchart_and_sequence():
+    flowchart = get_descriptor("flowchart")
+    sequence = get_descriptor("sequence")
+
+    assert flowchart.output_format == "reactflow_json"
+    assert sequence.output_format == "reactflow_json"
+
+
 def test_get_descriptor_unknown_type():
     with pytest.raises(DiagramTypeNotFoundError):
         get_descriptor("unknown_type")
@@ -48,4 +56,6 @@ def test_get_descriptor_unknown_type():
 
 def test_infer_diagram_type_from_prompt():
     assert infer_diagram_type_from_prompt("Please generate a mind map for chapter 3") == "mindmap"
+    assert infer_diagram_type_from_prompt("Please generate a flow chart for onboarding") == "flowchart"
+    assert infer_diagram_type_from_prompt("Please generate a sequence diagram for login") == "sequence"
     assert infer_diagram_type_from_prompt("Please visualize this chapter") is None

@@ -129,6 +129,7 @@ async def test_confirm_diagram_type_tool_returns_metadata():
     )
 
     assert result.error is None
+    assert "confirmed" in result.content.lower()
     assert result.metadata["diagram_type"] == "mindmap"
     assert result.metadata["reason"].startswith("Prompt")
 
@@ -141,15 +142,20 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
             notebook_id="nb-1",
             activated_command="/diagram",
             selected_document_ids=["doc-1"],
+            request_message="Generate a diagram from the notebook document",
         )
     )
 
     assert manifest.name == "diagram"
     assert manifest.slash_command == "/diagram"
     assert manifest.force_first_tool_call is True
+    assert manifest.required_tool_call_before_response == "create_diagram"
     assert manifest.confirmation_required == frozenset(
         {"confirm_diagram_type", "update_diagram", "delete_diagram"}
     )
+    assert "create_diagram" in manifest.system_prompt_addition
+    assert "strict JSON" in manifest.system_prompt_addition
+    assert "Do not output raw <tool_call>" in manifest.system_prompt_addition
     assert [tool.name for tool in manifest.tools] == [
         "list_diagrams",
         "read_diagram",
