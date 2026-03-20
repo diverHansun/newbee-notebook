@@ -15,10 +15,10 @@ import {
   updateNote,
 } from "@/lib/api/notes";
 import type { Mark, Note, NotebookDocumentItem } from "@/lib/api/types";
-import { parseReactFlowTree } from "@/lib/diagram/reactflow-tree";
 import { useDeleteDiagram, useDiagram, useDiagramContent, useDiagrams } from "@/lib/hooks/use-diagrams";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+import { DiagramViewer } from "@/components/studio/diagram-viewer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useStudioStore } from "@/stores/studio-store";
 
@@ -53,42 +53,6 @@ function groupMarksByDocument(marks: Mark[]): Map<string, Mark[]> {
     groups.set(mark.document_id, existing);
   });
   return groups;
-}
-
-function renderMindMapTree(
-  nodes: ReturnType<typeof parseReactFlowTree>,
-  depth = 0
-) {
-  return (
-    <ul
-      style={{
-        margin: depth === 0 ? 0 : "4px 0 0 12px",
-        paddingLeft: depth === 0 ? 0 : 12,
-        listStyle: "none",
-        borderLeft: depth === 0 ? "none" : "1px dashed hsl(var(--border))",
-      }}
-    >
-      {nodes.map((node) => (
-        <li key={node.id} style={{ marginBottom: 6 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 8px",
-              borderRadius: 8,
-              border: "1px solid hsl(var(--border))",
-              background: "hsl(var(--background))",
-              fontSize: 12,
-            }}
-          >
-            <span>{node.label}</span>
-          </div>
-          {node.children.length > 0 ? renderMindMapTree(node.children, depth + 1) : null}
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
@@ -157,16 +121,6 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   );
   const activeDiagram = activeDiagramQuery.data ?? null;
   const activeDiagramContent = activeDiagramContentQuery.data ?? "";
-  const mindMapTree = useMemo(() => {
-    if (!activeDiagramContent || activeDiagram?.format !== "reactflow_json") {
-      return [];
-    }
-    try {
-      return parseReactFlowTree(activeDiagramContent);
-    } catch {
-      return [];
-    }
-  }, [activeDiagram?.format, activeDiagramContent]);
   const documentMap = useMemo(
     () => new Map(documents.map((item) => [item.document_id, item])),
     [documents]
@@ -646,21 +600,8 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
             <span className="muted">{t(uiStrings.common.loading)}</span>
           ) : activeDiagramContentQuery.isError ? (
             <span className="muted">{t(uiStrings.common.retry)}</span>
-          ) : activeDiagram.format === "reactflow_json" && mindMapTree.length > 0 ? (
-            <div>{renderMindMapTree(mindMapTree)}</div>
           ) : (
-            <pre
-              style={{
-                margin: 0,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontFamily: "\"Cascadia Code\", monospace",
-                fontSize: 12,
-                lineHeight: 1.5,
-              }}
-            >
-              {activeDiagramContent}
-            </pre>
+            <DiagramViewer diagram={activeDiagram} content={activeDiagramContent} />
           )}
         </div>
       </div>

@@ -9,6 +9,7 @@
    外部库
    ================================================================ */
 @import "katex/dist/katex.min.css";
+@import "@xyflow/react/dist/style.css";
 
 /* ================================================================
    1. CSS Variables 鈥?Light / Dark themes
