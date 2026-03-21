@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock
 import uuid
 
@@ -72,6 +73,67 @@ async def test_delete_note_raises_for_missing_note():
 
     with pytest.raises(NoteNotFoundError):
         await service.delete("missing")
+
+
+@pytest.mark.anyio
+async def test_list_all_returns_all_notes():
+    repo = AsyncMock()
+    repo.list_all.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content=""),
+        Note(note_id="n2", notebook_id="nb2", title="B", content=""),
+    ]
+    service = NoteService(repo)
+
+    result = await service.list_all()
+
+    assert len(result) == 2
+    repo.list_all.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_list_all_filters_by_document_id():
+    repo = AsyncMock()
+    repo.list_all.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content="", document_ids=["d1"]),
+        Note(note_id="n2", notebook_id="nb1", title="B", content="", document_ids=["d2"]),
+        Note(note_id="n3", notebook_id="nb1", title="C", content="", document_ids=["d1", "d2"]),
+    ]
+    service = NoteService(repo)
+
+    result = await service.list_all(document_id="d1")
+
+    assert len(result) == 2
+    assert {n.note_id for n in result} == {"n1", "n3"}
+
+
+@pytest.mark.anyio
+async def test_list_all_sorts_by_created_at_asc():
+    repo = AsyncMock()
+    repo.list_all.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content="", created_at=datetime(2025, 1, 3)),
+        Note(note_id="n2", notebook_id="nb1", title="B", content="", created_at=datetime(2025, 1, 1)),
+        Note(note_id="n3", notebook_id="nb1", title="C", content="", created_at=datetime(2025, 1, 2)),
+    ]
+    service = NoteService(repo)
+
+    result = await service.list_all(sort_by="created_at", order="asc")
+
+    assert [n.note_id for n in result] == ["n2", "n3", "n1"]
+
+
+@pytest.mark.anyio
+async def test_list_all_sorts_by_updated_at_desc():
+    repo = AsyncMock()
+    repo.list_all.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content="", updated_at=datetime(2025, 1, 1)),
+        Note(note_id="n2", notebook_id="nb1", title="B", content="", updated_at=datetime(2025, 1, 3)),
+        Note(note_id="n3", notebook_id="nb1", title="C", content="", updated_at=datetime(2025, 1, 2)),
+    ]
+    service = NoteService(repo)
+
+    result = await service.list_all(sort_by="updated_at", order="desc")
+
+    assert [n.note_id for n in result] == ["n2", "n3", "n1"]
 
 
 def test_note_repository_impl_maps_model_to_entity_with_related_ids():

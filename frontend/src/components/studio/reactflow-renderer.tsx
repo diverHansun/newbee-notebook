@@ -3,6 +3,8 @@
 import {
   Background,
   Controls,
+  getNodesBounds,
+  getViewportForBounds,
   Handle,
   type NodeTypes,
   Position,
@@ -15,7 +17,9 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import clsx from "clsx";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { saveAs } from "file-saver";
+import { toPng } from "html-to-image";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 
 import type { Diagram } from "@/lib/api/types";
 import { useUpdateDiagramPositions } from "@/lib/hooks/use-diagrams";
@@ -24,6 +28,10 @@ import {
   type DiagramNodeData,
   type DiagramPosition,
 } from "@/lib/diagram/reactflow-layout";
+
+export type DiagramExportHandle = {
+  exportImage: (filename: string) => Promise<void>;
+};
 
 type ReactFlowRendererProps = {
   diagram: Diagram;
@@ -117,10 +125,12 @@ function toPositionPayload(nodes: DiagramFlowNode[]): Record<string, DiagramPosi
   );
 }
 
-export function ReactFlowRenderer({ diagram, content }: ReactFlowRendererProps) {
+export const ReactFlowRenderer = forwardRef<DiagramExportHandle, ReactFlowRendererProps>(
+  function ReactFlowRenderer({ diagram, content }, ref) {
   const updatePositionsMutation = useUpdateDiagramPositions(diagram.notebook_id);
   const saveTimerRef = useRef<number | null>(null);
   const reactFlowRef = useRef<ReactFlowInstance<DiagramFlowNode, DiagramFlowEdge> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const initialElements = useMemo(
     () => buildReactFlowElements(content, diagram.node_positions, diagram.diagram_type),
@@ -197,6 +207,44 @@ export function ReactFlowRenderer({ diagram, content }: ReactFlowRendererProps) 
     [schedulePositionSave, setNodes]
   );
 
+  useImperativeHandle(ref, () => ({
+    async exportImage(filename: string) {
+      const el = wrapperRef.current;
+      if (!el || nodes.length === 0) return;
+
+      const viewportEl = el.querySelector<HTMLElement>(".react-flow__viewport");
+      if (!viewportEl) return;
+
+      const padding = 40;
+      const bounds = getNodesBounds(nodes);
+      const imageWidth = bounds.width + padding * 2;
+      const imageHeight = bounds.height + padding * 2;
+
+      const viewport = getViewportForBounds(
+        bounds,
+        imageWidth,
+        imageHeight,
+        0.5,
+        2,
+        padding,
+      );
+
+      const dataUrl = await toPng(viewportEl, {
+        backgroundColor: "#ffffff",
+        width: imageWidth,
+        height: imageHeight,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
+      });
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      saveAs(blob, filename);
+    },
+  }));
+
   if (!initialElements) {
     return (
       <pre
@@ -216,6 +264,7 @@ export function ReactFlowRenderer({ diagram, content }: ReactFlowRendererProps) 
 
   return (
     <div
+      ref={wrapperRef}
       data-testid="diagram-viewer-reactflow"
       style={{
         height: "100%",
@@ -250,4 +299,4 @@ export function ReactFlowRenderer({ diagram, content }: ReactFlowRendererProps) 
       </ReactFlow>
     </div>
   );
-}
+});

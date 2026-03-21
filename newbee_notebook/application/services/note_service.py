@@ -59,6 +59,26 @@ class NoteService:
             raise NoteNotFoundError(f"Note not found: {note_id}")
         return note
 
+    async def list_all(
+        self,
+        document_id: Optional[str] = None,
+        sort_by: str = "updated_at",
+        order: str = "desc",
+    ) -> list[Note]:
+        """List all notes, optionally filtered by document and sorted."""
+        notes = await self.note_repo.list_all()
+
+        if document_id:
+            notes = [n for n in notes if document_id in n.document_ids]
+
+        reverse = order == "desc"
+        if sort_by == "created_at":
+            notes.sort(key=lambda n: n.created_at, reverse=reverse)
+        else:
+            notes.sort(key=lambda n: n.updated_at, reverse=reverse)
+
+        return notes
+
     async def list_by_notebook(
         self,
         notebook_id: str,

@@ -19,6 +19,7 @@ import { useDeleteDiagram, useDiagram, useDiagramContent, useDiagrams } from "@/
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { DiagramViewer } from "@/components/studio/diagram-viewer";
+import type { DiagramExportHandle } from "@/components/studio/reactflow-renderer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useStudioStore } from "@/stores/studio-store";
 
@@ -98,6 +99,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const [copiedMarkId, setCopiedMarkId] = useState<string | null>(null);
   const [copiedDiagramId, setCopiedDiagramId] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const diagramViewerRef = useRef<DiagramExportHandle>(null);
   const saveTimerRef = useRef<number | null>(null);
   const hydratedNoteIdRef = useRef<string | null>(null);
 
@@ -659,13 +661,42 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           </div>
         </div>
         <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "auto" }}>
-          <strong style={{ display: "block", marginBottom: 8 }}>{t(uiStrings.studio.diagramView)}</strong>
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <strong>{t(uiStrings.studio.diagramView)}</strong>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              aria-label={t(uiStrings.studio.exportPng)}
+              title={t(uiStrings.studio.exportPng)}
+              style={{ padding: "4px 6px" }}
+              onClick={() => {
+                void diagramViewerRef.current?.exportImage(
+                  `${activeDiagram.title}.png`
+                );
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+          </div>
           {activeDiagramContentQuery.isLoading ? (
             <span className="muted">{t(uiStrings.common.loading)}</span>
           ) : activeDiagramContentQuery.isError ? (
             <span className="muted">{t(uiStrings.common.retry)}</span>
           ) : (
-            <DiagramViewer diagram={activeDiagram} content={activeDiagramContent} />
+            <DiagramViewer ref={diagramViewerRef} diagram={activeDiagram} content={activeDiagramContent} />
           )}
         </div>
       </div>

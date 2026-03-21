@@ -24,6 +24,11 @@ class NoteRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_all(self) -> list[Note]:
+        """List all notes across all notebooks."""
+        pass
+
+    @abstractmethod
     async def create(self, note: Note) -> Note:
         """Create a note."""
         pass

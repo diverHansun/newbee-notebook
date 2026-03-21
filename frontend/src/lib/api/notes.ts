@@ -6,6 +6,20 @@ import {
   NoteUpdateInput,
 } from "@/lib/api/types";
 
+export function listAllNotes(params?: {
+  document_id?: string;
+  sort_by?: "created_at" | "updated_at";
+  order?: "asc" | "desc";
+}) {
+  const search = new URLSearchParams();
+  if (params?.document_id) search.set("document_id", params.document_id);
+  if (params?.sort_by) search.set("sort_by", params.sort_by);
+  if (params?.order) search.set("order", params.order);
+
+  const query = search.toString();
+  return apiFetch<NoteListResponse>(query ? `/notes?${query}` : "/notes");
+}
+
 export function listNotes(notebookId: string, params?: { document_id?: string }) {
   const search = new URLSearchParams();
   if (params?.document_id) {

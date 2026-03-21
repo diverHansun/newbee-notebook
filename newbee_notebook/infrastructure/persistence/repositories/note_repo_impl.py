@@ -47,6 +47,14 @@ class NoteRepositoryImpl(NoteRepository):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
+    async def list_all(self) -> list[Note]:
+        query = (
+            self._query()
+            .order_by(NoteModel.updated_at.desc(), NoteModel.created_at.desc())
+        )
+        result = await self._session.execute(query)
+        return [self._to_entity(model) for model in result.scalars().all()]
+
     async def list_by_notebook(
         self,
         notebook_id: str,

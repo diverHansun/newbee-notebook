@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { MCPConfigPanel } from "@/components/layout/mcp-config-panel";
 import { ModelConfigPanel } from "@/components/layout/model-config-panel";
+import { NotesExportPanel } from "@/components/layout/notes-export-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getHealthStatus, getSystemInfo } from "@/lib/api/system";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { useTheme } from "@/lib/theme/theme-context";
 
-export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "about";
+export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "data" | "about";
 
 type ControlPanelNavIconName =
   | ControlPanelTab
@@ -37,6 +38,7 @@ const ACTIVE_ITEMS: ActiveNavItem[] = [
   { key: "theme" },
   { key: "model" },
   { key: "mcp" },
+  { key: "data" },
 ];
 
 const DISABLED_ITEMS: DisabledNavItem[] = [
@@ -90,6 +92,17 @@ function ControlPanelNavIcon({ name }: { name: ControlPanelNavIconName }) {
           <path d="M4 9v6" />
           <path d="M16 10v4" />
           <path d="M20 11v2" />
+        </svg>
+      );
+    case "data":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M4 7V4h16v3" />
+          <path d="M9 20h6" />
+          <path d="M12 4v16" />
+          <path d="M4 20h4" />
+          <path d="M16 20h4" />
+          <path d="M4 12h16" />
         </svg>
       );
     case "skills":
@@ -226,6 +239,8 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
           {activeTab === "model" && <ModelConfigPanel />}
 
           {activeTab === "mcp" && <MCPConfigPanel />}
+
+          {activeTab === "data" && <NotesExportPanel />}
 
           {activeTab === "about" && (
             <div className="control-panel-stack">

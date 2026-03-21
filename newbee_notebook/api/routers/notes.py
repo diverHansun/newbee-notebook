@@ -61,6 +61,24 @@ async def create_note(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.get("/notes", response_model=NoteListResponse)
+async def list_all_notes(
+    document_id: Optional[str] = Query(None, description="Filter by document ID"),
+    sort_by: str = Query("updated_at", description="Sort field: created_at or updated_at"),
+    order: str = Query("desc", description="Sort order: asc or desc"),
+    service: NoteService = Depends(get_note_service),
+):
+    notes = await service.list_all(
+        document_id=document_id,
+        sort_by=sort_by,
+        order=order,
+    )
+    return NoteListResponse(
+        notes=[_to_note_list_item(note) for note in notes],
+        total=len(notes),
+    )
+
+
 @router.get("/notebooks/{notebook_id}/notes", response_model=NoteListResponse)
 async def list_notes(
     notebook_id: str = Path(..., description="Notebook ID"),
