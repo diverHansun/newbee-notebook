@@ -155,12 +155,10 @@ describe("StudioPanel diagrams", () => {
     expect(screen.queryByText("mermaid")).not.toBeInTheDocument();
     expect(screen.queryByText("1 docs")).not.toBeInTheDocument();
 
-    const selectableDiagramId = screen.getByTestId("diagram-id-text-diag-flow-001");
-    expect(selectableDiagramId).toHaveTextContent("diag-flow-001");
-    expect(selectableDiagramId.getAttribute("style")).toContain("user-select: text");
+    const copyIdButton = screen.getByTestId("diagram-id-text-diag-flow-001");
+    expect(copyIdButton).toHaveTextContent("Copy ID");
 
-    const copyButton = screen.getByRole("button", { name: /copy diagram id/i });
-    fireEvent.click(copyButton);
+    fireEvent.click(copyIdButton);
 
     expect(mocks.clipboardWriteText).toHaveBeenCalledWith("diag-flow-001");
   });

@@ -44,6 +44,18 @@ class NoteSkillProvider:
                 "changes manually when the tools can do it.\n"
                 "When the user requests an update, delete, or disassociation, call the corresponding tool "
                 "directly. The runtime confirmation flow will request approval for protected actions.\n"
+                "\n"
+                "Document association guidelines:\n"
+                "- When creating a note, analyse the note content to determine which notebook documents "
+                "it references or derives from. Pass those document IDs in the document_ids parameter of "
+                "create_note. If the conversation context or chat history contains information about which "
+                "documents were used, use that to infer the correct document_ids.\n"
+                "- If you cannot confidently determine the relevant documents, leave document_ids empty "
+                "rather than guessing.\n"
+                "- Do NOT re-infer or change document associations when updating a note. Document links "
+                "during updates should only be changed when the user explicitly requests it.\n"
+                "- When the user asks to link or unlink a document from a note, use "
+                "associate_note_document or disassociate_note_document accordingly.\n"
                 "---"
             ),
             tools=[

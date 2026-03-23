@@ -97,7 +97,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const [pendingDeleteDiagramId, setPendingDeleteDiagramId] = useState<string | null>(null);
   const [selectedDocumentIdToAdd, setSelectedDocumentIdToAdd] = useState("");
   const [copiedMarkId, setCopiedMarkId] = useState<string | null>(null);
-  const [copiedDiagramId, setCopiedDiagramId] = useState<string | null>(null);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const diagramViewerRef = useRef<DiagramExportHandle>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -273,10 +273,10 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   }, [copiedMarkId]);
 
   useEffect(() => {
-    if (!copiedDiagramId) return;
-    const timerId = window.setTimeout(() => setCopiedDiagramId(null), 1500);
+    if (!copiedItemId) return;
+    const timerId = window.setTimeout(() => setCopiedItemId(null), 1500);
     return () => window.clearTimeout(timerId);
-  }, [copiedDiagramId]);
+  }, [copiedItemId]);
 
   const availableMarks = useMemo(() => {
     if (!activeNote) return notebookMarks;
@@ -319,39 +319,55 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     [draftContent, scheduleSave]
   );
 
-  const copyDiagramId = useCallback(async (diagramId: string) => {
-    await navigator.clipboard.writeText(diagramId);
-    setCopiedDiagramId(diagramId);
+  const copyItemId = useCallback(async (itemId: string) => {
+    await navigator.clipboard.writeText(itemId);
+    setCopiedItemId(itemId);
   }, []);
 
-  const renderDiagramIdControls = useCallback(
-    (diagramId: string, options?: { stopPropagation?: boolean }) => {
+  const renderCopyIdButton = useCallback(
+    (itemId: string, labels: { default: string; copied: string }, testIdPrefix: string, options?: { stopPropagation?: boolean }) => {
       const stopPropagation = options?.stopPropagation ?? false;
-      const isCopied = copiedDiagramId === diagramId;
+      const isCopied = copiedItemId === itemId;
 
       return (
-        <code
+        <span
+          role="button"
+          tabIndex={0}
           className="chip"
-          data-testid={`diagram-id-text-${diagramId}`}
-          style={{
-            cursor: "pointer",
-            fontFamily: "\"Cascadia Code\", monospace",
-          }}
-          title={isCopied ? t(uiStrings.studio.diagramIdCopied) : t(uiStrings.studio.diagramId)}
+          data-testid={`${testIdPrefix}-id-text-${itemId}`}
+          style={{ fontSize: 11, padding: "2px 8px", whiteSpace: "nowrap", cursor: "pointer" }}
+          title={itemId}
           onClick={(event) => {
             if (stopPropagation) event.stopPropagation();
-            void copyDiagramId(diagramId);
+            void copyItemId(itemId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              if (stopPropagation) event.stopPropagation();
+              void copyItemId(itemId);
+            }
           }}
           onMouseDown={(event) => {
             if (stopPropagation) event.stopPropagation();
           }}
         >
-          {isCopied ? t(uiStrings.studio.diagramIdCopied) : diagramId}
-        </code>
+          {isCopied ? labels.copied : labels.default}
+        </span>
       );
     },
-    [copiedDiagramId, copyDiagramId, t]
+    [copiedItemId, copyItemId]
   );
+
+  const diagramIdLabels = useMemo(() => ({
+    default: t(uiStrings.studio.copyDiagramIdShort),
+    copied: t(uiStrings.studio.diagramIdCopied),
+  }), [t]);
+
+  const noteIdLabels = useMemo(() => ({
+    default: t(uiStrings.notes.noteId),
+    copied: t(uiStrings.notes.noteIdCopied),
+  }), [t]);
 
   const renderHome = () => (
     <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -432,7 +448,10 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
               onClick={() => openNoteEditor(note.note_id)}
             >
               <div className="stack-sm" style={{ width: "100%" }}>
-                <strong>{note.title || t(uiStrings.notes.untitled)}</strong>
+                <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+                  <strong>{note.title || t(uiStrings.notes.untitled)}</strong>
+                  {renderCopyIdButton(note.note_id, noteIdLabels, "note", { stopPropagation: true })}
+                </div>
                 <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
                   {note.document_ids.map((documentId) => (
                     <span key={documentId} className="chip">
@@ -600,7 +619,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
               <div className="stack-sm" style={{ width: "100%" }}>
                 <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
                   <strong>{diagram.title}</strong>
-                  {renderDiagramIdControls(diagram.diagram_id, { stopPropagation: true })}
+                  {renderCopyIdButton(diagram.diagram_id, diagramIdLabels, "diagram", { stopPropagation: true })}
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                   <span className="chip">{getDiagramTypeLabel(t, diagram.diagram_type)}</span>
@@ -653,7 +672,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           <div className="stack-sm">
             <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
               <strong>{activeDiagram.title}</strong>
-              {renderDiagramIdControls(activeDiagram.diagram_id)}
+              {renderCopyIdButton(activeDiagram.diagram_id, diagramIdLabels, "diagram")}
             </div>
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
               <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
@@ -722,13 +741,16 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           >
             {t(uiStrings.studio.backToList)}
           </button>
-          <button
-            className="btn btn-danger-ghost btn-sm"
-            type="button"
-            onClick={() => setPendingDeleteNote(activeNote)}
-          >
-            {t(uiStrings.notes.deleteNote)}
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            {renderCopyIdButton(activeNote.note_id, noteIdLabels, "note")}
+            <button
+              className="btn btn-danger-ghost btn-sm"
+              type="button"
+              onClick={() => setPendingDeleteNote(activeNote)}
+            >
+              {t(uiStrings.notes.deleteNote)}
+            </button>
+          </div>
         </div>
 
         <input

@@ -331,6 +331,8 @@ export const uiStrings = {
     saveUnsaved: { zh: "未保存", en: "Unsaved" },
     updatedAt: { zh: "更新于 {date}", en: "Updated {date}" },
     noteCount: { zh: "{n} 条笔记", en: "{n} notes" },
+    noteId: { zh: "复制 ID", en: "Copy ID" },
+    noteIdCopied: { zh: "已复制", en: "Copied" },
   },
   marks: {
     title: { zh: "书签", en: "Bookmarks" },

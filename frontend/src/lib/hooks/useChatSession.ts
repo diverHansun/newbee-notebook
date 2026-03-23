@@ -32,6 +32,11 @@ function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
   return message.trim().toLowerCase().startsWith("/diagram");
 }
 
+function isNoteCommandMessage(message: string, mode: MessageMode): boolean {
+  if (mode !== "agent") return false;
+  return message.trim().toLowerCase().startsWith("/note");
+}
+
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
     id: `msg-${msg.message_id}`,
@@ -401,6 +406,7 @@ export function useChatSession(notebookId: string) {
       const userMessageId = `local-user-${Date.now()}`;
       const streamStartedAtMs = Date.now();
       const isDiagramRequest = isDiagramCommandMessage(message, mode);
+      const isNoteRequest = isNoteCommandMessage(message, mode);
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
@@ -484,6 +490,9 @@ export function useChatSession(notebookId: string) {
                   queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
                 });
               }
+              if (isNoteRequest) {
+                queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
+              }
               queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
             }
           })();
@@ -550,6 +559,9 @@ export function useChatSession(notebookId: string) {
                   queryClient.invalidateQueries({
                     queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
                   });
+                }
+                if (isNoteRequest) {
+                  queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
                 }
                 return;
               }
@@ -764,6 +776,9 @@ export function useChatSession(notebookId: string) {
               queryClient.invalidateQueries({
                 queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
               });
+            }
+            if (isNoteRequest) {
+              queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
             }
             queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
           },
