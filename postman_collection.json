@@ -1,8 +1,8 @@
 {
     "info": {
-        "name": "Newbee Notebook API v2.5",
+        "name": "Newbee Notebook API v2.6",
         "_postman_id": "62f9c89d-8b94-4bcf-8d9c-e16a3a836b6d",
-        "description": "Newbee Notebook API Postman Collection v2.5 (backend-v2 / batch-2 complete)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Runtime modes: agent, ask, explain, conclude\n- `chat` is retained only as a backward-compatible alias for `agent`\n- Context support (`selected_text` + `document_id`)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- MCP settings and status APIs (`/settings/*`)\n- **Session Messages API** with mode filtering and pagination\n- **Three-level deletion semantics**: unlink / soft delete / hard delete\n\n## Notes\n- Storage backend switch (`STORAGE_BACKEND=local|minio`) is environment-driven in batch-1 MinIO Phase 0/1.\n- This collection keeps API paths stable; use existing document endpoints for local/minio modes.\n- Document-scoped retrieval now relies on stable `source_document_id` metadata in search indexes.\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until `completed` before asking grounded questions\n6. Variables are automatically populated\n\n## Deletion Semantics\n- **Remove from Notebook** (`DELETE /notebooks/{nid}/documents/{did}`): Unlink only.\n- **Delete Library Document** (`DELETE /library/documents/{did}`): Soft delete -- removes indexes + DB, preserves files.\n- **Delete Library Document (Force)** (`DELETE /library/documents/{did}?force=true`): Hard delete -- removes everything including files.\n\n## Context Format\nFor explain/conclude modes with selected text:\n```json\n{\n  \"context\": {\n    \"document_id\": \"<uuid>\",\n    \"selected_text\": \"text from document\"\n  }\n}\n```\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
+        "description": "Newbee Notebook API Postman Collection v2.6 (backend-v2 / batch-4 complete)\n\n## Features\n- Automatic variable extraction (IDs saved automatically)\n- Library-first document workflow\n- Notebook document association APIs\n- Runtime modes: agent, ask, explain, conclude\n- `chat` is retained only as a backward-compatible alias for `agent`\n- Context support (`selected_text` + `document_id`)\n- Streaming (SSE) endpoints\n- Runtime model switch APIs (`/config/*`)\n- MCP settings and status APIs (`/settings/*`)\n- Session Messages API with mode filtering and pagination\n- Three-level deletion semantics: unlink / soft delete / hard delete\n- Batch-3 APIs: notes, marks, and chat confirm callback\n- Batch-4 APIs: notebook-scoped diagrams metadata and content\n\n## Usage\n1. Import this collection into Postman\n2. Run requests in order:\n   - Health -> Notebooks -> Documents -> Sessions -> Chat\n3. Upload files to Library first\n4. Add Library documents to Notebook\n5. Poll document status until `completed` before asking grounded questions\n6. Use Batch-3/Batch-4 folders to verify notes/marks/diagrams endpoints\n\n## Documentation\nSee POSTMAN_GUIDE.md for detailed instructions.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -1997,6 +1997,804 @@
             ]
         },
         {
+            "name": "Batch-3 Notes & Marks",
+            "description": "Batch-3 endpoints: notes, marks, and chat confirmation callback.",
+            "item": [
+                {
+                    "name": "Create Note",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/notes",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes"
+                            ]
+                        },
+                        "description": "Create a note in the target notebook and save `note_id` to collection variables.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"notebook_id\": \"{{notebook_id}}\",\n  \"title\": \"Batch-3 Test Note\",\n  \"content\": \"Initial content from Postman\",\n  \"document_ids\": []\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 201\", function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Response contains note_id\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"note_id\");",
+                                    "});",
+                                    "pm.collectionVariables.set(\"note_id\", jsonData.note_id);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List Notes By Notebook",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notebooks/{{notebook_id}}/notes",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notebooks",
+                                "{{notebook_id}}",
+                                "notes"
+                            ]
+                        },
+                        "description": "List notes in notebook scope. If non-empty, save first note id."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Has notes and total\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"notes\");",
+                                    "    pm.expect(jsonData).to.have.property(\"total\");",
+                                    "});",
+                                    "if (jsonData.notes && jsonData.notes.length > 0) {",
+                                    "    pm.collectionVariables.set(\"note_id\", jsonData.notes[0].note_id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List All Notes",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notes?sort_by=updated_at&order=desc",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "sort_by",
+                                    "value": "updated_at",
+                                    "description": "created_at or updated_at"
+                                },
+                                {
+                                    "key": "order",
+                                    "value": "desc",
+                                    "description": "asc or desc"
+                                }
+                            ]
+                        },
+                        "description": "List all notes globally with sorting options."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Note",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notes/{{note_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes",
+                                "{{note_id}}"
+                            ]
+                        },
+                        "description": "Get a note by `note_id`."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Update Note",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/notes/{{note_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes",
+                                "{{note_id}}"
+                            ]
+                        },
+                        "description": "Patch note title/content.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Batch-3 Updated Note\",\n  \"content\": \"Updated by Postman patch request\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Add Note Document Tag",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/notes/{{note_id}}/documents",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes",
+                                "{{note_id}}",
+                                "documents"
+                            ]
+                        },
+                        "description": "Associate a document with note.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"document_id\": \"{{document_id}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Remove Note Document Tag",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notes/{{note_id}}/documents/{{document_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes",
+                                "{{note_id}}",
+                                "documents",
+                                "{{document_id}}"
+                            ]
+                        },
+                        "description": "Remove a note-document association."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Create Mark",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/documents/{{document_id}}/marks",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "documents",
+                                "{{document_id}}",
+                                "marks"
+                            ]
+                        },
+                        "description": "Create a mark under document scope and save `mark_id`.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"anchor_text\": \"sample anchor from postman\",\n  \"char_offset\": 0,\n  \"context_text\": \"optional context\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 201\", function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Response contains mark_id\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"mark_id\");",
+                                    "});",
+                                    "pm.collectionVariables.set(\"mark_id\", jsonData.mark_id);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List Document Marks",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/documents/{{document_id}}/marks",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "documents",
+                                "{{document_id}}",
+                                "marks"
+                            ]
+                        },
+                        "description": "List marks for a document and save first mark id when available."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Has marks and total\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"marks\");",
+                                    "    pm.expect(jsonData).to.have.property(\"total\");",
+                                    "});",
+                                    "if (jsonData.marks && jsonData.marks.length > 0) {",
+                                    "    pm.collectionVariables.set(\"mark_id\", jsonData.marks[0].mark_id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Count Document Marks",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/documents/{{document_id}}/marks/count",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "documents",
+                                "{{document_id}}",
+                                "marks",
+                                "count"
+                            ]
+                        },
+                        "description": "Get mark count under a document."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Has count field\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"count\");",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List Notebook Marks",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notebooks/{{notebook_id}}/marks",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notebooks",
+                                "{{notebook_id}}",
+                                "marks"
+                            ]
+                        },
+                        "description": "List marks in notebook scope."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Mark",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/marks/{{mark_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "marks",
+                                "{{mark_id}}"
+                            ]
+                        },
+                        "description": "Delete mark by id."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Note",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/notes/{{note_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "notes",
+                                "{{note_id}}"
+                            ]
+                        },
+                        "description": "Delete note by id."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Confirm Action (chat callback)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/chat/{{session_id}}/confirm",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "chat",
+                                "{{session_id}}",
+                                "confirm"
+                            ]
+                        },
+                        "description": "Resolve a pending confirmation request from SSE stream.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"request_id\": \"{{confirmation_request_id}}\",\n  \"approved\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200 or 404\", function () {",
+                                    "    pm.expect([200, 404]).to.include(pm.response.code);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Batch-4 Diagrams",
+            "description": "Batch-4 endpoints: notebook-scoped diagrams metadata and content.",
+            "item": [
+                {
+                    "name": "List Diagrams",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/diagrams?notebook_id={{notebook_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "diagrams"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notebook_id",
+                                    "value": "{{notebook_id}}",
+                                    "description": "Required notebook scope"
+                                }
+                            ]
+                        },
+                        "description": "List notebook-scoped diagrams and save first diagram id if exists."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "var jsonData = pm.response.json();",
+                                    "pm.test(\"Has diagrams and total\", function () {",
+                                    "    pm.expect(jsonData).to.have.property(\"diagrams\");",
+                                    "    pm.expect(jsonData).to.have.property(\"total\");",
+                                    "});",
+                                    "if (jsonData.diagrams && jsonData.diagrams.length > 0) {",
+                                    "    pm.collectionVariables.set(\"diagram_id\", jsonData.diagrams[0].diagram_id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Diagram",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/diagrams/{{diagram_id}}?notebook_id={{notebook_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "diagrams",
+                                "{{diagram_id}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notebook_id",
+                                    "value": "{{notebook_id}}",
+                                    "description": "Required notebook scope"
+                                }
+                            ]
+                        },
+                        "description": "Get diagram metadata by id."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Diagram Content",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/diagrams/{{diagram_id}}/content?notebook_id={{notebook_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "diagrams",
+                                "{{diagram_id}}",
+                                "content"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notebook_id",
+                                    "value": "{{notebook_id}}",
+                                    "description": "Required notebook scope"
+                                }
+                            ]
+                        },
+                        "description": "Get raw diagram content text (reactflow_json or mermaid)."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Update Diagram Positions",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/diagrams/{{diagram_id}}/positions?notebook_id={{notebook_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "diagrams",
+                                "{{diagram_id}}",
+                                "positions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notebook_id",
+                                    "value": "{{notebook_id}}",
+                                    "description": "Required notebook scope"
+                                }
+                            ]
+                        },
+                        "description": "Update node positions for reactflow_json diagrams.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"positions\": {\n    \"root\": {\"x\": 0, \"y\": 0}\n  }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 200 or 400\", function () {",
+                                    "    pm.expect([200, 400]).to.include(pm.response.code);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Diagram",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base}}/diagrams/{{diagram_id}}?notebook_id={{notebook_id}}",
+                            "host": [
+                                "{{api_base}}"
+                            ],
+                            "path": [
+                                "diagrams",
+                                "{{diagram_id}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notebook_id",
+                                    "value": "{{notebook_id}}",
+                                    "description": "Required notebook scope"
+                                }
+                            ]
+                        },
+                        "description": "Delete diagram by id in notebook scope."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "name": "Config",
             "description": "Runtime model switching configuration endpoints.",
             "item": [
@@ -2726,6 +3524,26 @@
         {
             "key": "mcp_server_name",
             "value": "filesystem"
+        },
+        {
+            "key": "note_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "mark_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "diagram_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "confirmation_request_id",
+            "value": "",
+            "type": "string"
         }
     ]
 }
