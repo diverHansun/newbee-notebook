@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 15;
 
 function formatRelativeTime(
   dateString: string,
