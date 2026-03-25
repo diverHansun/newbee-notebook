@@ -24,7 +24,7 @@ export type ChatMessage = {
   thinkingStage?: string | null;
   messageId?: number;
   sources?: NormalizedSource[];
-  sourcesType?: "tool_results" | "retrieval" | "none";
+  sourcesType?: "document_retrieval" | "tool_results" | "none";
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
   pendingConfirmation?: PendingConfirmation;

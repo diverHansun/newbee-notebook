@@ -1,10 +1,8 @@
 "use client";
 
-"use client";
-
 import { ConfirmationCard } from "@/components/chat/confirmation-card";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
-import { DocumentReferencesCard, ToolResultsCard } from "@/components/chat/sources-card";
+import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage } from "@/stores/chat-store";
@@ -76,7 +74,7 @@ function ThinkingIndicator({
 
 export function MessageItem({
   message,
-  onOpenDocument,
+  onOpenDocument: _onOpenDocument,
   onResolveConfirmation,
 }: MessageItemProps) {
   const { t } = useLang();
@@ -150,11 +148,7 @@ export function MessageItem({
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            {message.sourcesType === "tool_results" ? (
-              <ToolResultsCard sources={message.sources} />
-            ) : (
-              <DocumentReferencesCard sources={message.sources} onOpenDocument={onOpenDocument} />
-            )}
+            <DocumentReferencesCard sources={message.sources} />
           </div>
         )}
         {!isUser && message.pendingConfirmation ? (

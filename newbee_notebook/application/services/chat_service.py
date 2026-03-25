@@ -465,7 +465,7 @@ class ChatService:
                 yield {
                     "type": "sources",
                     "sources": sources,
-                    "sources_type": self._resolve_sources_type(mode_enum),
+                    "sources_type": self._resolve_sources_type(sources),
                 }
 
             # Persist messages before "done" so client-side connection close does not
@@ -676,10 +676,20 @@ class ChatService:
         }
 
     @staticmethod
-    def _resolve_sources_type(mode_enum: ModeType) -> str:
-        if normalize_runtime_mode(mode_enum) is ModeType.AGENT:
-            return "tool_results"
-        return "retrieval"
+    def _resolve_sources_type(sources: List[dict]) -> str:
+        if not sources:
+            return "none"
+
+        source_types = {
+            str(item.get("source_type") or "").strip().lower()
+            for item in sources
+            if str(item.get("source_type") or "").strip()
+        }
+        if not source_types:
+            return "document_retrieval"
+        if source_types.issubset({"retrieval"}):
+            return "document_retrieval"
+        return "tool_results"
 
     @staticmethod
     def _filter_sources_by_mode_quality(sources: List[dict], mode_enum: ModeType) -> List[dict]:

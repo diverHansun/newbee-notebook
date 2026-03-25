@@ -12,7 +12,6 @@ vi.mock("@/components/reader/markdown-viewer", () => ({
 
 vi.mock("@/components/chat/sources-card", () => ({
   DocumentReferencesCard: () => null,
-  ToolResultsCard: () => null,
 }));
 
 const assistantMessage: ChatMessage = {

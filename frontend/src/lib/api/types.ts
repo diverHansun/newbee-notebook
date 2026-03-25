@@ -276,7 +276,7 @@ export type SseEventThinking = {
 export type SseEventSources = {
   type: "sources";
   sources: RawSource[];
-  sources_type?: "tool_results" | "retrieval" | "none";
+  sources_type?: "document_retrieval" | "tool_results" | "none";
 };
 
 export type SseEventDone = {

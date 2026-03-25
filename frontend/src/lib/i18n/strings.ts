@@ -67,8 +67,6 @@ export const uiStrings = {
   },
   sources: {
     title: { zh: "引用来源", en: "References" },
-    toolResults: { zh: "工具调用结果", en: "Tool results" },
-    expandMore: { zh: "展开更多（共 {n} 条）", en: "Show more ({n} total)" },
   },
   sourceCard: {
     waiting: { zh: "等待处理", en: "Waiting" },

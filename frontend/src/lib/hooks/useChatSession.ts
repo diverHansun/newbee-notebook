@@ -470,7 +470,7 @@ export function useChatSession(notebookId: string) {
                 status: "done",
                 messageId: fallback.message_id,
                 sources: normalizeSources(fallback.sources),
-                sourcesType: mode === "agent" ? "tool_results" : "retrieval",
+                sourcesType: "document_retrieval",
               });
             } catch (fallbackError) {
               const fallbackApiError = fallbackError as ApiError;
@@ -534,7 +534,7 @@ export function useChatSession(notebookId: string) {
                 if (activeAssistantIdRef.current) {
                   updateMessage(activeAssistantIdRef.current, {
                     sources: normalizeSources(event.sources),
-                    sourcesType: event.sources_type || "retrieval",
+                    sourcesType: event.sources_type || "document_retrieval",
                   });
                 }
                 return;

@@ -208,6 +208,28 @@ def test_filter_sources_by_mode_quality_keeps_ask_sources_when_scores_absent():
     assert filtered == sources
 
 
+def test_resolve_sources_type_returns_document_retrieval_for_retrieval_only_sources():
+    sources = [
+        {"document_id": "doc-1", "source_type": "retrieval"},
+        {"document_id": "doc-2", "source_type": "retrieval"},
+    ]
+
+    assert ChatService._resolve_sources_type(sources) == "document_retrieval"
+
+
+def test_resolve_sources_type_returns_tool_results_for_mixed_sources():
+    sources = [
+        {"document_id": "doc-1", "source_type": "retrieval"},
+        {"document_id": "doc-2", "source_type": "web_search"},
+    ]
+
+    assert ChatService._resolve_sources_type(sources) == "tool_results"
+
+
+def test_resolve_sources_type_returns_none_for_empty_sources():
+    assert ChatService._resolve_sources_type([]) == "none"
+
+
 def test_validate_mode_guard_allows_ask_when_completed_docs_exist():
     service = _build_service()
 
