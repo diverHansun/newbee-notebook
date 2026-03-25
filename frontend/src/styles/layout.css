@@ -85,6 +85,8 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
+  flex-shrink: 0;
+  padding-top: 8px;
 }
 
 .notebook-pagination-info {

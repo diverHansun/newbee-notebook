@@ -45,6 +45,7 @@ export function DocumentReader({
   const readerBodyRef = useRef<HTMLDivElement>(null);
   const isSelecting = useReaderStore((state) => state.isSelecting);
   const activeMarkId = useReaderStore((state) => state.activeMarkId);
+  const markScrollTrigger = useReaderStore((state) => state.markScrollTrigger);
   const setReaderActiveMarkId = useReaderStore((state) => state.setActiveMarkId);
   const isTocOpen = useReaderStore((state) => state.isTocOpen);
   const setTocOpen = useReaderStore((state) => state.setTocOpen);
@@ -113,10 +114,6 @@ export function DocumentReader({
         char_offset: input.charOffset,
         context_text: input.contextText,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["marks", "document", documentId] });
-      void queryClient.invalidateQueries({ queryKey: ["marks", "notebook"] });
-    },
   });
 
   useEffect(() => {
@@ -200,6 +197,10 @@ export function DocumentReader({
           charOffset,
           contextText: selectedText,
         });
+        // Wait for query cache to contain the new mark before activating,
+        // so the scroll-to-mark effect can find it immediately.
+        await queryClient.invalidateQueries({ queryKey: ["marks", "document", documentId] });
+        await queryClient.invalidateQueries({ queryKey: ["marks", "notebook"] });
         setReaderActiveMarkId(mark.mark_id);
         setStudioActiveMarkId(mark.mark_id);
         setMarkFeedback(t(uiStrings.reader.bookmarkCreated));
@@ -207,7 +208,7 @@ export function DocumentReader({
         setMarkFeedback(t(uiStrings.reader.bookmarkCreateFailed));
       }
     },
-    [chunkOffsets, createMarkMutation, setReaderActiveMarkId, setStudioActiveMarkId, t]
+    [chunkOffsets, createMarkMutation, documentId, queryClient, setReaderActiveMarkId, setStudioActiveMarkId, t]
   );
 
   useEffect(() => {
@@ -324,7 +325,7 @@ export function DocumentReader({
     };
 
     scrollToMark();
-  }, [activeMarkId, chunkOffsets, marksQuery.data?.marks, totalChunkCount, visibleChunkCount]);
+  }, [activeMarkId, markScrollTrigger, chunkOffsets, marksQuery.data?.marks, totalChunkCount, visibleChunkCount]);
 
   // Clear active mark when user clicks anywhere in the reader (except on the mark itself)
   useEffect(() => {
@@ -527,61 +528,115 @@ function contentErrorMessage(
 }
 
 /**
- * Find anchor_text in the rendered DOM of a chunk and wrap it in a <mark> element.
- * Returns cleanup + scrollIntoView helpers, or null if text not found / wrapping fails.
+ * Find anchor_text in the rendered DOM of a chunk and wrap matching segments
+ * in <mark> elements. Handles text that spans across multiple inline elements
+ * (e.g. <strong>, <em>, <code>) by wrapping each text node segment individually.
  */
 function highlightTextInChunk(
   chunkEl: HTMLElement,
   anchorText: string,
 ): { cleanup: () => void; scrollIntoView: (container: HTMLElement | null) => void } | null {
-  // Use first 30 chars as the search snippet (avoids multi-element boundary issues)
-  const searchSnippet = anchorText.slice(0, 30).trim();
-  if (!searchSnippet) return null;
+  if (!anchorText.trim()) return null;
 
+  // Step 1: Collect all text nodes and build a concatenated string with offset tracking
+  const textEntries: { node: Text; start: number; end: number }[] = [];
   const walker = document.createTreeWalker(chunkEl, NodeFilter.SHOW_TEXT);
+  let cumOffset = 0;
   let textNode: Text | null;
-
   while ((textNode = walker.nextNode() as Text | null)) {
-    const content = textNode.textContent ?? "";
-    const idx = content.indexOf(searchSnippet);
-    if (idx < 0) continue;
+    const len = textNode.length;
+    textEntries.push({ node: textNode, start: cumOffset, end: cumOffset + len });
+    cumOffset += len;
+  }
+  if (textEntries.length === 0) return null;
 
-    try {
-      const range = document.createRange();
-      range.setStart(textNode, idx);
-      range.setEnd(textNode, Math.min(idx + anchorText.length, content.length));
+  // Step 2: Search for anchorText in the concatenated text
+  // Selection.toString() may differ from DOM text in two ways:
+  //   a) \n / \t rendered as spaces
+  //   b) paragraph boundaries produce extra spaces (e.g. "foo.  Bar" vs "foo. Bar")
+  // We collapse all whitespace runs to a single space for matching, then map
+  // collapsed positions back to original positions for wrapping.
+  const concatenated = textEntries.map((e) => e.node.textContent ?? "").join("");
 
-      const markEl = document.createElement("mark");
-      markEl.className = "mark-text-highlight";
-      range.surroundContents(markEl);
-
-      const cleanup = () => {
-        if (!markEl.isConnected) return;
-        const parent = markEl.parentNode;
-        if (!parent) return;
-        while (markEl.firstChild) parent.insertBefore(markEl.firstChild, markEl);
-        parent.removeChild(markEl);
-        if ("normalize" in parent) (parent as Element).normalize();
-      };
-
-      const scrollIntoView = (container: HTMLElement | null) => {
-        if (!container) {
-          markEl.scrollIntoView({ behavior: "smooth", block: "center" });
-          return;
-        }
-        const rect = markEl.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const scrollTarget =
-          container.scrollTop + rect.top - containerRect.top - containerRect.height / 2 + rect.height / 2;
-        container.scrollTo({ top: scrollTarget, behavior: "smooth" });
-      };
-
-      return { cleanup, scrollIntoView };
-    } catch {
-      // surroundContents failed (range spans element boundaries) — fall back to chunk scroll
-      return null;
+  const collapseWs = (s: string): { collapsed: string; origIndices: number[] } => {
+    const chars: string[] = [];
+    const indices: number[] = [];
+    let prevSpace = false;
+    for (let i = 0; i < s.length; i++) {
+      const isSpace = /\s/.test(s[i]);
+      if (isSpace) {
+        if (!prevSpace) { chars.push(" "); indices.push(i); }
+        prevSpace = true;
+      } else {
+        chars.push(s[i]); indices.push(i);
+        prevSpace = false;
+      }
     }
+    return { collapsed: chars.join(""), origIndices: indices };
+  };
+
+  const { collapsed: collapsedConcat, origIndices } = collapseWs(concatenated);
+  const { collapsed: collapsedAnchor } = collapseWs(anchorText);
+  const collapsedMatchStart = collapsedConcat.indexOf(collapsedAnchor);
+  if (collapsedMatchStart < 0) return null;
+  const collapsedMatchEnd = collapsedMatchStart + collapsedAnchor.length;
+
+  // Map back to original concatenated positions
+  const matchStart = origIndices[collapsedMatchStart];
+  const matchEnd =
+    collapsedMatchEnd < origIndices.length
+      ? origIndices[collapsedMatchEnd]
+      : concatenated.length;
+
+  // Step 3: Wrap each overlapping text node segment in a <mark> element
+  const createdMarks: HTMLElement[] = [];
+  for (const entry of textEntries) {
+    if (entry.end <= matchStart || entry.start >= matchEnd) continue;
+
+    const localStart = Math.max(matchStart, entry.start) - entry.start;
+    const localEnd = Math.min(matchEnd, entry.end) - entry.start;
+
+    let target: Text = entry.node;
+    if (localStart > 0) {
+      target = target.splitText(localStart);
+    }
+    if (localEnd - localStart < target.length) {
+      target.splitText(localEnd - localStart);
+    }
+
+    const markEl = document.createElement("mark");
+    markEl.className = "mark-text-highlight";
+    target.parentNode!.insertBefore(markEl, target);
+    markEl.appendChild(target);
+    createdMarks.push(markEl);
   }
 
-  return null;
+  if (createdMarks.length === 0) return null;
+
+  const cleanup = () => {
+    for (const markEl of createdMarks) {
+      if (!markEl.isConnected) continue;
+      const parent = markEl.parentNode;
+      if (!parent) continue;
+      while (markEl.firstChild) parent.insertBefore(markEl.firstChild, markEl);
+      parent.removeChild(markEl);
+    }
+    chunkEl.normalize();
+  };
+
+  const scrollIntoView = (container: HTMLElement | null) => {
+    const first = createdMarks[0];
+    if (!first?.isConnected) return;
+    if (!container) {
+      first.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const rect = first.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const scrollTarget =
+      container.scrollTop + rect.top - containerRect.top - containerRect.height / 2 + rect.height / 2;
+    container.scrollTo({ top: scrollTarget, behavior: "smooth" });
+  };
+
+  return { cleanup, scrollIntoView };
 }

@@ -15,6 +15,7 @@ type MenuPosition = {
 type ReaderState = {
   currentDocumentId: string | null;
   activeMarkId: string | null;
+  markScrollTrigger: number;
   selection: SelectionState | null;
   isSelecting: boolean;
   isTocOpen: boolean;
@@ -34,20 +35,22 @@ type ReaderState = {
 export const useReaderStore = create<ReaderState>((set) => ({
   currentDocumentId: null,
   activeMarkId: null,
+  markScrollTrigger: 0,
   selection: null,
   isSelecting: false,
   isTocOpen: true,
   isMenuVisible: false,
   menuPosition: null,
   openDocument: (documentId, markId = null) =>
-    set({
+    set((state) => ({
       currentDocumentId: documentId,
       activeMarkId: markId,
+      markScrollTrigger: markId != null ? state.markScrollTrigger + 1 : state.markScrollTrigger,
       selection: null,
       isSelecting: false,
       isMenuVisible: false,
       menuPosition: null,
-    }),
+    })),
   closeDocument: () =>
     set({
       currentDocumentId: null,
@@ -57,7 +60,11 @@ export const useReaderStore = create<ReaderState>((set) => ({
       isMenuVisible: false,
       menuPosition: null,
     }),
-  setActiveMarkId: (markId) => set({ activeMarkId: markId }),
+  setActiveMarkId: (markId) =>
+    set((state) => ({
+      activeMarkId: markId,
+      markScrollTrigger: markId != null ? state.markScrollTrigger + 1 : state.markScrollTrigger,
+    })),
   setSelection: (selection) => set({ selection }),
   setIsSelecting: (value) => set({ isSelecting: value }),
   setTocOpen: (open) => set({ isTocOpen: open }),
