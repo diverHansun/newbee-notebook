@@ -1,6 +1,7 @@
 "use client";
 
 import { saveAs } from "file-saver";
+import { toPng } from "html-to-image";
 import mermaid from "mermaid";
 import {
   forwardRef,
@@ -138,36 +139,23 @@ export const MermaidRenderer = forwardRef<DiagramExportHandle, MermaidRendererPr
     async exportImage(filename: string) {
       const container = canvasRef.current;
       if (!container) return;
+
       const svgEl = container.querySelector("svg");
       if (!svgEl) return;
 
-      const serializer = new XMLSerializer();
-      const svgString = serializer.serializeToString(svgEl);
-      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(svgBlob);
-
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load SVG as image"));
-        img.src = url;
+      const dataUrl = await toPng(container, {
+        backgroundColor: "#ffffff",
+        width: svgEl.clientWidth + 32,
+        height: svgEl.clientHeight + 32,
+        style: {
+          transform: "none",
+          width: `${svgEl.clientWidth + 32}px`,
+          height: `${svgEl.clientHeight + 32}px`,
+        },
       });
 
-      const pixelRatio = 2;
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth * pixelRatio;
-      canvas.height = img.naturalHeight * pixelRatio;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/png")
-      );
-      if (!blob) return;
-
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
       saveAs(blob, filename);
     },
   }));
