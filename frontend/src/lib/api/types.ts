@@ -298,6 +298,8 @@ export type SseEventConfirmation = {
   type: "confirmation_request";
   request_id: string;
   tool_name: string;
+  action_type: "create" | "update" | "delete" | "confirm";
+  target_type: "note" | "diagram" | "document";
   args_summary: Record<string, unknown>;
   description: string;
 };

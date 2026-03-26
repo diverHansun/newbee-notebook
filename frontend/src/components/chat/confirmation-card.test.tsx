@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmationCard } from "@/components/chat/confirmation-card";
@@ -9,6 +9,8 @@ function createPendingConfirmation(): PendingConfirmation {
   return {
     requestId: "req-1",
     toolName: "update_note",
+    actionType: "update",
+    targetType: "note",
     argsSummary: {
       note_id: "note-1",
     },
@@ -40,33 +42,14 @@ describe("ConfirmationCard", () => {
       />
     );
 
-    expect(screen.getByText("Confirm action")).toBeInTheDocument();
-    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
+    expect(screen.getByText("Update note")).toBeInTheDocument();
     expect(screen.getByText("note-1")).toBeInTheDocument();
-    expect(screen.getByText("Time left")).toBeInTheDocument();
-    expect(screen.getByText("03:00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     fireEvent.click(screen.getByRole("button", { name: "Reject" }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onReject).toHaveBeenCalledTimes(1);
-  });
-
-  it("updates the countdown while pending", () => {
-    renderWithLang(
-      <ConfirmationCard
-        confirmation={createPendingConfirmation()}
-        onConfirm={() => {}}
-        onReject={() => {}}
-      />
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(61_000);
-    });
-
-    expect(screen.getByText("01:59")).toBeInTheDocument();
   });
 
   it("renders a resolved status without action buttons", () => {

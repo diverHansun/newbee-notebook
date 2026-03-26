@@ -272,6 +272,7 @@ export const uiStrings = {
   confirmation: {
     title: { zh: "确认操作", en: "Confirm action" },
     confirm: { zh: "确认", en: "Confirm" },
+    confirmDelete: { zh: "确认删除", en: "Confirm delete" },
     reject: { zh: "拒绝", en: "Reject" },
     confirmed: { zh: "已确认", en: "Confirmed" },
     rejected: { zh: "已拒绝", en: "Rejected" },
@@ -279,6 +280,28 @@ export const uiStrings = {
     timeLeft: { zh: "剩余时间", en: "Time left" },
     requestId: { zh: "请求 ID", en: "Request ID" },
     tool: { zh: "工具", en: "Tool" },
+    actionTitle: {
+      create: {
+        note: { zh: "创建笔记", en: "Create note" },
+        diagram: { zh: "创建图表", en: "Create diagram" },
+        document: { zh: "关联文档", en: "Link document" },
+      },
+      update: {
+        note: { zh: "更新笔记", en: "Update note" },
+        diagram: { zh: "更新图表", en: "Update diagram" },
+        document: { zh: "更新文档", en: "Update document" },
+      },
+      delete: {
+        note: { zh: "删除笔记", en: "Delete note" },
+        diagram: { zh: "删除图表", en: "Delete diagram" },
+        document: { zh: "解除文档关联", en: "Unlink document" },
+      },
+      confirm: {
+        note: { zh: "确认笔记操作", en: "Confirm note action" },
+        diagram: { zh: "确认图表类型", en: "Confirm diagram type" },
+        document: { zh: "确认文档操作", en: "Confirm document action" },
+      },
+    },
   },
   explainCard: {
     titleExplain: { zh: "解释", en: "Explain" },

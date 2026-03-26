@@ -185,6 +185,8 @@ export function useChatSession(notebookId: string) {
       const pendingConfirmation = {
         requestId: event.request_id,
         toolName: event.tool_name,
+        actionType: event.action_type,
+        targetType: event.target_type,
         argsSummary: event.args_summary,
         description: event.description,
         status: "pending" as const,
@@ -210,6 +212,20 @@ export function useChatSession(notebookId: string) {
           },
         });
         confirmationTimersRef.current.delete(event.request_id);
+
+        // Auto-collapse after 1.5s
+        window.setTimeout(() => {
+          const msg = findMessageByConfirmationRequest(event.request_id);
+          if (msg?.pendingConfirmation && msg.pendingConfirmation.status === "timeout") {
+            updateMessage(msg.id, {
+              pendingConfirmation: {
+                ...msg.pendingConfirmation,
+                status: "collapsed",
+                resolvedFrom: "timeout",
+              },
+            });
+          }
+        }, 1500);
       }, CONFIRMATION_TIMEOUT_MS);
       confirmationTimersRef.current.set(event.request_id, timerId);
     },
@@ -841,12 +857,27 @@ export function useChatSession(notebookId: string) {
       if (!message?.pendingConfirmation) return;
 
       clearConfirmationTimer(requestId);
+      const resolvedStatus = approved ? "confirmed" : "rejected";
       updateMessage(message.id, {
         pendingConfirmation: {
           ...message.pendingConfirmation,
-          status: approved ? "confirmed" : "rejected",
+          status: resolvedStatus,
         },
       });
+
+      // Auto-collapse after 1.5s
+      window.setTimeout(() => {
+        const msg = findMessageByConfirmationRequest(requestId);
+        if (msg?.pendingConfirmation && msg.pendingConfirmation.status !== "pending") {
+          updateMessage(msg.id, {
+            pendingConfirmation: {
+              ...msg.pendingConfirmation,
+              status: "collapsed",
+              resolvedFrom: msg.pendingConfirmation.status as "confirmed" | "rejected" | "timeout",
+            },
+          });
+        }
+      }, 1500);
 
       await confirmChatAction(sessionId, {
         request_id: requestId,

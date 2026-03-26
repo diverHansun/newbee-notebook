@@ -24,6 +24,8 @@ const assistantMessage: ChatMessage = {
   pendingConfirmation: {
     requestId: "req-1",
     toolName: "update_note",
+    actionType: "update",
+    targetType: "note",
     argsSummary: {
       note_id: "note-1",
     },
@@ -47,7 +49,7 @@ describe("MessageItem", () => {
     );
 
     expect(screen.getByText("Working on it.")).toBeInTheDocument();
-    expect(screen.getByText("Confirm action")).toBeInTheDocument();
+    expect(screen.getByText("Update note")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     await user.click(screen.getByRole("button", { name: "Reject" }));

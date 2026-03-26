@@ -75,6 +75,8 @@ describe("useChatSession", () => {
           type: "confirmation_request",
           request_id: "req-1",
           tool_name: "update_note",
+          action_type: "update",
+          target_type: "note",
           args_summary: { note_id: "note-1" },
           description: "Update note metadata.",
         } as never);

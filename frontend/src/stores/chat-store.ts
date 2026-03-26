@@ -5,15 +5,25 @@ import { create } from "zustand";
 import { MessageMode, MessageRole } from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
-export type PendingConfirmationStatus = "pending" | "confirmed" | "rejected" | "timeout";
+export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
+export type ConfirmationTargetType = "note" | "diagram" | "document";
+export type PendingConfirmationStatus =
+  | "pending"
+  | "confirmed"
+  | "rejected"
+  | "timeout"
+  | "collapsed";
 
 export type PendingConfirmation = {
   requestId: string;
   toolName: string;
+  actionType: ConfirmationActionType;
+  targetType: ConfirmationTargetType;
   argsSummary: Record<string, unknown>;
   description: string;
   status: PendingConfirmationStatus;
   expiresAt: number;
+  resolvedFrom?: "confirmed" | "rejected" | "timeout";
 };
 
 export type ToolStep = {

@@ -211,17 +211,54 @@
   padding: 12px;
 }
 
+/* State: pending (default) */
+.confirmation-card--pending {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* State: resolving (confirmed/rejected/timeout) — fade out */
+.confirmation-card--resolving {
+  animation: confirmation-fade-out 1.5s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes confirmation-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Danger: delete operations */
+.confirmation-card[data-action-type="delete"] {
+  border-color: hsl(var(--destructive) / 0.5);
+  background: hsl(var(--destructive) / 0.04);
+}
+
+.confirmation-card[data-action-type="delete"] .btn-destructive {
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  border-color: hsl(var(--destructive));
+}
+
+.confirmation-card[data-action-type="delete"] .btn-destructive:hover {
+  background: hsl(var(--destructive) / 0.9);
+}
+
 .confirmation-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.confirmation-card-description {
-  margin: 10px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 .confirmation-card-summary {
@@ -251,6 +288,30 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Inline tag (collapsed state) */
+.confirmation-inline-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+  margin-top: 6px;
+  padding: 2px 0;
+}
+
+.confirmation-inline-tag[data-status="confirmed"] {
+  color: hsl(142 71% 45%);
+}
+
+.confirmation-inline-tag[data-status="rejected"] {
+  color: hsl(var(--muted-foreground));
+}
+
+.confirmation-inline-tag[data-status="timeout"] {
+  color: hsl(38 92% 50%);
 }
 
 

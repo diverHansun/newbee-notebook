@@ -1,6 +1,6 @@
 "use client";
 
-import { ConfirmationCard } from "@/components/chat/confirmation-card";
+import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confirmation-card";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
@@ -231,11 +231,15 @@ export function MessageItem({
           </div>
         )}
         {!isUser && message.pendingConfirmation ? (
-          <ConfirmationCard
-            confirmation={message.pendingConfirmation}
-            onConfirm={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, true)}
-            onReject={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, false)}
-          />
+          message.pendingConfirmation.status === "collapsed" ? (
+            <ConfirmationInlineTag confirmation={message.pendingConfirmation} />
+          ) : (
+            <ConfirmationCard
+              confirmation={message.pendingConfirmation}
+              onConfirm={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, true)}
+              onReject={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, false)}
+            />
+          )
         ) : null}
       </div>
     </div>
