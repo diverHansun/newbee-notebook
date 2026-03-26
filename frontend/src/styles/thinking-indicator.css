@@ -73,4 +73,144 @@
   animation: thinking-shimmer 1.2s linear infinite;
 }
 
+/* ================================================================
+   22b. Tool Steps Indicator
+   ================================================================ */
 
+.tool-steps-indicator {
+  max-width: 280px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.5);
+  padding: 10px 14px;
+}
+
+.tool-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.tool-step-label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-step-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 50%;
+}
+
+/* running: spinning ring */
+.tool-step--running .tool-step-icon {
+  background: conic-gradient(
+    hsl(var(--bee-yellow)),
+    hsl(var(--bee-amber)),
+    hsl(var(--bee-yellow))
+  );
+  animation: thinking-spin 1s linear infinite;
+}
+
+.tool-step--running .tool-step-icon::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: hsl(var(--muted) / 0.5);
+}
+
+/* done: static checkmark */
+.tool-step--done .tool-step-icon {
+  background: hsl(var(--bee-amber) / 0.2);
+}
+
+.tool-step--done .tool-step-icon::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 5px;
+  height: 8px;
+  border: solid hsl(var(--bee-amber));
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(40deg);
+}
+
+.tool-step--done .tool-step-label {
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+
+/* error: red cross */
+.tool-step--error .tool-step-icon {
+  background: hsl(0 70% 50% / 0.2);
+}
+
+.tool-step--error .tool-step-icon::before,
+.tool-step--error .tool-step-icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 1.5px;
+  background: hsl(0 70% 50%);
+  border-radius: 1px;
+}
+
+.tool-step--error .tool-step-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.tool-step--error .tool-step-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.tool-step--error .tool-step-label {
+  color: hsl(0 70% 50% / 0.8);
+}
+
+/* bottom shimmer bar */
+.tool-steps-progress {
+  position: relative;
+  margin-top: 8px;
+  height: 2px;
+  width: 100%;
+  border-radius: 999px;
+  background: hsl(var(--border));
+  overflow: hidden;
+}
+
+.tool-steps-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--bee-yellow)) 40%,
+    hsl(var(--bee-amber)) 60%,
+    transparent 100%
+  );
+  animation: thinking-shimmer 1.2s linear infinite;
+}
+
+/* exit animation (reserved for future use) */
+.tool-steps-indicator--exiting {
+  animation: thinking-fade-out 0.4s ease-out forwards;
+  pointer-events: none;
+}

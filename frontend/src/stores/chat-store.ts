@@ -16,6 +16,12 @@ export type PendingConfirmation = {
   expiresAt: number;
 };
 
+export type ToolStep = {
+  id: string;
+  toolName: string;
+  status: "running" | "done" | "error";
+};
+
 export type ChatMessage = {
   id: string;
   role: MessageRole;
@@ -28,6 +34,7 @@ export type ChatMessage = {
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
   pendingConfirmation?: PendingConfirmation;
+  toolSteps?: ToolStep[];
 };
 
 export type ExplainCardState = {
@@ -52,6 +59,8 @@ type ChatState = {
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   updateThinkingStage: (id: string, stage: string | null) => void;
   appendMessageContent: (id: string, delta: string) => void;
+  addToolStep: (id: string, step: ToolStep) => void;
+  updateToolStep: (id: string, toolCallId: string, status: ToolStep["status"]) => void;
   setStreaming: (isStreaming: boolean, messageId?: number | null) => void;
   setMode: (mode: "agent" | "ask") => void;
   clearMessages: () => void;
@@ -89,6 +98,27 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       messages: state.messages.map((msg) =>
         msg.id === id ? { ...msg, content: `${msg.content}${delta}`, thinkingStage: null } : msg
+      ),
+    })),
+  addToolStep: (id, step) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id
+          ? { ...msg, toolSteps: [...(msg.toolSteps || []), step] }
+          : msg
+      ),
+    })),
+  updateToolStep: (id, toolCallId, status) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id
+          ? {
+              ...msg,
+              toolSteps: (msg.toolSteps || []).map((s) =>
+                s.id === toolCallId ? { ...s, status } : s
+              ),
+            }
+          : msg
       ),
     })),
   setStreaming: (isStreaming, messageId = null) =>

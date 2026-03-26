@@ -5,7 +5,7 @@ import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
-import { ChatMessage } from "@/stores/chat-store";
+import { ChatMessage, ToolStep } from "@/stores/chat-store";
 
 type MessageItemProps = {
   message: ChatMessage;
@@ -44,6 +44,34 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
   return t(uiStrings.thinking.default);
 }
 
+function toolDisplayLabel(toolName: string, t: TranslateFn): string {
+  const known: Record<string, LocalizedString> = {
+    knowledge_base: uiStrings.tools.knowledgeBase,
+    tavily_search: uiStrings.tools.webSearch,
+    tavily_crawl: uiStrings.tools.webCrawl,
+    zhipu_web_search: uiStrings.tools.webSearch,
+    zhipu_web_crawl: uiStrings.tools.webCrawl,
+    time: uiStrings.tools.getTime,
+    list_notes: uiStrings.tools.listNotes,
+    read_note: uiStrings.tools.readNote,
+    create_note: uiStrings.tools.createNote,
+    update_note: uiStrings.tools.updateNote,
+    delete_note: uiStrings.tools.deleteNote,
+    list_marks: uiStrings.tools.listMarks,
+    associate_note_document: uiStrings.tools.associateDoc,
+    disassociate_note_document: uiStrings.tools.disassociateDoc,
+    list_diagrams: uiStrings.tools.listDiagrams,
+    read_diagram: uiStrings.tools.readDiagram,
+    confirm_diagram_type: uiStrings.tools.confirmDiagramType,
+    create_diagram: uiStrings.tools.createDiagram,
+    update_diagram: uiStrings.tools.updateDiagram,
+    delete_diagram: uiStrings.tools.deleteDiagram,
+    update_diagram_positions: uiStrings.tools.updateDiagramPositions,
+  };
+  if (known[toolName]) return t(known[toolName]);
+  return toolName.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
+
 function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
   if (!status) return "";
   if (status === "streaming") return t(uiStrings.messageStatus.streaming);
@@ -72,6 +100,45 @@ function ThinkingIndicator({
   );
 }
 
+function ToolStepsIndicator({
+  steps,
+  thinkingStage,
+  t,
+}: {
+  steps: ToolStep[];
+  thinkingStage?: string | null;
+  t: TranslateFn;
+}) {
+  const isSynthesizing = thinkingStage === "synthesizing";
+
+  return (
+    <div className="tool-steps-indicator" role="status" aria-live="polite">
+      <div className="tool-steps-list">
+        {steps.map((step) => (
+          <div key={step.id} className={`tool-step tool-step--${step.status}`}>
+            <span className="tool-step-icon" aria-hidden="true" />
+            <span className="tool-step-label">
+              {toolDisplayLabel(step.toolName, t)}
+              {step.status === "running" ? "..." : ""}
+            </span>
+          </div>
+        ))}
+        {isSynthesizing ? (
+          <div className="tool-step tool-step--running">
+            <span className="tool-step-icon" aria-hidden="true" />
+            <span className="tool-step-label">
+              {t(uiStrings.thinking.generating)}
+            </span>
+          </div>
+        ) : null}
+      </div>
+      <div className="tool-steps-progress" aria-hidden="true">
+        <span className="tool-steps-progress-bar" />
+      </div>
+    </div>
+  );
+}
+
 export function MessageItem({
   message,
   onOpenDocument: _onOpenDocument,
@@ -79,8 +146,14 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
+  const hasToolSteps =
+    !isUser &&
+    message.status === "streaming" &&
+    !message.content &&
+    message.toolSteps &&
+    message.toolSteps.length > 0;
   const showThinkingIndicator =
-    !isUser && message.status === "streaming" && !message.content;
+    !isUser && message.status === "streaming" && !message.content && !hasToolSteps;
 
   return (
     <div style={{ display: "flex", gap: 12, flexDirection: isUser ? "row-reverse" : "row" }}>
@@ -116,7 +189,7 @@ export function MessageItem({
           <span className={`badge ${modeBadgeClass(message.mode)}`}>
             {modeLabel(message.mode)}
           </span>
-          {message.status && message.status !== "done" && !showThinkingIndicator && (
+          {message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps && (
             <span className="muted" style={{ fontSize: 11 }}>
               {messageStatusLabel(t, message.status)}
             </span>
@@ -126,6 +199,12 @@ export function MessageItem({
         {/* Message bubble */}
         {showThinkingIndicator ? (
           <ThinkingIndicator stage={message.thinkingStage} t={t} />
+        ) : hasToolSteps ? (
+          <ToolStepsIndicator
+            steps={message.toolSteps!}
+            thinkingStage={message.thinkingStage}
+            t={t}
+          />
         ) : (
           <div
             className={`card${isUser ? "" : " message-bubble-assistant"}`}

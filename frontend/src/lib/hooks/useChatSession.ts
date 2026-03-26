@@ -148,6 +148,8 @@ export function useChatSession(notebookId: string) {
     explainCard,
     setExplainCard,
     appendExplainContent,
+    addToolStep,
+    updateToolStep,
   } = useChatStore();
 
   const clearThinkingTimeout = useCallback(() => {
@@ -530,6 +532,26 @@ export function useChatSession(notebookId: string) {
                 }
                 return;
               }
+              if (event.type === "tool_call") {
+                if (activeAssistantIdRef.current) {
+                  addToolStep(activeAssistantIdRef.current, {
+                    id: event.tool_call_id,
+                    toolName: event.tool_name,
+                    status: "running",
+                  });
+                }
+                return;
+              }
+              if (event.type === "tool_result") {
+                if (activeAssistantIdRef.current) {
+                  updateToolStep(
+                    activeAssistantIdRef.current,
+                    event.tool_call_id,
+                    event.success ? "done" : "error",
+                  );
+                }
+                return;
+              }
               if (event.type === "sources") {
                 if (activeAssistantIdRef.current) {
                   updateMessage(activeAssistantIdRef.current, {
@@ -787,6 +809,7 @@ export function useChatSession(notebookId: string) {
     },
     [
       addMessage,
+      addToolStep,
       appendExplainContent,
       appendMessageContent,
       clearConfirmationForMessage,
@@ -797,6 +820,7 @@ export function useChatSession(notebookId: string) {
       queryClient,
       sessions,
       updateThinkingStage,
+      updateToolStep,
       setExplainCard,
       setCurrentSessionId,
       setStreaming,

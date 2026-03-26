@@ -302,6 +302,22 @@ export type SseEventConfirmation = {
   description: string;
 };
 
+export type SseEventToolCall = {
+  type: "tool_call";
+  tool_name: string;
+  tool_call_id: string;
+  tool_input: Record<string, unknown>;
+};
+
+export type SseEventToolResult = {
+  type: "tool_result";
+  tool_name: string;
+  tool_call_id: string;
+  success: boolean;
+  content_preview: string;
+  quality_meta: Record<string, unknown> | null;
+};
+
 export type SseEvent =
   | SseEventStart
   | SseEventContent
@@ -310,7 +326,9 @@ export type SseEvent =
   | SseEventDone
   | SseEventError
   | SseEventHeartbeat
-  | SseEventConfirmation;
+  | SseEventConfirmation
+  | SseEventToolCall
+  | SseEventToolResult;
 
 export type ApiErrorPayload = {
   error_code?: string;
