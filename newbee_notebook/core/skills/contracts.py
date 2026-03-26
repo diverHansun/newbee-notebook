@@ -17,6 +17,12 @@ class SkillContext:
 
 
 @dataclass(frozen=True)
+class ConfirmationMeta:
+    action_type: str   # create | update | delete | confirm
+    target_type: str   # note | diagram | document
+
+
+@dataclass(frozen=True)
 class SkillManifest:
     name: str
     slash_command: str
@@ -24,6 +30,7 @@ class SkillManifest:
     tools: list[ToolDefinition]
     system_prompt_addition: str = ""
     confirmation_required: frozenset[str] = field(default_factory=frozenset)
+    confirmation_meta: dict[str, ConfirmationMeta] = field(default_factory=dict)
     force_first_tool_call: bool = False
     required_tool_call_before_response: str | None = None
 

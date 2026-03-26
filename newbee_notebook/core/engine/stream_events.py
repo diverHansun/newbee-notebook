@@ -50,6 +50,8 @@ class ConfirmationRequestEvent:
     tool_name: str
     args_summary: dict
     description: str
+    action_type: str = "confirm"
+    target_type: str = "unknown"
     event: str = "confirmation_request"
 
 

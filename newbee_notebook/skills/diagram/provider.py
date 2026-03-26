@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from newbee_notebook.application.services.diagram_service import DiagramService
 from newbee_notebook.core.skills import SkillContext, SkillManifest
+from newbee_notebook.core.skills.contracts import ConfirmationMeta
 from newbee_notebook.skills.diagram.tools import (
     _build_confirm_diagram_type_tool,
     _build_create_diagram_tool,
@@ -113,6 +114,17 @@ class DiagramSkillProvider:
                     "delete_diagram",
                 }
             ),
+            confirmation_meta={
+                "confirm_diagram_type": ConfirmationMeta(
+                    action_type="confirm", target_type="diagram"
+                ),
+                "update_diagram": ConfirmationMeta(
+                    action_type="update", target_type="diagram"
+                ),
+                "delete_diagram": ConfirmationMeta(
+                    action_type="delete", target_type="diagram"
+                ),
+            },
             force_first_tool_call=True,
             required_tool_call_before_response=_required_diagram_tool_for_request(
                 context.request_message

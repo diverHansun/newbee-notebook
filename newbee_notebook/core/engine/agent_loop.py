@@ -10,6 +10,7 @@ from typing import Any, AsyncGenerator
 from uuid import uuid4
 
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+from newbee_notebook.core.skills.contracts import ConfirmationMeta
 from newbee_notebook.core.engine.mode_config import ModeConfig
 from newbee_notebook.core.engine.stream_events import (
     ConfirmationRequestEvent,
@@ -44,6 +45,7 @@ class AgentLoop:
         llm_retry_attempts: int = 1,
         tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
         confirmation_required: frozenset[str] | None = None,
+        confirmation_meta: dict[str, ConfirmationMeta] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | None = None,
@@ -57,6 +59,7 @@ class AgentLoop:
             for name, values in (tool_argument_defaults or {}).items()
         }
         self._confirmation_required = confirmation_required or frozenset()
+        self._confirmation_meta = confirmation_meta or {}
         self._confirmation_gateway = confirmation_gateway
         self._force_first_tool_call = force_first_tool_call
         self._required_tool_call_before_response = required_tool_call_before_response
@@ -451,11 +454,14 @@ class AgentLoop:
                     if tool_name in self._confirmation_required and self._confirmation_gateway:
                         request_id = str(uuid4())
                         self._confirmation_gateway.create(request_id)
+                        meta = self._confirmation_meta.get(tool_name)
                         yield ConfirmationRequestEvent(
                             request_id=request_id,
                             tool_name=tool_name,
                             args_summary=self._confirmation_args_summary(effective_arguments),
                             description=f"Agent requested to run {tool_name}",
+                            action_type=meta.action_type if meta else "confirm",
+                            target_type=meta.target_type if meta else "unknown",
                         )
                         approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
                         if not approved:
@@ -567,11 +573,14 @@ class AgentLoop:
                     if tool_name in self._confirmation_required and self._confirmation_gateway:
                         request_id = str(uuid4())
                         self._confirmation_gateway.create(request_id)
+                        meta = self._confirmation_meta.get(tool_name)
                         yield ConfirmationRequestEvent(
                             request_id=request_id,
                             tool_name=tool_name,
                             args_summary=self._confirmation_args_summary(effective_arguments),
                             description=f"Agent requested to run {tool_name}",
+                            action_type=meta.action_type if meta else "confirm",
+                            target_type=meta.target_type if meta else "unknown",
                         )
                         approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
                         if not approved:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.core.skills import SkillContext, SkillManifest
+from newbee_notebook.core.skills.contracts import ConfirmationMeta
 from newbee_notebook.skills.note.tools import (
     build_associate_note_document_tool,
     build_create_note_tool,
@@ -71,5 +72,12 @@ class NoteSkillProvider:
             confirmation_required=frozenset(
                 {"update_note", "delete_note", "disassociate_note_document"}
             ),
+            confirmation_meta={
+                "update_note": ConfirmationMeta(action_type="update", target_type="note"),
+                "delete_note": ConfirmationMeta(action_type="delete", target_type="note"),
+                "disassociate_note_document": ConfirmationMeta(
+                    action_type="delete", target_type="document"
+                ),
+            },
             force_first_tool_call=True,
         )

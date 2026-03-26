@@ -162,6 +162,7 @@ class ChatService:
             external_tools,
             system_prompt_addition,
             confirmation_required,
+            confirmation_meta,
             force_first_tool_call,
             required_tool_call_before_response,
         ) = self._resolve_skill_runtime(
@@ -211,6 +212,7 @@ class ChatService:
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
             confirmation_required=confirmation_required,
+            confirmation_meta=confirmation_meta,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
             confirmation_gateway=self._confirmation_gateway,
@@ -329,6 +331,7 @@ class ChatService:
             external_tools,
             system_prompt_addition,
             confirmation_required,
+            confirmation_meta,
             force_first_tool_call,
             required_tool_call_before_response,
         ) = self._resolve_skill_runtime(
@@ -384,6 +387,7 @@ class ChatService:
                 external_tools=external_tools,
                 system_prompt_addition=system_prompt_addition,
                 confirmation_required=confirmation_required,
+                confirmation_meta=confirmation_meta,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
                 confirmation_gateway=self._confirmation_gateway,
@@ -428,6 +432,8 @@ class ChatService:
                         "type": "confirmation_request",
                         "request_id": event.request_id,
                         "tool_name": event.tool_name,
+                        "action_type": event.action_type,
+                        "target_type": event.target_type,
                         "args_summary": event.args_summary,
                         "description": event.description,
                     }
@@ -536,13 +542,13 @@ class ChatService:
         message: str,
         runtime_mode: ModeType,
         source_document_ids: Optional[List[str]],
-    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], bool, str | None]:
+    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], dict, bool, str | None]:
         if not self._skill_registry:
-            return message, runtime_mode, None, "", frozenset(), False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None
 
         matched = self._skill_registry.match_command(message)
         if not matched:
-            return message, runtime_mode, None, "", frozenset(), False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None
 
         provider, activated_command, cleaned_message = matched
         manifest = provider.build_manifest(
@@ -559,6 +565,7 @@ class ChatService:
             list(manifest.tools),
             manifest.system_prompt_addition,
             manifest.confirmation_required,
+            manifest.confirmation_meta,
             manifest.force_first_tool_call,
             manifest.required_tool_call_before_response,
         )
