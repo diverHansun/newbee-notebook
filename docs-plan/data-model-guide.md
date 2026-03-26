@@ -7,15 +7,11 @@
 
 ---
 
-## 一、data-model.md 的定位（非常重要）
+## 一、data-model.md 的核心作用
 
-在 iris-code 的文档体系中：
+`data-model.md` 决定**用什么核心概念来思考问题**。
 
-- `goals-duty.md` 决定 **做什么 / 不做什么**
-- `architecture.md` 决定 **结构如何组织**
-- `data-model.md` 决定 **用什么核心概念来思考问题**
-
-> **data-model.md 的目标是统一“认知模型”，而不是冻结实现。**
+> **data-model.md 的目标是统一”认知模型”，而不是冻结实现。**
 
 ---
 
