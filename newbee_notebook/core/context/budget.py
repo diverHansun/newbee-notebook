@@ -14,3 +14,8 @@ class ContextBudget:
     tool_results: int
     output_reserved: int
     main_injection: int
+    summary: int = 0
+
+    @property
+    def compaction_threshold(self) -> int:
+        return int(self.total * 0.95)

@@ -8,8 +8,28 @@ from newbee_notebook.core.context.token_counter import TokenCounter
 
 
 class _WordTokenCounter(TokenCounter):
+    def __init__(self):
+        pass
+
     def count(self, text: str) -> int:
-        return len([part for part in text.split(" ") if part])
+        normalized = str(text or "").strip()
+        if not normalized:
+            return 0
+        return len([part for part in normalized.split(" ") if part])
+
+    def encode(self, text: str) -> list[int]:
+        return list(range(self.count(text)))
+
+    def decode(self, tokens: list[int]) -> str:
+        return " ".join("token" for _ in tokens)
+
+    def count_message_overhead(self, message: dict) -> int:
+        return 0
+
+    def count_messages(self, messages: list[dict]) -> int:
+        if not messages:
+            return 0
+        return sum(self.count(str(message.get("content") or "")) for message in messages)
 
 
 def _msg(role: str, content: str, mode: str = "agent") -> StoredMessage:
