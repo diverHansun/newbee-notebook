@@ -7,6 +7,7 @@ from functools import lru_cache
 from typing import Any, AsyncGenerator, Callable
 
 from newbee_notebook.core.context import (
+    CompactionService,
     Compressor,
     ContextBudget,
     ContextBuilder,
@@ -23,6 +24,12 @@ from newbee_notebook.core.engine.stream_events import (
     SourceEvent,
     WarningEvent,
 )
+from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.llm.qwen import (
+    DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
+    QWEN_CONTEXT_WINDOWS,
+)
+from newbee_notebook.core.llm.zhipu import DEFAULT_CONTEXT_WINDOW as ZHIPU_DEFAULT_CONTEXT_WINDOW
 from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session.lock_manager import SessionLockManager
 from newbee_notebook.core.tools.contracts import SourceItem
@@ -30,6 +37,64 @@ from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType, normalize_runtime_mode
+from llama_index.llms.openai.utils import openai_modelname_to_contextsize
+
+OPENAI_DEFAULT_CONTEXT_WINDOW = 128000
+
+
+def _resolve_context_window(runtime_config: LLMRuntimeConfig | None) -> int:
+    if runtime_config is None:
+        return QWEN_DEFAULT_CONTEXT_WINDOW
+
+    provider = str(runtime_config.provider or "").strip().lower()
+    model = str(runtime_config.model or "").strip()
+    if provider == "qwen":
+        return QWEN_CONTEXT_WINDOWS.get(model, QWEN_DEFAULT_CONTEXT_WINDOW)
+    if provider == "zhipu":
+        try:
+            return int(openai_modelname_to_contextsize(model))
+        except Exception:
+            return ZHIPU_DEFAULT_CONTEXT_WINDOW
+    if provider == "openai":
+        try:
+            return int(openai_modelname_to_contextsize(model))
+        except Exception:
+            return OPENAI_DEFAULT_CONTEXT_WINDOW
+    return OPENAI_DEFAULT_CONTEXT_WINDOW
+
+
+def _scaled_budget(total: int, ratio: float, minimum: int) -> int:
+    return max(minimum, int(total * ratio))
+
+
+def _build_context_budget(runtime_config: LLMRuntimeConfig | None) -> ContextBudget:
+    total = _resolve_context_window(runtime_config)
+    system_prompt = _scaled_budget(total, 0.01, 512)
+    summary = _scaled_budget(total, 0.03, 1024)
+    current_message = _scaled_budget(total, 0.02, 512)
+    tool_results = _scaled_budget(total, 0.04, 1024)
+    output_reserved = _scaled_budget(total, 0.04, 1024)
+    main_injection = _scaled_budget(total, 0.01, 512)
+    history = max(
+        total
+        - system_prompt
+        - summary
+        - current_message
+        - tool_results
+        - output_reserved
+        - main_injection,
+        0,
+    )
+    return ContextBudget(
+        total=total,
+        system_prompt=system_prompt,
+        history=history,
+        current_message=current_message,
+        tool_results=tool_results,
+        output_reserved=output_reserved,
+        main_injection=main_injection,
+        summary=summary,
+    )
 
 
 @lru_cache(maxsize=8)
@@ -67,6 +132,11 @@ class SessionManager:
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        runtime_config: LLMRuntimeConfig | None = None,
+        token_counter: TokenCounter | None = None,
+        compressor: Compressor | None = None,
+        context_budget: ContextBudget | None = None,
+        compaction_service: CompactionService | None = None,
     ):
         self._session_repo = session_repo
         self._message_repo = message_repo
@@ -76,9 +146,26 @@ class SessionManager:
         self._agent_loop_cls = agent_loop_cls
         self._system_prompt_provider = system_prompt_provider or self._default_system_prompt
         self._confirmation_gateway = confirmation_gateway
+        self._runtime_config = runtime_config or getattr(llm_client, "runtime_config", None)
+        self._token_counter = token_counter or TokenCounter()
+        self._compressor = compressor or Compressor(token_counter=self._token_counter)
+        self._context_budget = context_budget or _build_context_budget(self._runtime_config)
         self._current_session: Session | None = None
         self._current_mode: ModeType = ModeType.AGENT
         self._memory = SessionMemory()
+        self._context_builder = ContextBuilder(
+            memory=self._memory,
+            token_counter=self._token_counter,
+            compressor=self._compressor,
+        )
+        self._compaction_service = compaction_service or CompactionService(
+            message_repo=self._message_repo,
+            session_repo=self._session_repo,
+            llm_client=self._llm_client,
+            token_counter=self._token_counter,
+            compressor=self._compressor,
+            budget=self._context_budget,
+        )
         self._last_sources: list[SourceItem] = []
 
     @property
@@ -114,10 +201,10 @@ class SessionManager:
         if not self._current_session:
             return
 
-        main_messages = await self._message_repo.list_by_session(
+        main_messages = await self._message_repo.list_after_boundary(
             self._current_session.session_id,
-            limit=50,
-            modes=list(self.MAIN_TRACK_MODES),
+            self._current_session.compaction_boundary_id,
+            track_modes=list(self.MAIN_TRACK_MODES),
         )
         side_messages = await self._message_repo.list_by_session(
             self._current_session.session_id,
@@ -136,6 +223,7 @@ class SessionManager:
             role=_normalize_message_role(message.role),
             content=message.content,
             mode=_normalize_message_mode(message.mode),
+            message_type=_normalize_message_type(getattr(message, "message_type", "normal")),
         )
 
     @staticmethod
@@ -147,28 +235,15 @@ class SessionManager:
         mode: ModeType,
         system_prompt_addition: str = "",
     ) -> list[dict[str, str]]:
-        builder = ContextBuilder(
-            memory=self._memory,
-            token_counter=TokenCounter(),
-            compressor=Compressor(token_counter=TokenCounter()),
-        )
         track = "side" if mode in self.SIDE_TRACK_MODES else "main"
         system_prompt = self._system_prompt_provider(mode)
         if system_prompt_addition.strip():
             system_prompt = f"{system_prompt}\n\n{system_prompt_addition.strip()}"
-        return builder.build(
+        return self._context_builder.build(
             track=track,
             system_prompt=system_prompt,
             current_message="",
-            budget=ContextBudget(
-                total=4096,
-                system_prompt=512,
-                history=2048,
-                current_message=512,
-                tool_results=512,
-                output_reserved=512,
-                main_injection=512,
-            ),
+            budget=self._context_budget,
             inject_main=track == "side",
         )
 
@@ -293,18 +368,6 @@ class SessionManager:
 
         mode = normalize_runtime_mode(mode_type or self._current_mode)
         self._current_mode = mode
-        chat_history = self._build_chat_history(mode, system_prompt_addition=system_prompt_addition)
-        loop = await self._build_loop(
-            mode=mode,
-            allowed_document_ids=allowed_document_ids,
-            context=context,
-            external_tools=external_tools,
-            confirmation_required=confirmation_required,
-            confirmation_meta=confirmation_meta,
-            confirmation_gateway=confirmation_gateway,
-            force_first_tool_call=force_first_tool_call,
-            required_tool_call_before_response=required_tool_call_before_response,
-        )
         runtime_message = self._build_runtime_message(
             mode=mode,
             message=message,
@@ -313,6 +376,24 @@ class SessionManager:
         )
 
         async with self._lock_manager.acquire(self._current_session.session_id):
+            compacted = await self._compaction_service.compact_if_needed(
+                session=self._current_session,
+                track_modes=list(self.MAIN_TRACK_MODES),
+            )
+            if compacted:
+                await self._reload_memory()
+            chat_history = self._build_chat_history(mode, system_prompt_addition=system_prompt_addition)
+            loop = await self._build_loop(
+                mode=mode,
+                allowed_document_ids=allowed_document_ids,
+                context=context,
+                external_tools=external_tools,
+                confirmation_required=confirmation_required,
+                confirmation_meta=confirmation_meta,
+                confirmation_gateway=confirmation_gateway,
+                force_first_tool_call=force_first_tool_call,
+                required_tool_call_before_response=required_tool_call_before_response,
+            )
             async for event in loop.stream(message=runtime_message, chat_history=chat_history):
                 if isinstance(event, SourceEvent):
                     self._last_sources = list(event.sources)
@@ -381,3 +462,7 @@ def _normalize_message_mode(mode: ModeType | str) -> str:
     if normalized in known:
         return normalize_runtime_mode(normalized).value
     return normalized
+
+
+def _normalize_message_type(message_type: Any) -> str:
+    return message_type.value if hasattr(message_type, "value") else str(message_type)

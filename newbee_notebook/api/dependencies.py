@@ -381,6 +381,7 @@ async def get_mcp_client_manager_dep(
 async def get_runtime_session_manager_dep(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    runtime_config=Depends(get_llm_runtime_config_dep),
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
@@ -395,6 +396,7 @@ async def get_runtime_session_manager_dep(
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
         confirmation_gateway=confirmation_gateway,
+        runtime_config=runtime_config,
     )
 
 

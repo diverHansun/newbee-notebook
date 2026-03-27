@@ -83,6 +83,7 @@ class MessageResponse(BaseModel):
     session_id: str
     mode: str
     role: str
+    message_type: str = "normal"
     content: str
     created_at: datetime
 

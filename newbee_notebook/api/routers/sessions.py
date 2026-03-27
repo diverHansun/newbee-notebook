@@ -265,6 +265,11 @@ async def list_session_messages(
                     session_id=msg.session_id,
                     mode=msg.mode.value if hasattr(msg.mode, "value") else str(msg.mode),
                     role=msg.role.value if hasattr(msg.role, "value") else str(msg.role),
+                    message_type=(
+                        msg.message_type.value
+                        if hasattr(msg.message_type, "value")
+                        else str(getattr(msg, "message_type", "normal"))
+                    ),
                     content=msg.content,
                     created_at=msg.created_at,
                 )

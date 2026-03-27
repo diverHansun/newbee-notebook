@@ -20,8 +20,6 @@ class SessionMemory:
         self._main_history: list[StoredMessage] = []
         self._side_history: list[StoredMessage] = []
         self._side_max_messages = side_max_messages
-        self._summary: str | None = None
-        self._summary_stale = True
 
     def get_history(self, track: str) -> list[StoredMessage]:
         normalized = str(track).strip().lower()
@@ -41,7 +39,6 @@ class SessionMemory:
                 self._side_history = self._side_history[-self._side_max_messages :]
         else:
             raise ValueError(f"unknown track: {track}")
-        self._summary_stale = True
 
     def load_from_messages(
         self,
@@ -52,22 +49,7 @@ class SessionMemory:
         self._side_history = list(side_messages)
         if self._side_max_messages > 0:
             self._side_history = self._side_history[-self._side_max_messages :]
-        self._summary_stale = True
-
-    def get_summary(self) -> str | None:
-        if self._summary_stale:
-            return None
-        return self._summary
-
-    def set_summary(self, summary: str) -> None:
-        self._summary = summary
-        self._summary_stale = False
-
-    def mark_summary_stale(self) -> None:
-        self._summary_stale = True
 
     def reset(self) -> None:
         self._main_history = []
         self._side_history = []
-        self._summary = None
-        self._summary_stale = True

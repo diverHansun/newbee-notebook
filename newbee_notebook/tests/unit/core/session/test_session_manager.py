@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from newbee_notebook.core.llm.config import LLMRuntimeConfig
 from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
@@ -12,7 +13,7 @@ from newbee_notebook.core.session.session_manager import SessionManager
 from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.entities.session import Session
-from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
+from newbee_notebook.domain.value_objects.mode_type import MessageRole, MessageType, ModeType
 
 
 @dataclass
@@ -35,7 +36,10 @@ class RecordingLoop:
         llm_retry_attempts=1,
         tool_argument_defaults=None,
         confirmation_required=None,
+        confirmation_meta=None,
         confirmation_gateway=None,
+        force_first_tool_call=False,
+        required_tool_call_before_response=None,
     ):
         self.llm_client = llm_client
         self.tools = tools
@@ -43,7 +47,10 @@ class RecordingLoop:
         self.llm_retry_attempts = llm_retry_attempts
         self.tool_argument_defaults = tool_argument_defaults
         self.confirmation_required = confirmation_required
+        self.confirmation_meta = confirmation_meta
         self.confirmation_gateway = confirmation_gateway
+        self.force_first_tool_call = force_first_tool_call
+        self.required_tool_call_before_response = required_tool_call_before_response
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
@@ -88,7 +95,8 @@ async def test_chat_aggregates_stream_events_into_result():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [[], []]
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
     tool_registry = DummyToolRegistry()
     manager = SessionManager(
         session_repo=session_repo,
@@ -133,7 +141,8 @@ async def test_request_scoped_manager_builds_fresh_context_from_db_history():
     session_repo = AsyncMock()
     session_repo.get.return_value = session
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [history, [], history, []]
+    message_repo.list_after_boundary.return_value = history
+    message_repo.list_by_session.side_effect = [[], []]
     tool_registry = DummyToolRegistry()
 
     manager_a = SessionManager(
@@ -178,15 +187,13 @@ async def test_explain_injects_main_track_history_into_side_context():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [
-        [
-            Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="main question"),
-            Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.ASSISTANT, content="main answer"),
-        ],
-        [
-            Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.USER, content="explain this"),
-            Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.ASSISTANT, content="prior explain"),
-        ],
+    message_repo.list_after_boundary.return_value = [
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="main question"),
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.ASSISTANT, content="main answer"),
+    ]
+    message_repo.list_by_session.return_value = [
+        Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.USER, content="explain this"),
+        Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.ASSISTANT, content="prior explain"),
     ]
     manager = SessionManager(
         session_repo=session_repo,
@@ -218,7 +225,8 @@ async def test_explain_builds_runtime_message_and_document_scope_defaults():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [[], []]
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
     manager = SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,
@@ -250,7 +258,8 @@ async def test_ask_builds_runtime_message_with_notebook_scope_hint():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [[], []]
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
     manager = SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,
@@ -280,7 +289,8 @@ async def test_session_manager_awaits_async_tool_registry_for_agent_mode():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [[], []]
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
 
     class _TrackingToolRegistry(DummyToolRegistry):
         async def get_tools(self, mode, external_tools=None):
@@ -364,7 +374,8 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
     session_repo = AsyncMock()
     session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
     message_repo = AsyncMock()
-    message_repo.list_by_session.side_effect = [[], []]
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
 
     class _TrackingToolRegistry:
         def __init__(self):
@@ -412,6 +423,114 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
     assert [tool.name for tool in loop.tools] == ["list_notes"]
     assert loop.confirmation_required == frozenset({"update_note"})
     assert loop.confirmation_gateway is confirmation_gateway
+
+
+def test_build_context_budget_uses_provider_specific_context_windows():
+    qwen_budget = session_manager_module._build_context_budget(
+        LLMRuntimeConfig(
+            provider="qwen",
+            model="qwen3.5-plus",
+            api_key="key",
+            base_url="https://qwen.example.test/v1",
+            temperature=0.3,
+            max_tokens=8192,
+            top_p=0.8,
+        )
+    )
+    zhipu_budget = session_manager_module._build_context_budget(
+        LLMRuntimeConfig(
+            provider="zhipu",
+            model="glm-4.7",
+            api_key="key",
+            base_url="https://zhipu.example.test/v1",
+            temperature=0.3,
+            max_tokens=8192,
+            top_p=0.8,
+        )
+    )
+    openai_budget = session_manager_module._build_context_budget(
+        LLMRuntimeConfig(
+            provider="openai",
+            model="gpt-4o-mini",
+            api_key="key",
+            base_url="https://openai.example.test/v1",
+            temperature=0.3,
+            max_tokens=8192,
+            top_p=0.8,
+        )
+    )
+
+    assert qwen_budget.total == 131072
+    assert zhipu_budget.total == 128000
+    assert openai_budget.total == 128000
+    assert qwen_budget.history > qwen_budget.summary > 0
+    assert zhipu_budget.compaction_threshold == int(128000 * 0.95)
+
+
+@pytest.mark.anyio
+async def test_session_manager_compacts_before_rebuilding_main_history():
+    session = Session(session_id="s1", notebook_id="nb1")
+    session_repo = AsyncMock()
+    session_repo.get.return_value = session
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.side_effect = [
+        [
+            Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="older question"),
+        ],
+        [
+            Message(
+                message_id=88,
+                session_id="s1",
+                mode=ModeType.AGENT,
+                role=MessageRole.ASSISTANT,
+                message_type=MessageType.SUMMARY,
+                content="compacted summary",
+            ),
+            Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="fresh question"),
+        ],
+    ]
+    message_repo.list_by_session.side_effect = [[], []]
+    compaction_service = AsyncMock()
+
+    async def _compact_if_needed(*, session: Session, track_modes: list[ModeType]) -> bool:
+        session.compaction_boundary_id = 88
+        return True
+
+    compaction_service.compact_if_needed.side_effect = _compact_if_needed
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+        compaction_service=compaction_service,
+    )
+
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(message="follow up", mode_type=ModeType.AGENT)
+
+    history = RecordingLoop.instances[-1].calls[-1].chat_history
+    assert history == [
+        {"role": "system", "content": "prompt:agent"},
+        {"role": "assistant", "content": "compacted summary"},
+        {"role": "user", "content": "fresh question"},
+    ]
+    compaction_service.compact_if_needed.assert_awaited_once_with(
+        session=session,
+        track_modes=list(SessionManager.MAIN_TRACK_MODES),
+    )
+    assert message_repo.list_after_boundary.await_args_list[0].args == (
+        "s1",
+        None,
+    )
+    assert message_repo.list_after_boundary.await_args_list[1].args == (
+        "s1",
+        88,
+    )
 
 
 def test_explain_and_conclude_prompts_explain_document_scoped_retrieval_arguments():

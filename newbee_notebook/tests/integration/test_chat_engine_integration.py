@@ -49,13 +49,27 @@ class _InMemorySessionRepo:
     async def increment_message_count(self, session_id: str, delta: int):
         self._sessions[session_id].increment_message_count(delta)
 
+    async def update_compaction_boundary(self, session_id: str, compaction_boundary_id: int | None):
+        self._sessions[session_id].compaction_boundary_id = compaction_boundary_id
+
 
 class _InMemoryMessageRepo:
     def __init__(self):
         self.messages: list[Message] = []
+        self._next_id = 1
+
+    async def create(self, message: Message):
+        if message.message_id is None:
+            message.message_id = self._next_id
+            self._next_id += 1
+        self.messages.append(message)
+        return message
 
     async def create_batch(self, batch):
-        self.messages.extend(batch)
+        created = []
+        for message in batch:
+            created.append(await self.create(message))
+        return created
 
     async def list_by_session(self, session_id: str, limit: int = 50, offset: int = 0, modes=None):
         allowed = None if modes is None else {mode.value if hasattr(mode, "value") else str(mode) for mode in modes}
@@ -63,6 +77,21 @@ class _InMemoryMessageRepo:
         if allowed is not None:
             rows = [item for item in rows if (item.mode.value if hasattr(item.mode, "value") else str(item.mode)) in allowed]
         return rows[offset: offset + limit]
+
+    async def list_after_boundary(self, session_id: str, boundary_message_id: int | None, track_modes=None):
+        allowed = None if track_modes is None else {
+            mode.value if hasattr(mode, "value") else str(mode) for mode in track_modes
+        }
+        rows = [item for item in self.messages if item.session_id == session_id]
+        if boundary_message_id is not None:
+            rows = [
+                item
+                for item in rows
+                if item.message_id is not None and item.message_id >= boundary_message_id
+            ]
+        if allowed is not None:
+            rows = [item for item in rows if (item.mode.value if hasattr(item.mode, "value") else str(item.mode)) in allowed]
+        return rows
 
     async def count_by_session(self, session_id: str, modes=None):
         return len(await self.list_by_session(session_id=session_id, limit=10_000, modes=modes))
