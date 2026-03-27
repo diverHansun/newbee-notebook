@@ -21,6 +21,13 @@ class MessageRole(str, Enum):
     SYSTEM = "system"
 
 
+class MessageType(str, Enum):
+    """Persisted message categories."""
+
+    NORMAL = "normal"
+    SUMMARY = "summary"
+
+
 def normalize_runtime_mode(mode: str | ModeType) -> ModeType:
     normalized = mode if isinstance(mode, ModeType) else ModeType(str(mode).strip().lower())
     if normalized is ModeType.CHAT:

@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
     title VARCHAR(500),
     message_count INTEGER NOT NULL DEFAULT 0,
-    context_summary TEXT,
+    compaction_boundary_id INTEGER,
     include_ec_context BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -80,9 +80,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_notebook_id ON sessions(notebook_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_compaction_boundary_id ON sessions(compaction_boundary_id);
 
 -- Backfill additive columns for existing volumes where table already exists
 ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE IF EXISTS sessions ADD COLUMN IF NOT EXISTS compaction_boundary_id INTEGER;
 
 -- Notebook-document soft references
 CREATE TABLE IF NOT EXISTS notebook_document_refs (
@@ -194,11 +196,13 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     mode VARCHAR(20) NOT NULL CHECK (mode IN ('agent','ask','conclude','explain')),
     role VARCHAR(20) NOT NULL CHECK (role IN ('user','assistant','system')),
+    message_type VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (message_type IN ('normal','summary')),
     content TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+ALTER TABLE IF EXISTS messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NOT NULL DEFAULT 'normal';
 
 -- ============================================================================
 -- Multi-Provider Vector Store Tables

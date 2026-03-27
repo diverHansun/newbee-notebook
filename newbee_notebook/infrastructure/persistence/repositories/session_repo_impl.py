@@ -29,7 +29,7 @@ class SessionRepositoryImpl(SessionRepository):
             notebook_id=str(model.notebook_id),
             title=model.title,
             message_count=model.message_count,
-            context_summary=model.context_summary,
+            compaction_boundary_id=getattr(model, "compaction_boundary_id", None),
             include_ec_context=getattr(model, "include_ec_context", False),
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -86,7 +86,7 @@ class SessionRepositoryImpl(SessionRepository):
             notebook_id=uuid.UUID(session.notebook_id),
             title=session.title,
             message_count=session.message_count,
-            context_summary=session.context_summary,
+            compaction_boundary_id=session.compaction_boundary_id,
             include_ec_context=session.include_ec_context,
             created_at=session.created_at,
             updated_at=session.updated_at,
@@ -103,7 +103,7 @@ class SessionRepositoryImpl(SessionRepository):
             .values(
                 title=session.title,
                 message_count=session.message_count,
-                context_summary=session.context_summary,
+                compaction_boundary_id=session.compaction_boundary_id,
                 include_ec_context=session.include_ec_context,
                 updated_at=datetime.now(),
             )
@@ -140,13 +140,17 @@ class SessionRepositoryImpl(SessionRepository):
         )
         await self._session.flush()
     
-    async def update_context_summary(self, session_id: str, summary: str) -> None:
-        """Update the context summary."""
+    async def update_compaction_boundary(
+        self,
+        session_id: str,
+        compaction_boundary_id: int | None,
+    ) -> None:
+        """Update the compaction boundary pointer."""
         await self._session.execute(
             update(SessionModel)
             .where(SessionModel.id == uuid.UUID(session_id))
             .values(
-                context_summary=summary,
+                compaction_boundary_id=compaction_boundary_id,
                 updated_at=datetime.now(),
             )
         )

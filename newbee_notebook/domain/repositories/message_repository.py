@@ -33,3 +33,12 @@ class MessageRepository(ABC):
         modes: Optional[List[ModeType]] = None,
     ) -> int:
         pass
+
+    @abstractmethod
+    async def list_after_boundary(
+        self,
+        session_id: str,
+        boundary_message_id: int | None,
+        track_modes: Optional[List[ModeType]] = None,
+    ) -> List[Message]:
+        pass

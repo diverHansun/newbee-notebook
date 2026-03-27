@@ -11,6 +11,7 @@ class StoredMessage:
     role: str
     content: str
     mode: str
+    message_type: str = "normal"
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

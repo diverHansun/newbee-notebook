@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from newbee_notebook.domain.entities.base import Entity, generate_uuid
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
+from newbee_notebook.domain.value_objects.mode_type import MessageRole, MessageType, ModeType
 
 
 @dataclass
@@ -14,5 +14,6 @@ class Message(Entity):
     session_id: str = ""
     mode: ModeType = ModeType.AGENT
     role: MessageRole = MessageRole.USER
+    message_type: MessageType = MessageType.NORMAL
     content: str = ""
     created_at: datetime = field(default_factory=datetime.now)

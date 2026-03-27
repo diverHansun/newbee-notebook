@@ -43,7 +43,19 @@ def get_runtime_schema_statements() -> list[str]:
         ADD COLUMN IF NOT EXISTS include_ec_context BOOLEAN NOT NULL DEFAULT FALSE
         """,
         """
+        ALTER TABLE IF EXISTS sessions
+        ADD COLUMN IF NOT EXISTS compaction_boundary_id INTEGER
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_sessions_compaction_boundary_id
+        ON sessions(compaction_boundary_id)
+        """,
+        """
         UPDATE messages SET mode = 'agent' WHERE mode = 'chat'
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NOT NULL DEFAULT 'normal'
         """,
         """
         ALTER TABLE IF EXISTS messages
@@ -53,6 +65,15 @@ def get_runtime_schema_statements() -> list[str]:
         ALTER TABLE IF EXISTS messages
         ADD CONSTRAINT messages_mode_check
         CHECK (mode IN ('agent','ask','conclude','explain'))
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        DROP CONSTRAINT IF EXISTS messages_message_type_check
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
+        ADD CONSTRAINT messages_message_type_check
+        CHECK (message_type IN ('normal','summary'))
         """,
         """
         CREATE TABLE IF NOT EXISTS app_settings (

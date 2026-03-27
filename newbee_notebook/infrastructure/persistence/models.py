@@ -22,7 +22,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
 
 
 class Base(DeclarativeBase):
@@ -171,7 +170,7 @@ class SessionModel(Base):
     )
     title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
-    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    compaction_boundary_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     include_ec_context: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -263,6 +262,7 @@ class MessageModel(Base):
     )
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    message_type: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

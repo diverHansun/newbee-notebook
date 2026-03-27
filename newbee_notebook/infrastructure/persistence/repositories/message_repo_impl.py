@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
 from newbee_notebook.infrastructure.persistence.models import MessageModel
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole
+from newbee_notebook.domain.value_objects.mode_type import MessageRole, MessageType, ModeType
 
 
 class MessageRepositoryImpl(MessageRepository):
@@ -22,6 +22,7 @@ class MessageRepositoryImpl(MessageRepository):
             session_id=str(model.session_id),
             mode=ModeType(model.mode),
             role=MessageRole(model.role),
+            message_type=MessageType(model.message_type),
             content=model.content,
             created_at=model.created_at,
         )
@@ -31,6 +32,11 @@ class MessageRepositoryImpl(MessageRepository):
             session_id=uuid.UUID(message.session_id),
             mode=message.mode.value if hasattr(message.mode, "value") else str(message.mode),
             role=message.role.value if hasattr(message.role, "value") else str(message.role),
+            message_type=(
+                message.message_type.value
+                if hasattr(message.message_type, "value")
+                else str(message.message_type)
+            ),
             content=message.content,
             created_at=message.created_at,
         )
@@ -61,6 +67,28 @@ class MessageRepositoryImpl(MessageRepository):
         )
         if modes is not None:
             mode_values = [mode.value for mode in modes]
+            if not mode_values:
+                return []
+            query = query.where(MessageModel.mode.in_(mode_values))
+
+        result = await self._session.execute(query)
+        return [self._to_entity(m) for m in result.scalars().all()]
+
+    async def list_after_boundary(
+        self,
+        session_id: str,
+        boundary_message_id: int | None,
+        track_modes: Optional[List[ModeType]] = None,
+    ) -> List[Message]:
+        query = (
+            select(MessageModel)
+            .where(MessageModel.session_id == uuid.UUID(session_id))
+            .order_by(MessageModel.created_at.asc(), MessageModel.id.asc())
+        )
+        if boundary_message_id is not None:
+            query = query.where(MessageModel.id >= boundary_message_id)
+        if track_modes is not None:
+            mode_values = [mode.value for mode in track_modes]
             if not mode_values:
                 return []
             query = query.where(MessageModel.mode.in_(mode_values))

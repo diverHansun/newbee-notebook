@@ -131,16 +131,14 @@ class SessionRepository(ABC):
             delta: Amount to increment (default 1).
         """
         pass
-    
+
     @abstractmethod
-    async def update_context_summary(self, session_id: str, summary: str) -> None:
-        """
-        Update the context summary.
-        
-        Args:
-            session_id: Session unique identifier.
-            summary: New context summary.
-        """
+    async def update_compaction_boundary(
+        self,
+        session_id: str,
+        compaction_boundary_id: int | None,
+    ) -> None:
+        """Update the compaction boundary pointer."""
         pass
 
 

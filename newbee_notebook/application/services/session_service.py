@@ -47,7 +47,6 @@ class SessionService:
     Responsibilities:
     - CRUD operations for Sessions
     - Session limit enforcement (20 per Notebook)
-    - Context summary management
     """
     
     def __init__(
@@ -233,25 +232,3 @@ class SessionService:
         
         return result
     
-    async def update_context_summary(
-        self,
-        session_id: str,
-        summary: str,
-    ) -> None:
-        """
-        Update the context summary for a Session.
-        
-        Used for conversation history compression.
-        
-        Args:
-            session_id: Session unique identifier.
-            summary: Compressed history summary.
-            
-        Raises:
-            SessionNotFoundError: If not found.
-        """
-        await self.get_or_raise(session_id)
-        await self.session_repo.update_context_summary(session_id, summary)
-        logger.info(f"Updated context summary for session: {session_id}")
-
-
