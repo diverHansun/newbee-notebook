@@ -203,6 +203,90 @@ export type DiagramUpdatePositionsInput = {
   positions: Record<string, { x: number; y: number }>;
 };
 
+export type VideoSummaryStatus = "processing" | "completed" | "failed" | string;
+
+export type VideoSummaryListItem = {
+  summary_id: string;
+  notebook_id: string | null;
+  platform: string;
+  video_id: string;
+  title: string;
+  cover_url: string | null;
+  duration_seconds: number;
+  uploader_name: string;
+  status: VideoSummaryStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VideoSummary = VideoSummaryListItem & {
+  source_url: string;
+  uploader_id: string;
+  summary_content: string;
+  error_message: string | null;
+  document_ids: string[];
+  stats: Record<string, unknown> | null;
+  transcript_source: string;
+  transcript_path: string | null;
+};
+
+export type VideoSummaryListResponse = {
+  summaries: VideoSummaryListItem[];
+  total: number;
+};
+
+export type VideoInfo = {
+  video_id: string;
+  source_url: string;
+  title: string;
+  description: string;
+  cover_url: string | null;
+  duration_seconds: number;
+  uploader_name: string;
+  uploader_id: string;
+  stats: Record<string, unknown> | null;
+};
+
+export type VideoSummarizeRequest = {
+  url_or_bvid: string;
+  notebook_id?: string | null;
+};
+
+export type VideoStreamEvent =
+  | {
+      type: "start" | "subtitle" | "asr" | "summarize";
+      video_id: string;
+    }
+  | {
+      type: "done";
+      summary_id: string;
+      status: string;
+      reused: boolean;
+    }
+  | {
+      type: "error";
+      message: string;
+      video_id?: string;
+    };
+
+export type BilibiliAuthStatus = {
+  logged_in: boolean;
+};
+
+export type BilibiliQrLoginEvent =
+  | {
+      type: "qr_generated";
+      qr_url?: string;
+      image_base64?: string;
+    }
+  | {
+      type: "scanned" | "done" | "timeout";
+    }
+  | {
+      type: "error";
+      message: string;
+    };
+
 export type Session = {
   session_id: string;
   notebook_id: string;

@@ -19,6 +19,8 @@ import { useDeleteDiagram, useDiagram, useDiagramContent, useDiagrams } from "@/
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { DiagramViewer } from "@/components/studio/diagram-viewer";
+import { VideoDetail } from "@/components/studio/video-detail";
+import { VideoList } from "@/components/studio/video-list";
 import type { DiagramExportHandle } from "@/components/studio/reactflow-renderer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useStudioStore } from "@/stores/studio-store";
@@ -76,15 +78,18 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
     studioView,
     activeNoteId,
     activeDiagramId,
+    activeVideoId,
     activeMarkId,
     noteDocFilter,
     markDocFilter,
     navigateTo,
     openNoteEditor,
     openDiagramDetail,
+    openVideoDetail,
     backToHome,
     backToList,
     backToDiagramList,
+    backToVideoList,
     setActiveMarkId,
     setNoteDocFilter,
     setMarkDocFilter,
@@ -388,6 +393,18 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           <strong>{t(uiStrings.studio.diagrams)}</strong>
           <span className="muted" style={{ fontSize: 12 }}>
             {t(uiStrings.studio.diagramsDescription)}
+          </span>
+        </div>
+      </div>
+      <div
+        className="card card-interactive"
+        style={{ padding: 16, minHeight: 100 }}
+        onClick={() => navigateTo("videos")}
+      >
+        <div className="stack-sm">
+          <strong>{t(uiStrings.studio.video)}</strong>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {t(uiStrings.studio.videoDescription)}
           </span>
         </div>
       </div>
@@ -899,8 +916,14 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       {studioView === "home" ? renderHome() : null}
       {studioView === "notes" ? renderNotesList() : null}
       {studioView === "diagrams" ? renderDiagramsList() : null}
+      {studioView === "videos" ? (
+        <VideoList notebookId={notebookId} onOpenSummary={openVideoDetail} />
+      ) : null}
       {studioView === "note-detail" ? renderNoteDetail() : null}
       {studioView === "diagram-detail" ? renderDiagramDetail() : null}
+      {studioView === "video-detail" && activeVideoId ? (
+        <VideoDetail notebookId={notebookId} summaryId={activeVideoId} onBack={backToVideoList} />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(pendingDeleteNote)}

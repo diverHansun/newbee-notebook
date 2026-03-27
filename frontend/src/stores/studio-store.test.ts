@@ -8,7 +8,9 @@ describe("studio-store", () => {
       studioView: "home",
       activeNoteId: null,
       activeDiagramId: null,
+      activeVideoId: null,
       activeMarkId: null,
+      videoFilterMode: "all",
       noteDocFilter: null,
       markDocFilter: null,
     });
@@ -45,5 +47,20 @@ describe("studio-store", () => {
 
     expect(useStudioStore.getState().studioView).toBe("diagrams");
     expect(useStudioStore.getState().activeDiagramId).toBeNull();
+  });
+
+  it("navigates into video detail and back to the videos list", () => {
+    useStudioStore.getState().navigateTo("videos");
+    useStudioStore.getState().setVideoFilterMode("notebook");
+    useStudioStore.getState().openVideoDetail("video-1");
+
+    expect(useStudioStore.getState().studioView).toBe("video-detail");
+    expect(useStudioStore.getState().activeVideoId).toBe("video-1");
+
+    useStudioStore.getState().backToVideoList();
+
+    expect(useStudioStore.getState().studioView).toBe("videos");
+    expect(useStudioStore.getState().activeVideoId).toBeNull();
+    expect(useStudioStore.getState().videoFilterMode).toBe("notebook");
   });
 });

@@ -18,6 +18,17 @@ function extractEventPayload(block: string): string | null {
   return dataLines.join("\n");
 }
 
+function extractEventName(block: string): string | null {
+  const lines = block.split("\n");
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith("event:")) {
+      return line.slice(6).trim();
+    }
+  }
+  return null;
+}
+
 export async function parseSseStream(
   stream: ReadableStream<Uint8Array>,
   options: SseParserOptions
@@ -50,6 +61,57 @@ export async function parseSseStream(
     const trailingPayload = extractEventPayload(buffer);
     if (trailingPayload) {
       options.onEvent(JSON.parse(trailingPayload) as SseEvent);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+type NamedSseParserOptions<TEvent> = {
+  onEvent: (event: TEvent) => void;
+  mapEvent: (eventName: string, payload: Record<string, unknown>) => TEvent;
+  signal?: AbortSignal;
+};
+
+export async function parseNamedSseStream<TEvent>(
+  stream: ReadableStream<Uint8Array>,
+  options: NamedSseParserOptions<TEvent>
+): Promise<void> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  try {
+    while (true) {
+      if (options.signal?.aborted) return;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, "\n");
+
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const chunk = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        separatorIndex = buffer.indexOf("\n\n");
+
+        const payload = extractEventPayload(chunk);
+        const eventName = extractEventName(chunk);
+        if (!payload || !eventName) continue;
+
+        options.onEvent(options.mapEvent(eventName, JSON.parse(payload) as Record<string, unknown>));
+      }
+    }
+
+    const trailingPayload = extractEventPayload(buffer);
+    const trailingEventName = extractEventName(buffer);
+    if (trailingPayload && trailingEventName) {
+      options.onEvent(
+        options.mapEvent(
+          trailingEventName,
+          JSON.parse(trailingPayload) as Record<string, unknown>
+        )
+      );
     }
   } finally {
     reader.releaseLock();

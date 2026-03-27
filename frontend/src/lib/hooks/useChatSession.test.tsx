@@ -1,10 +1,13 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
+import { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatSession } from "@/lib/hooks/useChatSession";
+import { LanguageContext } from "@/lib/i18n/language-context";
 import { useChatStore } from "@/stores/chat-store";
-import { createHookWrapper } from "@/test/test-utils";
+import { createQueryClient } from "@/test/test-utils";
 
 const listSessions = vi.fn();
 const listSessionMessages = vi.fn();
@@ -32,6 +35,18 @@ vi.mock("@/lib/hooks/useChatStream", () => ({
     cancelStream: (...args: unknown[]) => cancelStream(...args),
   }),
 }));
+
+function createWrapper() {
+  const queryClient = createQueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <LanguageContext.Provider value={{ lang: "en", setLang: () => {} }}>
+        {children}
+      </LanguageContext.Provider>
+    </QueryClientProvider>
+  );
+  return { queryClient, wrapper };
+}
 
 describe("useChatSession", () => {
   beforeEach(() => {
@@ -85,8 +100,9 @@ describe("useChatSession", () => {
   });
 
   it("stores pending confirmation when the stream emits a confirmation request", async () => {
+    const { wrapper } = createWrapper();
     const { result } = renderHook(() => useChatSession("nb-1"), {
-      wrapper: createHookWrapper(),
+      wrapper,
     });
 
     await waitFor(() => {
@@ -102,6 +118,33 @@ describe("useChatSession", () => {
       expect(assistantMessage?.pendingConfirmation?.requestId).toBe("req-1");
       expect(assistantMessage?.pendingConfirmation?.argsSummary.note_id).toBe("note-1");
       expect(assistantMessage?.pendingConfirmation?.status).toBe("pending");
+    });
+  });
+
+  it("invalidates the shared video summary list after a /video command finishes", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 456 });
+        callbacks?.onEvent?.({ type: "done" });
+      }
+    );
+
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useChatSession("nb-1"), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("/video summarize BV1", "agent");
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["video-summaries", "all"],
+      });
     });
   });
 });

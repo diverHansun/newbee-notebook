@@ -40,6 +40,11 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
         description: t(uiStrings.slashCommand.diagramDescription),
         available: true,
       },
+      {
+        command: "/video",
+        description: t(uiStrings.slashCommand.videoDescription),
+        available: true,
+      },
     ],
     [t]
   );

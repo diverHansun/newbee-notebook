@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { DIAGRAMS_QUERY_KEY } from "@/lib/hooks/use-diagrams";
+import { ALL_VIDEO_SUMMARIES_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
@@ -35,6 +36,11 @@ function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
 function isNoteCommandMessage(message: string, mode: MessageMode): boolean {
   if (mode !== "agent") return false;
   return message.trim().toLowerCase().startsWith("/note");
+}
+
+function isVideoCommandMessage(message: string, mode: MessageMode): boolean {
+  if (mode !== "agent") return false;
+  return message.trim().toLowerCase().startsWith("/video");
 }
 
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
@@ -425,6 +431,7 @@ export function useChatSession(notebookId: string) {
       const streamStartedAtMs = Date.now();
       const isDiagramRequest = isDiagramCommandMessage(message, mode);
       const isNoteRequest = isNoteCommandMessage(message, mode);
+      const isVideoRequest = isVideoCommandMessage(message, mode);
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
@@ -510,6 +517,9 @@ export function useChatSession(notebookId: string) {
               }
               if (isNoteRequest) {
                 queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
+              }
+              if (isVideoRequest) {
+                queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
               }
               queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
             }
@@ -600,6 +610,9 @@ export function useChatSession(notebookId: string) {
                 }
                 if (isNoteRequest) {
                   queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
+                }
+                if (isVideoRequest) {
+                  queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
                 }
                 return;
               }
@@ -817,6 +830,9 @@ export function useChatSession(notebookId: string) {
             }
             if (isNoteRequest) {
               queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
+            }
+            if (isVideoRequest) {
+              queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
             }
             queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) });
           },

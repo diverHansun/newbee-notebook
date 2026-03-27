@@ -75,4 +75,33 @@ describe("ChatInput", () => {
     expect(input).toHaveValue("/diagram ");
     expect(onModeChange).toHaveBeenCalledWith("agent");
   });
+
+  it("shows video slash command and completes /video", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        mode="ask"
+        isStreaming={false}
+        askBlocked={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Ask a question (document search)...");
+    await user.type(input, "/v");
+
+    expect(screen.getByRole("button", { name: /summarize and manage video content/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /summarize and manage video content/i }));
+
+    expect(input).toHaveValue("/video ");
+    expect(onModeChange).toHaveBeenCalledWith("agent");
+  });
 });
