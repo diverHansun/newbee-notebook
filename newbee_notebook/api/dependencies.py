@@ -20,6 +20,9 @@ from newbee_notebook.infrastructure.persistence.repositories.message_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.mark_repo_impl import MarkRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.note_repo_impl import NoteRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl import DiagramRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.video_summary_repo_impl import (
+    VideoSummaryRepositoryImpl,
+)
 from newbee_notebook.application.services.library_service import LibraryService
 from newbee_notebook.application.services.notebook_service import NotebookService
 from newbee_notebook.application.services.session_service import SessionService
@@ -30,6 +33,7 @@ from newbee_notebook.application.services.app_settings_service import AppSetting
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
+from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.mcp import MCPClientManager
@@ -55,8 +59,10 @@ from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.infrastructure.bilibili import AsrPipeline, BilibiliAuthManager, BilibiliClient
 from newbee_notebook.skills.note import NoteSkillProvider
 from newbee_notebook.skills.diagram import DiagramSkillProvider
+from newbee_notebook.skills.video import VideoSkillProvider
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +130,11 @@ async def get_note_repo(session=Depends(get_db_session)) -> NoteRepositoryImpl:
 async def get_diagram_repo(session=Depends(get_db_session)) -> DiagramRepositoryImpl:
     """Get DiagramRepository instance."""
     return DiagramRepositoryImpl(session)
+
+
+async def get_video_repo(session=Depends(get_db_session)) -> VideoSummaryRepositoryImpl:
+    """Get VideoSummaryRepository instance."""
+    return VideoSummaryRepositoryImpl(session)
 
 
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
@@ -201,6 +212,7 @@ _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
 _runtime_confirmation_gateway = None
+_bilibili_auth_manager = None
 
 
 def get_llm_singleton():
@@ -289,6 +301,13 @@ def get_mcp_client_manager_singleton() -> MCPClientManager:
     if _mcp_client_manager is None:
         _mcp_client_manager = MCPClientManager(config_path=get_configs_directory() / "mcp.json")
     return _mcp_client_manager
+
+
+def get_bilibili_auth_manager() -> BilibiliAuthManager:
+    global _bilibili_auth_manager
+    if _bilibili_auth_manager is None:
+        _bilibili_auth_manager = BilibiliAuthManager(base_dir=get_configs_directory())
+    return _bilibili_auth_manager
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
@@ -476,10 +495,38 @@ async def get_diagram_service(
     )
 
 
+async def get_bilibili_client_dep(
+    auth_manager: BilibiliAuthManager = Depends(get_bilibili_auth_manager),
+) -> BilibiliClient:
+    return BilibiliClient(credential=auth_manager.get_credential())
+
+
+def get_asr_pipeline_dep() -> AsrPipeline:
+    return AsrPipeline()
+
+
+async def get_video_service(
+    video_repo: VideoSummaryRepositoryImpl = Depends(get_video_repo),
+    ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
+    llm_client=Depends(get_llm_client_dep),
+    bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    asr_pipeline: AsrPipeline = Depends(get_asr_pipeline_dep),
+) -> VideoService:
+    return VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=get_storage(),
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+
 async def get_runtime_skill_registry_dep(
     note_service: NoteService = Depends(get_note_service),
     mark_service: MarkService = Depends(get_mark_service),
     diagram_service: DiagramService = Depends(get_diagram_service),
+    video_service: VideoService = Depends(get_video_service),
 ) -> SkillRegistry:
     registry = SkillRegistry()
     registry.register(
@@ -491,6 +538,11 @@ async def get_runtime_skill_registry_dep(
     registry.register(
         DiagramSkillProvider(
             diagram_service=diagram_service,
+        )
+    )
+    registry.register(
+        VideoSkillProvider(
+            video_service=video_service,
         )
     )
     return registry
