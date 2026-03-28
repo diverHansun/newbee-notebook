@@ -254,6 +254,9 @@ class VideoService:
         bvid = await self._extract_bvid(url_or_bvid)
         return await self._bili_client.get_related_videos(bvid)
 
+    async def get_video_ai_conclusion(self, url_or_bvid: str) -> str:
+        return await self._bili_client.get_video_ai_conclusion(url_or_bvid)
+
     async def _transcribe_with_asr(self, bvid: str, info: dict[str, Any]) -> str:
         if self._asr_pipeline is None:
             raise VideoTranscriptUnavailableError(

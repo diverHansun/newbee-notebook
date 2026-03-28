@@ -154,6 +154,16 @@ async def test_summarize_marks_summary_failed_when_subtitle_missing_and_asr_disa
 
 
 @pytest.mark.anyio
+async def test_get_video_ai_conclusion_proxies_to_client(service, bili_client):
+    bili_client.get_video_ai_conclusion.return_value = "Quick AI summary"
+
+    payload = await service.get_video_ai_conclusion("BV1xx411c7mD")
+
+    assert payload == "Quick AI summary"
+    bili_client.get_video_ai_conclusion.assert_awaited_once_with("BV1xx411c7mD")
+
+
+@pytest.mark.anyio
 async def test_summarize_emits_start_after_processing_summary_is_created(
     service,
     video_repo,

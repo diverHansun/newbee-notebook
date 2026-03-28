@@ -1,4 +1,6 @@
 from newbee_notebook.infrastructure.bilibili.payloads import (
+    normalize_ai_conclusion,
+    normalize_search_results,
     normalize_subtitle_items,
     normalize_video_info,
 )
@@ -36,3 +38,42 @@ def test_normalize_subtitle_items_preserves_timeline_shape():
         {"from": 0.0, "to": 1.2, "content": "hello"},
         {"from": 1.2, "to": 2.0, "content": "world"},
     ]
+
+
+def test_normalize_search_results_strips_markup_and_parses_duration():
+    payload = normalize_search_results(
+        [
+            {
+                "bvid": "BV1xx411c7mD",
+                "title": "<em class=\"keyword\">Demo</em> Video",
+                "arcurl": "https://www.bilibili.com/video/BV1xx411c7mD",
+                "author": "UP",
+                "duration": "01:05",
+                "play": "1200",
+                "description": "<em>demo</em> description",
+            }
+        ]
+    )
+
+    assert payload == [
+        {
+            "video_id": "BV1xx411c7mD",
+            "title": "Demo Video",
+            "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+            "author": "UP",
+            "duration": 65,
+            "play_count": 1200,
+            "description": "demo description",
+        }
+    ]
+
+
+def test_normalize_ai_conclusion_returns_empty_string_for_unknown_shape():
+    assert normalize_ai_conclusion({"model_result": {"summary": "Quick AI summary"}}) == "Quick AI summary"
+    assert (
+        normalize_ai_conclusion(
+            {"model_result": {"result": [{"summary": "Nested AI summary"}]}}
+        )
+        == "Nested AI summary"
+    )
+    assert normalize_ai_conclusion({"unexpected": True}) == ""

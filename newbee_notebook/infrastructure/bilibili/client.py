@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from typing import Any, Awaitable, Callable
 
 import aiohttp
-from bilibili_api import video
+from bilibili_api import hot, rank, search, video
 from bilibili_api.exceptions import (
     CredentialNoBiliJctException,
     CredentialNoSessdataException,
     NetworkException,
     ResponseCodeException,
 )
+from bilibili_api.video import AudioQuality, VideoDownloadURLDataDetecter
 
 from newbee_notebook.infrastructure.bilibili.exceptions import (
     AuthenticationError,
@@ -24,11 +26,22 @@ from newbee_notebook.infrastructure.bilibili.exceptions import (
     RateLimitError,
 )
 from newbee_notebook.infrastructure.bilibili.payloads import (
+    normalize_ai_conclusion,
+    normalize_hot_rank_list,
+    normalize_search_results,
     normalize_subtitle_items,
     normalize_video_info,
 )
 
 _BVID_RE = re.compile(r"\bBV[0-9A-Za-z]{10}\b")
+_DOWNLOAD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/133.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.bilibili.com",
+}
 
 
 def extract_bvid(url_or_bvid: str) -> str:
@@ -123,6 +136,123 @@ class BilibiliClient:
         items = normalize_subtitle_items(subtitle_payload.get("body"))
         text = "\n".join(item["content"] for item in items if item.get("content"))
         return text, items
+
+    async def search_video(self, keyword: str, page: int = 1) -> list[dict[str, Any]]:
+        raw = await self._call_api(
+            "search_video",
+            search.search_by_type(
+                keyword,
+                search_type=search.SearchObjectType.VIDEO,
+                page=page,
+            ),
+        )
+        raw_list = raw.get("result") if isinstance(raw, dict) else []
+        return normalize_search_results(raw_list)
+
+    async def get_hot_videos(self, page: int = 1, page_size: int = 20) -> list[dict[str, Any]]:
+        raw = await self._call_api(
+            "get_hot_videos",
+            hot.get_hot_videos(pn=page, ps=page_size),
+        )
+        raw_list = []
+        if isinstance(raw, dict):
+            raw_list = raw.get("list") or raw.get("data", {}).get("list", [])
+        return normalize_hot_rank_list(raw_list)
+
+    async def get_rank_videos(self, day: int = 3) -> list[dict[str, Any]]:
+        day_type = rank.RankDayType.THREE_DAY if day == 3 else rank.RankDayType.WEEK
+        raw = await self._call_api(
+            "get_rank_videos",
+            rank.get_rank(day=day_type),
+        )
+        raw_list = []
+        if isinstance(raw, dict):
+            raw_list = raw.get("list") or raw.get("data", {}).get("list", [])
+        return normalize_hot_rank_list(raw_list)
+
+    async def get_related_videos(self, url_or_bvid: str) -> list[dict[str, Any]]:
+        bvid = self.extract_bvid(url_or_bvid)
+        raw = await self._call_api(
+            "get_related_videos",
+            self._video_factory(bvid=bvid, credential=self._credential).get_related(),
+        )
+        return normalize_hot_rank_list(raw if isinstance(raw, list) else [])
+
+    async def get_video_ai_conclusion(self, url_or_bvid: str) -> str:
+        bvid = self.extract_bvid(url_or_bvid)
+        video_client = self._video_factory(bvid=bvid, credential=self._credential)
+        pages = await self._call_api("get_pages", video_client.get_pages())
+        if not pages:
+            return ""
+
+        cid = pages[0].get("cid")
+        if not cid:
+            return ""
+
+        raw = await self._call_api(
+            "get_video_ai_conclusion",
+            video_client.get_ai_conclusion(cid=cid),
+        )
+        return normalize_ai_conclusion(raw if isinstance(raw, dict) else {})
+
+    async def get_audio_url(self, url_or_bvid: str) -> str:
+        bvid = self.extract_bvid(url_or_bvid)
+        video_client = self._video_factory(bvid=bvid, credential=self._credential)
+        download_data = await self._call_api(
+            "get_audio_url",
+            video_client.get_download_url(page_index=0),
+        )
+        detector = VideoDownloadURLDataDetecter(download_data)
+        streams = detector.detect_best_streams(
+            audio_max_quality=AudioQuality._64K,
+            no_dolby_audio=True,
+            no_hires=True,
+        )
+
+        if hasattr(detector, "check_flv_mp4_stream") and detector.check_flv_mp4_stream():
+            if streams and getattr(streams[0], "url", ""):
+                return str(streams[0].url)
+        else:
+            if len(streams) >= 2 and getattr(streams[1], "url", ""):
+                return str(streams[1].url)
+            for stream in streams:
+                if getattr(stream, "audio_quality", None) is not None and getattr(stream, "url", ""):
+                    return str(stream.url)
+                if getattr(stream, "url", ""):
+                    return str(stream.url)
+
+        raise BiliError("get_audio_url: no audio stream found")
+
+    async def download_audio(self, audio_url: str, output_path: str) -> int:
+        timeout = aiohttp.ClientTimeout(total=300)
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(audio_url, headers=_DOWNLOAD_HEADERS) as response:
+                        if response.status != 200:
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(2)
+                                continue
+                            raise NetworkError(f"download_audio: HTTP {response.status}")
+
+                        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+                        total_bytes = 0
+                        with open(output_path, "wb") as handle:
+                            async for chunk in response.content.iter_chunked(256 * 1024):
+                                if not chunk:
+                                    continue
+                                handle.write(chunk)
+                                total_bytes += len(chunk)
+                        return total_bytes
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)
+                    continue
+                raise NetworkError(f"download_audio: {exc}") from exc
+
+        raise NetworkError("download_audio: retry limit exhausted")
 
     async def _call_api(self, action: str, awaitable):
         try:
