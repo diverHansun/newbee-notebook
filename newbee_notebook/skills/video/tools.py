@@ -23,6 +23,83 @@ def _format_summary_item(index: int, summary: VideoSummary) -> str:
     )
 
 
+def _format_video_result_lines(results: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for index, item in enumerate(results, start=1):
+        lines.append(
+            f"{index}. {item.get('title', '')} ({item.get('video_id') or item.get('bvid', '')})"
+        )
+    return lines
+
+
+def build_discover_videos_tool(service: VideoService) -> ToolDefinition:
+    async def execute(args: dict[str, Any]) -> ToolCallResult:
+        source = str(args.get("source") or "").strip().lower()
+
+        try:
+            if source == "search":
+                keyword = str(args.get("keyword") or "").strip()
+                if not keyword:
+                    return _safe_error_result(
+                        "discover_videos requires keyword when source=search",
+                        "video_discover_missing_keyword",
+                    )
+                results = await service.search_videos(
+                    keyword,
+                    page=int(args.get("page") or 1),
+                )
+            elif source == "hot":
+                results = await service.get_hot_videos(page=int(args.get("page") or 1))
+            elif source == "rank":
+                results = await service.get_rank_videos(day=int(args.get("day") or 3))
+            elif source == "related":
+                url_or_bvid = str(args.get("url_or_bvid") or "").strip()
+                if not url_or_bvid:
+                    return _safe_error_result(
+                        "discover_videos requires url_or_bvid when source=related",
+                        "video_discover_missing_video_id",
+                    )
+                results = await service.get_related_videos(url_or_bvid)
+            else:
+                return _safe_error_result(
+                    "discover_videos source must be one of: search, hot, rank, related",
+                    "video_discover_invalid_source",
+                )
+        except Exception as exc:
+            return _safe_error_result(f"Failed to discover videos: {exc}", "video_discover_failed")
+
+        if not results:
+            return ToolCallResult(content="No videos found.", metadata={"source": source, "results": []})
+
+        lines = [f"Found {len(results)} video result(s) from {source}:"]
+        lines.extend(_format_video_result_lines(results))
+        return ToolCallResult(content="\n".join(lines), metadata={"source": source, "results": results})
+
+    return ToolDefinition(
+        name="discover_videos",
+        description="Discover Bilibili videos from search, hot, ranking, or related recommendations.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["search", "hot", "rank", "related"],
+                    "description": "Discovery source",
+                },
+                "keyword": {"type": "string", "description": "Search keyword when source=search"},
+                "url_or_bvid": {
+                    "type": "string",
+                    "description": "Video URL or BV identifier when source=related",
+                },
+                "page": {"type": "integer", "description": "Result page for search or hot"},
+                "day": {"type": "integer", "description": "Ranking day window when source=rank"},
+            },
+            "required": ["source"],
+        },
+        execute=execute,
+    )
+
+
 def build_search_video_tool(service: VideoService) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
         try:
@@ -50,6 +127,47 @@ def build_search_video_tool(service: VideoService) -> ToolDefinition:
                 "page": {"type": "integer", "description": "Result page"},
             },
             "required": ["keyword"],
+        },
+        execute=execute,
+    )
+
+
+def build_get_video_content_tool(service: VideoService) -> ToolDefinition:
+    async def execute(args: dict[str, Any]) -> ToolCallResult:
+        url_or_bvid = str(args.get("url_or_bvid") or "").strip()
+        content_type = str(args.get("type") or "subtitle").strip().lower()
+        try:
+            if content_type == "subtitle":
+                text, items = await service.get_video_subtitle(url_or_bvid)
+                if not text:
+                    return ToolCallResult(content="No subtitles available for this video.", metadata={"items": items})
+                return ToolCallResult(content=text, metadata={"items": items})
+            if content_type == "ai_conclusion":
+                text = await service.get_video_ai_conclusion(url_or_bvid)
+                if not text:
+                    return ToolCallResult(content="No AI conclusion available for this video.")
+                return ToolCallResult(content=text, metadata={"type": "ai_conclusion"})
+            return _safe_error_result(
+                "get_video_content type must be one of: subtitle, ai_conclusion",
+                "video_content_invalid_type",
+            )
+        except Exception as exc:
+            return _safe_error_result(f"Failed to fetch video content: {exc}", "video_content_failed")
+
+    return ToolDefinition(
+        name="get_video_content",
+        description="Get either subtitles or Bilibili AI conclusion for a video.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url_or_bvid": {"type": "string", "description": "Video URL or BV identifier"},
+                "type": {
+                    "type": "string",
+                    "enum": ["subtitle", "ai_conclusion"],
+                    "description": "Content type to fetch",
+                },
+            },
+            "required": ["url_or_bvid"],
         },
         execute=execute,
     )

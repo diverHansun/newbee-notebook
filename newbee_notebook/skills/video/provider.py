@@ -8,15 +8,12 @@ from newbee_notebook.core.skills.contracts import ConfirmationMeta
 from newbee_notebook.skills.video.tools import (
     build_associate_notebook_tool,
     build_delete_summary_tool,
+    build_discover_videos_tool,
     build_disassociate_notebook_tool,
-    build_get_hot_videos_tool,
-    build_get_rank_videos_tool,
-    build_get_related_videos_tool,
+    build_get_video_content_tool,
     build_get_video_info_tool,
-    build_get_video_subtitle_tool,
     build_list_summaries_tool,
     build_read_summary_tool,
-    build_search_video_tool,
     build_summarize_video_tool,
 )
 
@@ -41,26 +38,27 @@ class VideoSkillProvider:
             system_prompt_addition=(
                 "---\n"
                 "Active skill: /video\n"
-                "Use the available tools for video search, metadata lookup, subtitle lookup, "
+                "Use the available tools for video discovery, metadata lookup, content lookup, "
                 "and summary management requests.\n"
                 "When the user provides a URL or BV identifier, prefer get_video_info first and "
                 "then use summarize_video only when a summary is requested.\n"
+                "Use discover_videos with source=search for keyword search, source=hot for "
+                "trending videos, source=rank for ranking lists, and source=related for "
+                "recommendations based on another video.\n"
+                "Use get_video_content with type=subtitle for the transcript and "
+                "type=ai_conclusion for Bilibili's built-in AI summary when available.\n"
                 "Use summarize_video for full AI summarization. It may take longer than metadata "
-                "or search tools.\n"
-                "Use get_hot_videos or get_rank_videos for discovery requests.\n"
+                "or discovery tools.\n"
                 "---"
             ),
             tools=[
-                build_search_video_tool(service=self._video_service),
+                build_discover_videos_tool(service=self._video_service),
                 build_get_video_info_tool(service=self._video_service),
-                build_get_video_subtitle_tool(service=self._video_service),
+                build_get_video_content_tool(service=self._video_service),
                 build_summarize_video_tool(service=self._video_service, notebook_id=context.notebook_id),
                 build_list_summaries_tool(service=self._video_service, notebook_id=context.notebook_id),
                 build_read_summary_tool(service=self._video_service),
                 build_delete_summary_tool(service=self._video_service),
-                build_get_hot_videos_tool(service=self._video_service),
-                build_get_rank_videos_tool(service=self._video_service),
-                build_get_related_videos_tool(service=self._video_service),
                 build_associate_notebook_tool(
                     service=self._video_service,
                     notebook_id=context.notebook_id,
