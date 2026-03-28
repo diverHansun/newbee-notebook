@@ -63,7 +63,7 @@ from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
-from newbee_notebook.infrastructure.asr import ZhipuTranscriber
+from newbee_notebook.infrastructure.asr import QwenTranscriber, ZhipuTranscriber
 from newbee_notebook.infrastructure.bilibili import AsrPipeline, BilibiliAuthManager, BilibiliClient
 from newbee_notebook.infrastructure.bilibili.audio_processor import AudioProcessor
 from newbee_notebook.skills.note import NoteSkillProvider
@@ -531,6 +531,23 @@ def _build_asr_segmenter(max_segment_seconds: int):
     return _segment_audio
 
 
+def _resolve_qwen_base_url() -> str:
+    custom = (os.getenv("DASHSCOPE_BASE_URL") or os.getenv("QWEN_BASE_URL") or "").strip()
+    if not custom:
+        return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    normalized = custom.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        normalized = normalized[: -len("/chat/completions")]
+    if normalized.endswith("/compatible-mode/v1"):
+        return normalized
+    if normalized.endswith("/api/v1"):
+        return f"{normalized[:-len('/api/v1')]}/compatible-mode/v1"
+    if normalized.endswith("/v1"):
+        return normalized
+    return f"{normalized}/compatible-mode/v1"
+
+
 async def get_asr_pipeline_dep(
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
     session=Depends(get_db_session),
@@ -540,13 +557,23 @@ async def get_asr_pipeline_dep(
     api_key = (resolve_asr_api_key(provider) or "").strip()
     if not api_key:
         return None
-    if provider != "zhipu":
-        return None
-    return AsrPipeline(
-        audio_fetcher=_build_asr_audio_fetcher(bili_client),
-        segmenter=_build_asr_segmenter(25),
-        transcriber=ZhipuTranscriber(api_key=api_key, model=asr_config["model"]),
-    )
+    if provider == "zhipu":
+        return AsrPipeline(
+            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            segmenter=_build_asr_segmenter(25),
+            transcriber=ZhipuTranscriber(api_key=api_key, model=asr_config["model"]),
+        )
+    if provider == "qwen":
+        return AsrPipeline(
+            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            segmenter=_build_asr_segmenter(180),
+            transcriber=QwenTranscriber(
+                api_key=api_key,
+                model=asr_config["model"],
+                base_url=_resolve_qwen_base_url(),
+            ),
+        )
+    return None
 
 
 async def get_video_service(
