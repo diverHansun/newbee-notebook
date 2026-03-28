@@ -94,6 +94,11 @@ class NotebookModel(Base):
         back_populates="notebook",
         cascade="all, delete-orphan",
     )
+    video_summaries = relationship(
+        "VideoSummaryModel",
+        back_populates="notebook",
+        cascade="save-update, merge",
+    )
 
 
 class DocumentModel(Base):
@@ -468,4 +473,59 @@ class DiagramModel(Base):
         ),
         Index("idx_diagrams_notebook_id", "notebook_id"),
         Index("idx_diagrams_document_ids", "document_ids", postgresql_using="gin"),
+    )
+
+
+class VideoSummaryModel(Base):
+    """Video summary metadata and rendered summary content."""
+
+    __tablename__ = "video_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    notebook_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notebooks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    video_id: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    cover_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploader_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    uploader_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    transcript_source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    transcript_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    summary_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="processing")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        default=list,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    notebook = relationship("NotebookModel", back_populates="video_summaries")
+
+    __table_args__ = (
+        UniqueConstraint("platform", "video_id", name="uq_video_summaries_platform_video_id"),
+        CheckConstraint(
+            "status IN ('processing', 'completed', 'failed')",
+            name="ck_video_summaries_status",
+        ),
+        Index("idx_video_summaries_notebook_id", "notebook_id"),
+        Index("idx_video_summaries_status", "status"),
+        Index("idx_video_summaries_document_ids", "document_ids", postgresql_using="gin"),
     )

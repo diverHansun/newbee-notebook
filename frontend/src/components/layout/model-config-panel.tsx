@@ -7,10 +7,13 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   getAvailableModels,
   getModelsConfig,
+  resetASRConfig,
   resetEmbeddingConfig,
   resetLLMConfig,
+  updateASRConfig,
   updateEmbeddingConfig,
   updateLLMConfig,
+  type ASRConfig,
   type EmbeddingConfig,
   type LLMConfig,
 } from "@/lib/api/config";
@@ -34,6 +37,12 @@ type EmbeddingDraft = {
   dim: number;
 };
 
+type ASRDraft = {
+  provider: string;
+  model: string;
+  api_key_set: boolean;
+};
+
 function formatFloat(value: number): string {
   return value.toFixed(2);
 }
@@ -47,6 +56,12 @@ function inferProviderByPreset(name: string, label: string): string {
 }
 function getDefaultLLMModel(provider: string, presets: Array<{ name: string; label: string }>): string {
   const fallback = provider === "zhipu" ? "glm-4.7" : "qwen3.5-plus";
+  const matchedPreset = presets.find((item) => inferProviderByPreset(item.name, item.label) === provider);
+  return matchedPreset?.name ?? fallback;
+}
+
+function getDefaultASRModel(provider: string, presets: Array<{ name: string; label: string }>): string {
+  const fallback = provider === "zhipu" ? "glm-asr-2512" : "qwen3-asr-flash";
   const matchedPreset = presets.find((item) => inferProviderByPreset(item.name, item.label) === provider);
   return matchedPreset?.name ?? fallback;
 }
@@ -71,12 +86,21 @@ function toEmbeddingDraft(config: EmbeddingConfig): EmbeddingDraft {
   };
 }
 
+function toASRDraft(config: ASRConfig): ASRDraft {
+  return {
+    provider: config.provider,
+    model: config.model,
+    api_key_set: config.api_key_set,
+  };
+}
+
 export function ModelConfigPanel() {
-  const { t } = useLang();
+  const { t, ti } = useLang();
   const queryClient = useQueryClient();
 
   const [llmDraft, setLlmDraft] = useState<LLMDraft | null>(null);
   const [embeddingDraft, setEmbeddingDraft] = useState<EmbeddingDraft | null>(null);
+  const [asrDraft, setAsrDraft] = useState<ASRDraft | null>(null);
 
   const modelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -98,6 +122,7 @@ export function ModelConfigPanel() {
     if (!configQuery.data) return;
     setLlmDraft(toLLMDraft(configQuery.data.llm));
     setEmbeddingDraft(toEmbeddingDraft(configQuery.data.embedding));
+    setAsrDraft(toASRDraft(configQuery.data.asr));
   }, [configQuery.data]);
 
   useEffect(() => {
@@ -144,6 +169,24 @@ export function ModelConfigPanel() {
     },
   });
 
+  const asrMutation = useMutation({
+    mutationFn: updateASRConfig,
+    onSuccess: (next) => {
+      setAsrDraft(toASRDraft(next));
+      queryClient.setQueryData(["models-config"], (prev: any) => {
+        if (!prev) return prev;
+        return { ...prev, asr: next };
+      });
+    },
+  });
+
+  const resetAsrMutation = useMutation({
+    mutationFn: resetASRConfig,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["models-config"] });
+    },
+  });
+
   const llmProviders = useMemo(() => {
     const providers = availableQuery.data?.llm.providers ?? ["qwen", "zhipu"];
     return providers.filter((provider) => provider === "qwen" || provider === "zhipu");
@@ -152,6 +195,11 @@ export function ModelConfigPanel() {
   const embeddingProviders = useMemo(() => {
     const providers = availableQuery.data?.embedding.providers ?? ["qwen3-embedding", "zhipu"];
     return providers.filter((provider) => provider === "qwen3-embedding" || provider === "zhipu");
+  }, [availableQuery.data]);
+
+  const asrProviders = useMemo(() => {
+    const providers = availableQuery.data?.asr.providers ?? ["zhipu", "qwen"];
+    return providers.filter((provider) => provider === "qwen" || provider === "zhipu");
   }, [availableQuery.data]);
 
   const llmPresetMap = useMemo(() => {
@@ -163,9 +211,18 @@ export function ModelConfigPanel() {
     return map;
   }, [availableQuery.data]);
 
+  const asrPresetMap = useMemo(() => {
+    const entries = availableQuery.data?.asr.presets ?? [];
+    const map = new Map<string, string>();
+    for (const item of entries) {
+      map.set(item.name, inferProviderByPreset(item.name, item.label));
+    }
+    return map;
+  }, [availableQuery.data]);
+
   const localEmbeddingModels = availableQuery.data?.embedding.local_models ?? [];
 
-  const loading = configQuery.isLoading || availableQuery.isLoading || !llmDraft || !embeddingDraft;
+  const loading = configQuery.isLoading || availableQuery.isLoading || !llmDraft || !embeddingDraft || !asrDraft;
 
   const disabledByFeatureFlag =
     configQuery.error instanceof ApiError &&
@@ -174,8 +231,10 @@ export function ModelConfigPanel() {
   const actionError =
     llmMutation.error ||
     embeddingMutation.error ||
+    asrMutation.error ||
     resetLLMMutation.error ||
     resetEmbeddingMutation.error ||
+    resetAsrMutation.error ||
     configQuery.error ||
     availableQuery.error;
 
@@ -205,6 +264,13 @@ export function ModelConfigPanel() {
       provider: next.provider,
       mode: next.mode ?? undefined,
       api_model: next.api_model,
+    });
+  };
+
+  const commitASR = (next: ASRDraft) => {
+    asrMutation.mutate({
+      provider: next.provider,
+      model: next.model.trim(),
     });
   };
 
@@ -491,6 +557,95 @@ export function ModelConfigPanel() {
           </div>
 
           <div className="control-panel-warning">{t(uiStrings.controlPanel.embeddingSwitchWarning)}</div>
+        </div>
+      </div>
+
+      <div className="control-panel-card">
+        <div className="control-panel-card-header">
+          <div className="control-panel-card-title">{t(uiStrings.controlPanel.asrConfig)}</div>
+          <button
+            type="button"
+            className="control-panel-reset-btn"
+            onClick={() => {
+              if (!window.confirm(t(uiStrings.controlPanel.restoreDefaultsConfirm))) return;
+              resetAsrMutation.mutate();
+            }}
+            disabled={resetAsrMutation.isPending}
+          >
+            {t(uiStrings.controlPanel.restoreDefaults)}
+          </button>
+        </div>
+
+        <div className="control-panel-card-body control-panel-stack">
+          <div className="control-panel-field">
+            <div className="control-panel-field-label">{t(uiStrings.controlPanel.asrProvider)}</div>
+            <SegmentedControl
+              value={asrDraft.provider}
+              options={asrProviders.map((provider) => ({ value: provider, label: provider }))}
+              onChange={(provider) => {
+                if (provider === asrDraft.provider) return;
+                const asrPresets = availableQuery.data?.asr.presets ?? [];
+                const next = {
+                  ...asrDraft,
+                  provider,
+                  model: getDefaultASRModel(provider, asrPresets),
+                };
+                setAsrDraft(next);
+                commitASR(next);
+              }}
+            />
+          </div>
+
+          <div className="control-panel-field">
+            <label className="control-panel-field-label" htmlFor="asr-model-input">
+              {t(uiStrings.controlPanel.asrModel)}
+            </label>
+            <input
+              id="asr-model-input"
+              className="input"
+              list="asr-model-presets"
+              value={asrDraft.model}
+              onChange={(event) => {
+                const rawModel = event.target.value;
+                const matchedProvider = asrPresetMap.get(rawModel.trim());
+                setAsrDraft({
+                  ...asrDraft,
+                  model: rawModel,
+                  provider: matchedProvider || asrDraft.provider,
+                });
+              }}
+              onBlur={() => {
+                commitASR(asrDraft);
+              }}
+            />
+            <datalist id="asr-model-presets">
+              {(availableQuery.data?.asr.presets ?? []).map((preset) => (
+                <option key={preset.name} value={preset.name} label={preset.label} />
+              ))}
+            </datalist>
+            <div className="control-panel-field-note">{t(uiStrings.controlPanel.asrModelHint)}</div>
+          </div>
+
+          <div className="control-panel-readonly-row">
+            <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.asrApiKeyStatus)}</span>
+            <span className="control-panel-status">
+              <span
+                className={`control-panel-status-dot${asrDraft.api_key_set ? " is-ok" : ""}`}
+                aria-hidden="true"
+              />
+              <span>
+                {asrDraft.api_key_set
+                  ? t(uiStrings.controlPanel.asrApiKeyConfigured)
+                  : ti(uiStrings.controlPanel.asrApiKeyMissing, { provider: asrDraft.provider })}
+              </span>
+            </span>
+          </div>
+
+          {!asrDraft.api_key_set ? (
+            <div className="control-panel-warning">
+              {ti(uiStrings.controlPanel.asrApiKeyMissing, { provider: asrDraft.provider })}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

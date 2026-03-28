@@ -263,7 +263,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Newbee Notebook database initialized successfully';
     RAISE NOTICE 'Extensions enabled: vector, uuid-ossp, pgcrypto';
-    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, diagrams';
+    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';

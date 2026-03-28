@@ -3,6 +3,13 @@
 from pathlib import Path
 
 
+def build_video_transcript_key(video_id: str, *, extension: str = "txt") -> str:
+    """Build the storage object key for one persisted video transcript."""
+
+    normalized_extension = extension.lstrip(".") or "txt"
+    return f"videos/transcripts/{video_id}.{normalized_extension}"
+
+
 def build_storage_key_candidates(
     raw_path: str | None,
     default_key: str | None = None,

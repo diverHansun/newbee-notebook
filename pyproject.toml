@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = [
+    "av>=17.0.0",
     "asyncpg>=0.31.0",
+    "bilibili-api-python>=17.4.1",
     "celery>=5.6.2",
     "docx2txt==0.9",
     "faiss-cpu==1.12.0",
@@ -32,6 +34,7 @@ dependencies = [
     "python-json-logger>=4.0.0",
     "python-multipart>=0.0.21",
     "pyyaml==6.0.3",
+    "qrcode[pil]>=8.2",
     "redis>=7.1.0",
     "requests==2.32.5",
     "rich==14.2.0",

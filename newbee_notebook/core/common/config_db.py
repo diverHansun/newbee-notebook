@@ -80,9 +80,23 @@ def _read_embedding_yaml_defaults() -> dict[str, Any]:
     }
 
 
+_ASR_DEFAULTS: dict[str, Any] = {
+    "provider": "zhipu",
+    "model": "glm-asr-2512",
+}
+
+
+def _default_asr_model_for_provider(provider: str) -> str:
+    return {
+        "zhipu": "glm-asr-2512",
+        "qwen": "qwen3-asr-flash",
+    }.get(provider, "glm-asr-2512")
+
+
 SYSTEM_DEFAULTS: dict[str, Any] = {
     "llm": _read_llm_yaml_defaults(),
     "embedding": _read_embedding_yaml_defaults(),
+    "asr": _ASR_DEFAULTS,
 }
 
 
@@ -99,6 +113,11 @@ async def get_llm_provider_async(session: AsyncSession) -> str:
 
 async def get_embedding_provider_async(session: AsyncSession) -> str:
     cfg = await get_embedding_config_async(session)
+    return cfg["provider"]
+
+
+async def get_asr_provider_async(session: AsyncSession) -> str:
+    cfg = await get_asr_config_async(session)
     return cfg["provider"]
 
 
@@ -260,6 +279,55 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def get_asr_config_async(session: AsyncSession) -> dict[str, Any]:
+    """Get effective ASR config with DB > env > defaults."""
+    defaults = SYSTEM_DEFAULTS["asr"]
+
+    source = "default"
+    db_values: dict[str, str] = {}
+    try:
+        db_values = await _get_app_settings_service(session).get_many("asr.")
+        if db_values:
+            source = "db"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed reading asr.* from app_settings, fallback chain continues: %s", exc)
+
+    provider = (
+        db_values.get("asr.provider")
+        or os.getenv("ASR_PROVIDER")
+        or defaults["provider"]
+    )
+    provider = str(provider).strip().lower() or str(defaults["provider"])
+
+    model = db_values.get("asr.model")
+    if model is None:
+        env_model = os.getenv("ASR_MODEL")
+        if env_model:
+            model = env_model
+            if source == "default":
+                source = "env"
+        else:
+            model = _default_asr_model_for_provider(provider)
+
+    if source == "default" and os.getenv("ASR_PROVIDER"):
+        source = "env"
+
+    return {
+        "provider": provider,
+        "model": str(model).strip() or _default_asr_model_for_provider(provider),
+        "source": source,
+    }
+
+
+def resolve_asr_api_key(provider: str) -> str | None:
+    normalized = str(provider or "").strip().lower()
+    if normalized == "zhipu":
+        return os.getenv("ZHIPU_API_KEY")
+    if normalized == "qwen":
+        return os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+    return None
+
+
 def apply_llm_runtime_env(config: dict[str, Any]) -> None:
     """Apply effective LLM config to process env for immediate runtime effect."""
     os.environ["LLM_PROVIDER"] = str(config["provider"])
@@ -286,12 +354,20 @@ def apply_embedding_runtime_env(config: dict[str, Any]) -> None:
         os.environ["EMBEDDING_MODEL"] = str(config.get("model") or "embedding-3")
 
 
+def apply_asr_runtime_env(config: dict[str, Any]) -> None:
+    """Apply effective ASR config to process env for immediate runtime effect."""
+    os.environ["ASR_PROVIDER"] = str(config["provider"])
+    os.environ["ASR_MODEL"] = str(config["model"])
+
+
 async def sync_runtime_env_from_db(session: AsyncSession) -> None:
     """Load effective model config and project into env for runtime builders."""
     llm_cfg = await get_llm_config_async(session)
     emb_cfg = await get_embedding_config_async(session)
+    asr_cfg = await get_asr_config_async(session)
     apply_llm_runtime_env(llm_cfg)
     apply_embedding_runtime_env(emb_cfg)
+    apply_asr_runtime_env(asr_cfg)
 
 
 async def sync_embedding_runtime_env_from_db(session: AsyncSession) -> dict[str, Any]:

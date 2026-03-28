@@ -13,10 +13,13 @@ from newbee_notebook.api.dependencies import (
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.core.common.config_db import (
     SYSTEM_DEFAULTS,
+    apply_asr_runtime_env,
     apply_embedding_runtime_env,
     apply_llm_runtime_env,
+    get_asr_config_async,
     get_embedding_config_async,
     get_llm_config_async,
+    resolve_asr_api_key,
 )
 from newbee_notebook.core.common.project_paths import get_models_directory
 from newbee_notebook.core.llm import get_registered_providers as get_registered_llm_providers
@@ -44,9 +47,17 @@ class EmbeddingConfigResponse(BaseModel):
     source: str
 
 
+class ASRConfigResponse(BaseModel):
+    provider: str
+    model: str
+    source: str
+    api_key_set: bool
+
+
 class ModelsConfigResponse(BaseModel):
     llm: LLMConfigResponse
     embedding: EmbeddingConfigResponse
+    asr: ASRConfigResponse
 
 
 class PresetModel(BaseModel):
@@ -67,9 +78,15 @@ class EmbeddingAvailable(BaseModel):
     local_models: list[str]
 
 
+class ASRAvailable(BaseModel):
+    providers: list[str]
+    presets: list[PresetModel]
+
+
 class AvailableModelsResponse(BaseModel):
     llm: LLMAvailable
     embedding: EmbeddingAvailable
+    asr: ASRAvailable
 
 
 class UpdateLLMRequest(BaseModel):
@@ -84,6 +101,11 @@ class UpdateEmbeddingRequest(BaseModel):
     provider: str
     mode: str | None = None
     api_model: str | None = None
+
+
+class UpdateASRRequest(BaseModel):
+    provider: str
+    model: str | None = None
 
 
 class ResetResponse(BaseModel):
@@ -109,6 +131,8 @@ def _scan_local_embedding_models() -> list[str]:
 async def get_models_config(session=Depends(get_db_session)):
     llm = await get_llm_config_async(session)
     embedding = await get_embedding_config_async(session)
+    asr = await get_asr_config_async(session)
+    asr_api_key = resolve_asr_api_key(asr["provider"])
     return ModelsConfigResponse(
         llm=LLMConfigResponse(**llm),
         embedding=EmbeddingConfigResponse(
@@ -117,6 +141,12 @@ async def get_models_config(session=Depends(get_db_session)):
             model=embedding["model"],
             dim=embedding["dim"],
             source=embedding["source"],
+        ),
+        asr=ASRConfigResponse(
+            provider=asr["provider"],
+            model=asr["model"],
+            source=asr["source"],
+            api_key_set=bool(asr_api_key),
         ),
     )
 
@@ -140,6 +170,13 @@ async def get_available_models():
                 PresetModel(name="embedding-3", label="Embedding-3 (Zhipu)"),
             ],
             local_models=_scan_local_embedding_models(),
+        ),
+        asr=ASRAvailable(
+            providers=["zhipu", "qwen"],
+            presets=[
+                PresetModel(name="glm-asr-2512", label="GLM-ASR (Zhipu)"),
+                PresetModel(name="qwen3-asr-flash", label="Qwen3-ASR-Flash (Qwen)"),
+            ],
         ),
     )
 
@@ -245,6 +282,44 @@ async def update_embedding_config(req: UpdateEmbeddingRequest, session=Depends(g
     )
 
 
+@router.put("/asr", response_model=ASRConfigResponse)
+async def update_asr_config(req: UpdateASRRequest, session=Depends(get_db_session)):
+    provider = str(req.provider or "").strip().lower()
+    if provider not in {"zhipu", "qwen"}:
+        raise HTTPException(status_code=400, detail=f"Unknown ASR provider: {req.provider}")
+
+    api_key = resolve_asr_api_key(provider)
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"API key for provider '{provider}' is not configured. "
+                "Please set the corresponding environment variable first."
+            ),
+        )
+
+    model = str(
+        (req.model or ("glm-asr-2512" if provider == "zhipu" else "qwen3-asr-flash"))
+    ).strip()
+    next_cfg = {
+        "provider": provider,
+        "model": model,
+        "source": "db",
+    }
+
+    settings = AppSettingsService(session)
+    await settings.set_many(
+        {
+            "asr.provider": next_cfg["provider"],
+            "asr.model": next_cfg["model"],
+        }
+    )
+
+    apply_asr_runtime_env(next_cfg)
+
+    return ASRConfigResponse(**next_cfg, api_key_set=True)
+
+
 @router.post("/llm/reset", response_model=ResetResponse)
 async def reset_llm_config(session=Depends(get_db_session)):
     settings = AppSettingsService(session)
@@ -272,4 +347,18 @@ async def reset_embedding_config(session=Depends(get_db_session)):
     return ResetResponse(
         message="Embedding configuration reset to system defaults",
         defaults=SYSTEM_DEFAULTS["embedding"],
+    )
+
+
+@router.post("/asr/reset", response_model=ResetResponse)
+async def reset_asr_config(session=Depends(get_db_session)):
+    settings = AppSettingsService(session)
+    await settings.delete_prefix("asr.")
+
+    default_cfg = {**SYSTEM_DEFAULTS["asr"], "source": "default"}
+    apply_asr_runtime_env(default_cfg)
+
+    return ResetResponse(
+        message="ASR configuration reset to system defaults",
+        defaults=SYSTEM_DEFAULTS["asr"],
     )

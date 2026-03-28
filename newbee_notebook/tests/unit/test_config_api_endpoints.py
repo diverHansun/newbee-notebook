@@ -63,6 +63,18 @@ def _build_client(monkeypatch):
             "source": "db" if "embedding.provider" in store else "default",
         }
 
+    async def _fake_get_asr_config_async(_session):
+        provider = store.get("asr.provider", "zhipu")
+        model = store.get(
+            "asr.model",
+            "glm-asr-2512" if provider == "zhipu" else "qwen3-asr-flash",
+        )
+        return {
+            "provider": provider,
+            "model": model,
+            "source": "db" if "asr.provider" in store else "default",
+        }
+
     async def _db_override():
         yield object()
 
@@ -72,6 +84,12 @@ def _build_client(monkeypatch):
     monkeypatch.setattr(config_router, "AppSettingsService", FakeSettingsService)
     monkeypatch.setattr(config_router, "get_llm_config_async", _fake_get_llm_config_async)
     monkeypatch.setattr(config_router, "get_embedding_config_async", _fake_get_embedding_config_async)
+    monkeypatch.setattr(config_router, "get_asr_config_async", _fake_get_asr_config_async)
+    monkeypatch.setattr(
+        config_router,
+        "resolve_asr_api_key",
+        lambda provider: "configured-key" if provider in {"zhipu", "qwen"} else None,
+    )
     monkeypatch.setattr(config_router, "get_registered_llm_providers", lambda: ["qwen", "zhipu"])
     monkeypatch.setattr(
         config_router,
@@ -94,6 +112,8 @@ def test_get_models_returns_effective_config(monkeypatch):
     payload = response.json()
     assert payload["llm"]["provider"] == "qwen"
     assert payload["embedding"]["provider"] == "qwen3-embedding"
+    assert payload["asr"]["provider"] == "zhipu"
+    assert payload["asr"]["api_key_set"] is True
 
 
 def test_put_llm_rejects_unknown_provider(monkeypatch):
@@ -136,6 +156,11 @@ def test_get_available_models_exposes_glm_4_7_preset(monkeypatch):
     assert response.status_code == 200
     presets = response.json()["llm"]["presets"]
     assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-4.7"}
+    assert response.json()["asr"]["providers"] == ["zhipu", "qwen"]
+    assert {preset["name"] for preset in response.json()["asr"]["presets"]} == {
+        "glm-asr-2512",
+        "qwen3-asr-flash",
+    }
 
 
 def test_get_available_models_reads_local_models_from_repo_models_dir(monkeypatch, tmp_path):
@@ -176,6 +201,65 @@ def test_reset_embedding_clears_prefix_and_resets_singleton(monkeypatch):
     assert "embedding.provider" not in store
     assert "embedding.mode" not in store
     embedding_reset.assert_called_once()
+
+
+def test_put_asr_rejects_unknown_provider(monkeypatch):
+    client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/asr",
+        json={
+            "provider": "unknown-provider",
+            "model": "x-asr",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_put_asr_rejects_missing_api_key(monkeypatch):
+    client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    monkeypatch.setattr(config_router, "resolve_asr_api_key", lambda _provider: None)
+
+    response = client.put(
+        "/api/v1/config/asr",
+        json={
+            "provider": "zhipu",
+            "model": "glm-asr-2512",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_put_asr_updates_store(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/asr",
+        json={
+            "provider": "qwen",
+            "model": "qwen3-asr-flash",
+        },
+    )
+
+    assert response.status_code == 200
+    assert store["asr.provider"] == "qwen"
+    assert store["asr.model"] == "qwen3-asr-flash"
+    assert response.json()["api_key_set"] is True
+
+
+def test_reset_asr_clears_prefix(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    store["asr.provider"] = "qwen"
+    store["asr.model"] = "qwen3-asr-flash"
+
+    response = client.post("/api/v1/config/asr/reset")
+
+    assert response.status_code == 200
+    assert "asr.provider" not in store
+    assert "asr.model" not in store
 
 
 def test_create_app_respects_feature_model_switch_flag(monkeypatch):

@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock
 
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.core.session import SessionRunResult
+from newbee_notebook.core.skills import SkillRegistry
 from newbee_notebook.core.tools.contracts import SourceItem
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.skills.video.provider import VideoSkillProvider
 
 
 class _DummyRuntimeAskSessionManager:
@@ -70,3 +72,15 @@ def test_chat_service_routes_ask_to_runtime_manager():
     assert result.mode == ModeType.ASK
     assert runtime_manager.started_with == ["session-1"]
     assert runtime_manager.chat_kwargs["mode_type"] == ModeType.ASK
+
+
+def test_skill_registry_supports_video_command():
+    registry = SkillRegistry()
+    registry.register(VideoSkillProvider(video_service=AsyncMock()))
+
+    matched = registry.match_command("/video summarize BV1xx411c7mD")
+
+    assert matched is not None
+    _, command, cleaned_message = matched
+    assert command == "/video"
+    assert cleaned_message == "summarize BV1xx411c7mD"

@@ -17,9 +17,17 @@ export interface EmbeddingConfig {
   source: string;
 }
 
+export interface ASRConfig {
+  provider: string;
+  model: string;
+  source: string;
+  api_key_set: boolean;
+}
+
 export interface ModelsConfig {
   llm: LLMConfig;
   embedding: EmbeddingConfig;
+  asr: ASRConfig;
 }
 
 export interface PresetModel {
@@ -39,6 +47,10 @@ export interface AvailableModels {
     api_models: PresetModel[];
     local_models: string[];
   };
+  asr: {
+    providers: string[];
+    presets: PresetModel[];
+  };
 }
 
 export interface UpdateLLMPayload {
@@ -53,6 +65,11 @@ export interface UpdateEmbeddingPayload {
   provider: string;
   mode?: string;
   api_model?: string;
+}
+
+export interface UpdateASRPayload {
+  provider: string;
+  model?: string;
 }
 
 export interface ResetResponse {
@@ -82,6 +99,13 @@ export function updateEmbeddingConfig(payload: UpdateEmbeddingPayload) {
   });
 }
 
+export function updateASRConfig(payload: UpdateASRPayload) {
+  return apiFetch<ASRConfig>("/config/asr", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
 export function resetLLMConfig() {
   return apiFetch<ResetResponse>("/config/llm/reset", {
     method: "POST",
@@ -90,6 +114,12 @@ export function resetLLMConfig() {
 
 export function resetEmbeddingConfig() {
   return apiFetch<ResetResponse>("/config/embedding/reset", {
+    method: "POST",
+  });
+}
+
+export function resetASRConfig() {
+  return apiFetch<ResetResponse>("/config/asr/reset", {
     method: "POST",
   });
 }
