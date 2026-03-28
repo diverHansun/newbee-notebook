@@ -26,7 +26,9 @@ def anyio_backend():
 
 @pytest.fixture
 def video_repo():
-    return AsyncMock()
+    repo = AsyncMock()
+    repo.commit = AsyncMock()
+    return repo
 
 
 @pytest.fixture
@@ -109,28 +111,97 @@ async def test_summarize_reuses_completed_summary(service, video_repo):
 
 
 @pytest.mark.anyio
-async def test_summarize_uses_asr_when_subtitle_missing(
-    service,
+async def test_summarize_marks_summary_failed_when_subtitle_missing_and_asr_disabled(
     video_repo,
     bili_client,
     llm_client,
     storage,
-    asr_pipeline,
+    ref_repo,
 ):
+    from newbee_notebook.application.services.video_service import (
+        VideoService,
+        VideoTranscriptUnavailableError,
+    )
+
     video_repo.get_by_platform_and_video_id.return_value = None
     video_repo.create.side_effect = lambda summary: summary
     video_repo.update.side_effect = lambda summary: summary
     bili_client.get_video_subtitle.return_value = ("", [])
+    events: list[tuple[str, dict]] = []
 
-    summary = await service.summarize("BV1xx411c7mD")
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
 
-    assert summary.video_id == "BV1xx411c7mD"
-    assert summary.transcript_source == "asr"
-    assert summary.summary_content == "## Summary"
-    assert summary.status == "completed"
-    asr_pipeline.transcribe.assert_awaited_once()
-    llm_client.chat.assert_awaited_once()
-    storage.save_file.assert_awaited_once()
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    with pytest.raises(VideoTranscriptUnavailableError):
+        await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    failed_summary = video_repo.update.await_args_list[-1].args[0]
+    assert failed_summary.status == "failed"
+    assert "ASR is disabled" in failed_summary.error_message
+    assert events[0][0] == "start"
+    assert events[-1][0] == "error"
+    llm_client.chat.assert_not_awaited()
+    storage.save_file.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_summarize_emits_start_after_processing_summary_is_created(
+    service,
+    video_repo,
+):
+    video_repo.get_by_platform_and_video_id.return_value = None
+    recorded_steps: list[str] = []
+
+    def create_summary(summary):
+        recorded_steps.append("create")
+        return summary
+
+    video_repo.create.side_effect = create_summary
+    video_repo.update.side_effect = lambda summary: summary
+    video_repo.commit.side_effect = lambda: recorded_steps.append("commit")
+
+    async def progress(event: str, payload: dict) -> None:
+        if event == "start":
+            recorded_steps.append("start")
+
+    await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    assert recorded_steps[:3] == ["create", "commit", "start"]
+
+
+@pytest.mark.anyio
+async def test_summarize_commits_completed_summary_before_done_event(
+    service,
+    video_repo,
+):
+    video_repo.get_by_platform_and_video_id.return_value = None
+    recorded_steps: list[str] = []
+
+    video_repo.create.side_effect = lambda summary: summary
+
+    def update_summary(summary):
+        recorded_steps.append(summary.status)
+        return summary
+
+    video_repo.update.side_effect = update_summary
+    video_repo.commit.side_effect = lambda: recorded_steps.append("commit")
+
+    async def progress(event: str, payload: dict) -> None:
+        if event == "done":
+            recorded_steps.append("done")
+
+    await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    assert recorded_steps[-3:] == ["completed", "commit", "done"]
 
 
 @pytest.mark.anyio

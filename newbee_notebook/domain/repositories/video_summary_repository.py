@@ -46,3 +46,7 @@ class VideoSummaryRepository(ABC):
     @abstractmethod
     async def delete(self, summary_id: str) -> bool:
         """Delete a summary by ID."""
+
+    @abstractmethod
+    async def commit(self) -> None:
+        """Persist pending video-summary changes so other requests can observe them."""

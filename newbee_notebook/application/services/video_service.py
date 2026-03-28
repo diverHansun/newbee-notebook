@@ -78,25 +78,44 @@ class VideoService:
                     f"Video summary is already processing: {bvid}"
                 )
 
-        await self._emit(progress_callback, "start", {"video_id": bvid})
-        info = await self._bili_client.get_video_info(bvid)
         summary = await self._video_repo.create(
             VideoSummary(
                 notebook_id=notebook_id,
                 platform="bilibili",
                 video_id=bvid,
-                source_url=info.get("source_url") or url_or_bvid,
-                title=info.get("title", ""),
-                cover_url=info.get("cover_url"),
-                duration_seconds=int(info.get("duration_seconds") or 0),
-                uploader_name=info.get("uploader_name", ""),
-                uploader_id=str(info.get("uploader_id", "")),
-                stats=info.get("stats"),
+                source_url=url_or_bvid,
+                title=bvid,
+                cover_url=None,
+                duration_seconds=0,
+                uploader_name="",
+                uploader_id="",
+                stats=None,
                 status="processing",
             )
         )
+        await self._video_repo.commit()
+        await self._emit(
+            progress_callback,
+            "start",
+            {
+                "video_id": bvid,
+                "summary_id": summary.summary_id,
+                "status": "processing",
+            },
+        )
 
         try:
+            info = await self._bili_client.get_video_info(bvid)
+            summary.source_url = info.get("source_url") or url_or_bvid
+            summary.title = info.get("title") or summary.title
+            summary.cover_url = info.get("cover_url")
+            summary.duration_seconds = int(info.get("duration_seconds") or 0)
+            summary.uploader_name = info.get("uploader_name", "")
+            summary.uploader_id = str(info.get("uploader_id", ""))
+            summary.stats = info.get("stats")
+            summary.touch()
+            summary = await self._video_repo.update(summary)
+
             transcript_text, _tracks = await self._bili_client.get_video_subtitle(bvid)
             transcript_source = "subtitle"
             if transcript_text.strip():
@@ -122,11 +141,13 @@ class VideoService:
             summary.error_message = None
             summary.touch()
             summary = await self._video_repo.update(summary)
+            await self._video_repo.commit()
         except Exception as exc:
             summary.status = "failed"
             summary.error_message = str(exc)
             summary.touch()
             await self._video_repo.update(summary)
+            await self._video_repo.commit()
             await self._emit(
                 progress_callback,
                 "error",
@@ -236,7 +257,7 @@ class VideoService:
     async def _transcribe_with_asr(self, bvid: str, info: dict[str, Any]) -> str:
         if self._asr_pipeline is None:
             raise VideoTranscriptUnavailableError(
-                f"Transcript is unavailable and ASR is not configured: {bvid}"
+                f"Transcript is unavailable because subtitles are missing and ASR is disabled: {bvid}"
             )
         transcript_text = await self._asr_pipeline.transcribe(
             {

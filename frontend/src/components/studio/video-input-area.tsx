@@ -100,6 +100,7 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
 
   const handleSummarize = async () => {
     const trimmedInput = input.trim();
+    let hasRefreshedProcessingLists = false;
     setValidationError(null);
     setStreamError(null);
     setCurrentStep(null);
@@ -124,6 +125,13 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               event.type === "asr" ||
               event.type === "summarize"
             ) {
+              if (!hasRefreshedProcessingLists) {
+                hasRefreshedProcessingLists = true;
+                await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
+                await queryClient.invalidateQueries({
+                  queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
+                });
+              }
               setCurrentStep(getStepLabel(event.type, t));
               return;
             }

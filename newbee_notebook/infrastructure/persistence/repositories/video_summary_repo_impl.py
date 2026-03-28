@@ -151,3 +151,6 @@ class VideoSummaryRepositoryImpl(VideoSummaryRepository):
         )
         await self._session.flush()
         return result.rowcount > 0
+
+    async def commit(self) -> None:
+        await self._session.commit()

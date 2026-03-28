@@ -501,8 +501,8 @@ async def get_bilibili_client_dep(
     return BilibiliClient(credential=auth_manager.get_credential())
 
 
-def get_asr_pipeline_dep() -> AsrPipeline:
-    return AsrPipeline()
+def get_asr_pipeline_dep() -> AsrPipeline | None:
+    return None
 
 
 async def get_video_service(
@@ -510,7 +510,7 @@ async def get_video_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     llm_client=Depends(get_llm_client_dep),
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
-    asr_pipeline: AsrPipeline = Depends(get_asr_pipeline_dep),
+    asr_pipeline: AsrPipeline | None = Depends(get_asr_pipeline_dep),
 ) -> VideoService:
     return VideoService(
         video_repo=video_repo,

@@ -101,6 +101,31 @@ describe("VideoInputArea", () => {
     });
   });
 
+  it("refreshes video lists as soon as the summarize stream starts", async () => {
+    const user = userEvent.setup();
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({ type: "start", video_id: "BV1" });
+      }
+    );
+
+    const { queryClient } = renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.summarizeVideoStream).toHaveBeenCalledOnce();
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["video-summaries", "all"],
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["video-summaries", "notebook-1"],
+      });
+    });
+  });
+
   it("opens the qr login dialog and shows the qr image when login starts", async () => {
     const user = userEvent.setup();
     apiMocks.streamBilibiliQrLogin.mockImplementation(
