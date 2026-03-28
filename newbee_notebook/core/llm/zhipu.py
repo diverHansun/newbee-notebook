@@ -1,4 +1,4 @@
-﻿"""Zhipu models via OpenAI-compatible interface.
+"""Zhipu models via OpenAI-compatible interface.
 
 This wraps llama-index's OpenAI adapter but targets Zhipu's OpenAI-compatible
 endpoint, keeping the config shape of llm.yaml (zhipu section).
@@ -133,7 +133,7 @@ def build_llm(
     """Build and return an OpenAI-compatible LLM targeting Zhipu models."""
     cfg = _get_zhipu_config()
 
-    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "glm-4.7")
+    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "glm-5")
     final_temperature = (
         temperature
         if temperature is not None
@@ -150,9 +150,7 @@ def build_llm(
         else _env_float("LLM_TOP_P", float(cfg.get("top_p", 0.8)))
     )
     final_system_prompt = (
-        system_prompt
-        or _env_or_none("LLM_SYSTEM_PROMPT")
-        or cfg.get("system_prompt")
+        system_prompt or _env_or_none("LLM_SYSTEM_PROMPT") or cfg.get("system_prompt")
     )
 
     resolved_api_key = api_key or _get_api_key()

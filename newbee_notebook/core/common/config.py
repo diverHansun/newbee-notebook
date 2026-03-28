@@ -1,4 +1,4 @@
-﻿"""Configuration management for Newbee Notebook.
+"""Configuration management for Newbee Notebook.
 
 Handles environment variables, YAML configuration files, and runtime configuration.
 """
@@ -18,23 +18,23 @@ load_dotenv()
 
 def load_yaml_config(config_path: str) -> dict:
     """Load configuration from a YAML file.
-    
+
     Args:
         config_path: Path to the YAML configuration file
-        
+
     Returns:
         dict: Configuration dictionary
     """
     if not os.path.exists(config_path):
         return {}
-        
-    with open(config_path, 'r', encoding='utf-8') as file:
+
+    with open(config_path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file) or {}
 
 
 def get_zhipu_api_key():
     """Get Zhipu API key from environment variables.
-    
+
     Returns:
         str: API key for Zhipu services
     """
@@ -58,8 +58,8 @@ def get_embedding_provider():
 
     # Try to get from YAML config
     embeddings_config = get_embeddings_config()
-    if embeddings_config and 'embeddings' in embeddings_config:
-        provider = embeddings_config['embeddings'].get('provider')
+    if embeddings_config and "embeddings" in embeddings_config:
+        provider = embeddings_config["embeddings"].get("provider")
         if provider:
             return provider
 
@@ -69,19 +69,21 @@ def get_embedding_provider():
 
 def get_embeddings_config():
     """Get embeddings configuration from YAML file.
-    
+
     Returns:
         dict: Embeddings configuration
     """
     return load_yaml_config(CONFIG_DIR / "embeddings.yaml")
 
+
 def get_llm_config():
     """Get LLM configuration from YAML file.
-    
+
     Returns:
         dict: LLM configuration
     """
     return load_yaml_config(CONFIG_DIR / "llm.yaml")
+
 
 def get_llm_provider() -> str:
     """Get LLM provider with priority: env > YAML > default."""
@@ -120,7 +122,7 @@ def get_llm_model():
         return "qwen-plus"
     if provider == "openai":
         return "gpt-4o-mini"
-    return "glm-4.7"
+    return "glm-5"
 
 
 def get_llm_temperature():
@@ -161,9 +163,10 @@ def get_llm_top_p():
             pass
     return 0.7
 
+
 def get_documents_directory():
     """Get documents directory from environment variable or default.
-    
+
     Returns:
         str: Documents directory path
     """
@@ -172,54 +175,56 @@ def get_documents_directory():
 
 def _resolve_env_var(value: str) -> str:
     """Resolve environment variable placeholder in format ${VAR:default}.
-    
+
     Args:
         value: String that may contain ${VAR:default} format
-        
+
     Returns:
         str: Resolved value (env var if exists, else default, else original)
     """
     import re
-    
+
     # Pattern: ${VAR_NAME:default_value}
     # Note: default value can be empty, e.g. ${MINERU_API_KEY:}
-    pattern = r'\$\{([^:}]+):([^}]*)\}'
-    
+    pattern = r"\$\{([^:}]+):([^}]*)\}"
+
     def replace_env(match):
         var_name = match.group(1)
         default_value = match.group(2)
         return os.getenv(var_name, default_value)
-    
+
     # Replace all ${VAR:default} patterns
     resolved = re.sub(pattern, replace_env, value)
-    
+
     # Also handle ${VAR} without default
-    pattern_no_default = r'\$\{([^}]+)\}'
+    pattern_no_default = r"\$\{([^}]+)\}"
     resolved = re.sub(pattern_no_default, lambda m: os.getenv(m.group(1), ""), resolved)
-    
+
     return resolved
 
 
 def get_storage_config():
     """Get storage configuration from YAML file or defaults.
-    
+
     Returns:
         dict: Storage configuration
     """
     config = load_yaml_config(CONFIG_DIR / "storage.yaml")
-    
+
     # Apply environment variable overrides and resolve placeholders
     if config:
         if "postgresql" in config:
             pg_config = config["postgresql"]
-            
+
             # Resolve placeholders first
             host = _resolve_env_var(str(pg_config.get("host", "localhost")))
             port_str = _resolve_env_var(str(pg_config.get("port", "5432")))
-            database = _resolve_env_var(str(pg_config.get("database", "newbee_notebook")))
+            database = _resolve_env_var(
+                str(pg_config.get("database", "newbee_notebook"))
+            )
             user = _resolve_env_var(str(pg_config.get("user", "postgres")))
             password = _resolve_env_var(str(pg_config.get("password", "")))
-            
+
             # Apply environment variable overrides (highest priority)
             pg_config["host"] = os.getenv("POSTGRES_HOST", host)
             try:
@@ -229,20 +234,20 @@ def get_storage_config():
             pg_config["database"] = os.getenv("POSTGRES_DB", database)
             pg_config["user"] = os.getenv("POSTGRES_USER", user)
             pg_config["password"] = os.getenv("POSTGRES_PASSWORD", password)
-        
+
         if "elasticsearch" in config:
             es_config = config["elasticsearch"]
-            
+
             # Resolve placeholders
             url = _resolve_env_var(str(es_config.get("url", "http://localhost:9200")))
             api_key = _resolve_env_var(str(es_config.get("api_key", "")))
             cloud_id = _resolve_env_var(str(es_config.get("cloud_id", "")))
-            
+
             # Apply environment variable overrides
             es_config["url"] = os.getenv("ELASTICSEARCH_URL", url)
             es_config["api_key"] = os.getenv("ELASTICSEARCH_API_KEY", api_key)
             es_config["cloud_id"] = os.getenv("ELASTICSEARCH_CLOUD_ID", cloud_id)
-    
+
     return config
 
 
@@ -332,4 +337,3 @@ def get_config():
         "storage": get_storage_config(),
         "document_processing": get_document_processing_config(),
     }
-

@@ -7,7 +7,7 @@ llm:
 
   # Runtime defaults used by the batch-2 OpenAI-compatible LLM client.
   zhipu:
-    model: glm-4.7
+    model: glm-5
     temperature: 0.7
     max_tokens: 32768
     top_p: 0.8

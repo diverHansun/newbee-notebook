@@ -1,4 +1,4 @@
-﻿"""Runtime model-switching configuration endpoints."""
+"""Runtime model-switching configuration endpoints."""
 
 from __future__ import annotations
 
@@ -22,7 +22,9 @@ from newbee_notebook.core.common.config_db import (
     resolve_asr_api_key,
 )
 from newbee_notebook.core.common.project_paths import get_models_directory
-from newbee_notebook.core.llm import get_registered_providers as get_registered_llm_providers
+from newbee_notebook.core.llm import (
+    get_registered_providers as get_registered_llm_providers,
+)
 from newbee_notebook.core.rag.embeddings import (
     get_registered_providers as get_registered_embedding_providers,
 )
@@ -155,15 +157,23 @@ async def get_models_config(session=Depends(get_db_session)):
 async def get_available_models():
     return AvailableModelsResponse(
         llm=LLMAvailable(
-            providers=[provider for provider in get_registered_llm_providers() if provider in {"qwen", "zhipu", "openai"}],
+            providers=[
+                provider
+                for provider in get_registered_llm_providers()
+                if provider in {"qwen", "zhipu", "openai"}
+            ],
             presets=[
                 PresetModel(name="qwen3.5-plus", label="Qwen 3.5 Plus (Qwen)"),
-                PresetModel(name="glm-4.7", label="GLM-4.7 (Zhipu)"),
+                PresetModel(name="glm-5", label="GLM-5 (Zhipu)"),
             ],
             custom_input=True,
         ),
         embedding=EmbeddingAvailable(
-            providers=[provider for provider in get_registered_embedding_providers() if provider in {"qwen3-embedding", "zhipu"}],
+            providers=[
+                provider
+                for provider in get_registered_embedding_providers()
+                if provider in {"qwen3-embedding", "zhipu"}
+            ],
             modes=["local", "api"],
             api_models=[
                 PresetModel(name="text-embedding-v4", label="Text Embedding v4 (Qwen)"),
@@ -185,12 +195,18 @@ async def get_available_models():
 async def update_llm_config(req: UpdateLLMRequest, session=Depends(get_db_session)):
     providers = set(get_registered_llm_providers())
     if req.provider not in providers:
-        raise HTTPException(status_code=400, detail=f"Unknown LLM provider: {req.provider}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown LLM provider: {req.provider}"
+        )
 
     if req.temperature is not None and not (0.0 <= req.temperature <= 2.0):
-        raise HTTPException(status_code=400, detail="temperature must be between 0.0 and 2.0")
+        raise HTTPException(
+            status_code=400, detail="temperature must be between 0.0 and 2.0"
+        )
     if req.max_tokens is not None and not (1 <= req.max_tokens <= 131072):
-        raise HTTPException(status_code=400, detail="max_tokens must be between 1 and 131072")
+        raise HTTPException(
+            status_code=400, detail="max_tokens must be between 1 and 131072"
+        )
     if req.top_p is not None and not (0.0 <= req.top_p <= 1.0):
         raise HTTPException(status_code=400, detail="top_p must be between 0.0 and 1.0")
 
@@ -198,8 +214,12 @@ async def update_llm_config(req: UpdateLLMRequest, session=Depends(get_db_sessio
     next_cfg = {
         "provider": req.provider,
         "model": req.model.strip(),
-        "temperature": req.temperature if req.temperature is not None else current["temperature"],
-        "max_tokens": req.max_tokens if req.max_tokens is not None else current["max_tokens"],
+        "temperature": req.temperature
+        if req.temperature is not None
+        else current["temperature"],
+        "max_tokens": req.max_tokens
+        if req.max_tokens is not None
+        else current["max_tokens"],
         "top_p": req.top_p if req.top_p is not None else current["top_p"],
         "source": "db",
     }
@@ -222,7 +242,9 @@ async def update_llm_config(req: UpdateLLMRequest, session=Depends(get_db_sessio
 
 
 @router.put("/embedding", response_model=EmbeddingConfigResponse)
-async def update_embedding_config(req: UpdateEmbeddingRequest, session=Depends(get_db_session)):
+async def update_embedding_config(
+    req: UpdateEmbeddingRequest, session=Depends(get_db_session)
+):
     providers = set(get_registered_embedding_providers())
     if req.provider not in providers:
         raise HTTPException(
@@ -245,7 +267,9 @@ async def update_embedding_config(req: UpdateEmbeddingRequest, session=Depends(g
         next_cfg = {
             "provider": req.provider,
             "mode": mode,
-            "model": model if mode == "api" else current.get("model") or "Qwen3-Embedding-0.6B",
+            "model": model
+            if mode == "api"
+            else current.get("model") or "Qwen3-Embedding-0.6B",
             "api_model": model,
             "dim": int(current.get("dim") or 1024),
             "source": "db",
@@ -286,7 +310,9 @@ async def update_embedding_config(req: UpdateEmbeddingRequest, session=Depends(g
 async def update_asr_config(req: UpdateASRRequest, session=Depends(get_db_session)):
     provider = str(req.provider or "").strip().lower()
     if provider not in {"zhipu", "qwen"}:
-        raise HTTPException(status_code=400, detail=f"Unknown ASR provider: {req.provider}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown ASR provider: {req.provider}"
+        )
 
     api_key = resolve_asr_api_key(provider)
     if not api_key:
