@@ -17,11 +17,19 @@ export const VIDEO_SUMMARIES_QUERY_KEY = (notebookId: string) =>
 export const VIDEO_SUMMARY_QUERY_KEY = (summaryId: string) =>
   ["video-summary", summaryId] as const;
 
+function hasProcessingItem(data: { summaries: Array<{ status: string }> } | undefined): boolean {
+  return data?.summaries?.some((s) => s.status === "processing") ?? false;
+}
+
 export function useAllVideoSummaries() {
   return useQuery({
     queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY,
     queryFn: () => listAllVideoSummaries(),
     staleTime: 30_000,
+    refetchInterval: (query) => {
+      if (hasProcessingItem(query.state.data)) return 5_000;
+      return false;
+    },
   });
 }
 
@@ -31,6 +39,10 @@ export function useVideoSummaries(notebookId: string) {
     queryFn: () => listVideoSummaries(notebookId),
     enabled: Boolean(notebookId),
     staleTime: 30_000,
+    refetchInterval: (query) => {
+      if (hasProcessingItem(query.state.data)) return 5_000;
+      return false;
+    },
   });
 }
 
@@ -39,6 +51,11 @@ export function useVideoSummary(summaryId: string | null) {
     queryKey: VIDEO_SUMMARY_QUERY_KEY(summaryId ?? ""),
     queryFn: () => getVideoSummary(summaryId!),
     enabled: Boolean(summaryId),
+    refetchInterval: (query) => {
+      // Poll every 3s while the summary is still processing
+      if (query.state.data?.status === "processing") return 3_000;
+      return false;
+    },
   });
 }
 

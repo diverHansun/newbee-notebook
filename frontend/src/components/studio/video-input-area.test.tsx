@@ -148,6 +148,84 @@ describe("VideoInputArea", () => {
     });
   });
 
+  it("shows step-by-step progress during summarization", async () => {
+    const user = userEvent.setup();
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({ type: "start", video_id: "BV1" });
+        options?.onEvent?.({ type: "subtitle", video_id: "BV1" });
+        options?.onEvent?.({ type: "summarize", video_id: "BV1" });
+        options?.onEvent?.({
+          type: "done",
+          summary_id: "sum-1",
+          status: "completed",
+          reused: false,
+        });
+      }
+    );
+
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Loading video info")).toBeInTheDocument();
+      expect(screen.getByText("Fetching subtitles")).toBeInTheDocument();
+      expect(screen.getByText("Generating summary")).toBeInTheDocument();
+      expect(screen.getByText("Summary complete")).toBeInTheDocument();
+    });
+  });
+
+  it("shows reused message when summary already exists", async () => {
+    const user = userEvent.setup();
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({
+          type: "done",
+          summary_id: "sum-1",
+          status: "completed",
+          reused: true,
+        });
+      }
+    );
+
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Existing summary found")).toBeInTheDocument();
+    });
+  });
+
+  it("shows friendly error and login button for auth errors", async () => {
+    const user = userEvent.setup();
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({ type: "start", video_id: "BV1" });
+        options?.onEvent?.({
+          type: "error",
+          message: "get_player_info: Credential 类未提供 sessdata 或者为空。",
+        });
+      }
+    );
+
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/bilibili session expired or not logged in/i)
+      ).toBeInTheDocument();
+      const loginButtons = screen.getAllByRole("button", { name: /bilibili login/i });
+      expect(loginButtons.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   it("falls back to a qr link when the backend only returns qr_url", async () => {
     const user = userEvent.setup();
     apiMocks.streamBilibiliQrLogin.mockImplementation(

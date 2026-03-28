@@ -11,7 +11,7 @@ import {
   useBilibiliAuthStatus,
   useBilibiliLogout,
 } from "@/lib/hooks/use-bilibili-auth";
-import { ALL_VIDEO_SUMMARIES_QUERY_KEY, VIDEO_SUMMARIES_QUERY_KEY } from "@/lib/hooks/use-videos";
+import { ALL_VIDEO_SUMMARIES_QUERY_KEY, VIDEO_SUMMARIES_QUERY_KEY, VIDEO_SUMMARY_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
@@ -27,8 +27,10 @@ function isValidBilibiliInput(value: string): boolean {
   return BV_ID_PATTERN.test(trimmed) || BILIBILI_URL_PATTERN.test(trimmed);
 }
 
+type StepType = "start" | "subtitle" | "asr" | "summarize";
+
 function getStepLabel(
-  type: "start" | "subtitle" | "asr" | "summarize",
+  type: StepType,
   t: (value: { zh: string; en: string }) => string
 ): string {
   switch (type) {
@@ -43,6 +45,21 @@ function getStepLabel(
   }
 }
 
+function isAuthError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("credential") ||
+    lower.includes("sessdata") ||
+    lower.includes("authenticationerror") ||
+    lower.includes("未提供")
+  );
+}
+
+type ProgressEntry = {
+  label: string;
+  status: "done" | "active";
+};
+
 export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
   const { t } = useLang();
   const queryClient = useQueryClient();
@@ -52,7 +69,8 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
   const [input, setInput] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [isAuthRelatedError, setIsAuthRelatedError] = useState(false);
+  const [progressSteps, setProgressSteps] = useState<ProgressEntry[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginDialogMessage, setLoginDialogMessage] = useState<string | null>(null);
@@ -103,7 +121,8 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
     let hasRefreshedProcessingLists = false;
     setValidationError(null);
     setStreamError(null);
-    setCurrentStep(null);
+    setIsAuthRelatedError(false);
+    setProgressSteps([]);
 
     if (!isValidBilibiliInput(trimmedInput)) {
       setValidationError(t(uiStrings.video.invalidInput));
@@ -132,7 +151,10 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
                   queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
                 });
               }
-              setCurrentStep(getStepLabel(event.type, t));
+              setProgressSteps((prev) => {
+                const updated = prev.map((s) => ({ ...s, status: "done" as const }));
+                return [...updated, { label: getStepLabel(event.type, t), status: "active" as const }];
+              });
               return;
             }
             if (event.type === "done") {
@@ -140,12 +162,27 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               await queryClient.invalidateQueries({
                 queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
               });
-              setCurrentStep(null);
+              await queryClient.invalidateQueries({
+                queryKey: VIDEO_SUMMARY_QUERY_KEY(event.summary_id),
+              });
+              if (event.reused) {
+                setProgressSteps([{ label: t(uiStrings.video.stepReused), status: "done" }]);
+              } else {
+                setProgressSteps((prev) => {
+                  const updated = prev.map((s) => ({ ...s, status: "done" as const }));
+                  return [...updated, { label: t(uiStrings.video.stepDone), status: "done" }];
+                });
+              }
               return;
             }
             if (event.type === "error") {
-              setStreamError(event.message);
-              setCurrentStep(null);
+              if (isAuthError(event.message)) {
+                setStreamError(t(uiStrings.video.authError));
+                setIsAuthRelatedError(true);
+              } else {
+                setStreamError(event.message);
+              }
+              setProgressSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
             }
           },
         }
@@ -209,11 +246,46 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
           {validationError}
         </span>
       ) : null}
-      {currentStep ? <span className="muted">{currentStep}</span> : null}
+      {progressSteps.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {progressSteps.map((step, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+              {step.status === "done" ? (
+                <span style={{ color: "#16a34a", fontWeight: 600, width: 14, textAlign: "center" }}>✓</span>
+              ) : (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 14,
+                    height: 14,
+                    border: "2px solid currentColor",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "thinking-spin 0.8s linear infinite",
+                  }}
+                />
+              )}
+              <span className="muted">{step.label}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {streamError ? (
-        <span className="muted" style={{ color: "#b91c1c", fontSize: 12 }}>
-          {streamError}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className="muted" style={{ color: "#b91c1c", fontSize: 12 }}>
+            {streamError}
+          </span>
+          {isAuthRelatedError && !authQuery.data?.logged_in ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              style={{ fontSize: 12 }}
+              onClick={() => void handleStartLogin()}
+            >
+              {t(uiStrings.video.login)}
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {loginDialogOpen ? (

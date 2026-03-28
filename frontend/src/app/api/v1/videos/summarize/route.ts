@@ -40,15 +40,18 @@ export async function POST(request: Request) {
       });
     }
 
-    return new Response(backendResponse.body, {
+    // Pipe through a TransformStream so each SSE chunk is flushed
+    // immediately instead of being buffered by the Node.js runtime.
+    const transform = new TransformStream();
+    backendResponse.body.pipeTo(transform.writable).catch(() => {});
+
+    return new Response(transform.readable, {
       status: backendResponse.status,
       headers: {
-        "content-type":
-          backendResponse.headers.get("content-type") || "text/event-stream; charset=utf-8",
-        "cache-control":
-          backendResponse.headers.get("cache-control") || "no-cache, no-transform",
-        "x-accel-buffering": backendResponse.headers.get("x-accel-buffering") || "no",
-        connection: backendResponse.headers.get("connection") || "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "x-accel-buffering": "no",
+        connection: "keep-alive",
       },
     });
   } catch (error) {

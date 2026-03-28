@@ -57,6 +57,7 @@ checkpoints/
 .env.local
 .env.*.local
 configs/mcp.json
+configs/bilibili/
 
 # API keys and secrets (redundant but explicit)
 *_API_KEY

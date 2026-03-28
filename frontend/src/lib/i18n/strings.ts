@@ -416,6 +416,12 @@ export const uiStrings = {
       stepSubtitle: { zh: "获取视频字幕", en: "Fetching subtitles" },
       stepAsr: { zh: "执行语音转写", en: "Running speech transcription" },
       stepSummarize: { zh: "生成视频摘要", en: "Generating summary" },
+      stepDone: { zh: "摘要生成完成", en: "Summary complete" },
+      stepReused: { zh: "已找到现有摘要，直接使用", en: "Existing summary found" },
+      authError: {
+        zh: "B站登录已过期或未登录，请重新登录后再试。",
+        en: "Bilibili session expired or not logged in. Please login and try again.",
+      },
     },
     notes: {
       title: { zh: "笔记", en: "Notes" },
