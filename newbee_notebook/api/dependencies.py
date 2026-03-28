@@ -4,9 +4,12 @@ Newbee Notebook - API Dependencies
 FastAPI dependency injection configuration.
 """
 
+import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import AsyncGenerator
-import logging
+
 from fastapi import Depends
 
 from newbee_notebook.infrastructure.persistence.database import Database, get_database
@@ -59,7 +62,9 @@ from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
+from newbee_notebook.infrastructure.asr import ZhipuTranscriber
 from newbee_notebook.infrastructure.bilibili import AsrPipeline, BilibiliAuthManager, BilibiliClient
+from newbee_notebook.infrastructure.bilibili.audio_processor import AudioProcessor
 from newbee_notebook.skills.note import NoteSkillProvider
 from newbee_notebook.skills.diagram import DiagramSkillProvider
 from newbee_notebook.skills.video import VideoSkillProvider
@@ -501,8 +506,41 @@ async def get_bilibili_client_dep(
     return BilibiliClient(credential=auth_manager.get_credential())
 
 
-def get_asr_pipeline_dep() -> AsrPipeline | None:
-    return None
+def _build_asr_audio_fetcher(bili_client: BilibiliClient):
+    async def _fetch_audio(source: dict[str, str]) -> str:
+        bvid = str(source.get("video_id") or "")
+        workspace = tempfile.mkdtemp(prefix="video-asr-")
+        audio_url = await bili_client.get_audio_url(bvid)
+        output_path = os.path.join(workspace, f"{bvid}_audio.m4s")
+        await bili_client.download_audio(audio_url, output_path)
+        return output_path
+
+    return _fetch_audio
+
+
+def _build_asr_segmenter(max_segment_seconds: int):
+    def _segment_audio(audio_path: str) -> list[str]:
+        output_dir = os.path.join(os.path.dirname(audio_path), "segments")
+        return AudioProcessor.convert_and_split(
+            input_path=audio_path,
+            output_dir=output_dir,
+            max_segment_seconds=max_segment_seconds,
+        )
+
+    return _segment_audio
+
+
+async def get_asr_pipeline_dep(
+    bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+) -> AsrPipeline | None:
+    api_key = (os.getenv("ZHIPU_API_KEY") or "").strip()
+    if not api_key:
+        return None
+    return AsrPipeline(
+        audio_fetcher=_build_asr_audio_fetcher(bili_client),
+        segmenter=_build_asr_segmenter(25),
+        transcriber=ZhipuTranscriber(api_key=api_key),
+    )
 
 
 async def get_video_service(

@@ -164,6 +164,30 @@ async def test_get_video_ai_conclusion_proxies_to_client(service, bili_client):
 
 
 @pytest.mark.anyio
+async def test_summarize_uses_asr_fallback_when_subtitle_missing(
+    service,
+    video_repo,
+    bili_client,
+    asr_pipeline,
+):
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    events: list[tuple[str, dict]] = []
+    bili_client.get_video_subtitle.return_value = ("", [])
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    summary = await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    assert summary.status == "completed"
+    assert summary.transcript_source == "asr"
+    asr_pipeline.transcribe.assert_awaited_once()
+    assert [event for event, _payload in events] == ["start", "asr", "summarize", "done"]
+
+
+@pytest.mark.anyio
 async def test_summarize_emits_start_after_processing_summary_is_created(
     service,
     video_repo,
