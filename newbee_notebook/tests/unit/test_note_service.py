@@ -3,15 +3,16 @@ from unittest.mock import AsyncMock
 import uuid
 
 import pytest
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from newbee_notebook.application.services.note_service import NoteNotFoundError, NoteService
 from newbee_notebook.domain.entities.note import Note
 from newbee_notebook.infrastructure.persistence.models import (
-    Base,
     NoteDocumentTagModel,
     NoteMarkRefModel,
     NoteModel,
+    NotebookModel,
 )
 from newbee_notebook.infrastructure.persistence.repositories.note_repo_impl import NoteRepositoryImpl
 
@@ -164,7 +165,14 @@ def test_note_repository_impl_maps_model_to_entity_with_related_ids():
 async def test_note_repository_create_returns_note_without_lazy_loading():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(NotebookModel.__table__.create)
+        await conn.run_sync(NoteModel.__table__.create)
+        await conn.execute(
+            insert(NotebookModel).values(
+                id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+                title="Notebook",
+            )
+        )
 
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 

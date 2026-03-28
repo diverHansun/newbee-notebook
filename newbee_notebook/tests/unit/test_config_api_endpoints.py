@@ -148,14 +148,14 @@ def test_put_llm_updates_store_and_resets_singleton(monkeypatch):
     llm_reset.assert_called_once()
 
 
-def test_get_available_models_exposes_glm_4_7_preset(monkeypatch):
+def test_get_available_models_exposes_glm_5_preset(monkeypatch):
     client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
 
     response = client.get("/api/v1/config/models/available")
 
     assert response.status_code == 200
     presets = response.json()["llm"]["presets"]
-    assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-4.7"}
+    assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-5"}
     assert response.json()["asr"]["providers"] == ["zhipu", "qwen"]
     assert {preset["name"] for preset in response.json()["asr"]["presets"]} == {
         "glm-asr-2512",

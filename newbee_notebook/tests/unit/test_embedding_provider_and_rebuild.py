@@ -77,6 +77,7 @@ def test_build_qwen3_embedding_local_resolves_main_repo_models_dir(monkeypatch, 
         },
     )
     monkeypatch.setattr(qwen3_embedding, "Qwen3LocalEmbedding", DummyLocalEmbedding)
+    monkeypatch.delenv("QWEN3_EMBEDDING_MODEL_PATH", raising=False)
 
     qwen3_embedding.build_qwen3_embedding(mode="local", source_path=anchor)
 

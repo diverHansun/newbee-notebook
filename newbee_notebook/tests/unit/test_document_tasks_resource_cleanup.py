@@ -15,11 +15,19 @@ class _FakeAsyncCloser:
 class _FakeVectorStoreWithNestedAsyncClose:
     def __init__(self) -> None:
         self._store = _FakeAsyncCloser()
+        self.deleted_doc_id = None
+
+    def delete_nodes(self, *, filters) -> None:
+        self.deleted_doc_id = filters.filters[0].value
 
 
 class _FakeVectorStoreWithAsyncClose:
     def __init__(self) -> None:
         self.closed = False
+        self.deleted_doc_id = None
+
+    def delete_nodes(self, *, filters) -> None:
+        self.deleted_doc_id = filters.filters[0].value
 
     async def close(self) -> None:
         self.closed = True
@@ -101,7 +109,7 @@ def test_delete_document_nodes_task_closes_loaded_indexes(monkeypatch):
 
     asyncio.run(document_tasks._delete_document_nodes_async("doc-123"))
 
-    assert fake_pg.deleted_doc_id == "doc-123"
-    assert fake_es.deleted_doc_id == "doc-123"
+    assert fake_pg.vector_store.deleted_doc_id == "doc-123"
+    assert fake_es.vector_store.deleted_doc_id == "doc-123"
     assert fake_pg.vector_store.closed is True
     assert fake_es.vector_store._store.closed is True
