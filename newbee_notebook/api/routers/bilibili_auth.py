@@ -23,7 +23,7 @@ def _format_sse(event: str, payload: dict) -> str:
 async def auth_status(
     manager: BilibiliAuthManager = Depends(get_bilibili_auth_manager),
 ):
-    return AuthStatusResponse(logged_in=manager.load_credential() is not None)
+    return AuthStatusResponse(logged_in=await manager.load_credential() is not None)
 
 
 @router.get("/bilibili/auth/qr")
@@ -49,5 +49,5 @@ async def qr_login(
 async def logout(
     manager: BilibiliAuthManager = Depends(get_bilibili_auth_manager),
 ):
-    manager.clear_credential()
+    await manager.clear_credential()
     return Response(status_code=204)

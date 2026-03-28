@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -15,6 +16,15 @@ from newbee_notebook.core.common.project_paths import resolve_project_relative_p
 logger = logging.getLogger(__name__)
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
+_BILIBILI_CREDENTIAL_KEY = "bilibili.credential"
+_BILIBILI_CREDENTIAL_FIELDS = (
+    "sessdata",
+    "bili_jct",
+    "buvid3",
+    "buvid4",
+    "dedeuserid",
+    "ac_time_value",
+)
 
 
 def _get_app_settings_service(session: AsyncSession):
@@ -35,6 +45,20 @@ def _as_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_bilibili_credential_payload(payload: Any) -> dict[str, str]:
+    if isinstance(payload, dict):
+        source = payload
+    else:
+        source = {
+            field: getattr(payload, field, "")
+            for field in _BILIBILI_CREDENTIAL_FIELDS
+        }
+    return {
+        field: str(source.get(field, "") or "")
+        for field in _BILIBILI_CREDENTIAL_FIELDS
+    }
 
 
 def _read_llm_yaml_defaults() -> dict[str, Any]:
@@ -119,6 +143,40 @@ async def get_embedding_provider_async(session: AsyncSession) -> str:
 async def get_asr_provider_async(session: AsyncSession) -> str:
     cfg = await get_asr_config_async(session)
     return cfg["provider"]
+
+
+async def get_bilibili_credential_async(session: AsyncSession) -> dict[str, str] | None:
+    raw_value = await _get_app_settings_service(session).get(_BILIBILI_CREDENTIAL_KEY)
+    if raw_value is None or not str(raw_value).strip():
+        return None
+
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        logger.warning("Invalid bilibili credential payload in app_settings")
+        return None
+
+    if not isinstance(payload, dict):
+        logger.warning("Unexpected bilibili credential payload type in app_settings: %s", type(payload))
+        return None
+
+    normalized = _normalize_bilibili_credential_payload(payload)
+    if not any(normalized.values()):
+        return None
+    return normalized
+
+
+async def save_bilibili_credential_async(session: AsyncSession, payload: Any) -> dict[str, str]:
+    normalized = _normalize_bilibili_credential_payload(payload)
+    await _get_app_settings_service(session).set(
+        _BILIBILI_CREDENTIAL_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+async def delete_bilibili_credential_async(session: AsyncSession) -> None:
+    await _get_app_settings_service(session).delete(_BILIBILI_CREDENTIAL_KEY)
 
 
 async def get_llm_config_async(session: AsyncSession) -> dict[str, Any]:

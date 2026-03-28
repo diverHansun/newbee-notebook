@@ -218,7 +218,6 @@ _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
 _runtime_confirmation_gateway = None
-_bilibili_auth_manager = None
 
 
 def get_llm_singleton():
@@ -309,11 +308,8 @@ def get_mcp_client_manager_singleton() -> MCPClientManager:
     return _mcp_client_manager
 
 
-def get_bilibili_auth_manager() -> BilibiliAuthManager:
-    global _bilibili_auth_manager
-    if _bilibili_auth_manager is None:
-        _bilibili_auth_manager = BilibiliAuthManager(base_dir=get_configs_directory())
-    return _bilibili_auth_manager
+async def get_bilibili_auth_manager(session=Depends(get_db_session)) -> BilibiliAuthManager:
+    return BilibiliAuthManager(session=session, base_dir=get_configs_directory())
 
 def reset_llm_singleton() -> None:
     """Reset cached LLM singleton for runtime config changes."""
@@ -504,7 +500,7 @@ async def get_diagram_service(
 async def get_bilibili_client_dep(
     auth_manager: BilibiliAuthManager = Depends(get_bilibili_auth_manager),
 ) -> BilibiliClient:
-    return BilibiliClient(credential=auth_manager.get_credential())
+    return BilibiliClient(credential=await auth_manager.get_credential())
 
 
 def _build_asr_audio_fetcher(bili_client: BilibiliClient):

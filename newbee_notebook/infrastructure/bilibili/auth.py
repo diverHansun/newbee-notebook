@@ -10,18 +10,27 @@ from typing import Any
 
 from bilibili_api.login_v2 import QrCodeLogin, QrCodeLoginEvents
 from bilibili_api.utils.network import Credential
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from newbee_notebook.core.common.config_db import (
+    delete_bilibili_credential_async,
+    get_bilibili_credential_async,
+    save_bilibili_credential_async,
+)
 
 
 class BilibiliAuthManager:
-    """Persist and load Bilibili credential payloads from local storage."""
+    """Persist and load Bilibili credential payloads from app_settings."""
 
     def __init__(
         self,
         *,
+        session: AsyncSession,
         base_dir: str | Path,
         qr_login_factory=QrCodeLogin,
         poll_interval_seconds: float = 2.0,
     ) -> None:
+        self._session = session
         self._base_dir = Path(base_dir)
         self._credential_path = self._base_dir / "bilibili" / "credential.json"
         self._qr_login_factory = qr_login_factory
@@ -31,26 +40,25 @@ class BilibiliAuthManager:
     def credential_path(self) -> Path:
         return self._credential_path
 
-    def save_credential(self, payload: dict[str, Any]) -> None:
-        normalized = self._normalize_payload(payload)
-        self._credential_path.parent.mkdir(parents=True, exist_ok=True)
-        self._credential_path.write_text(
-            json.dumps(normalized, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+    async def save_credential(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = await save_bilibili_credential_async(self._session, payload)
+        await self._commit_session()
+        self._remove_legacy_file()
+        return normalized
 
-    def load_credential(self) -> dict[str, Any] | None:
-        if not self._credential_path.exists():
-            return None
-        payload = json.loads(self._credential_path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else None
+    async def load_credential(self) -> dict[str, Any] | None:
+        payload = await get_bilibili_credential_async(self._session)
+        if payload is not None:
+            return payload
+        return await self._migrate_legacy_file_if_needed()
 
-    def clear_credential(self) -> None:
-        if self._credential_path.exists():
-            self._credential_path.unlink()
+    async def clear_credential(self) -> None:
+        await delete_bilibili_credential_async(self._session)
+        await self._commit_session()
+        self._remove_legacy_file()
 
-    def get_credential(self) -> Credential | None:
-        payload = self.load_credential()
+    async def get_credential(self) -> Credential | None:
+        payload = await self.load_credential()
         if payload is None:
             return None
         return Credential(
@@ -90,7 +98,7 @@ class BilibiliAuthManager:
                 if state == QrCodeLoginEvents.CONF:
                     yield ("scanned", {})
                 elif state == QrCodeLoginEvents.DONE:
-                    self.save_credential(login.get_credential())
+                    await self.save_credential(login.get_credential())
                     yield ("done", {})
                     break
                 elif state == QrCodeLoginEvents.TIMEOUT:
@@ -119,3 +127,27 @@ class BilibiliAuthManager:
             "dedeuserid": getattr(payload, "dedeuserid", "") or "",
             "ac_time_value": getattr(payload, "ac_time_value", "") or "",
         }
+
+    async def _migrate_legacy_file_if_needed(self) -> dict[str, Any] | None:
+        if not self._credential_path.exists():
+            return None
+
+        try:
+            payload = json.loads(self._credential_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        normalized = await self.save_credential(payload)
+        return normalized if any(normalized.values()) else None
+
+    async def _commit_session(self) -> None:
+        commit = getattr(self._session, "commit", None)
+        if callable(commit):
+            await commit()
+
+    def _remove_legacy_file(self) -> None:
+        if self._credential_path.exists():
+            self._credential_path.unlink()

@@ -12,10 +12,10 @@ class _FakeAuthManager:
         self._credential = credential
         self.clear_calls = 0
 
-    def load_credential(self):
+    async def load_credential(self):
         return self._credential
 
-    def clear_credential(self):
+    async def clear_credential(self):
         self.clear_calls += 1
         self._credential = None
 
