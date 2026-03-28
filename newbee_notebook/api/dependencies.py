@@ -58,6 +58,7 @@ from newbee_notebook.core.common.config import (
     get_embedding_provider,
     get_pgvector_config_for_provider,
 )
+from newbee_notebook.core.common.config_db import get_asr_config_async, resolve_asr_api_key
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
@@ -532,14 +533,19 @@ def _build_asr_segmenter(max_segment_seconds: int):
 
 async def get_asr_pipeline_dep(
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    session=Depends(get_db_session),
 ) -> AsrPipeline | None:
-    api_key = (os.getenv("ZHIPU_API_KEY") or "").strip()
+    asr_config = await get_asr_config_async(session)
+    provider = str(asr_config["provider"]).strip().lower()
+    api_key = (resolve_asr_api_key(provider) or "").strip()
     if not api_key:
+        return None
+    if provider != "zhipu":
         return None
     return AsrPipeline(
         audio_fetcher=_build_asr_audio_fetcher(bili_client),
         segmenter=_build_asr_segmenter(25),
-        transcriber=ZhipuTranscriber(api_key=api_key),
+        transcriber=ZhipuTranscriber(api_key=api_key, model=asr_config["model"]),
     )
 
 
