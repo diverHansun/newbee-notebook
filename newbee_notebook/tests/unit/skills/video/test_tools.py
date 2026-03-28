@@ -137,7 +137,7 @@ def test_video_skill_provider_builds_manifest(video_service):
     assert manifest.slash_command == "/video"
     assert manifest.force_first_tool_call is True
     assert manifest.confirmation_required == frozenset(
-        {"delete_summary", "disassociate_notebook"}
+        {"delete_summary", "disassociate_notebook", "update_summary"}
     )
     assert "discover_videos" in manifest.system_prompt_addition
     assert "get_video_content" in manifest.system_prompt_addition
@@ -148,6 +148,7 @@ def test_video_skill_provider_builds_manifest(video_service):
         "summarize_video",
         "list_summaries",
         "read_summary",
+        "update_summary",
         "delete_summary",
         "associate_notebook",
         "disassociate_notebook",

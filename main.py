@@ -43,14 +43,20 @@ def main() -> None:
     if args.reload and args.workers != 1:
         parser.error("--workers cannot be used with --reload")
 
-    uvicorn.run(
-        "newbee_notebook.api.main:app",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-        workers=args.workers,
-        log_level=args.log_level,
-    )
+    run_kwargs = {
+        "host": args.host,
+        "port": args.port,
+        "reload": args.reload,
+        "workers": args.workers,
+        "log_level": args.log_level,
+    }
+
+    # Limit reload scanning to backend Python package to avoid traversing large
+    # frontend dependency trees on Windows.
+    if args.reload:
+        run_kwargs["reload_dirs"] = ["newbee_notebook"]
+
+    uvicorn.run("newbee_notebook.api.main:app", **run_kwargs)
 
 
 if __name__ == "__main__":

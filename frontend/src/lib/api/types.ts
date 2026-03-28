@@ -383,7 +383,7 @@ export type SseEventConfirmation = {
   request_id: string;
   tool_name: string;
   action_type: "create" | "update" | "delete" | "confirm";
-  target_type: "note" | "diagram" | "document";
+  target_type: "note" | "diagram" | "document" | "video";
   args_summary: Record<string, unknown>;
   description: string;
 };

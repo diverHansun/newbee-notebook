@@ -6,7 +6,7 @@ import { MessageMode, MessageRole } from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
 export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
-export type ConfirmationTargetType = "note" | "diagram" | "document";
+export type ConfirmationTargetType = "note" | "diagram" | "document" | "video";
 export type PendingConfirmationStatus =
   | "pending"
   | "confirmed"
