@@ -33,10 +33,10 @@ def load_yaml_config(config_path: str) -> dict:
 
 
 def get_zhipu_api_key():
-    """Get ZhipuAI API key from environment variables.
+    """Get Zhipu API key from environment variables.
     
     Returns:
-        str: API key for ZhipuAI services
+        str: API key for Zhipu services
     """
     return os.getenv("ZHIPU_API_KEY")
 

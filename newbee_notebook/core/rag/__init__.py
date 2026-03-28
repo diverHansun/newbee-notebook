@@ -3,7 +3,7 @@
 This module provides RAG components using LlamaIndex with pgvector and Elasticsearch backends.
 
 Submodules:
-    - embeddings: Embedding models (ZhipuAI embedding-3)
+    - embeddings: Embedding models (qwen3-embedding, Zhipu official API)
     - document_loader: Load documents from various file formats
     - text_splitter: Split documents into chunks for indexing
     - retrieval: Hybrid retrieval strategies (pgvector + ES BM25)

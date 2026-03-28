@@ -27,7 +27,7 @@ embeddings:
     api_model: text-embedding-v4
     api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
 
-  # ZhipuAI embedding (fallback option).
+  # Zhipu official embeddings API (fallback option).
   zhipu:
     model: embedding-3
     dim: 1024

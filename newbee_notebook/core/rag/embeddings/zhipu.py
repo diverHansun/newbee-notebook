@@ -1,55 +1,51 @@
-﻿"""ZhipuAI Embedding builder.
+"""Zhipu embedding builder via the official embeddings HTTP API.
 
-Provides a factory function for LlamaIndex ZhipuAI embeddings (embedding-3).
-Configuration priority: environment variable > YAML config > defaults.
+This preserves the existing ``zhipu`` provider name for runtime/config
+compatibility without depending on the dedicated ``zhipuai`` SDK.
 """
 
-from typing import List, Dict, Any
+from __future__ import annotations
+
+from typing import Any, Dict, List
 import os
 
-from llama_index.embeddings.zhipuai import ZhipuAIEmbedding
+from llama_index.embeddings.openai import OpenAIEmbedding
 
-from newbee_notebook.core.common.config import (
-    get_zhipu_api_key,
-    get_embeddings_config,
-)
+from newbee_notebook.core.common.config import get_embeddings_config, get_zhipu_api_key
 from newbee_notebook.core.rag.embeddings.base import BaseEmbeddingModel
 from newbee_notebook.core.rag.embeddings.registry import register_embedding
 
+DEFAULT_ZHIPU_EMBEDDINGS_BASE = "https://open.bigmodel.cn/api/paas/v4"
+
 
 class ZhipuEmbeddingWrapper(BaseEmbeddingModel):
-    """Wrapper for ZhipuAI Embedding to match BaseEmbeddingModel interface."""
+    """Wrapper for OpenAI-compatible Zhipu embeddings."""
 
-    def __init__(self, zhipu_embedding: ZhipuAIEmbedding, model_name: str):
-        super().__init__()
-        self._zhipu_embedding = zhipu_embedding
-        self._model_name = model_name
+    def __init__(self, embedding_client: OpenAIEmbedding, model_name: str):
+        super().__init__(model_name=model_name)
+        self._embedding_client = embedding_client
 
     @property
     def dimensions(self) -> int:
-        return self._zhipu_embedding.dimensions
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
+        return self._embedding_client.dimensions
 
     def _get_query_embedding(self, query: str) -> List[float]:
-        return self._zhipu_embedding._get_query_embedding(query)
+        return self._embedding_client._get_query_embedding(query)
 
     def _get_text_embedding(self, text: str) -> List[float]:
-        return self._zhipu_embedding._get_text_embedding(text)
+        return self._embedding_client._get_text_embedding(text)
 
     def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
-        return self._zhipu_embedding._get_text_embeddings(texts)
+        return self._embedding_client._get_text_embeddings(texts)
 
     async def _aget_query_embedding(self, query: str) -> List[float]:
-        return await self._zhipu_embedding._aget_query_embedding(query)
+        return await self._embedding_client._aget_query_embedding(query)
 
     async def _aget_text_embedding(self, text: str) -> List[float]:
-        return await self._zhipu_embedding._aget_text_embedding(text)
+        return await self._embedding_client._aget_text_embedding(text)
 
     async def _aget_text_embeddings(self, texts: List[str]) -> List[List[float]]:
-        return await self._zhipu_embedding._aget_text_embeddings(texts)
+        return await self._embedding_client._aget_text_embeddings(texts)
 
 
 def _get_zhipu_config() -> Dict[str, Any]:
@@ -57,12 +53,21 @@ def _get_zhipu_config() -> Dict[str, Any]:
     return embeddings_config.get("embeddings", {}).get("zhipu", {})
 
 
+def _get_api_base(config: Dict[str, Any]) -> str:
+    return (
+        os.getenv("ZHIPU_API_BASE")
+        or os.getenv("EMBEDDING_API_BASE")
+        or config.get("api_base")
+        or DEFAULT_ZHIPU_EMBEDDINGS_BASE
+    )
+
+
 @register_embedding("zhipu")
 def build_zhipu_embedding(
     model: str | None = None,
     dimensions: int | None = None,
 ) -> BaseEmbeddingModel:
-    """Build and return a ZhipuAI Embedding instance."""
+    """Build a Zhipu embedding client against the official embeddings API."""
     api_key = get_zhipu_api_key()
     if not api_key:
         raise ValueError(
@@ -70,24 +75,20 @@ def build_zhipu_embedding(
         )
 
     config = _get_zhipu_config()
-
     final_model = model or os.getenv("EMBEDDING_MODEL") or config.get("model", "embedding-3")
     final_dimensions = int(
-        dimensions
-        or os.getenv("EMBEDDING_DIMENSION")
-        or config.get("dim", 1024)
+        dimensions or os.getenv("EMBEDDING_DIMENSION") or config.get("dim", 1024)
     )
 
-    print(f"[ZhipuAI] Model: {final_model}, Dimensions: {final_dimensions}")
-
-    zhipu_embedding = ZhipuAIEmbedding(
+    embedding_client = OpenAIEmbedding(
         model=final_model,
         api_key=api_key,
+        api_base=_get_api_base(config),
         dimensions=final_dimensions,
     )
 
     return ZhipuEmbeddingWrapper(
-        zhipu_embedding=zhipu_embedding,
+        embedding_client=embedding_client,
         model_name=f"zhipu-{final_model}",
     )
 
