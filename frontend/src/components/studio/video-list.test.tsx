@@ -88,7 +88,7 @@ describe("VideoList", () => {
     const user = userEvent.setup();
     const onOpenSummary = vi.fn();
 
-    renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} />);
+    renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} onBack={vi.fn()} />);
 
     expect(screen.getByTestId("video-input-area")).toBeInTheDocument();
     expect(screen.getByText("All Videos Entry")).toBeInTheDocument();
@@ -106,13 +106,13 @@ describe("VideoList", () => {
     const user = userEvent.setup();
     const onOpenSummary = vi.fn();
 
-    const view = renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} />);
+    const view = renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} onBack={vi.fn()} />);
 
     await user.click(screen.getByRole("radio", { name: "This Notebook" }));
     expect(screen.getByText("Notebook Videos Entry")).toBeInTheDocument();
 
     view.unmount();
-    renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} />);
+    renderVideoList(<VideoList notebookId="notebook-1" onOpenSummary={onOpenSummary} onBack={vi.fn()} />);
 
     expect(screen.getByRole("radio", { name: "This Notebook" })).toBeChecked();
     expect(screen.getByText("Notebook Videos Entry")).toBeInTheDocument();

@@ -193,6 +193,19 @@ class VideoService:
                 pass
         return deleted
 
+    async def update_summary_content(self, summary_id: str, content: str) -> VideoSummary:
+        """Replace the markdown summary content of a completed video summary."""
+        summary = await self.get(summary_id)
+        if summary.status != "completed":
+            raise ValueError(
+                f"Cannot update summary in status '{summary.status}', expected 'completed'"
+            )
+        summary.summary_content = content
+        summary.touch()
+        summary = await self._video_repo.update(summary)
+        await self._video_repo.commit()
+        return summary
+
     async def associate_notebook(self, summary_id: str, notebook_id: str) -> VideoSummary:
         summary = await self.get(summary_id)
         summary.notebook_id = notebook_id
@@ -288,14 +301,24 @@ class VideoService:
         return [
             {
                 "role": "system",
-                "content": "You summarize Bilibili videos into concise markdown notes.",
+                "content": (
+                    "You are a video summarization assistant. Based on the provided video "
+                    "metadata and transcript, generate a structured Markdown summary.\n\n"
+                    "Output requirements:\n"
+                    "- Write in Chinese\n"
+                    "- Use level-2 headings (##) as section titles\n"
+                    "- Include sections: overview, key topics (grouped by theme), takeaways\n"
+                    "- Bold important terms and key concepts\n"
+                    "- Use unordered lists for bullet points\n"
+                    "- Keep it concise, avoid redundant repetition"
+                ),
             },
             {
                 "role": "user",
                 "content": (
                     f"Title: {info.get('title', '')}\n"
                     f"Uploader: {info.get('uploader_name', '')}\n"
-                    f"Duration: {info.get('duration_seconds', 0)}\n\n"
+                    f"Duration: {info.get('duration_seconds', 0)}s\n\n"
                     f"Transcript:\n{transcript_text}"
                 ),
             },

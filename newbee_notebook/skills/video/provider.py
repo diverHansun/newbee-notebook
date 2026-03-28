@@ -15,6 +15,7 @@ from newbee_notebook.skills.video.tools import (
     build_list_summaries_tool,
     build_read_summary_tool,
     build_summarize_video_tool,
+    build_update_summary_tool,
 )
 
 
@@ -49,6 +50,8 @@ class VideoSkillProvider:
                 "type=ai_conclusion for Bilibili's built-in AI summary when available.\n"
                 "Use summarize_video for full AI summarization. It may take longer than metadata "
                 "or discovery tools.\n"
+                "Use update_summary to modify the content of an existing completed summary. "
+                "Always read_summary first to get the current content before updating.\n"
                 "---"
             ),
             tools=[
@@ -58,6 +61,7 @@ class VideoSkillProvider:
                 build_summarize_video_tool(service=self._video_service, notebook_id=context.notebook_id),
                 build_list_summaries_tool(service=self._video_service, notebook_id=context.notebook_id),
                 build_read_summary_tool(service=self._video_service),
+                build_update_summary_tool(service=self._video_service),
                 build_delete_summary_tool(service=self._video_service),
                 build_associate_notebook_tool(
                     service=self._video_service,
@@ -65,11 +69,19 @@ class VideoSkillProvider:
                 ),
                 build_disassociate_notebook_tool(service=self._video_service),
             ],
-            confirmation_required=frozenset({"delete_summary", "disassociate_notebook"}),
+            confirmation_required=frozenset({
+                "delete_summary",
+                "disassociate_notebook",
+                "update_summary",
+            }),
             confirmation_meta={
                 "delete_summary": ConfirmationMeta(action_type="delete", target_type="video"),
                 "disassociate_notebook": ConfirmationMeta(
                     action_type="delete",
+                    target_type="video",
+                ),
+                "update_summary": ConfirmationMeta(
+                    action_type="update",
                     target_type="video",
                 ),
             },

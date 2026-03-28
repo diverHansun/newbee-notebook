@@ -917,7 +917,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       {studioView === "notes" ? renderNotesList() : null}
       {studioView === "diagrams" ? renderDiagramsList() : null}
       {studioView === "videos" ? (
-        <VideoList notebookId={notebookId} onOpenSummary={openVideoDetail} />
+        <VideoList notebookId={notebookId} onOpenSummary={openVideoDetail} onBack={backToHome} />
       ) : null}
       {studioView === "note-detail" ? renderNoteDetail() : null}
       {studioView === "diagram-detail" ? renderDiagramDetail() : null}

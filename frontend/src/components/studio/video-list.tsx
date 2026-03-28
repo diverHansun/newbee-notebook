@@ -13,9 +13,10 @@ import { useStudioStore } from "@/stores/studio-store";
 type VideoListProps = {
   notebookId: string;
   onOpenSummary: (summaryId: string) => void;
+  onBack: () => void;
 };
 
-export function VideoList({ notebookId, onOpenSummary }: VideoListProps) {
+export function VideoList({ notebookId, onOpenSummary, onBack }: VideoListProps) {
   const { t } = useLang();
   const { videoFilterMode, setVideoFilterMode } = useStudioStore();
   const allVideosQuery = useAllVideoSummaries();
@@ -30,7 +31,9 @@ export function VideoList({ notebookId, onOpenSummary }: VideoListProps) {
   return (
     <div className="stack-md" style={{ height: "100%", padding: 0 }}>
       <div className="row-between" style={{ gap: 8, alignItems: "center" }}>
-        <strong>{t(uiStrings.video.title)}</strong>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={onBack}>
+          {t(uiStrings.studio.backToStudio)}
+        </button>
         <SegmentedControl
           value={videoFilterMode}
           options={[
