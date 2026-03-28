@@ -162,6 +162,21 @@ def test_init_postgres_notice_mentions_video_summaries():
     assert "Core tables:" in sql
 
 
+def test_init_postgres_declares_batch6_video_table():
+    sql_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "init-postgres.sql"
+    )
+
+    sql = sql_path.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS video_summaries (" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_video_summaries_notebook_id" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_video_summaries_document_ids" in sql
+
+
 def test_runtime_schema_statements_backfill_batch3_tables():
     statements = "\n".join(get_runtime_schema_statements())
 

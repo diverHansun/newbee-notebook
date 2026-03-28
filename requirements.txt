@@ -1,65 +1,38 @@
-# Core RAG + integrations (install in your venv)
-llama-index==0.14.0
-llama-index-llms-zhipuai==0.4.1
-llama-index-llms-openai==0.5.6
-llama-index-embeddings-zhipuai==0.3.1
-llama-index-vector-stores-faiss==0.5.1
-llama-index-readers-file==0.5.4
-faiss-cpu==1.12.0
-
-# Vector stores and databases
-llama-index-vector-stores-postgres==0.7.2
-llama-index-vector-stores-elasticsearch==0.5.1
-psycopg2-binary==2.9.11
-asyncpg==0.31.0
-sqlalchemy==2.0.44
-
-# Agent tools
-tavily-python==0.7.17
-
-# HTTP client
-requests==2.32.5
-minio>=7.2.0,<8
-
-# Hugging Face transformers (for local embedding/encoder models)
-# Default torch target is CPU.
-# If you have a dedicated GPU, install a CUDA-matched torch build manually
-# according to https://pytorch.org/get-started/locally/ after creating the venv.
-transformers==4.57.1
-torch==2.9.0
-numpy==2.2.6
-
-# Configuration and data handling
-pyyaml==6.0.3
-
-# Document processing
-pandas==2.2.3
-openpyxl==3.1.5
-xlrd==2.0.0
+# Synced with [project.dependencies] in pyproject.toml.
+av>=17.0.0
+asyncpg>=0.31.0
+bilibili-api-python>=17.4.1
+celery>=5.6.2
 docx2txt==0.9
-
-# Utilities
+fastapi>=0.128.0
+llama-index-core==0.14.15
+llama-index-embeddings-openai==0.5.1
+llama-index-llms-openai>=0.5.6
+llama-index-readers-file==0.5.4
+llama-index-vector-stores-elasticsearch==0.5.1
+llama-index-vector-stores-postgres>=0.7.2
+markitdown[all,pdf]==0.1.4
+mcp==1.26.0
+minio>=7.2.0,<8
+numpy==2.2.6
+openpyxl==3.1.5
+pandas<2.3.0
+psycopg2-binary>=2.9.11
 pydantic==2.12.3
+pytest>=9.0.1
 python-dotenv==1.1.1
-tiktoken==0.12.0
-python-json-logger==4.0.0
-httpx==0.27.2
-markitdown[all]
-mineru-kie-sdk==0.1.1
-python-docx>=1.1.0
-
-# Optional dependencies for enhanced features
+python-json-logger>=4.0.0
+python-multipart>=0.0.21
+pyyaml==6.0.3
+qrcode[pil]>=8.2
+redis>=7.1.0
+requests==2.32.5
 rich==14.2.0
 sentence-transformers==5.1.1
-
-# API server
-fastapi==0.128.0
-uvicorn==0.40.0
-python-multipart==0.0.21
-
-# Task queue and caching
-celery==5.6.2
-redis==7.1.0
-
-# Testing
-pytest==9.0.1
+sqlalchemy>=2.0.44
+tavily-python>=0.7.17
+tiktoken==0.12.0
+torch==2.9.0
+transformers==4.57.1
+uvicorn>=0.40.0
+xlrd>=2.0.0
