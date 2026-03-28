@@ -191,6 +191,16 @@ export const uiStrings = {
     embeddingModeApi: { zh: "API", en: "API" },
     embeddingModel: { zh: "模型", en: "Model" },
     embeddingDim: { zh: "维度", en: "Dimension" },
+    asrConfig: { zh: "ASR 配置", en: "ASR Configuration" },
+    asrProvider: { zh: "Provider", en: "Provider" },
+    asrModel: { zh: "模型", en: "Model" },
+    asrModelHint: { zh: "选择提供商预设模型，或输入兼容模型名称", en: "Select a provider preset or enter a compatible model name" },
+    asrApiKeyStatus: { zh: "API Key 状态", en: "API key status" },
+    asrApiKeyConfigured: { zh: "API key 已配置", en: "API key configured" },
+    asrApiKeyMissing: {
+      zh: "请先在环境变量中配置 {provider} 的 API key",
+      en: "Please configure {provider} API key in environment variables",
+    },
     embeddingSwitchWarning: {
       zh: "切换 Embedding 仅影响后续新文档的索引。已索引文档需通过重新索引才能迁移。",
       en: "Switching Embedding only affects future document indexing. Re-index is required to migrate existing documents.",
