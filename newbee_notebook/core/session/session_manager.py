@@ -29,14 +29,20 @@ from newbee_notebook.core.llm.qwen import (
     DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
     QWEN_CONTEXT_WINDOWS,
 )
-from newbee_notebook.core.llm.zhipu import DEFAULT_CONTEXT_WINDOW as ZHIPU_DEFAULT_CONTEXT_WINDOW
+from newbee_notebook.core.llm.zhipu import (
+    DEFAULT_CONTEXT_WINDOW as ZHIPU_DEFAULT_CONTEXT_WINDOW,
+)
 from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session.lock_manager import SessionLockManager
 from newbee_notebook.core.tools.contracts import SourceItem
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
-from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType, normalize_runtime_mode
+from newbee_notebook.domain.value_objects.mode_type import (
+    MessageRole,
+    ModeType,
+    normalize_runtime_mode,
+)
 from llama_index.llms.openai.utils import openai_modelname_to_contextsize
 
 OPENAI_DEFAULT_CONTEXT_WINDOW = 128000
@@ -97,16 +103,16 @@ def _build_context_budget(runtime_config: LLMRuntimeConfig | None) -> ContextBud
     )
 
 
-@lru_cache(maxsize=8)
-def _load_mode_prompt(mode: ModeType) -> str:
+@lru_cache(maxsize=16)
+def _load_mode_prompt(mode: ModeType, lang: str = "en") -> str:
     if mode in (ModeType.AGENT, ModeType.CHAT):
-        return load_prompt("chat.md")
+        return load_prompt("chat", lang)
     if mode is ModeType.ASK:
-        return load_prompt("ask.md")
+        return load_prompt("ask", lang)
     if mode is ModeType.EXPLAIN:
-        return load_prompt("explain.md")
+        return load_prompt("explain", lang)
     if mode is ModeType.CONCLUDE:
-        return load_prompt("conclude.md")
+        return load_prompt("conclude", lang)
     return f"You are running in {mode.value} mode."
 
 
@@ -144,12 +150,18 @@ class SessionManager:
         self._tool_registry = tool_registry
         self._lock_manager = lock_manager or SessionLockManager()
         self._agent_loop_cls = agent_loop_cls
-        self._system_prompt_provider = system_prompt_provider or self._default_system_prompt
+        self._system_prompt_provider = (
+            system_prompt_provider or self._default_system_prompt
+        )
         self._confirmation_gateway = confirmation_gateway
-        self._runtime_config = runtime_config or getattr(llm_client, "runtime_config", None)
+        self._runtime_config = runtime_config or getattr(
+            llm_client, "runtime_config", None
+        )
         self._token_counter = token_counter or TokenCounter()
         self._compressor = compressor or Compressor(token_counter=self._token_counter)
-        self._context_budget = context_budget or _build_context_budget(self._runtime_config)
+        self._context_budget = context_budget or _build_context_budget(
+            self._runtime_config
+        )
         self._current_session: Session | None = None
         self._current_mode: ModeType = ModeType.AGENT
         self._memory = SessionMemory()
@@ -167,6 +179,7 @@ class SessionManager:
             budget=self._context_budget,
         )
         self._last_sources: list[SourceItem] = []
+        self._lang: str = "en"
 
     @property
     def session_id(self) -> str | None:
@@ -223,20 +236,27 @@ class SessionManager:
             role=_normalize_message_role(message.role),
             content=message.content,
             mode=_normalize_message_mode(message.mode),
-            message_type=_normalize_message_type(getattr(message, "message_type", "normal")),
+            message_type=_normalize_message_type(
+                getattr(message, "message_type", "normal")
+            ),
         )
 
     @staticmethod
-    def _default_system_prompt(mode: ModeType) -> str:
-        return _load_mode_prompt(mode)
+    def _default_system_prompt(mode: ModeType, lang: str = "en") -> str:
+        return _load_mode_prompt(mode, lang)
 
     def _build_chat_history(
         self,
         mode: ModeType,
         system_prompt_addition: str = "",
+        lang: str = "en",
     ) -> list[dict[str, str]]:
         track = "side" if mode in self.SIDE_TRACK_MODES else "main"
-        system_prompt = self._system_prompt_provider(mode)
+        lang = lang if lang in ("en", "zh") else "en"
+        try:
+            system_prompt = self._system_prompt_provider(mode, lang)
+        except TypeError:
+            system_prompt = self._system_prompt_provider(mode)
         if system_prompt_addition.strip():
             system_prompt = f"{system_prompt}\n\n{system_prompt_addition.strip()}"
         return self._context_builder.build(
@@ -280,12 +300,7 @@ class SessionManager:
             else "Conclude the selected text using grounded notebook evidence."
         )
         instruction = normalized_message or default_instruction
-        return (
-            "Selected text:\n"
-            f"{selected_text}\n\n"
-            "User request:\n"
-            f"{instruction}"
-        )
+        return f"Selected text:\n{selected_text}\n\nUser request:\n{instruction}"
 
     @staticmethod
     def _build_tool_argument_defaults(
@@ -322,8 +337,12 @@ class SessionManager:
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | None = None,
     ):
-        effective_confirmation_gateway = confirmation_gateway or self._confirmation_gateway
-        tools = await self._tool_registry.get_tools(mode.value, external_tools=external_tools)
+        effective_confirmation_gateway = (
+            confirmation_gateway or self._confirmation_gateway
+        )
+        tools = await self._tool_registry.get_tools(
+            mode.value, external_tools=external_tools
+        )
         mode_config = ModeConfigFactory.build(mode, tools)
         tool_argument_defaults = self._build_tool_argument_defaults(
             mode=mode,
@@ -343,7 +362,9 @@ class SessionManager:
         if force_first_tool_call:
             loop_kwargs["force_first_tool_call"] = True
         if required_tool_call_before_response:
-            loop_kwargs["required_tool_call_before_response"] = required_tool_call_before_response
+            loop_kwargs["required_tool_call_before_response"] = (
+                required_tool_call_before_response
+            )
         return self._agent_loop_cls(**loop_kwargs)
 
     async def chat_stream(
@@ -361,11 +382,13 @@ class SessionManager:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | None = None,
+        lang: str = "en",
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
             raise ValueError("Session not started")
 
+        self._lang = lang if lang in ("en", "zh") else "en"
         mode = normalize_runtime_mode(mode_type or self._current_mode)
         self._current_mode = mode
         runtime_message = self._build_runtime_message(
@@ -382,7 +405,9 @@ class SessionManager:
             )
             if compacted:
                 await self._reload_memory()
-            chat_history = self._build_chat_history(mode, system_prompt_addition=system_prompt_addition)
+            chat_history = self._build_chat_history(
+                mode, system_prompt_addition=system_prompt_addition, lang=self._lang
+            )
             loop = await self._build_loop(
                 mode=mode,
                 allowed_document_ids=allowed_document_ids,
@@ -394,7 +419,9 @@ class SessionManager:
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
             )
-            async for event in loop.stream(message=runtime_message, chat_history=chat_history):
+            async for event in loop.stream(
+                message=runtime_message, chat_history=chat_history
+            ):
                 if isinstance(event, SourceEvent):
                     self._last_sources = list(event.sources)
                 yield event
@@ -414,6 +441,7 @@ class SessionManager:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | None = None,
+        lang: str = "en",
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -432,6 +460,7 @@ class SessionManager:
             confirmation_gateway=confirmation_gateway,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
+            lang=lang,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)
@@ -450,6 +479,7 @@ class SessionManager:
 
     def get_last_sources(self) -> list[SourceItem]:
         return list(self._last_sources)
+
 
 def _normalize_message_role(role: MessageRole | str) -> str:
     return role.value if hasattr(role, "value") else str(role)

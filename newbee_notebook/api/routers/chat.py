@@ -253,6 +253,7 @@ async def chat(
             context=request.context.model_dump() if request.context else None,
             include_ec_context=request.include_ec_context,
             source_document_ids=request.source_document_ids,
+            lang=request.lang,
         )
     except DocumentProcessingError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message)
@@ -331,6 +332,7 @@ async def chat_stream(
         context=request.context.model_dump() if request.context else None,
         include_ec_context=request.include_ec_context,
         source_document_ids=request.source_document_ids,
+        lang=request.lang,
     )
     stream = sse_adapter(business_stream)
     

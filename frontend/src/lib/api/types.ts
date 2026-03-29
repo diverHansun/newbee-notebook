@@ -340,6 +340,7 @@ export type ChatRequest = {
   context?: ChatContext | null;
   include_ec_context?: boolean | null;
   source_document_ids?: string[] | null;
+  lang?: "en" | "zh";
 };
 
 export type SseEventStart = {

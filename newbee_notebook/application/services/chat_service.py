@@ -11,7 +11,11 @@ from dataclasses import dataclass, field
 from dataclasses import asdict
 
 from newbee_notebook.domain.entities.session import Session
-from newbee_notebook.domain.value_objects.mode_type import ModeType, MessageRole, normalize_runtime_mode
+from newbee_notebook.domain.value_objects.mode_type import (
+    ModeType,
+    MessageRole,
+    normalize_runtime_mode,
+)
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.reference_repository import (
@@ -51,6 +55,7 @@ ASK_SOURCE_SCORE_THRESHOLD = 0.3
 @dataclass
 class ChatSource:
     """Reference source from RAG retrieval."""
+
     document_id: str
     chunk_id: str
     title: str
@@ -61,6 +66,7 @@ class ChatSource:
 @dataclass
 class ChatResult:
     """Result of a chat completion."""
+
     session_id: str
     message_id: int
     content: str
@@ -72,14 +78,14 @@ class ChatResult:
 class ChatService:
     """
     Application service for chat operations.
-    
+
     Responsibilities:
     - Orchestrate the chat flow
     - Manage session context
     - Integrate with RAG retrieval
     - Handle streaming responses
     """
-    
+
     def __init__(
         self,
         session_repo: SessionRepository,
@@ -130,15 +136,16 @@ class ChatService:
         context: Optional[dict] = None,
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
+        lang: str = "en",
     ) -> ChatResult:
         """
         Send a message and get a complete response.
-        
+
         Args:
             session_id: Session ID.
             message: User message.
             mode: Chat mode (chat, ask, explain, conclude).
-            
+
         Returns:
             ChatResult with response and sources.
         """
@@ -146,7 +153,7 @@ class ChatService:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        
+
         mode_enum = ModeType(mode)
         effective_include_ec_context = (
             include_ec_context
@@ -174,8 +181,15 @@ class ChatService:
         mode_enum = runtime_mode_enum
 
         # Notebook scope documents
-        allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
-        allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
+        (
+            allowed_doc_ids,
+            docs_by_status,
+            blocking_doc_ids,
+            completed_doc_titles,
+        ) = await self._get_notebook_scope(session.notebook_id)
+        allowed_doc_ids = self._apply_source_filter(
+            allowed_doc_ids, source_document_ids
+        )
         allowed_doc_id_set = set(allowed_doc_ids)
         filtered_doc_titles = {
             doc_id: title
@@ -216,6 +230,7 @@ class ChatService:
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
             confirmation_gateway=self._confirmation_gateway,
+            lang=lang,
         )
         response_content = runtime_result.content
         sources = self._source_items_to_dicts(runtime_result.sources)
@@ -239,7 +254,9 @@ class ChatService:
         await self._session_repo.increment_message_count(session_id, 2)
 
         # Merge sources with user selection/context chunks for consistency
-        sources = self._merge_sources_with_context(sources or [], context, context_chunks)
+        sources = self._merge_sources_with_context(
+            sources or [], context, context_chunks
+        )
         sources_before_validation = list(sources)
         sources = await self._filter_valid_sources(sources)
         sources = self._filter_sources_by_mode_quality(sources, mode_enum)
@@ -291,6 +308,7 @@ class ChatService:
         context: Optional[dict] = None,
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
+        lang: str = "en",
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -341,8 +359,15 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
-        allowed_doc_ids, docs_by_status, blocking_doc_ids, completed_doc_titles = await self._get_notebook_scope(session.notebook_id)
-        allowed_doc_ids = self._apply_source_filter(allowed_doc_ids, source_document_ids)
+        (
+            allowed_doc_ids,
+            docs_by_status,
+            blocking_doc_ids,
+            completed_doc_titles,
+        ) = await self._get_notebook_scope(session.notebook_id)
+        allowed_doc_ids = self._apply_source_filter(
+            allowed_doc_ids, source_document_ids
+        )
         allowed_doc_id_set = set(allowed_doc_ids)
         filtered_doc_titles = {
             doc_id: title
@@ -391,6 +416,7 @@ class ChatService:
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
                 confirmation_gateway=self._confirmation_gateway,
+                lang=lang,
             )
             while True:
                 try:
@@ -404,7 +430,11 @@ class ChatService:
                 if isinstance(event, StartEvent):
                     continue
                 if isinstance(event, WarningEvent):
-                    yield {"type": "warning", "code": event.code, "message": event.message}
+                    yield {
+                        "type": "warning",
+                        "code": event.code,
+                        "message": event.message,
+                    }
                     continue
                 if isinstance(event, PhaseEvent):
                     yield {"type": "phase", "stage": event.stage}
@@ -424,7 +454,9 @@ class ChatService:
                         "tool_call_id": event.tool_call_id,
                         "success": event.success,
                         "content_preview": event.content_preview,
-                        "quality_meta": asdict(event.quality_meta) if event.quality_meta else None,
+                        "quality_meta": asdict(event.quality_meta)
+                        if event.quality_meta
+                        else None,
                     }
                     continue
                 if isinstance(event, ConfirmationRequestEvent):
@@ -514,20 +546,36 @@ class ChatService:
             yield {"type": "done"}
 
         except asyncio.TimeoutError:
-            yield {"type": "error", "error_code": "timeout", "message": "Stream timeout"}
+            yield {
+                "type": "error",
+                "error_code": "timeout",
+                "message": "Stream timeout",
+            }
         except asyncio.CancelledError:
             if stream is not None:
                 try:
                     await stream.aclose()
                 except Exception:
-                    logger.debug("Failed to close upstream stream cleanly for session %s", session_id)
+                    logger.debug(
+                        "Failed to close upstream stream cleanly for session %s",
+                        session_id,
+                    )
             if stream_ready_to_finish:
-                logger.debug("Stream connection closed after completion for session %s", session_id)
+                logger.debug(
+                    "Stream connection closed after completion for session %s",
+                    session_id,
+                )
             else:
-                logger.info("Stream cancelled before completion for session %s", session_id)
+                logger.info(
+                    "Stream cancelled before completion for session %s", session_id
+                )
             return
         except DocumentProcessingError as exc:
-            payload = {"type": "error", "error_code": exc.error_code, "message": exc.message}
+            payload = {
+                "type": "error",
+                "error_code": exc.error_code,
+                "message": exc.message,
+            }
             if exc.details:
                 payload["details"] = exc.details
             yield payload
@@ -542,7 +590,9 @@ class ChatService:
         message: str,
         runtime_mode: ModeType,
         source_document_ids: Optional[List[str]],
-    ) -> tuple[str, ModeType, list[Any] | None, str, frozenset[str], dict, bool, str | None]:
+    ) -> tuple[
+        str, ModeType, list[Any] | None, str, frozenset[str], dict, bool, str | None
+    ]:
         if not self._skill_registry:
             return message, runtime_mode, None, "", frozenset(), {}, False, None
 
@@ -570,7 +620,9 @@ class ChatService:
             manifest.required_tool_call_before_response,
         )
 
-    async def confirm_action(self, session_id: str, request_id: str, approved: bool) -> bool:
+    async def confirm_action(
+        self, session_id: str, request_id: str, approved: bool
+    ) -> bool:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
@@ -588,7 +640,12 @@ class ChatService:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        allowed_doc_ids, docs_by_status, blocking_doc_ids, _ = await self._get_notebook_scope(session.notebook_id)
+        (
+            allowed_doc_ids,
+            docs_by_status,
+            blocking_doc_ids,
+            _,
+        ) = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
         await self._validate_mode_guard(
             mode_enum=mode_enum,
@@ -610,7 +667,11 @@ class ChatService:
     ) -> None:
         """Common guard for retrieval-dependent modes."""
         rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
-        if mode_enum in rag_modes and not allowed_doc_ids and (blocking_document_ids or []):
+        if (
+            mode_enum in rag_modes
+            and not allowed_doc_ids
+            and (blocking_document_ids or [])
+        ):
             raise DocumentProcessingError(
                 message="All documents are still processing; no searchable data is available yet.",
                 details={
@@ -628,8 +689,14 @@ class ChatService:
                     "Conclude/Explain mode requires at least one processed document "
                     "or a selected_text context."
                 )
-            if context and context.get("selected_text") and not context.get("document_id"):
-                raise ValueError("selected_text requires a document_id to ensure traceable sources")
+            if (
+                context
+                and context.get("selected_text")
+                and not context.get("document_id")
+            ):
+                raise ValueError(
+                    "selected_text requires a document_id to ensure traceable sources"
+                )
             if context and context.get("document_id"):
                 target_doc_id = context["document_id"]
                 if target_doc_id not in set(allowed_doc_ids):
@@ -641,6 +708,7 @@ class ChatService:
                             "retryable": True,
                         },
                     )
+
     @staticmethod
     def _apply_source_filter(
         all_doc_ids: List[str],
@@ -699,7 +767,9 @@ class ChatService:
         return "tool_results"
 
     @staticmethod
-    def _filter_sources_by_mode_quality(sources: List[dict], mode_enum: ModeType) -> List[dict]:
+    def _filter_sources_by_mode_quality(
+        sources: List[dict], mode_enum: ModeType
+    ) -> List[dict]:
         if not sources:
             return []
         if mode_enum != ModeType.ASK:
@@ -758,7 +828,9 @@ class ChatService:
             )
         return restored
 
-    async def _get_notebook_scope(self, notebook_id: str) -> tuple[List[str], Dict[str, int], List[str], Dict[str, str]]:
+    async def _get_notebook_scope(
+        self, notebook_id: str
+    ) -> tuple[List[str], Dict[str, int], List[str], Dict[str, str]]:
         """Collect retrieval scope and processing status overview for notebook refs."""
         zero_counts = {status.value: 0 for status in DocumentStatus}
         refs = await self._ref_repo.list_by_notebook(notebook_id)
@@ -766,7 +838,9 @@ class ChatService:
             return [], zero_counts, [], {}
 
         docs = await self._document_repo.get_batch([ref.document_id for ref in refs])
-        completed_doc_ids = list({doc.document_id for doc in docs if doc.status == DocumentStatus.COMPLETED})
+        completed_doc_ids = list(
+            {doc.document_id for doc in docs if doc.status == DocumentStatus.COMPLETED}
+        )
         completed_doc_titles = {
             doc.document_id: getattr(doc, "title", "")
             for doc in docs
@@ -832,7 +906,12 @@ class ChatService:
         doc_id = context.get("document_id")
         chunk_idx = context.get("chunk_index")
         filters = []
-        from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
+        from llama_index.core.vector_stores import (
+            MetadataFilters,
+            MetadataFilter,
+            FilterOperator,
+        )
+
         metadata_filters = None
         if doc_id:
             filters.append(

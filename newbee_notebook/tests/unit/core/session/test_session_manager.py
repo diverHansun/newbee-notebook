@@ -318,23 +318,23 @@ async def test_session_manager_awaits_async_tool_registry_for_agent_mode():
 def test_default_system_prompt_loads_mode_prompt_files(monkeypatch):
     loaded_files: list[str] = []
 
-    def _fake_load_prompt(file_name: str) -> str:
+    def _fake_load_prompt(file_name: str, lang: str = "en") -> str:
         loaded_files.append(file_name)
         return f"prompt:{file_name}"
 
     session_manager_module._load_mode_prompt.cache_clear()
     monkeypatch.setattr(session_manager_module, "load_prompt", _fake_load_prompt)
 
-    assert SessionManager._default_system_prompt(ModeType.AGENT) == "prompt:chat.md"
-    assert SessionManager._default_system_prompt(ModeType.ASK) == "prompt:ask.md"
-    assert SessionManager._default_system_prompt(ModeType.EXPLAIN) == "prompt:explain.md"
-    assert SessionManager._default_system_prompt(ModeType.CONCLUDE) == "prompt:conclude.md"
-    assert loaded_files == ["chat.md", "ask.md", "explain.md", "conclude.md"]
+    assert SessionManager._default_system_prompt(ModeType.AGENT) == "prompt:chat"
+    assert SessionManager._default_system_prompt(ModeType.ASK) == "prompt:ask"
+    assert SessionManager._default_system_prompt(ModeType.EXPLAIN) == "prompt:explain"
+    assert SessionManager._default_system_prompt(ModeType.CONCLUDE) == "prompt:conclude"
+    assert loaded_files == ["chat", "ask", "explain", "conclude"]
     session_manager_module._load_mode_prompt.cache_clear()
 
 
 def test_ask_prompt_matches_runtime_tool_contract():
-    prompt = load_prompt("ask.md")
+    prompt = load_prompt("ask")
 
     assert "knowledge_base" in prompt
     assert "time" in prompt
@@ -346,13 +346,13 @@ def test_ask_prompt_matches_runtime_tool_contract():
     assert "keyword" in prompt
     assert "semantic" in prompt
     assert "hybrid" in prompt
-    assert "Do not ask the user to upload a file" in prompt
+    assert "Mellow" in prompt
     assert "zhipu_web_search" not in prompt
     assert "zhipu_web_crawl" not in prompt
 
 
 def test_agent_prompt_explains_knowledge_base_argument_strategy():
-    prompt = load_prompt("chat.md")
+    prompt = load_prompt("chat")
 
     assert "knowledge_base" in prompt
     assert "tavily_search" in prompt
@@ -364,7 +364,7 @@ def test_agent_prompt_explains_knowledge_base_argument_strategy():
     assert "max_results" in prompt
     assert "filter_document_id" in prompt
     assert "allowed_document_ids" in prompt
-    assert "Avoid generic queries" in prompt
+    assert "Mellow" in prompt
     assert "public web information" in prompt
     assert "instead of relying on memory" in prompt
 
@@ -534,8 +534,8 @@ async def test_session_manager_compacts_before_rebuilding_main_history():
 
 
 def test_explain_and_conclude_prompts_explain_document_scoped_retrieval_arguments():
-    explain_prompt = load_prompt("explain.md")
-    conclude_prompt = load_prompt("conclude.md")
+    explain_prompt = load_prompt("explain")
+    conclude_prompt = load_prompt("conclude")
 
     for prompt in (explain_prompt, conclude_prompt):
         assert "knowledge_base" in prompt

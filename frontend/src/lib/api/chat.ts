@@ -2,6 +2,16 @@ import { ApiError, apiFetch, buildError } from "@/lib/api/client";
 import { ApiErrorPayload, ChatRequest, ChatResponse, SseEvent } from "@/lib/api/types";
 import { parseSseStream } from "@/lib/utils/sse-parser";
 
+function getLangFromStorage(): "en" | "zh" {
+  if (typeof window !== "undefined") {
+    const saved = window.localStorage.getItem("lang");
+    if (saved === "en" || saved === "zh") {
+      return saved;
+    }
+  }
+  return "zh";
+}
+
 type ConfirmActionRequest = {
   request_id: string;
   approved: boolean;
@@ -30,9 +40,10 @@ async function throwIfNotOk(response: Response): Promise<void> {
 }
 
 export function chatOnce(notebookId: string, request: ChatRequest) {
+  const lang = getLangFromStorage();
   return apiFetch<ChatResponse>(`/chat/notebooks/${notebookId}/chat`, {
     method: "POST",
-    body: request,
+    body: { ...request, lang },
   });
 }
 
@@ -41,13 +52,14 @@ export async function chatStream(
   request: ChatRequest,
   options: StreamOptions
 ): Promise<void> {
+  const lang = getLangFromStorage();
   const response = await fetch(`/api/v1/chat/notebooks/${notebookId}/chat/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify({ ...request, lang }),
     signal: options.signal,
   });
 
