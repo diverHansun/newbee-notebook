@@ -46,7 +46,7 @@ class SessionService:
     
     Responsibilities:
     - CRUD operations for Sessions
-    - Session limit enforcement (20 per Notebook)
+    - Session limit enforcement (50 per Notebook)
     """
     
     def __init__(

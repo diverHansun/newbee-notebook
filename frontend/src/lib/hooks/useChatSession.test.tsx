@@ -121,6 +121,18 @@ describe("useChatSession", () => {
     });
   });
 
+  it("requests up to 50 sessions for the chat session picker", async () => {
+    const { wrapper } = createWrapper();
+
+    renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(listSessions).toHaveBeenCalledWith("nb-1", 50, 0);
+    });
+  });
+
   it("invalidates the shared video summary list after a /video command finishes", async () => {
     startStream.mockImplementationOnce(
       async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {

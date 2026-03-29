@@ -11,7 +11,7 @@ from newbee_notebook.domain.entities.base import Entity, generate_uuid
 
 
 # Maximum number of sessions allowed per notebook
-MAX_SESSIONS_PER_NOTEBOOK = 20
+MAX_SESSIONS_PER_NOTEBOOK = 50
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Notebook(Entity):
     Notebook entity - a workspace for documents and conversations.
     
     Each Notebook can have:
-    - Up to 20 Sessions
+    - Up to 50 Sessions
     - Documents (either owned or referenced from Library)
     
     Attributes:

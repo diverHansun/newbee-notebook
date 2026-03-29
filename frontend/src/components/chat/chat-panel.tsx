@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageItem } from "@/components/chat/message-item";
+import { SessionSelect } from "@/components/chat/session-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Session } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
@@ -135,22 +136,12 @@ export function ChatPanel({
           gap: 8,
         }}
       >
-        <div className="row" style={{ flex: 1, minWidth: 0 }}>
-          <select
-            className="select"
-            style={{ minWidth: 120, maxWidth: 180 }}
-            value={currentSessionId || ""}
-            onChange={(event) => onSwitchSession(event.target.value)}
-          >
-            <option value="" disabled>
-              {t(uiStrings.chat.sessionSelect)}
-            </option>
-            {sessions.map((session) => (
-              <option key={session.session_id} value={session.session_id}>
-                {session.title || session.session_id.slice(0, 8)}
-              </option>
-            ))}
-          </select>
+        <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+          <SessionSelect
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onChange={onSwitchSession}
+          />
           {currentSession && (
             <button
               className="btn btn-ghost btn-danger-ghost btn-sm"

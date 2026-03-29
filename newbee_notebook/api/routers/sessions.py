@@ -81,7 +81,7 @@ async def create_session(
     """
     Create a new Session in a Notebook.
     
-    Each Notebook can have up to 20 sessions. Returns 400 if limit reached.
+    Each Notebook can have up to 50 sessions. Returns 400 if limit reached.
     
     Args:
         notebook_id: Notebook unique identifier.
@@ -92,7 +92,7 @@ async def create_session(
         
     Raises:
         404: Notebook not found.
-        400: Session limit exceeded (max 20 per notebook).
+        400: Session limit exceeded (max 50 per notebook).
     """
     try:
         title = request.title if request else None

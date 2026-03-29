@@ -367,4 +367,125 @@
   border-color: hsl(var(--secondary) / 0.45);
 }
 
+.session-select {
+  position: relative;
+  min-width: 120px;
+  max-width: 220px;
+  flex: 1 1 180px;
+}
+
+.session-select-trigger {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 10px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out, background 200ms ease-out;
+}
+
+.session-select-trigger:hover:not(:disabled) {
+  background: hsl(var(--accent));
+}
+
+.session-select-trigger:focus-visible,
+.session-select-trigger.is-open {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.18);
+}
+
+.session-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.session-select-trigger-label,
+.session-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-select-trigger-label.is-placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.session-select-trigger-icon {
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.session-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--card));
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.session-select-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.session-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-select-menu::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.session-select-menu::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--ring));
+  background-clip: padding-box;
+}
+
+.session-select-option {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease-out, color 160ms ease-out;
+}
+
+.session-select-option:hover,
+.session-select-option:focus-visible {
+  outline: none;
+  background: hsl(var(--accent));
+}
+
+.session-select-option.is-selected {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+}
+
 

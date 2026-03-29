@@ -24,6 +24,7 @@ import { ChatMessage, useChatStore } from "@/stores/chat-store";
 
 const SESSION_QUERY_KEY = (notebookId: string) => ["sessions", notebookId] as const;
 const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] as const;
+const SESSION_PICKER_LIMIT = 50;
 const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
 const CONFIRMATION_TIMEOUT_MS = 180_000;
@@ -264,7 +265,7 @@ export function useChatSession(notebookId: string) {
 
   const sessionQuery = useQuery({
     queryKey: SESSION_QUERY_KEY(notebookId),
-    queryFn: () => listSessions(notebookId),
+    queryFn: () => listSessions(notebookId, SESSION_PICKER_LIMIT, 0),
   });
 
   const sessions: Session[] = useMemo(() => sessionQuery.data?.data ?? [], [sessionQuery.data?.data]);
@@ -332,7 +333,7 @@ export function useChatSession(notebookId: string) {
               data: [newSession],
               pagination: {
                 total: 1,
-                limit: 20,
+                limit: SESSION_PICKER_LIMIT,
                 offset: 0,
                 has_next: false,
                 has_prev: false,

@@ -115,7 +115,7 @@ def test_chat_stream_endpoint_returns_409_for_document_processing_error():
 def test_chat_endpoint_returns_400_for_session_limit_exceeded():
     chat_service = AsyncMock()
     session_service = AsyncMock()
-    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(20))
+    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(50))
 
     client = _build_client(chat_service, session_service)
     response = client.post(
@@ -126,14 +126,14 @@ def test_chat_endpoint_returns_400_for_session_limit_exceeded():
     assert response.status_code == 400
     detail = response.json()["detail"]
     assert detail["error_code"] == "E3001"
-    assert detail["details"]["current_count"] == 20
-    assert detail["details"]["max_count"] == 20
+    assert detail["details"]["current_count"] == 50
+    assert detail["details"]["max_count"] == 50
 
 
 def test_chat_stream_endpoint_returns_400_for_session_limit_exceeded():
     chat_service = AsyncMock()
     session_service = AsyncMock()
-    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(20))
+    session_service.create = AsyncMock(side_effect=SessionLimitExceededError(50))
 
     client = _build_client(chat_service, session_service)
     response = client.post(
@@ -144,8 +144,8 @@ def test_chat_stream_endpoint_returns_400_for_session_limit_exceeded():
     assert response.status_code == 400
     detail = response.json()["detail"]
     assert detail["error_code"] == "E3001"
-    assert detail["details"]["current_count"] == 20
-    assert detail["details"]["max_count"] == 20
+    assert detail["details"]["current_count"] == 50
+    assert detail["details"]["max_count"] == 50
 
 
 def test_chat_endpoint_accepts_agent_mode():

@@ -51,7 +51,7 @@ export const uiStrings = {
     newSession: { zh: "新建会话", en: "New session" },
     deleteSession: { zh: "删除会话", en: "Delete session" },
     sessionSelect: { zh: "选择会话", en: "Select session" },
-    sessionCount: { zh: "{n} / 20 个会话", en: "{n} / 20 sessions" },
+    sessionCount: { zh: "{n} / 50 个会话", en: "{n} / 50 sessions" },
     defaultSessionTitle: { zh: "会话 {n}", en: "Session {n}" },
     emptyMessages: { zh: "还没有消息，先发第一条。", en: "No messages yet. Send the first one." },
     confirmDelete: { zh: "确定要删除「{name}」吗？", en: "Delete \"{name}\"?" },
