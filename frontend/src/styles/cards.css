@@ -1,4 +1,114 @@
-﻿/* ================================================================
+﻿/* Studio Card Colors */
+:root {
+  /* Notes & Marks - Soft Blue */
+  --studio-notes-bg: hsl(207, 90%, 94%);
+  --studio-notes-glow: hsl(207, 90%, 85%);
+  
+  /* Diagrams - Soft Green */
+  --studio-diagrams-bg: hsl(112, 47%, 90%);
+  --studio-diagrams-glow: hsl(112, 47%, 80%);
+  
+  /* Video - Soft Pink */
+  --studio-video-bg: hsl(340, 82%, 90%);
+  --studio-video-glow: hsl(340, 82%, 80%);
+}
+
+.dark {
+  /* Notes & Marks - Sapphire Blue */
+  --studio-notes-bg: hsl(215, 50%, 30%);
+  --studio-notes-glow: hsl(215, 55%, 40%);
+  --studio-notes-accent: hsl(215, 65%, 52%);
+
+  /* Diagrams - Emerald Green */
+  --studio-diagrams-bg: hsl(150, 40%, 25%);
+  --studio-diagrams-glow: hsl(150, 45%, 35%);
+  --studio-diagrams-accent: hsl(150, 55%, 44%);
+
+  /* Video - Rose */
+  --studio-video-bg: hsl(345, 48%, 30%);
+  --studio-video-glow: hsl(345, 53%, 40%);
+  --studio-video-accent: hsl(345, 60%, 50%);
+}
+
+/* 基础卡片样式 */
+.studio-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background-color: var(--studio-notes-bg);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition:
+    box-shadow 200ms ease-out,
+    transform 200ms ease-out,
+    border-color 200ms ease-out;
+  cursor: pointer;
+}
+
+/* --- Dark mode: colored left accent border + refined text --- */
+.dark .studio-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid transparent;
+}
+
+.dark .studio-card strong {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.dark .studio-card .muted {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Notes & Marks 卡片 */
+.studio-card--notes {
+  background-color: var(--studio-notes-bg);
+}
+
+.dark .studio-card--notes {
+  border-left-color: var(--studio-notes-accent);
+}
+
+.studio-card--notes:hover {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+    0 0 20px 2px var(--studio-notes-glow);
+  transform: translateY(-2px);
+}
+
+/* Diagrams 卡片 */
+.studio-card--diagrams {
+  background-color: var(--studio-diagrams-bg);
+}
+
+.dark .studio-card--diagrams {
+  border-left-color: var(--studio-diagrams-accent);
+}
+
+.studio-card--diagrams:hover {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+    0 0 20px 2px var(--studio-diagrams-glow);
+  transform: translateY(-2px);
+}
+
+/* Video 卡片 */
+.studio-card--video {
+  background-color: var(--studio-video-bg);
+}
+
+.dark .studio-card--video {
+  border-left-color: var(--studio-video-accent);
+}
+
+.studio-card--video:hover {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+    0 0 20px 2px var(--studio-video-glow);
+  transform: translateY(-2px);
+}
+
+/* ================================================================
    10. Card
    ================================================================ */
 

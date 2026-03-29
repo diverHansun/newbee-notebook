@@ -376,7 +376,11 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
 
   const renderHome = () => (
     <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-      <div className="card card-interactive" style={{ padding: 16, minHeight: 100 }} onClick={() => navigateTo("notes")}>
+      <div 
+        className="studio-card studio-card--notes" 
+        style={{ padding: 16, minHeight: 100 }} 
+        onClick={() => navigateTo("notes")}
+      >
         <div className="stack-sm">
           <strong>{t(uiStrings.studio.notesAndMarks)}</strong>
           <span className="muted" style={{ fontSize: 12 }}>
@@ -385,7 +389,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         </div>
       </div>
       <div
-        className="card card-interactive"
+        className="studio-card studio-card--diagrams"
         style={{ padding: 16, minHeight: 100 }}
         onClick={() => navigateTo("diagrams")}
       >
@@ -397,7 +401,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
         </div>
       </div>
       <div
-        className="card card-interactive"
+        className="studio-card studio-card--video"
         style={{ padding: 16, minHeight: 100 }}
         onClick={() => navigateTo("videos")}
       >
