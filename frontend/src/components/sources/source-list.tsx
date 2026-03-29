@@ -9,7 +9,6 @@ import {
   removeDocumentFromNotebook,
 } from "@/lib/api/documents";
 import { listLibraryDocuments } from "@/lib/api/library";
-import { listMarksByDocument } from "@/lib/api/marks";
 import { NotebookDocumentItem } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
@@ -48,12 +47,6 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
     enabled: showLibrary,
   });
 
-  const pendingRemoveDocumentId = pendingRemoveDocument?.document_id ?? null;
-  const removeDocumentMarksQuery = useQuery({
-    queryKey: ["marks", "document", pendingRemoveDocumentId],
-    queryFn: () => listMarksByDocument(pendingRemoveDocumentId!),
-    enabled: Boolean(pendingRemoveDocumentId),
-  });
 
   const documentRows = useMemo(
     () => notebookDocumentsQuery.data?.data ?? [],
@@ -89,17 +82,11 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
     },
   });
 
-  const pendingRemoveMarkCount = removeDocumentMarksQuery.data?.total ?? 0;
   const removeDialogMessage = pendingRemoveDocument
     ? [
         ti(uiStrings.sourceList.removeConfirm, { title: pendingRemoveDocument.title }),
         t(uiStrings.sourceList.removeConfirmDetail),
-        pendingRemoveMarkCount > 0
-          ? ti(uiStrings.sourceList.removeConfirmMarks, { n: pendingRemoveMarkCount })
-          : null,
-      ]
-        .filter((value): value is string => Boolean(value))
-        .join("\n")
+      ].join("\n")
     : "";
 
   return (

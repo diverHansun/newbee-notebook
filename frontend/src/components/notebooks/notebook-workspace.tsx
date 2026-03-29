@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { ChatPanel } from "@/components/chat/chat-panel";
@@ -9,7 +8,6 @@ import { AppShell } from "@/components/layout/app-shell";
 import { DocumentReader } from "@/components/reader/document-reader";
 import { SourcesPanel } from "@/components/sources/sources-panel";
 import { StudioPanel } from "@/components/studio/studio-panel";
-import { getNotebook } from "@/lib/api/notebooks";
 import { MessageMode, NotebookDocumentItem } from "@/lib/api/types";
 import { useChatSession } from "@/lib/hooks/useChatSession";
 import { useLang } from "@/lib/hooks/useLang";
@@ -47,10 +45,6 @@ function buildRagHint(
 
 export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
   const { t, ti } = useLang();
-  const notebookQuery = useQuery({
-    queryKey: ["notebook", notebookId],
-    queryFn: () => getNotebook(notebookId),
-  });
 
   const [documents, setDocuments] = useState<NotebookDocumentItem[]>([]);
   const chat = useChatSession(notebookId);
@@ -125,7 +119,6 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
 
   return (
     <AppShell
-      title={notebookQuery.data?.title || notebookId}
       left={
         <SourcesPanel
           notebookId={notebookId}

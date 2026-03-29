@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ReactNode } from "react";
 import { Panel, Group, Separator } from "react-resizable-panels";
 
@@ -8,42 +7,17 @@ import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
 type AppShellProps = {
-  title: string;
   left: ReactNode;
   main: ReactNode;
   right: ReactNode;
   mainOverlay?: ReactNode;
 };
 
-export function AppShell({ title, left, main, right, mainOverlay }: AppShellProps) {
+export function AppShell({ left, main, right, mainOverlay }: AppShellProps) {
   const { t } = useLang();
 
   return (
     <div className="page-shell">
-      {/* Header */}
-      <header className="page-header">
-        <div className="row">
-          <Link
-            href="/notebooks"
-            className="text-sm font-semibold tracking-tight"
-            style={{
-              color: "inherit",
-              borderBottom: "2px solid hsl(var(--bee-yellow))",
-              paddingBottom: 1,
-            }}
-          >
-            Newbee Notebook
-          </Link>
-          <span className="muted">/</span>
-          <span className="text-sm font-medium">{title}</span>
-        </div>
-        <div className="row" style={{ gap: 8 }}>
-          <Link href="/notebooks" className="btn btn-ghost btn-sm">
-            {t(uiStrings.layout.backToList)}
-          </Link>
-        </div>
-      </header>
-
       {/* Three-column resizable workspace */}
       <main style={{ flex: 1, overflow: "hidden" }}>
         <Group

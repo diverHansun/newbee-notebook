@@ -102,7 +102,7 @@ export const uiStrings = {
     finalizing: { zh: "完成处理中...", en: "Finalizing..." },
   },
   sourceList: {
-    title: { zh: "Notebook Sources", en: "Notebook Sources" },
+    title: { zh: "文档来源", en: "document Sources" },
     add: { zh: "+ 添加", en: "+ Add" },
     refresh: { zh: "刷新", en: "Refresh" },
     addFromLibrary: { zh: "从 Library 添加", en: "Add from Library" },
@@ -118,10 +118,6 @@ export const uiStrings = {
     removeConfirmDetail: {
       zh: "文档本身不会被删除，可以稍后重新添加。",
       en: "The document file will be kept and can be added again later.",
-    },
-    removeConfirmMarks: {
-      zh: "该文档有 {n} 个书签，移除后书签也会一并删除。",
-      en: "This document has {n} bookmarks. Removing it will remove them as well.",
     },
     confirmRemove: { zh: "确认移除", en: "Confirm remove" },
   },
@@ -153,7 +149,6 @@ export const uiStrings = {
     moreContentLoading: { zh: "正在加载更多内容...", en: "Loading more content..." },
   },
   layout: {
-    backToList: { zh: "返回列表", en: "Back to list" },
     sourcesPanel: { zh: "Sources", en: "Sources" },
     mainPanel: { zh: "Main", en: "Main" },
     studioPanel: { zh: "Studio", en: "Studio" },
@@ -478,7 +473,7 @@ export const uiStrings = {
   },
   notebooksPage: {
     viewLibrary: { zh: "查看 Library", en: "View Library" },
-    title: { zh: "我的 Notebooks", en: "My Notebooks" },
+    title: { zh: "我的笔记本", en: "My Notebooks" },
     emptyTitle: { zh: "还没有 Notebook", en: "No notebooks yet" },
     emptyDesc: {
       zh: "Notebook 是你的 AI 知识助手工作区。先上传文档到 Library，再创建 Notebook 开始对话。",
