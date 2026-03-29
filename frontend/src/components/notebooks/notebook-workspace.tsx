@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ExplainCard } from "@/components/chat/explain-card";
@@ -14,6 +14,7 @@ import { MessageMode, NotebookDocumentItem } from "@/lib/api/types";
 import { useChatSession } from "@/lib/hooks/useChatSession";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+import { useChatStore } from "@/stores/chat-store";
 import { useReaderStore } from "@/stores/reader-store";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -58,6 +59,13 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
 
   const ragHint = useMemo(() => buildRagHint(documents, ti), [documents, ti]);
   const askBlocked = Boolean(ragHint);
+
+  useEffect(() => {
+    readerStore.closeDocument();
+    uiStore.setMainView("chat");
+    useChatStore.getState().setCurrentSessionId(null);
+    useChatStore.getState().clearMessages();
+  }, [notebookId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDocument = (documentId: string, markId?: string | null) => {
     readerStore.openDocument(documentId, markId);
