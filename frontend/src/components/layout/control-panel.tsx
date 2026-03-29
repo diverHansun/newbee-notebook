@@ -15,7 +15,6 @@ export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "data" | 
 
 type ControlPanelNavIconName =
   | ControlPanelTab
-  | "rag"
   | "mcp"
   | "skills";
 
@@ -30,7 +29,7 @@ type ActiveNavItem = {
 };
 
 type DisabledNavItem = {
-  key: "rag" | "skills";
+  key: "skills";
 };
 
 const ACTIVE_ITEMS: ActiveNavItem[] = [
@@ -42,7 +41,6 @@ const ACTIVE_ITEMS: ActiveNavItem[] = [
 ];
 
 const DISABLED_ITEMS: DisabledNavItem[] = [
-  { key: "rag" },
   { key: "skills" },
 ];
 
@@ -72,16 +70,6 @@ function ControlPanelNavIcon({ name }: { name: ControlPanelNavIconName }) {
           <rect x="13" y="4" width="7" height="7" rx="1.5" />
           <rect x="4" y="13" width="7" height="7" rx="1.5" />
           <rect x="13" y="13" width="7" height="7" rx="1.5" />
-        </svg>
-      );
-    case "rag":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden>
-          <ellipse cx="10" cy="7" rx="5" ry="2.5" />
-          <path d="M5 7v7c0 1.4 2.2 2.5 5 2.5 1.1 0 2.1-.2 3-.5" />
-          <path d="M5 10c0 1.4 2.2 2.5 5 2.5" />
-          <circle cx="17.5" cy="16.5" r="2.5" />
-          <path d="M19.4 18.4 21 20" />
         </svg>
       );
     case "mcp":

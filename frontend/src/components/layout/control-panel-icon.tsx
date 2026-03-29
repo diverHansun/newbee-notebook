@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ControlPanel, type ControlPanelTab } from "@/components/layout/control-panel";
@@ -56,7 +57,7 @@ export function ControlPanelIcon() {
         onClick={() => setOpen((prev) => !prev)}
       >
         <span className="control-panel-button-mark" aria-hidden>
-          NB
+          <Image src="/assets/images/newbee-icon.jpg" alt="Newbee Notebook" width={60} height={60} unoptimized priority />
         </span>
       </button>
 
