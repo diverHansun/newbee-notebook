@@ -700,8 +700,8 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
             </div>
           </div>
         </div>
-        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "auto" }}>
-          <div className="row-between" style={{ marginBottom: 8 }}>
+        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="row-between" style={{ marginBottom: 8, flexShrink: 0 }}>
             <strong>{t(uiStrings.studio.diagramView)}</strong>
             <button
               className="btn btn-ghost btn-sm"
@@ -736,7 +736,9 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           ) : activeDiagramContentQuery.isError ? (
             <span className="muted">{t(uiStrings.common.retry)}</span>
           ) : (
-            <DiagramViewer ref={diagramViewerRef} diagram={activeDiagram} content={activeDiagramContent} />
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <DiagramViewer ref={diagramViewerRef} diagram={activeDiagram} content={activeDiagramContent} />
+            </div>
           )}
         </div>
       </div>

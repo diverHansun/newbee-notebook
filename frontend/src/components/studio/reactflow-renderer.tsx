@@ -2,7 +2,6 @@
 
 import {
   Background,
-  Controls,
   getNodesBounds,
   getViewportForBounds,
   Handle,
@@ -28,6 +27,7 @@ import {
   type DiagramNodeData,
   type DiagramPosition,
 } from "@/lib/diagram/reactflow-layout";
+import { useTheme } from "@/lib/theme/theme-context";
 
 export type DiagramExportHandle = {
   exportImage: (filename: string) => Promise<void>;
@@ -44,21 +44,51 @@ const INITIAL_DETAIL_ZOOM = 0.5;
 type DiagramFlowNode = Node<DiagramNodeData, "diagramNode">;
 type DiagramFlowEdge = Edge;
 
+// Brightened accent colors for dark mode — mapped from light-mode MINDMAP_ACCENTS
+const ACCENT_DARK_MAP: Record<string, string> = {
+  "#7ab36a": "#9fd08a",
+  "#5aa88a": "#7ec4a8",
+  "#8bbf73": "#a8d48e",
+  "#d4a85b": "#e8c07a",
+  "#6fa38d": "#8dbfab",
+};
+
 function DiagramNodeCard({ data, selected }: NodeProps<DiagramFlowNode>) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const isMindMap = data.diagramType === "mindmap";
   const isRoot = data.kind === "root";
-  const background = isRoot
-    ? "linear-gradient(135deg, #e8f6df 0%, #d8efcb 100%)"
-    : isMindMap
-      ? "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,251,247,0.99) 100%)"
-      : "linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--secondary)) 100%)";
-  const color = isRoot ? "#173b2a" : "hsl(var(--foreground))";
-  const borderColor = isRoot ? "rgba(122, 179, 106, 0.45)" : "hsl(var(--border))";
-  const shadow = selected
-    ? "0 20px 44px rgba(122, 179, 106, 0.2)"
-    : isRoot
-      ? "0 18px 34px rgba(92, 132, 78, 0.18)"
-      : "0 12px 26px rgba(60, 84, 52, 0.1)";
+
+  let background: string;
+  let borderColor: string;
+  let shadow: string;
+
+  if (isDark) {
+    background = "hsl(217, 33%, 21%)";
+    borderColor = isRoot ? "hsl(150, 50%, 50%)" : "rgba(255, 255, 255, 0.10)";
+    shadow = selected
+      ? "0 0 0 2px hsl(150, 50%, 50%), 0 8px 24px rgba(0, 0, 0, 0.5)"
+      : isRoot
+        ? "0 0 0 2px hsl(150, 50%, 50%), 0 8px 24px rgba(0, 0, 0, 0.4)"
+        : "0 4px 16px rgba(0, 0, 0, 0.4)";
+  } else {
+    background = isRoot
+      ? "#e8f6df"
+      : isMindMap
+        ? "#ffffff"
+        : "hsl(var(--card))";
+    borderColor = isRoot ? "rgba(122, 179, 106, 0.45)" : "hsl(var(--border))";
+    shadow = selected
+      ? "0 20px 44px rgba(122, 179, 106, 0.2)"
+      : isRoot
+        ? "0 18px 34px rgba(92, 132, 78, 0.18)"
+        : "0 12px 26px rgba(60, 84, 52, 0.1)";
+  }
+
+  const color = isDark || !isRoot ? "hsl(var(--foreground))" : "#173b2a";
+  const borderWidth = isDark && isRoot ? 2 : 1;
+
+  const accentColor = isDark ? (ACCENT_DARK_MAP[data.accentColor] ?? data.accentColor) : data.accentColor;
 
   return (
     <div
@@ -68,7 +98,7 @@ function DiagramNodeCard({ data, selected }: NodeProps<DiagramFlowNode>) {
         minWidth: isRoot ? 224 : 188,
         maxWidth: isRoot ? 272 : 236,
         borderRadius: isRoot ? 26 : 18,
-        border: `1px solid ${borderColor}`,
+        border: `${borderWidth}px solid ${borderColor}`,
         background,
         color,
         boxShadow: shadow,
@@ -86,8 +116,8 @@ function DiagramNodeCard({ data, selected }: NodeProps<DiagramFlowNode>) {
             bottom: 10,
             width: 4,
             borderRadius: 999,
-            background: data.accentColor,
-            opacity: 0.92,
+            background: accentColor,
+            opacity: isDark ? 1 : 0.92,
           }}
         />
       ) : null}
@@ -127,15 +157,25 @@ function toPositionPayload(nodes: DiagramFlowNode[]): Record<string, DiagramPosi
 
 export const ReactFlowRenderer = forwardRef<DiagramExportHandle, ReactFlowRendererProps>(
   function ReactFlowRenderer({ diagram, content }, ref) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const updatePositionsMutation = useUpdateDiagramPositions(diagram.notebook_id);
   const saveTimerRef = useRef<number | null>(null);
   const reactFlowRef = useRef<ReactFlowInstance<DiagramFlowNode, DiagramFlowEdge> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const initialElements = useMemo(
-    () => buildReactFlowElements(content, diagram.node_positions, diagram.diagram_type),
-    [content, diagram.diagram_type, diagram.node_positions]
-  );
+  const initialElements = useMemo(() => {
+    const elements = buildReactFlowElements(content, diagram.node_positions, diagram.diagram_type);
+    if (!elements) return null;
+    const edgeStroke = isDark ? "rgba(255, 255, 255, 0.35)" : "rgba(148, 163, 184, 0.9)";
+    return {
+      ...elements,
+      edges: elements.edges.map((edge) => ({
+        ...edge,
+        style: { ...edge.style, stroke: edgeStroke, strokeWidth: 1.5 },
+      })),
+    };
+  }, [content, diagram.diagram_type, diagram.node_positions, isDark]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<DiagramFlowNode>(initialElements?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<DiagramFlowEdge>(initialElements?.edges ?? []);
@@ -295,7 +335,6 @@ export const ReactFlowRenderer = forwardRef<DiagramExportHandle, ReactFlowRender
         zoomOnDoubleClick={false}
       >
         <Background gap={20} size={1} />
-        <Controls showInteractive={false} />
       </ReactFlow>
     </div>
   );

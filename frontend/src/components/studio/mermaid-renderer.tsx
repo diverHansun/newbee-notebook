@@ -52,16 +52,41 @@ export const MermaidRenderer = forwardRef<DiagramExportHandle, MermaidRendererPr
     }
 
     let active = true;
-    const theme =
-      typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-        ? "dark"
-        : "default";
+    const isDarkMode =
+      typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
     setPending(true);
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "loose",
-      theme,
+      theme: "base",
+      themeVariables: isDarkMode
+        ? {
+            // Dark mode: blue-tinted slate palette, white text
+            primaryColor: "hsl(215, 45%, 24%)",
+            primaryTextColor: "hsl(210, 40%, 92%)",
+            primaryBorderColor: "hsl(215, 35%, 40%)",
+            lineColor: "rgba(255, 255, 255, 0.35)",
+            secondaryColor: "hsl(215, 38%, 19%)",
+            tertiaryColor: "hsl(215, 38%, 16%)",
+            background: "transparent",
+            mainBkg: "hsl(215, 45%, 24%)",
+            nodeBorder: "hsl(215, 35%, 40%)",
+            clusterBkg: "hsl(215, 38%, 17%)",
+            titleColor: "hsl(210, 40%, 92%)",
+            edgeLabelBackground: "hsl(215, 45%, 24%)",
+            attributeBackgroundColorEven: "hsl(215, 45%, 24%)",
+            attributeBackgroundColorOdd: "hsl(215, 38%, 19%)",
+          }
+        : {
+            // Light mode: keep close to original defaults
+            primaryColor: "#e8f6df",
+            primaryTextColor: "#173b2a",
+            primaryBorderColor: "rgba(122, 179, 106, 0.5)",
+            lineColor: "rgba(100, 116, 139, 0.8)",
+            secondaryColor: "#f0faf0",
+            tertiaryColor: "#ffffff",
+          },
     });
 
     mermaid
@@ -83,19 +108,6 @@ export const MermaidRenderer = forwardRef<DiagramExportHandle, MermaidRendererPr
       active = false;
     };
   }, [mermaidId, syntax]);
-
-  const zoomIn = useCallback(() => {
-    setZoom((current) => clampZoom(current + ZOOM_STEP));
-  }, []);
-
-  const zoomOut = useCallback(() => {
-    setZoom((current) => clampZoom(current - ZOOM_STEP));
-  }, []);
-
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  }, []);
 
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -162,51 +174,33 @@ export const MermaidRenderer = forwardRef<DiagramExportHandle, MermaidRendererPr
 
   if (svgMarkup.length > 0) {
     return (
-      <div data-testid="diagram-mermaid" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
-          <button type="button" className="btn btn-ghost btn-sm" aria-label="Zoom out" onClick={zoomOut}>
-            -
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" aria-label="Zoom in" onClick={zoomIn}>
-            +
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" aria-label="Reset view" onClick={resetView}>
-            100%
-          </button>
-        </div>
+      <div
+        data-testid="diagram-mermaid"
+        style={{
+          height: "100%",
+          overflow: "hidden",
+          position: "relative",
+          cursor: dragStartRef.current ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+      >
         <div
+          ref={canvasRef}
+          data-testid="diagram-mermaid-canvas"
           style={{
-            borderRadius: 8,
-            background:
-              "linear-gradient(180deg, rgba(247,250,246,0.6) 0%, rgba(255,255,255,0.4) 100%)",
-            minHeight: 240,
-            overflow: "hidden",
-            position: "relative",
-            cursor: dragStartRef.current ? "grabbing" : "grab",
-            touchAction: "none",
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+            transformOrigin: "0 0",
+            width: "max-content",
+            maxWidth: "none",
+            padding: 16,
           }}
-          onWheel={handleWheel}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerEnd}
-          onPointerCancel={handlePointerEnd}
-        >
-          <div
-            ref={canvasRef}
-            data-testid="diagram-mermaid-canvas"
-            style={{
-              transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-              transformOrigin: "0 0",
-              width: "max-content",
-              maxWidth: "none",
-              padding: 16,
-            }}
-            dangerouslySetInnerHTML={{ __html: svgMarkup }}
-          />
-        </div>
-        <div className="muted" style={{ fontSize: 11 }}>
-          {`Zoom ${Math.round(zoom * 100)}%`}
-        </div>
+          dangerouslySetInnerHTML={{ __html: svgMarkup }}
+        />
       </div>
     );
   }
