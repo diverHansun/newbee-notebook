@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { createNotebook, deleteNotebook, listNotebooks } from "@/lib/api/notebooks";
+import { createNotebook, deleteNotebook, listNotebooks, updateNotebook } from "@/lib/api/notebooks";
+import { NotebookContextMenu } from "@/components/notebooks/notebook-context-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 12;
 
 function formatRelativeTime(
   dateString: string,
@@ -59,6 +60,18 @@ export default function NotebooksPage() {
     notebookId: string;
     title: string;
   } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    notebookId: string;
+    title: string;
+    description: string | null;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [editingNotebook, setEditingNotebook] = useState<{
+    notebookId: string;
+    title: string;
+    description: string;
+  } | null>(null);
 
   const notebooksQuery = useQuery({
     queryKey: ["notebooks", currentPage, PAGE_SIZE],
@@ -80,6 +93,15 @@ export default function NotebooksPage() {
   const deleteMutation = useMutation({
     mutationFn: (notebookId: string) => deleteNotebook(notebookId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notebooks"] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ notebookId, title: t, description: d }: { notebookId: string; title: string; description: string }) =>
+      updateNotebook(notebookId, { title: t, description: d.trim() }),
+    onSuccess: () => {
+      setEditingNotebook(null);
       queryClient.invalidateQueries({ queryKey: ["notebooks"] });
     },
   });
@@ -151,20 +173,35 @@ export default function NotebooksPage() {
         {notebooks.length > 0 && (
           <div className="notebook-grid">
             {notebooks.map((notebook) => (
-              <div key={notebook.notebook_id} className="card card-interactive notebook-card">
+              <div
+                key={notebook.notebook_id}
+                className="card notebook-card"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({
+                    notebookId: notebook.notebook_id,
+                    title: notebook.title,
+                    description: notebook.description,
+                    x: e.clientX,
+                    y: e.clientY,
+                  });
+                }}
+              >
                 <Link
                   href={`/notebooks/${notebook.notebook_id}`}
                   className="stack-sm notebook-card-link"
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <strong className="text-sm font-medium notebook-card-title" style={{ lineHeight: 1.4 }}>
+                  <span className="notebook-card-menu-hint" aria-hidden="true">···</span>
+                  <strong className="text-base font-semibold" style={{ lineHeight: 1.4 }}>
                     {notebook.title}
                   </strong>
                   {notebook.description && (
                     <span
                       className="muted notebook-card-description"
                       style={{
-                        fontSize: 12,
+                        fontSize: 13,
                         display: "-webkit-box",
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: "vertical",
@@ -188,21 +225,6 @@ export default function NotebooksPage() {
                     })}
                   </span>
                 </Link>
-                <div className="notebook-card-footer">
-                  <button
-                    className="btn btn-ghost btn-danger-ghost btn-sm"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDeleteNotebook({
-                        notebookId: notebook.notebook_id,
-                        title: notebook.title,
-                      });
-                    }}
-                  >
-                    {t(uiStrings.common.delete)}
-                  </button>
-                </div>
               </div>
             ))}
           </div>
@@ -316,6 +338,95 @@ export default function NotebooksPage() {
             setPendingDeleteNotebook(null);
           }}
         />
+
+        {/* Context menu */}
+        {contextMenu && (
+          <NotebookContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onEdit={() => {
+              setEditingNotebook({
+                notebookId: contextMenu.notebookId,
+                title: contextMenu.title,
+                description: contextMenu.description ?? "",
+              });
+            }}
+            onDelete={() => {
+              setPendingDeleteNotebook({
+                notebookId: contextMenu.notebookId,
+                title: contextMenu.title,
+              });
+            }}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+
+        {/* Edit notebook modal */}
+        {editingNotebook && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 50,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.4)",
+              backdropFilter: "blur(4px)",
+            }}
+            onClick={() => setEditingNotebook(null)}
+          >
+            <div
+              className="card"
+              style={{ width: 440, padding: 24 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="stack-md">
+                <div className="row-between">
+                  <strong className="text-base font-semibold">{t(uiStrings.notebooksPage.editNotebook)}</strong>
+                  <button className="btn btn-ghost btn-icon" type="button" onClick={() => setEditingNotebook(null)}>
+                    ✕
+                  </button>
+                </div>
+                <div className="stack-sm">
+                  <label className="muted" style={{ fontSize: 12 }}>{t(uiStrings.notebooksPage.titleLabel)}</label>
+                  <input
+                    className="input"
+                    value={editingNotebook.title}
+                    onChange={(e) => setEditingNotebook({ ...editingNotebook, title: e.target.value })}
+                    autoFocus
+                  />
+                  {!editingNotebook.title.trim() && (
+                    <span style={{ fontSize: 12, color: "hsl(var(--destructive))" }}>
+                      {t(uiStrings.notebooksPage.titleRequired)}
+                    </span>
+                  )}
+                </div>
+                <div className="stack-sm">
+                  <label className="muted" style={{ fontSize: 12 }}>{t(uiStrings.notebooksPage.descriptionLabel)}</label>
+                  <textarea
+                    className="textarea"
+                    value={editingNotebook.description}
+                    onChange={(e) => setEditingNotebook({ ...editingNotebook, description: e.target.value })}
+                  />
+                </div>
+                <div className="row" style={{ justifyContent: "flex-end" }}>
+                  <button className="btn" type="button" onClick={() => setEditingNotebook(null)}>
+                    {t(uiStrings.common.cancel)}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    disabled={!editingNotebook.title.trim() || updateMutation.isPending}
+                    onClick={() => updateMutation.mutate(editingNotebook)}
+                  >
+                    {t(uiStrings.notebooksPage.editSave)}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Bottom action bar */}

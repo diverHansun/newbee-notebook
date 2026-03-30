@@ -10,6 +10,13 @@
   .studio-panel {
     display: none;
   }
+
+  .notebook-grid {
+    width: 100%;
+    margin: 0;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: 168px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -23,6 +30,20 @@
 
   .page-main {
     padding: 16px;
+  }
+
+  .notebook-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 160px;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .notebook-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 152px;
+    gap: 12px;
   }
 }
 

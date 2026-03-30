@@ -504,6 +504,10 @@ export const uiStrings = {
     pageInfo: { zh: "{current} / {total}", en: "{current} / {total}" },
     prevPage: { zh: "上一页", en: "Previous" },
     nextPage: { zh: "下一页", en: "Next" },
+    contextMenuEdit: { zh: "编辑信息", en: "Edit info" },
+    editNotebook: { zh: "修改 Notebook 信息", en: "Edit Notebook" },
+    editSave: { zh: "保存", en: "Save" },
+    titleRequired: { zh: "名称不能为空", en: "Name is required" },
   },
   libraryPage: {
     breadcrumbLibrary: { zh: "Library", en: "Library" },

@@ -26,6 +26,7 @@
   flex: 1;
   padding: 24px;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .workspace-grid {
@@ -74,10 +75,12 @@
 
 .notebook-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
+  width: min(86%, 1600px);
+  margin: 12px auto 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 188px;
+  gap: clamp(24px, 1.8vw, 34px);
   flex: 1;
-  align-content: start;
 }
 
 .notebook-pagination {

@@ -19,7 +19,7 @@ export function createNotebook(input: { title: string; description?: string }) {
   });
 }
 
-export function updateNotebook(notebookId: string, input: { title?: string; description?: string }) {
+export function updateNotebook(notebookId: string, input: { title?: string; description?: string | null }) {
   return apiFetch<Notebook>(`/notebooks/${notebookId}`, {
     method: "PATCH",
     body: input,
