@@ -63,7 +63,6 @@ export const uiStrings = {
     inputPlaceholderAsk: { zh: "输入问题（基于文档检索）...", en: "Ask a question (document search)..." },
     stopGenerate: { zh: "停止生成", en: "Stop generating" },
     sendMessage: { zh: "发送消息", en: "Send message" },
-    ragUnavailable: { zh: "RAG 不可用", en: "RAG unavailable" },
     docCount: { zh: "{selected}/{total} 文档", en: "{selected}/{total} docs" },
     removeDoc: { zh: "移除 {title}", en: "Remove {title}" },
     noSourcesChip: { zh: "不使用文档", en: "No documents" },
@@ -476,10 +475,6 @@ export const uiStrings = {
     bookmarkCreateFailed: { zh: "书签创建失败", en: "Failed to create bookmark" },
   },
   workspace: {
-    ragHint: {
-      zh: "文档处理中，RAG 暂不可用：等待 {queued}，处理中 {processing}，已转换待索引 {converted}。可先使用 Agent 模式。",
-      en: "Documents are still processing, so RAG is unavailable: queued {queued}, processing {processing}, converted pending index {converted}. Agent mode is available in the meantime.",
-    },
     explainPrompt: { zh: "请解释这段内容", en: "Please explain this passage." },
     concludePrompt: { zh: "请总结这段内容", en: "Please summarize this passage." },
   },

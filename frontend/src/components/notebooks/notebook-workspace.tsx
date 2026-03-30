@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ExplainCard } from "@/components/chat/explain-card";
@@ -8,7 +8,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { DocumentReader } from "@/components/reader/document-reader";
 import { SourcesPanel } from "@/components/sources/sources-panel";
 import { StudioPanel } from "@/components/studio/studio-panel";
-import { MessageMode, NotebookDocumentItem } from "@/lib/api/types";
+import { MessageMode } from "@/lib/api/types";
 import { useChatSession } from "@/lib/hooks/useChatSession";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
@@ -20,39 +20,11 @@ type NotebookWorkspaceProps = {
   notebookId: string;
 };
 
-function buildRagHint(
-  documents: NotebookDocumentItem[],
-  ti: ReturnType<typeof useLang>["ti"]
-): string | null {
-  const blocking = documents.filter((item) =>
-    ["uploaded", "pending", "processing", "converted"].includes(item.status)
-  );
-  if (blocking.length === 0) return null;
-
-  const counts = {
-    uploaded: blocking.filter((d) => d.status === "uploaded").length,
-    pending: blocking.filter((d) => d.status === "pending").length,
-    processing: blocking.filter((d) => d.status === "processing").length,
-    converted: blocking.filter((d) => d.status === "converted").length,
-  };
-
-  return ti(uiStrings.workspace.ragHint, {
-    queued: counts.uploaded + counts.pending,
-    processing: counts.processing,
-    converted: counts.converted,
-  });
-}
-
 export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
-  const { t, ti } = useLang();
-
-  const [documents, setDocuments] = useState<NotebookDocumentItem[]>([]);
+  const { t } = useLang();
   const chat = useChatSession(notebookId);
   const readerStore = useReaderStore();
   const uiStore = useUiStore();
-
-  const ragHint = useMemo(() => buildRagHint(documents, ti), [documents, ti]);
-  const askBlocked = Boolean(ragHint);
 
   useEffect(() => {
     readerStore.closeDocument();
@@ -104,8 +76,6 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         messages={chat.messages}
         mode={chat.currentMode}
         isStreaming={chat.isStreaming}
-        askBlocked={askBlocked}
-        ragHint={ragHint || undefined}
         onModeChange={chat.setMode}
         onSendMessage={(text, mode, sourceDocIds) => sendByMode(text, mode, undefined, sourceDocIds)}
         onCancel={chat.cancelStream}
@@ -123,7 +93,6 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         <SourcesPanel
           notebookId={notebookId}
           onOpenDocument={openDocument}
-          onDocumentsUpdate={setDocuments}
         />
       }
       main={mainContent}

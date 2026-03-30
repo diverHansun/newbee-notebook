@@ -198,14 +198,15 @@ class ChatService:
         }
         warnings: List[dict] = []
         mode_context = self._build_mode_context(context, filtered_doc_titles)
-        await self._validate_mode_guard(
-            mode_enum=mode_enum,
-            allowed_doc_ids=allowed_doc_ids,
-            context=context,
-            notebook_id=session.notebook_id,
-            documents_by_status=docs_by_status,
-            blocking_document_ids=blocking_doc_ids,
-        )
+        if mode_enum in {ModeType.CONCLUDE, ModeType.EXPLAIN}:
+            await self._validate_mode_guard(
+                mode_enum=mode_enum,
+                allowed_doc_ids=allowed_doc_ids,
+                context=context,
+                notebook_id=session.notebook_id,
+                documents_by_status=docs_by_status,
+                blocking_document_ids=blocking_doc_ids,
+            )
         blocking_warning = self._build_blocking_warning(
             blocking_doc_ids=blocking_doc_ids,
             allowed_doc_ids=allowed_doc_ids,
@@ -375,7 +376,7 @@ class ChatService:
             if doc_id in allowed_doc_id_set
         }
         mode_context = self._build_mode_context(context, filtered_doc_titles)
-        if mode_enum not in {ModeType.CHAT, ModeType.AGENT}:
+        if mode_enum in {ModeType.CONCLUDE, ModeType.EXPLAIN}:
             await self._validate_mode_guard(
                 mode_enum=mode_enum,
                 allowed_doc_ids=allowed_doc_ids,
@@ -647,6 +648,8 @@ class ChatService:
             _,
         ) = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
+        if mode_enum in {ModeType.CHAT, ModeType.AGENT, ModeType.ASK}:
+            return
         await self._validate_mode_guard(
             mode_enum=mode_enum,
             allowed_doc_ids=allowed_doc_ids,
@@ -666,7 +669,7 @@ class ChatService:
         blocking_document_ids: Optional[List[str]] = None,
     ) -> None:
         """Common guard for retrieval-dependent modes."""
-        rag_modes = (ModeType.ASK, ModeType.CONCLUDE, ModeType.EXPLAIN)
+        rag_modes = (ModeType.CONCLUDE, ModeType.EXPLAIN)
         if (
             mode_enum in rag_modes
             and not allowed_doc_ids

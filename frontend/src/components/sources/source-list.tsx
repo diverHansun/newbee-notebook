@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   addDocumentsToNotebook,
@@ -18,14 +18,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 type SourceListProps = {
   notebookId: string;
   onOpenDocument: (documentId: string) => void;
-  onDocumentsUpdate?: (documents: NotebookDocumentItem[]) => void;
 };
 
 function isNonTerminalStatus(status: string) {
   return status === "uploaded" || status === "pending" || status === "processing" || status === "converted";
 }
 
-export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: SourceListProps) {
+export function SourceList({ notebookId, onOpenDocument }: SourceListProps) {
   const { t, ti } = useLang();
   const queryClient = useQueryClient();
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
@@ -52,14 +51,6 @@ export function SourceList({ notebookId, onOpenDocument, onDocumentsUpdate }: So
     () => notebookDocumentsQuery.data?.data ?? [],
     [notebookDocumentsQuery.data?.data]
   );
-
-  const onDocumentsUpdateRef = useRef(onDocumentsUpdate);
-  onDocumentsUpdateRef.current = onDocumentsUpdate;
-
-  useEffect(() => {
-    onDocumentsUpdateRef.current?.(documentRows);
-  }, [documentRows]);
-
   const notebookDocumentIdSet = useMemo(
     () => new Set(documentRows.map((item) => item.document_id)),
     [documentRows]

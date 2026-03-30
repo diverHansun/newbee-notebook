@@ -23,7 +23,6 @@ describe("ChatInput", () => {
         notebookId="nb-1"
         mode="ask"
         isStreaming={false}
-        askBlocked={false}
         sourceDocIds={null}
         onSourceDocIdsChange={() => {}}
         onModeChange={onModeChange}
@@ -52,7 +51,6 @@ describe("ChatInput", () => {
         notebookId="nb-1"
         mode="ask"
         isStreaming={false}
-        askBlocked={false}
         sourceDocIds={null}
         onSourceDocIdsChange={() => {}}
         onModeChange={onModeChange}
@@ -85,7 +83,6 @@ describe("ChatInput", () => {
         notebookId="nb-1"
         mode="ask"
         isStreaming={false}
-        askBlocked={false}
         sourceDocIds={null}
         onSourceDocIdsChange={() => {}}
         onModeChange={onModeChange}

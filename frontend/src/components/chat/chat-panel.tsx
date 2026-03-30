@@ -18,8 +18,6 @@ type ChatPanelProps = {
   messages: ChatMessage[];
   mode: "agent" | "ask";
   isStreaming: boolean;
-  askBlocked: boolean;
-  ragHint?: string;
   onModeChange: (mode: "agent" | "ask") => void;
   onSendMessage: (text: string, mode: "agent" | "ask", sourceDocIds?: string[] | null) => void;
   onCancel: () => void;
@@ -37,8 +35,6 @@ export function ChatPanel({
   messages,
   mode,
   isStreaming,
-  askBlocked,
-  ragHint,
   onModeChange,
   onSendMessage,
   onCancel,
@@ -164,25 +160,6 @@ export function ChatPanel({
         </span>
       </div>
 
-      {/* RAG hint banner */}
-      {askBlocked && ragHint && (
-        <div
-          style={{
-            margin: "12px 16px 0",
-            padding: "10px 14px",
-            background: "hsl(var(--bee-yellow-light))",
-            border: "1px solid hsl(var(--bee-yellow) / 0.4)",
-            borderLeft: "3px solid hsl(var(--bee-yellow))",
-            borderRadius: "calc(var(--radius) - 2px)",
-            fontSize: 13,
-            color: "#92400E",
-            lineHeight: 1.5,
-          }}
-        >
-          {ragHint}
-        </div>
-      )}
-
       {/* Message list */}
       <div ref={messageListRef} className="chat-message-list" onScroll={handleMessageListScroll}>
         {messages.length === 0 ? (
@@ -208,7 +185,6 @@ export function ChatPanel({
           notebookId={notebookId}
           mode={mode}
           isStreaming={isStreaming}
-          askBlocked={askBlocked}
           sourceDocIds={sourceDocIds}
           onSourceDocIdsChange={setSourceDocIds}
           onModeChange={onModeChange}

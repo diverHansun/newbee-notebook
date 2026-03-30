@@ -13,7 +13,6 @@ type ChatInputProps = {
   notebookId: string;
   mode: "agent" | "ask";
   isStreaming: boolean;
-  askBlocked: boolean;
   sourceDocIds: string[] | null;
   onSourceDocIdsChange: (ids: string[] | null) => void;
   onModeChange: (mode: "agent" | "ask") => void;
@@ -52,7 +51,6 @@ export function ChatInput({
   notebookId,
   mode,
   isStreaming,
-  askBlocked,
   sourceDocIds,
   onSourceDocIdsChange,
   onModeChange,
@@ -68,11 +66,10 @@ export function ChatInput({
   const submitCurrentInput = () => {
     const content = input.trim();
     if (!content || isStreaming) return;
-    if (mode === "ask" && askBlocked) return;
     onSend(content, mode);
     setInput("");
   };
-  const sendDisabled = !input.trim() || (mode === "ask" && askBlocked);
+  const sendDisabled = !input.trim();
   const actionClassName = `chat-action-btn${
     isStreaming ? " is-stop" : !sendDisabled ? " is-ready" : ""
   }`;
@@ -179,11 +176,6 @@ export function ChatInput({
               disabled={isStreaming}
               onDocsChange={handleSourceDocsChange}
             />
-            {mode === "ask" && askBlocked && (
-              <span className="badge badge-failed" style={{ fontSize: 10 }}>
-                {t(uiStrings.chat.ragUnavailable)}
-              </span>
-            )}
             {sourceDocsTotal > 0 && sourceDocIds !== null && sourceDocIds.length > 0 && (
               <span className="muted" style={{ fontSize: 11 }}>
                 {ti(uiStrings.chat.docCount, { selected: sourceDocIds.length, total: sourceDocsTotal })}

@@ -245,6 +245,47 @@ def test_validate_mode_guard_allows_ask_when_completed_docs_exist():
     )
 
 
+def test_validate_mode_guard_allows_ask_when_all_documents_processing():
+    service = _build_service()
+
+    asyncio.run(
+        service._validate_mode_guard(
+            mode_enum=ModeType.ASK,
+            allowed_doc_ids=[],
+            context=None,
+            notebook_id="nb-1",
+            documents_by_status={"processing": 2, "completed": 0},
+            blocking_document_ids=["doc-1", "doc-2"],
+        )
+    )
+
+
+def test_prevalidate_mode_requirements_skips_ask_even_when_all_docs_processing():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.PROCESSING, title="Busy"),
+    ]
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+    )
+
+    asyncio.run(service.prevalidate_mode_requirements("session-1", "ask"))
+
+
 def test_validate_mode_guard_blocks_explain_when_target_document_is_not_completed():
     service = _build_service()
 
@@ -521,6 +562,40 @@ def test_chat_returns_warnings_for_partial_documents_in_nonstream_mode():
             },
         }
     ]
+
+
+def test_chat_allows_ask_when_all_documents_are_processing():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.PROCESSING, title="Busy"),
+    ]
+    document_repo.get.return_value = None
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="hi", mode="ask"))
+
+    assert result.content == "runtime answer"
+    assert result.mode == ModeType.ASK
+    assert result.warnings == []
 
 
 def test_agent_mode_matches_chat_alias_and_does_not_emit_partial_document_warning():
