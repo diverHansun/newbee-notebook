@@ -26,7 +26,7 @@ export function AppShell({ left, main, right, mainOverlay }: AppShellProps) {
           style={{ height: "100%" }}
         >
           {/* Sources Panel — 25% default, min 15% */}
-          <Panel id="sources" defaultSize="25%" minSize="200px" maxSize="40%">
+          <Panel id="sources" defaultSize="25%" minSize="200px" maxSize="35%">
             <section
               className="panel"
               style={{
@@ -77,7 +77,7 @@ export function AppShell({ left, main, right, mainOverlay }: AppShellProps) {
           <Separator id="sep-main-studio" className="resize-handle" />
 
           {/* Studio Panel — 25% default, min 15% */}
-          <Panel id="studio" defaultSize="25%" minSize="160px" maxSize="40%">
+          <Panel id="studio" defaultSize="25%" minSize="160px" maxSize="55%">
             <section
               className="panel studio-panel"
               style={{
