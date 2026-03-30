@@ -10,6 +10,7 @@ from newbee_notebook.api.dependencies import get_video_service
 from newbee_notebook.api.routers import videos as videos_router
 from newbee_notebook.application.services.video_service import VideoSummaryNotFoundError
 from newbee_notebook.domain.entities.video_summary import VideoSummary
+from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
 
 
 def _build_client(service: AsyncMock) -> TestClient:
@@ -79,6 +80,45 @@ def test_summarize_video_streams_sse_events():
     assert "event: info" in response.text
     assert "event: done" in response.text
     service.summarize.assert_awaited_once()
+
+
+def test_summarize_stream_sanitizes_unexpected_exception_message():
+    service = AsyncMock()
+    service.summarize = AsyncMock(
+        side_effect=RuntimeError(
+            "duplicate key value violates unique constraint uq_video_summaries_platform_video_id"
+        )
+    )
+
+    client = _build_client(service)
+    response = client.post(
+        "/api/v1/videos/summarize",
+        json={"url_or_bvid": "BV1xx411c7mD", "notebook_id": "nb-1"},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "Video summarization failed. Please retry." in response.text
+    assert "duplicate key value" not in response.text
+
+
+def test_summarize_stream_returns_safe_auth_error_payload():
+    service = AsyncMock()
+    service.summarize = AsyncMock(
+        side_effect=AuthenticationError("get_player_info: Credential sessdata missing")
+    )
+
+    client = _build_client(service)
+    response = client.post(
+        "/api/v1/videos/summarize",
+        json={"url_or_bvid": "BV1xx411c7mD", "notebook_id": "nb-1"},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "E_BILIBILI_AUTH" in response.text
+    assert "sessdata" not in response.text
+    assert "Bilibili session expired or not logged in. Please login and try again." in response.text
 
 
 def test_get_video_returns_404_when_missing():

@@ -54,6 +54,7 @@ function mapVideoStreamEvent(
     return {
       type: "error",
       message: String(payload.message ?? "Unknown video stream error"),
+      error_code: payload.error_code ? String(payload.error_code) : undefined,
       video_id: payload.video_id ? String(payload.video_id) : undefined,
     };
   }

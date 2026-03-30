@@ -80,8 +80,12 @@ async def _summarize_stream(
     request: SummarizeRequest,
 ) -> AsyncGenerator[str, None]:
     queue: asyncio.Queue[tuple[str | None, dict]] = asyncio.Queue()
+    error_emitted = False
 
     async def _progress_callback(event: str, payload: dict) -> None:
+        nonlocal error_emitted
+        if event == "error":
+            error_emitted = True
         await queue.put((event, payload))
 
     async def _run() -> None:
@@ -92,7 +96,8 @@ async def _summarize_stream(
                 progress_callback=_progress_callback,
             )
         except Exception as exc:  # noqa: BLE001
-            await queue.put(("error", {"message": str(exc)}))
+            if not error_emitted:
+                await queue.put(("error", VideoService.build_stream_error_payload(exc)))
         finally:
             await queue.put((None, {}))
 

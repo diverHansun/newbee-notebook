@@ -154,6 +154,71 @@ async def test_summarize_marks_summary_failed_when_subtitle_missing_and_asr_disa
 
 
 @pytest.mark.anyio
+async def test_summarize_retries_failed_summary_without_creating_a_new_row(
+    service,
+    video_repo,
+):
+    existing_failed = VideoSummary(
+        summary_id="summary-failed",
+        notebook_id="nb-old",
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        source_url="https://www.bilibili.com/video/BV1xx411c7mD",
+        title="Old title",
+        status="failed",
+        error_message="previous raw error",
+    )
+    video_repo.get_by_platform_and_video_id.return_value = existing_failed
+    update_snapshots: list[tuple[str, str | None]] = []
+
+    def update_summary(summary):
+        update_snapshots.append((summary.status, summary.error_message))
+        return summary
+
+    video_repo.update.side_effect = update_summary
+
+    summary = await service.summarize("BV1xx411c7mD", notebook_id="nb-1")
+
+    video_repo.create.assert_not_awaited()
+    assert update_snapshots[0] == ("processing", None)
+    assert summary.summary_id == "summary-failed"
+    assert summary.status == "completed"
+
+
+@pytest.mark.anyio
+async def test_summarize_sanitizes_unexpected_errors_for_stream_and_storage(
+    service,
+    video_repo,
+    llm_client,
+):
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    llm_client.chat.side_effect = RuntimeError(
+        "duplicate key value violates unique constraint uq_video_summaries_platform_video_id"
+    )
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    with pytest.raises(RuntimeError):
+        await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    failed_summary = video_repo.update.await_args_list[-1].args[0]
+    assert failed_summary.status == "failed"
+    assert failed_summary.error_message == "Video summarization failed. Please retry."
+    assert events[-1] == (
+        "error",
+        {
+            "video_id": "BV1xx411c7mD",
+            "error_code": "E_VIDEO_SUMMARIZE_FAILED",
+            "message": "Video summarization failed. Please retry.",
+        },
+    )
+
+
+@pytest.mark.anyio
 async def test_get_video_ai_conclusion_proxies_to_client(service, bili_client):
     bili_client.get_video_ai_conclusion.return_value = "Quick AI summary"
 

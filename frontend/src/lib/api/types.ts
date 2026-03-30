@@ -266,6 +266,7 @@ export type VideoStreamEvent =
   | {
       type: "error";
       message: string;
+      error_code?: string;
       video_id?: string;
     };
 

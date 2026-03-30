@@ -176,7 +176,7 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               return;
             }
             if (event.type === "error") {
-              if (isAuthError(event.message)) {
+              if (event.error_code === "E_BILIBILI_AUTH" || isAuthError(event.message)) {
                 setStreamError(t(uiStrings.video.authError));
                 setIsAuthRelatedError(true);
               } else {

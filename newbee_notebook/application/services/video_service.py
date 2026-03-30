@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from io import BytesIO
 from typing import Any, Awaitable, Callable, Optional
 
@@ -16,8 +17,10 @@ from newbee_notebook.domain.repositories.video_summary_repository import (
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 from newbee_notebook.infrastructure.storage.object_keys import build_video_transcript_key
+from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
 
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
+logger = logging.getLogger(__name__)
 
 
 class VideoSummarizingInProgressError(RuntimeError):
@@ -77,22 +80,31 @@ class VideoService:
                 raise VideoSummarizingInProgressError(
                     f"Video summary is already processing: {bvid}"
                 )
-
-        summary = await self._video_repo.create(
-            VideoSummary(
-                notebook_id=notebook_id,
-                platform="bilibili",
-                video_id=bvid,
-                source_url=url_or_bvid,
-                title=bvid,
-                cover_url=None,
-                duration_seconds=0,
-                uploader_name="",
-                uploader_id="",
-                stats=None,
-                status="processing",
+            summary = existing
+            summary.notebook_id = notebook_id or summary.notebook_id
+            summary.status = "processing"
+            summary.error_message = None
+            summary.summary_content = ""
+            summary.transcript_source = ""
+            summary.transcript_path = None
+            summary.touch()
+            summary = await self._video_repo.update(summary)
+        else:
+            summary = await self._video_repo.create(
+                VideoSummary(
+                    notebook_id=notebook_id,
+                    platform="bilibili",
+                    video_id=bvid,
+                    source_url=url_or_bvid,
+                    title=bvid,
+                    cover_url=None,
+                    duration_seconds=0,
+                    uploader_name="",
+                    uploader_id="",
+                    stats=None,
+                    status="processing",
+                )
             )
-        )
         await self._video_repo.commit()
         await self._emit(
             progress_callback,
@@ -143,15 +155,17 @@ class VideoService:
             summary = await self._video_repo.update(summary)
             await self._video_repo.commit()
         except Exception as exc:
+            safe_error = self.build_stream_error_payload(exc)
+            logger.exception("Video summarize failed for %s", bvid)
             summary.status = "failed"
-            summary.error_message = str(exc)
+            summary.error_message = safe_error["message"]
             summary.touch()
             await self._video_repo.update(summary)
             await self._video_repo.commit()
             await self._emit(
                 progress_callback,
                 "error",
-                {"video_id": bvid, "message": str(exc)},
+                {"video_id": bvid, **safe_error},
             )
             raise
 
@@ -327,6 +341,28 @@ class VideoService:
     @staticmethod
     def _extract_summary_content(response: Any) -> str:
         return str(response.choices[0].message.content).strip()
+
+    @staticmethod
+    def build_stream_error_payload(exc: Exception) -> dict[str, str]:
+        if isinstance(exc, AuthenticationError):
+            return {
+                "error_code": "E_BILIBILI_AUTH",
+                "message": "Bilibili session expired or not logged in. Please login and try again.",
+            }
+        if isinstance(exc, VideoSummarizingInProgressError):
+            return {
+                "error_code": "E_VIDEO_SUMMARIZE_IN_PROGRESS",
+                "message": str(exc),
+            }
+        if isinstance(exc, VideoTranscriptUnavailableError):
+            return {
+                "error_code": "E_VIDEO_TRANSCRIPT_UNAVAILABLE",
+                "message": str(exc),
+            }
+        return {
+            "error_code": "E_VIDEO_SUMMARIZE_FAILED",
+            "message": "Video summarization failed. Please retry.",
+        }
 
     @staticmethod
     async def _emit(
