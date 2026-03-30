@@ -13,9 +13,11 @@ const apiMocks = vi.hoisted(() => ({
   resetASRConfig: vi.fn(),
   resetEmbeddingConfig: vi.fn(),
   resetLLMConfig: vi.fn(),
+  resetMinerUConfig: vi.fn(),
   updateASRConfig: vi.fn(),
   updateEmbeddingConfig: vi.fn(),
   updateLLMConfig: vi.fn(),
+  updateMinerUConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/api/config", () => ({
@@ -24,9 +26,11 @@ vi.mock("@/lib/api/config", () => ({
   resetASRConfig: () => apiMocks.resetASRConfig(),
   resetEmbeddingConfig: () => apiMocks.resetEmbeddingConfig(),
   resetLLMConfig: () => apiMocks.resetLLMConfig(),
+  resetMinerUConfig: () => apiMocks.resetMinerUConfig(),
   updateASRConfig: (...args: unknown[]) => apiMocks.updateASRConfig(...args),
   updateEmbeddingConfig: (...args: unknown[]) => apiMocks.updateEmbeddingConfig(...args),
   updateLLMConfig: (...args: unknown[]) => apiMocks.updateLLMConfig(...args),
+  updateMinerUConfig: (...args: unknown[]) => apiMocks.updateMinerUConfig(...args),
 }));
 
 import { ModelConfigPanel } from "@/components/layout/model-config-panel";
@@ -41,6 +45,11 @@ function renderPanel(ui: ReactNode) {
 }
 
 function buildModelsConfig(overrides?: {
+  mineru?: Partial<{
+    mode: string;
+    source: string;
+    local_enabled: boolean;
+  }>;
   asr?: Partial<{
     provider: string;
     model: string;
@@ -63,6 +72,12 @@ function buildModelsConfig(overrides?: {
       model: "text-embedding-v4",
       dim: 1024,
       source: "db",
+    },
+    mineru: {
+      mode: "cloud",
+      source: "db",
+      local_enabled: true,
+      ...overrides?.mineru,
     },
     asr: {
       provider: "zhipu",
@@ -90,6 +105,9 @@ function buildAvailableModels() {
       api_models: [{ name: "text-embedding-v4", label: "text-embedding-v4" }],
       local_models: ["gte-Qwen2-7B-instruct-Q4_K_M.gguf"],
     },
+    mineru: {
+      modes: ["cloud", "local"],
+    },
     asr: {
       providers: ["zhipu", "qwen"],
       presets: [
@@ -107,18 +125,22 @@ describe("ModelConfigPanel", () => {
     apiMocks.updateLLMConfig.mockReset();
     apiMocks.updateEmbeddingConfig.mockReset();
     apiMocks.updateASRConfig.mockReset();
+    apiMocks.updateMinerUConfig.mockReset();
     apiMocks.resetLLMConfig.mockReset();
     apiMocks.resetEmbeddingConfig.mockReset();
     apiMocks.resetASRConfig.mockReset();
+    apiMocks.resetMinerUConfig.mockReset();
 
     apiMocks.getModelsConfig.mockResolvedValue(buildModelsConfig());
     apiMocks.getAvailableModels.mockResolvedValue(buildAvailableModels());
     apiMocks.updateLLMConfig.mockResolvedValue(buildModelsConfig().llm);
     apiMocks.updateEmbeddingConfig.mockResolvedValue(buildModelsConfig().embedding);
     apiMocks.updateASRConfig.mockResolvedValue(buildModelsConfig().asr);
+    apiMocks.updateMinerUConfig.mockResolvedValue(buildModelsConfig().mineru);
     apiMocks.resetLLMConfig.mockResolvedValue({ message: "ok", defaults: {} });
     apiMocks.resetEmbeddingConfig.mockResolvedValue({ message: "ok", defaults: {} });
     apiMocks.resetASRConfig.mockResolvedValue({ message: "ok", defaults: {} });
+    apiMocks.resetMinerUConfig.mockResolvedValue({ message: "ok", defaults: {} });
 
     vi.stubGlobal("confirm", vi.fn(() => true));
   });
@@ -183,5 +205,27 @@ describe("ModelConfigPanel", () => {
     await waitFor(() => {
       expect(apiMocks.resetASRConfig).toHaveBeenCalledOnce();
     });
+  });
+
+  it("updates mineru mode from cloud to local", async () => {
+    const user = userEvent.setup();
+    apiMocks.updateMinerUConfig.mockResolvedValue({
+      mode: "local",
+      source: "db",
+      local_enabled: true,
+    });
+
+    renderPanel(<ModelConfigPanel />);
+
+    const mineruHeading = await screen.findByText("MinerU Configuration");
+    const mineruCard = mineruHeading.closest(".control-panel-card");
+    expect(mineruCard).not.toBeNull();
+
+    await user.click(within(mineruCard as HTMLElement).getByRole("radio", { name: "Local" }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateMinerUConfig).toHaveBeenCalled();
+    });
+    expect(apiMocks.updateMinerUConfig.mock.calls[0][0]).toEqual({ mode: "local" });
   });
 });

@@ -20,7 +20,10 @@ from newbee_notebook.core.common.config import (
     get_pgvector_config_for_provider,
     get_storage_config,
 )
-from newbee_notebook.core.common.config_db import sync_embedding_runtime_env_from_db
+from newbee_notebook.core.common.config_db import (
+    sync_embedding_runtime_env_from_db,
+    sync_mineru_runtime_env_from_db,
+)
 from newbee_notebook.core.engine.index_builder import load_es_index, load_pgvector_index
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.rag.text_splitter.splitter import split_documents
@@ -43,7 +46,6 @@ from newbee_notebook.infrastructure.tasks.pipeline_context import PipelineContex
 logger = logging.getLogger(__name__)
 _EMBED_MODEL = None
 _EMBED_MODEL_SIGNATURE = None
-_PROCESSOR = DocumentProcessor()
 _PIPELINE_LOCK_REDIS = None
 _PIPELINE_LOCK_DISABLED = False
 _PIPELINE_LOCK_RELEASE_SCRIPT = (
@@ -377,8 +379,10 @@ async def _convert_document_async(document_id: str, force: bool = False) -> None
                 )
 
         await ctx.set_stage(ProcessingStage.CONVERTING)
+        await sync_mineru_runtime_env_from_db(ctx.session)
+        processor = DocumentProcessor()
         async with _materialize_document_source(ctx.document) as source_path:
-            result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+            result, rel_content_path, content_size = await processor.process_and_save(
                 document_id=ctx.document_id,
                 file_path=str(source_path),
             )
@@ -470,8 +474,10 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
 
         if not skip_conversion:
             await ctx.set_stage(ProcessingStage.CONVERTING)
+            await sync_mineru_runtime_env_from_db(ctx.session)
+            processor = DocumentProcessor()
             async with _materialize_document_source(ctx.document) as source_path:
-                result, rel_content_path, content_size = await _PROCESSOR.process_and_save(
+                result, rel_content_path, content_size = await processor.process_and_save(
                     document_id=ctx.document_id,
                     file_path=str(source_path),
                 )

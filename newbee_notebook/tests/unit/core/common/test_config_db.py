@@ -77,6 +77,48 @@ async def test_get_asr_config_async_uses_env_and_provider_default_model(monkeypa
     }
 
 
+@pytest.mark.anyio
+async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    values = {"mineru.mode": "local"}
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: _FakeSettingsService(values),
+    )
+    monkeypatch.setenv("MINERU_LOCAL_ENABLED", "true")
+
+    payload = await config_db.get_mineru_config_async(object())
+
+    assert payload == {
+        "mode": "local",
+        "source": "db",
+        "local_enabled": True,
+    }
+
+
+@pytest.mark.anyio
+async def test_get_mineru_config_async_forces_cloud_when_local_disabled(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    values = {"mineru.mode": "local"}
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: _FakeSettingsService(values),
+    )
+    monkeypatch.setenv("MINERU_LOCAL_ENABLED", "false")
+
+    payload = await config_db.get_mineru_config_async(object())
+
+    assert payload == {
+        "mode": "cloud",
+        "source": "db",
+        "local_enabled": False,
+    }
+
+
 def test_resolve_asr_api_key_reuses_provider_keys(monkeypatch):
     from newbee_notebook.core.common.config_db import resolve_asr_api_key
 

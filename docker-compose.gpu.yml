@@ -1,16 +1,17 @@
 services:
   # Worker override: GPU-capable PyTorch image so local embedding runs on CUDA.
-  # Uses pytorch/pytorch base (already has CUDA torch) and skips re-installing
-  # the CPU torch from requirements.txt to keep the CUDA build intact.
-  # If MINERU_MODE/MINERU_BACKEND are explicitly set in .env, those values still win.
+  # Uses pytorch/pytorch base and skips re-installing CPU torch from requirements.txt.
   celery-worker:
     image: pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime
     command: >
       bash -c "grep -v '^torch' requirements.txt | pip install -q -r /dev/stdin && celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-1} --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-1} --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-4}"
     environment:
-      MINERU_MODE: ${MINERU_MODE:-local}
-      MINERU_BACKEND: ${MINERU_BACKEND:-hybrid-auto-engine}
-    # Request an NVIDIA GPU for CUDA embedding inference
+      MINERU_MODE: local
+      MINERU_LOCAL_ENABLED: "true"
+      MINERU_BACKEND: hybrid-auto-engine
+      EMBEDDING_PROVIDER: qwen3-embedding
+      QWEN3_EMBEDDING_MODE: local
+      QWEN3_EMBEDDING_DEVICE: cuda
     deploy:
       resources:
         reservations:
@@ -21,30 +22,42 @@ services:
     ipc: host
     shm_size: "16gb"
 
-  # GPU override for MinerU API service.
+  # API override: expose MinerU local mode as switchable in settings.
+  api:
+    environment:
+      MINERU_MODE: local
+      MINERU_LOCAL_ENABLED: "true"
+
+  # GPU MinerU PDF -> Markdown service.
   # Use together with the base compose file:
-  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local up -d --build
-  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile mineru-local --profile minio up -d --build
+  #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
   mineru-api:
     build:
       context: ./docker/mineru
       dockerfile: Dockerfile.gpu
     image: newbee-notebook/mineru-api:gpu
+    container_name: newbee-notebook-mineru-api
+    restart: unless-stopped
     environment:
       MINERU_MODEL_SOURCE: modelscope
       MINERU_DEVICE_MODE: cuda
       MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
       MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}
       # Limit PDF rendering parallelism to reduce peak memory usage.
-      # Default is 4 workers; 1 keeps memory under ~1 GB per batch.
       MINERU_PDF_RENDER_THREADS: "1"
       # Force clean_vram() to trigger after each inference stage.
-      # MinerU's built-in threshold is 8 GB — on GPUs with more VRAM the
-      # cleanup never fires.  Setting VIRTUAL_VRAM_SIZE=8 makes MinerU
-      # behave as if the GPU has exactly 8 GB, which activates gc.collect()
-      # + torch.cuda.empty_cache() between inference stages.
       MINERU_VIRTUAL_VRAM_SIZE: "8"
-    # Request an NVIDIA GPU (Docker Desktop / Linux with nvidia-container-toolkit)
+    volumes:
+      - mineru_cache:/root/.cache
+    ports:
+      - "8001:8000"
+    networks:
+      - newbee_notebook_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
     deploy:
       resources:
         reservations:
@@ -57,5 +70,7 @@ services:
     ulimits:
       memlock: -1
       stack: 67108864
-    profiles:
-      - mineru-local
+
+volumes:
+  mineru_cache:
+    driver: local

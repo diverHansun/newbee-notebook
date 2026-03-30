@@ -75,6 +75,17 @@ def _build_client(monkeypatch):
             "source": "db" if "asr.provider" in store else "default",
         }
 
+    async def _fake_get_mineru_config_async(_session):
+        local_enabled = store.get("mineru.local_enabled", "true").lower() in {"1", "true", "yes", "on"}
+        mode = store.get("mineru.mode", "cloud")
+        if mode == "local" and not local_enabled:
+            mode = "cloud"
+        return {
+            "mode": mode,
+            "source": "db" if "mineru.mode" in store else "default",
+            "local_enabled": local_enabled,
+        }
+
     async def _db_override():
         yield object()
 
@@ -85,6 +96,7 @@ def _build_client(monkeypatch):
     monkeypatch.setattr(config_router, "get_llm_config_async", _fake_get_llm_config_async)
     monkeypatch.setattr(config_router, "get_embedding_config_async", _fake_get_embedding_config_async)
     monkeypatch.setattr(config_router, "get_asr_config_async", _fake_get_asr_config_async)
+    monkeypatch.setattr(config_router, "get_mineru_config_async", _fake_get_mineru_config_async)
     monkeypatch.setattr(
         config_router,
         "resolve_asr_api_key",
@@ -112,6 +124,8 @@ def test_get_models_returns_effective_config(monkeypatch):
     payload = response.json()
     assert payload["llm"]["provider"] == "qwen"
     assert payload["embedding"]["provider"] == "qwen3-embedding"
+    assert payload["mineru"]["mode"] == "cloud"
+    assert payload["mineru"]["local_enabled"] is True
     assert payload["asr"]["provider"] == "zhipu"
     assert payload["asr"]["api_key_set"] is True
 
@@ -156,11 +170,22 @@ def test_get_available_models_exposes_glm_5_preset(monkeypatch):
     assert response.status_code == 200
     presets = response.json()["llm"]["presets"]
     assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-5"}
+    assert response.json()["mineru"]["modes"] == ["cloud", "local"]
     assert response.json()["asr"]["providers"] == ["zhipu", "qwen"]
     assert {preset["name"] for preset in response.json()["asr"]["presets"]} == {
         "glm-asr-2512",
         "qwen3-asr-flash",
     }
+
+
+def test_get_available_models_limits_mineru_to_cloud_when_local_disabled(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    store["mineru.local_enabled"] = "false"
+
+    response = client.get("/api/v1/config/models/available")
+
+    assert response.status_code == 200
+    assert response.json()["mineru"]["modes"] == ["cloud"]
 
 
 def test_get_available_models_reads_local_models_from_repo_models_dir(monkeypatch, tmp_path):
@@ -247,6 +272,41 @@ def test_put_asr_updates_store(monkeypatch):
     assert store["asr.provider"] == "qwen"
     assert store["asr.model"] == "qwen3-asr-flash"
     assert response.json()["api_key_set"] is True
+
+
+def test_put_mineru_updates_store(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/mineru",
+        json={"mode": "local"},
+    )
+
+    assert response.status_code == 200
+    assert store["mineru.mode"] == "local"
+    assert response.json()["mode"] == "local"
+
+
+def test_put_mineru_rejects_local_when_disabled(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    store["mineru.local_enabled"] = "false"
+
+    response = client.put(
+        "/api/v1/config/mineru",
+        json={"mode": "local"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_reset_mineru_clears_prefix(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    store["mineru.mode"] = "local"
+
+    response = client.post("/api/v1/config/mineru/reset")
+
+    assert response.status_code == 200
+    assert "mineru.mode" not in store
 
 
 def test_reset_asr_clears_prefix(monkeypatch):

@@ -186,6 +186,18 @@ export const uiStrings = {
     embeddingModeApi: { zh: "API", en: "API" },
     embeddingModel: { zh: "模型", en: "Model" },
     embeddingDim: { zh: "维度", en: "Dimension" },
+    mineruConfig: { zh: "MinerU 配置", en: "MinerU Configuration" },
+    mineruMode: { zh: "模式", en: "Mode" },
+    mineruModeCloud: { zh: "云端", en: "Cloud" },
+    mineruModeLocal: { zh: "本地", en: "Local" },
+    mineruModeHint: {
+      zh: "切换 MinerU 模式会影响后续文档解析任务。",
+      en: "Switching MinerU mode affects subsequent document parsing tasks.",
+    },
+    mineruLocalDisabledHint: {
+      zh: "当前部署未启用本地 MinerU，默认固定为云端模式。",
+      en: "Local MinerU is disabled in this deployment. Cloud mode is enforced.",
+    },
     asrConfig: { zh: "ASR 配置", en: "ASR Configuration" },
     asrProvider: { zh: "Provider", en: "Provider" },
     asrModel: { zh: "模型", en: "Model" },

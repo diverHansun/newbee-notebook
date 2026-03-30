@@ -10,12 +10,15 @@ import {
   resetASRConfig,
   resetEmbeddingConfig,
   resetLLMConfig,
+  resetMinerUConfig,
   updateASRConfig,
   updateEmbeddingConfig,
   updateLLMConfig,
+  updateMinerUConfig,
   type ASRConfig,
   type EmbeddingConfig,
   type LLMConfig,
+  type MinerUConfig,
 } from "@/lib/api/config";
 import { ApiError } from "@/lib/api/client";
 import { useLang } from "@/lib/hooks/useLang";
@@ -41,6 +44,12 @@ type ASRDraft = {
   provider: string;
   model: string;
   api_key_set: boolean;
+};
+
+type MinerUDraft = {
+  mode: string;
+  source: string;
+  local_enabled: boolean;
 };
 
 function formatFloat(value: number): string {
@@ -94,6 +103,14 @@ function toASRDraft(config: ASRConfig): ASRDraft {
   };
 }
 
+function toMinerUDraft(config: MinerUConfig): MinerUDraft {
+  return {
+    mode: config.mode,
+    source: config.source,
+    local_enabled: config.local_enabled,
+  };
+}
+
 export function ModelConfigPanel() {
   const { t, ti } = useLang();
   const queryClient = useQueryClient();
@@ -101,6 +118,7 @@ export function ModelConfigPanel() {
   const [llmDraft, setLlmDraft] = useState<LLMDraft | null>(null);
   const [embeddingDraft, setEmbeddingDraft] = useState<EmbeddingDraft | null>(null);
   const [asrDraft, setAsrDraft] = useState<ASRDraft | null>(null);
+  const [mineruDraft, setMineruDraft] = useState<MinerUDraft | null>(null);
 
   const modelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -123,6 +141,7 @@ export function ModelConfigPanel() {
     setLlmDraft(toLLMDraft(configQuery.data.llm));
     setEmbeddingDraft(toEmbeddingDraft(configQuery.data.embedding));
     setAsrDraft(toASRDraft(configQuery.data.asr));
+    setMineruDraft(toMinerUDraft(configQuery.data.mineru));
   }, [configQuery.data]);
 
   useEffect(() => {
@@ -164,6 +183,24 @@ export function ModelConfigPanel() {
 
   const resetEmbeddingMutation = useMutation({
     mutationFn: resetEmbeddingConfig,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["models-config"] });
+    },
+  });
+
+  const mineruMutation = useMutation({
+    mutationFn: updateMinerUConfig,
+    onSuccess: (next) => {
+      setMineruDraft(toMinerUDraft(next));
+      queryClient.setQueryData(["models-config"], (prev: any) => {
+        if (!prev) return prev;
+        return { ...prev, mineru: next };
+      });
+    },
+  });
+
+  const resetMinerUMutation = useMutation({
+    mutationFn: resetMinerUConfig,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["models-config"] });
     },
@@ -221,8 +258,16 @@ export function ModelConfigPanel() {
   }, [availableQuery.data]);
 
   const localEmbeddingModels = availableQuery.data?.embedding.local_models ?? [];
+  const mineruModes =
+    availableQuery.data?.mineru?.modes ?? (mineruDraft?.local_enabled ? ["cloud", "local"] : ["cloud"]);
 
-  const loading = configQuery.isLoading || availableQuery.isLoading || !llmDraft || !embeddingDraft || !asrDraft;
+  const loading =
+    configQuery.isLoading ||
+    availableQuery.isLoading ||
+    !llmDraft ||
+    !embeddingDraft ||
+    !asrDraft ||
+    !mineruDraft;
 
   const disabledByFeatureFlag =
     configQuery.error instanceof ApiError &&
@@ -231,9 +276,11 @@ export function ModelConfigPanel() {
   const actionError =
     llmMutation.error ||
     embeddingMutation.error ||
+    mineruMutation.error ||
     asrMutation.error ||
     resetLLMMutation.error ||
     resetEmbeddingMutation.error ||
+    resetMinerUMutation.error ||
     resetAsrMutation.error ||
     configQuery.error ||
     availableQuery.error;
@@ -271,6 +318,12 @@ export function ModelConfigPanel() {
     asrMutation.mutate({
       provider: next.provider,
       model: next.model.trim(),
+    });
+  };
+
+  const commitMinerU = (next: MinerUDraft) => {
+    mineruMutation.mutate({
+      mode: next.mode,
     });
   };
 
@@ -646,6 +699,53 @@ export function ModelConfigPanel() {
               {ti(uiStrings.controlPanel.asrApiKeyMissing, { provider: asrDraft.provider })}
             </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="control-panel-card">
+        <div className="control-panel-card-header">
+          <div className="control-panel-card-title">{t(uiStrings.controlPanel.mineruConfig)}</div>
+          <button
+            type="button"
+            className="control-panel-reset-btn"
+            onClick={() => {
+              if (!window.confirm(t(uiStrings.controlPanel.restoreDefaultsConfirm))) return;
+              resetMinerUMutation.mutate();
+            }}
+            disabled={resetMinerUMutation.isPending}
+          >
+            {t(uiStrings.controlPanel.restoreDefaults)}
+          </button>
+        </div>
+
+        <div className="control-panel-card-body control-panel-stack">
+          <div className="control-panel-field">
+            <div className="control-panel-field-label">{t(uiStrings.controlPanel.mineruMode)}</div>
+            <SegmentedControl
+              value={mineruDraft.mode}
+              options={mineruModes.map((mode) => ({
+                value: mode,
+                label:
+                  mode === "local"
+                    ? t(uiStrings.controlPanel.mineruModeLocal)
+                    : t(uiStrings.controlPanel.mineruModeCloud),
+              }))}
+              onChange={(mode) => {
+                if (mode === mineruDraft.mode) return;
+                const next = {
+                  ...mineruDraft,
+                  mode,
+                };
+                setMineruDraft(next);
+                commitMinerU(next);
+              }}
+            />
+          </div>
+          {mineruDraft.local_enabled ? (
+            <div className="control-panel-field-note">{t(uiStrings.controlPanel.mineruModeHint)}</div>
+          ) : (
+            <div className="control-panel-warning">{t(uiStrings.controlPanel.mineruLocalDisabledHint)}</div>
+          )}
         </div>
       </div>
     </div>

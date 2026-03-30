@@ -24,9 +24,16 @@ export interface ASRConfig {
   api_key_set: boolean;
 }
 
+export interface MinerUConfig {
+  mode: string;
+  source: string;
+  local_enabled: boolean;
+}
+
 export interface ModelsConfig {
   llm: LLMConfig;
   embedding: EmbeddingConfig;
+  mineru: MinerUConfig;
   asr: ASRConfig;
 }
 
@@ -46,6 +53,9 @@ export interface AvailableModels {
     modes: string[];
     api_models: PresetModel[];
     local_models: string[];
+  };
+  mineru: {
+    modes: string[];
   };
   asr: {
     providers: string[];
@@ -70,6 +80,10 @@ export interface UpdateEmbeddingPayload {
 export interface UpdateASRPayload {
   provider: string;
   model?: string;
+}
+
+export interface UpdateMinerUPayload {
+  mode: string;
 }
 
 export interface ResetResponse {
@@ -106,6 +120,13 @@ export function updateASRConfig(payload: UpdateASRPayload) {
   });
 }
 
+export function updateMinerUConfig(payload: UpdateMinerUPayload) {
+  return apiFetch<MinerUConfig>("/config/mineru", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
 export function resetLLMConfig() {
   return apiFetch<ResetResponse>("/config/llm/reset", {
     method: "POST",
@@ -120,6 +141,12 @@ export function resetEmbeddingConfig() {
 
 export function resetASRConfig() {
   return apiFetch<ResetResponse>("/config/asr/reset", {
+    method: "POST",
+  });
+}
+
+export function resetMinerUConfig() {
+  return apiFetch<ResetResponse>("/config/mineru/reset", {
     method: "POST",
   });
 }

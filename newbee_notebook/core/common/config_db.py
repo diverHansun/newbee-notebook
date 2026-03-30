@@ -16,6 +16,7 @@ from newbee_notebook.core.common.project_paths import resolve_project_relative_p
 logger = logging.getLogger(__name__)
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
+_FALSY = {"0", "false", "no", "n", "off", ""}
 _BILIBILI_CREDENTIAL_KEY = "bilibili.credential"
 _BILIBILI_CREDENTIAL_FIELDS = (
     "sessdata",
@@ -45,6 +46,30 @@ def _as_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUTHY:
+            return True
+        if normalized in _FALSY:
+            return False
+    return default
+
+
+def _is_mineru_local_enabled() -> bool:
+    raw = os.getenv("MINERU_LOCAL_ENABLED")
+    if raw is None:
+        # Backward-compatible default for non-docker/local development.
+        return True
+    return _as_bool(raw, True)
 
 
 def _normalize_bilibili_credential_payload(payload: Any) -> dict[str, str]:
@@ -110,6 +135,19 @@ _ASR_DEFAULTS: dict[str, Any] = {
 }
 
 
+def _read_mineru_defaults() -> dict[str, Any]:
+    mode = str(os.getenv("MINERU_MODE", "cloud") or "cloud").strip().lower()
+    if mode not in {"cloud", "local"}:
+        mode = "cloud"
+    local_enabled = _is_mineru_local_enabled()
+    if mode == "local" and not local_enabled:
+        mode = "cloud"
+    return {
+        "mode": mode,
+        "local_enabled": local_enabled,
+    }
+
+
 def _default_asr_model_for_provider(provider: str) -> str:
     return {
         "zhipu": "glm-asr-2512",
@@ -120,6 +158,7 @@ def _default_asr_model_for_provider(provider: str) -> str:
 SYSTEM_DEFAULTS: dict[str, Any] = {
     "llm": _read_llm_yaml_defaults(),
     "embedding": _read_embedding_yaml_defaults(),
+    "mineru": _read_mineru_defaults(),
     "asr": _ASR_DEFAULTS,
 }
 
@@ -143,6 +182,11 @@ async def get_embedding_provider_async(session: AsyncSession) -> str:
 async def get_asr_provider_async(session: AsyncSession) -> str:
     cfg = await get_asr_config_async(session)
     return cfg["provider"]
+
+
+async def get_mineru_mode_async(session: AsyncSession) -> str:
+    cfg = await get_mineru_config_async(session)
+    return cfg["mode"]
 
 
 async def get_bilibili_credential_async(session: AsyncSession) -> dict[str, str] | None:
@@ -377,6 +421,42 @@ async def get_asr_config_async(session: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def get_mineru_config_async(session: AsyncSession) -> dict[str, Any]:
+    """Get effective MinerU config with DB > env > defaults + capability guard."""
+    defaults = SYSTEM_DEFAULTS["mineru"]
+    source = "default"
+
+    db_values: dict[str, str] = {}
+    try:
+        db_values = await _get_app_settings_service(session).get_many("mineru.")
+        if db_values:
+            source = "db"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed reading mineru.* from app_settings, fallback chain continues: %s", exc)
+
+    local_enabled = _is_mineru_local_enabled()
+    mode = (
+        db_values.get("mineru.mode")
+        or os.getenv("MINERU_MODE")
+        or defaults["mode"]
+    )
+    mode = str(mode).strip().lower() or str(defaults["mode"])
+    if mode not in {"cloud", "local"}:
+        mode = str(defaults["mode"])
+
+    if source == "default" and os.getenv("MINERU_MODE"):
+        source = "env"
+
+    if mode == "local" and not local_enabled:
+        mode = "cloud"
+
+    return {
+        "mode": mode,
+        "source": source,
+        "local_enabled": local_enabled,
+    }
+
+
 def resolve_asr_api_key(provider: str) -> str | None:
     normalized = str(provider or "").strip().lower()
     if normalized == "zhipu":
@@ -418,13 +498,23 @@ def apply_asr_runtime_env(config: dict[str, Any]) -> None:
     os.environ["ASR_MODEL"] = str(config["model"])
 
 
+def apply_mineru_runtime_env(config: dict[str, Any]) -> None:
+    """Apply effective MinerU config to process env for immediate runtime effect."""
+    mode = str(config.get("mode") or "cloud").strip().lower()
+    if mode not in {"cloud", "local"}:
+        mode = "cloud"
+    os.environ["MINERU_MODE"] = mode
+
+
 async def sync_runtime_env_from_db(session: AsyncSession) -> None:
     """Load effective model config and project into env for runtime builders."""
     llm_cfg = await get_llm_config_async(session)
     emb_cfg = await get_embedding_config_async(session)
+    mineru_cfg = await get_mineru_config_async(session)
     asr_cfg = await get_asr_config_async(session)
     apply_llm_runtime_env(llm_cfg)
     apply_embedding_runtime_env(emb_cfg)
+    apply_mineru_runtime_env(mineru_cfg)
     apply_asr_runtime_env(asr_cfg)
 
 
@@ -433,3 +523,10 @@ async def sync_embedding_runtime_env_from_db(session: AsyncSession) -> dict[str,
     emb_cfg = await get_embedding_config_async(session)
     apply_embedding_runtime_env(emb_cfg)
     return emb_cfg
+
+
+async def sync_mineru_runtime_env_from_db(session: AsyncSession) -> dict[str, Any]:
+    """Load the effective MinerU config from DB and project it into process env."""
+    mineru_cfg = await get_mineru_config_async(session)
+    apply_mineru_runtime_env(mineru_cfg)
+    return mineru_cfg

@@ -16,9 +16,11 @@ from newbee_notebook.core.common.config_db import (
     apply_asr_runtime_env,
     apply_embedding_runtime_env,
     apply_llm_runtime_env,
+    apply_mineru_runtime_env,
     get_asr_config_async,
     get_embedding_config_async,
     get_llm_config_async,
+    get_mineru_config_async,
     resolve_asr_api_key,
 )
 from newbee_notebook.core.common.project_paths import get_models_directory
@@ -56,9 +58,16 @@ class ASRConfigResponse(BaseModel):
     api_key_set: bool
 
 
+class MinerUConfigResponse(BaseModel):
+    mode: str
+    source: str
+    local_enabled: bool
+
+
 class ModelsConfigResponse(BaseModel):
     llm: LLMConfigResponse
     embedding: EmbeddingConfigResponse
+    mineru: MinerUConfigResponse
     asr: ASRConfigResponse
 
 
@@ -85,9 +94,14 @@ class ASRAvailable(BaseModel):
     presets: list[PresetModel]
 
 
+class MinerUAvailable(BaseModel):
+    modes: list[str]
+
+
 class AvailableModelsResponse(BaseModel):
     llm: LLMAvailable
     embedding: EmbeddingAvailable
+    mineru: MinerUAvailable
     asr: ASRAvailable
 
 
@@ -108,6 +122,10 @@ class UpdateEmbeddingRequest(BaseModel):
 class UpdateASRRequest(BaseModel):
     provider: str
     model: str | None = None
+
+
+class UpdateMinerURequest(BaseModel):
+    mode: str
 
 
 class ResetResponse(BaseModel):
@@ -133,6 +151,7 @@ def _scan_local_embedding_models() -> list[str]:
 async def get_models_config(session=Depends(get_db_session)):
     llm = await get_llm_config_async(session)
     embedding = await get_embedding_config_async(session)
+    mineru = await get_mineru_config_async(session)
     asr = await get_asr_config_async(session)
     asr_api_key = resolve_asr_api_key(asr["provider"])
     return ModelsConfigResponse(
@@ -144,6 +163,11 @@ async def get_models_config(session=Depends(get_db_session)):
             dim=embedding["dim"],
             source=embedding["source"],
         ),
+        mineru=MinerUConfigResponse(
+            mode=mineru["mode"],
+            source=mineru["source"],
+            local_enabled=bool(mineru.get("local_enabled", False)),
+        ),
         asr=ASRConfigResponse(
             provider=asr["provider"],
             model=asr["model"],
@@ -154,7 +178,10 @@ async def get_models_config(session=Depends(get_db_session)):
 
 
 @router.get("/models/available", response_model=AvailableModelsResponse)
-async def get_available_models():
+async def get_available_models(session=Depends(get_db_session)):
+    mineru_cfg = await get_mineru_config_async(session)
+    mineru_modes = ["cloud", "local"] if mineru_cfg.get("local_enabled") else ["cloud"]
+
     return AvailableModelsResponse(
         llm=LLMAvailable(
             providers=[
@@ -180,6 +207,9 @@ async def get_available_models():
                 PresetModel(name="embedding-3", label="Embedding-3 (Zhipu)"),
             ],
             local_models=_scan_local_embedding_models(),
+        ),
+        mineru=MinerUAvailable(
+            modes=mineru_modes,
         ),
         asr=ASRAvailable(
             providers=["zhipu", "qwen"],
@@ -346,6 +376,33 @@ async def update_asr_config(req: UpdateASRRequest, session=Depends(get_db_sessio
     return ASRConfigResponse(**next_cfg, api_key_set=True)
 
 
+@router.put("/mineru", response_model=MinerUConfigResponse)
+async def update_mineru_config(req: UpdateMinerURequest, session=Depends(get_db_session)):
+    mode = str(req.mode or "").strip().lower()
+    if mode not in {"cloud", "local"}:
+        raise HTTPException(status_code=400, detail="mode must be 'cloud' or 'local'")
+
+    current = await get_mineru_config_async(session)
+    if mode == "local" and not current.get("local_enabled", False):
+        raise HTTPException(
+            status_code=400,
+            detail="MinerU local mode is disabled for current deployment",
+        )
+
+    next_cfg = {
+        "mode": mode,
+        "source": "db",
+        "local_enabled": bool(current.get("local_enabled", False)),
+    }
+
+    settings = AppSettingsService(session)
+    await settings.set_many({"mineru.mode": next_cfg["mode"]})
+
+    apply_mineru_runtime_env(next_cfg)
+
+    return MinerUConfigResponse(**next_cfg)
+
+
 @router.post("/llm/reset", response_model=ResetResponse)
 async def reset_llm_config(session=Depends(get_db_session)):
     settings = AppSettingsService(session)
@@ -387,4 +444,21 @@ async def reset_asr_config(session=Depends(get_db_session)):
     return ResetResponse(
         message="ASR configuration reset to system defaults",
         defaults=SYSTEM_DEFAULTS["asr"],
+    )
+
+
+@router.post("/mineru/reset", response_model=ResetResponse)
+async def reset_mineru_config(session=Depends(get_db_session)):
+    settings = AppSettingsService(session)
+    await settings.delete_prefix("mineru.")
+
+    default_cfg = await get_mineru_config_async(session)
+    apply_mineru_runtime_env(default_cfg)
+
+    return ResetResponse(
+        message="MinerU configuration reset to system defaults",
+        defaults={
+            "mode": default_cfg["mode"],
+            "local_enabled": default_cfg["local_enabled"],
+        },
     )
