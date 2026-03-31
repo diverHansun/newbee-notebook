@@ -116,3 +116,7 @@ htmlcov/
 coding_guide.md
 
 MinerU/
+
+# Local Postman assets (contain private endpoint mapping)
+postman_collection.json
+POSTMAN_GUIDE.md
