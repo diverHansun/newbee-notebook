@@ -466,6 +466,35 @@ def resolve_asr_api_key(provider: str) -> str | None:
     return None
 
 
+_NOT_APPLICABLE = "__not_applicable__"
+
+
+def resolve_llm_api_key(provider: str) -> str | None:
+    normalized = str(provider or "").strip().lower()
+    if normalized == "zhipu":
+        return os.getenv("ZHIPU_API_KEY")
+    if normalized == "qwen":
+        return os.getenv("DASHSCOPE_API_KEY")
+    return None
+
+
+def resolve_embedding_api_key(provider: str, mode: str | None) -> str | None:
+    normalized_provider = str(provider or "").strip().lower()
+    if normalized_provider == "qwen3-embedding":
+        if str(mode or "").strip().lower() == "local":
+            return _NOT_APPLICABLE
+        return os.getenv("DASHSCOPE_API_KEY")
+    if normalized_provider == "zhipu":
+        return os.getenv("ZHIPU_API_KEY")
+    return None
+
+
+def resolve_mineru_api_key(mode: str) -> str | None:
+    if str(mode or "").strip().lower() == "local":
+        return _NOT_APPLICABLE
+    return os.getenv("MINERU_API_KEY")
+
+
 def apply_llm_runtime_env(config: dict[str, Any]) -> None:
     """Apply effective LLM config to process env for immediate runtime effect."""
     os.environ["LLM_PROVIDER"] = str(config["provider"])

@@ -130,6 +130,38 @@ def test_resolve_asr_api_key_reuses_provider_keys(monkeypatch):
     assert resolve_asr_api_key("unknown") is None
 
 
+def test_resolve_llm_api_key_reuses_provider_keys(monkeypatch):
+    from newbee_notebook.core.common.config_db import resolve_llm_api_key
+
+    monkeypatch.setenv("ZHIPU_API_KEY", "zhipu-key")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dashscope-key")
+
+    assert resolve_llm_api_key("zhipu") == "zhipu-key"
+    assert resolve_llm_api_key("qwen") == "dashscope-key"
+    assert resolve_llm_api_key("unknown") is None
+
+
+def test_resolve_embedding_api_key_supports_not_applicable(monkeypatch):
+    from newbee_notebook.core.common.config_db import _NOT_APPLICABLE, resolve_embedding_api_key
+
+    monkeypatch.setenv("ZHIPU_API_KEY", "zhipu-key")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "dashscope-key")
+
+    assert resolve_embedding_api_key("qwen3-embedding", "api") == "dashscope-key"
+    assert resolve_embedding_api_key("qwen3-embedding", "local") == _NOT_APPLICABLE
+    assert resolve_embedding_api_key("zhipu", None) == "zhipu-key"
+    assert resolve_embedding_api_key("unknown", None) is None
+
+
+def test_resolve_mineru_api_key_supports_not_applicable(monkeypatch):
+    from newbee_notebook.core.common.config_db import _NOT_APPLICABLE, resolve_mineru_api_key
+
+    monkeypatch.setenv("MINERU_API_KEY", "mineru-key")
+
+    assert resolve_mineru_api_key("cloud") == "mineru-key"
+    assert resolve_mineru_api_key("local") == _NOT_APPLICABLE
+
+
 @pytest.mark.anyio
 async def test_get_bilibili_credential_async_reads_json_blob(monkeypatch):
     from newbee_notebook.core.common import config_db

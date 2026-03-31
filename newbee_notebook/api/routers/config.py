@@ -12,6 +12,7 @@ from newbee_notebook.api.dependencies import (
 )
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.core.common.config_db import (
+    _NOT_APPLICABLE,
     SYSTEM_DEFAULTS,
     apply_asr_runtime_env,
     apply_embedding_runtime_env,
@@ -22,6 +23,9 @@ from newbee_notebook.core.common.config_db import (
     get_llm_config_async,
     get_mineru_config_async,
     resolve_asr_api_key,
+    resolve_embedding_api_key,
+    resolve_llm_api_key,
+    resolve_mineru_api_key,
 )
 from newbee_notebook.core.common.project_paths import get_models_directory
 from newbee_notebook.core.llm import (
@@ -41,6 +45,7 @@ class LLMConfigResponse(BaseModel):
     max_tokens: int
     top_p: float
     source: str
+    api_key_set: bool
 
 
 class EmbeddingConfigResponse(BaseModel):
@@ -49,6 +54,7 @@ class EmbeddingConfigResponse(BaseModel):
     model: str
     dim: int
     source: str
+    api_key_set: bool | None = None
 
 
 class ASRConfigResponse(BaseModel):
@@ -62,6 +68,7 @@ class MinerUConfigResponse(BaseModel):
     mode: str
     source: str
     local_enabled: bool
+    api_key_set: bool | None = None
 
 
 class ModelsConfigResponse(BaseModel):
@@ -153,20 +160,34 @@ async def get_models_config(session=Depends(get_db_session)):
     embedding = await get_embedding_config_async(session)
     mineru = await get_mineru_config_async(session)
     asr = await get_asr_config_async(session)
+
+    llm_api_key = resolve_llm_api_key(llm["provider"])
+    embedding_api_key = resolve_embedding_api_key(
+        embedding["provider"],
+        embedding.get("mode"),
+    )
+    embedding_api_key_set = (
+        None if embedding_api_key == _NOT_APPLICABLE else bool(embedding_api_key)
+    )
+    mineru_api_key = resolve_mineru_api_key(mineru["mode"])
+    mineru_api_key_set = None if mineru_api_key == _NOT_APPLICABLE else bool(mineru_api_key)
     asr_api_key = resolve_asr_api_key(asr["provider"])
+
     return ModelsConfigResponse(
-        llm=LLMConfigResponse(**llm),
+        llm=LLMConfigResponse(**llm, api_key_set=bool(llm_api_key)),
         embedding=EmbeddingConfigResponse(
             provider=embedding["provider"],
             mode=embedding.get("mode"),
             model=embedding["model"],
             dim=embedding["dim"],
             source=embedding["source"],
+            api_key_set=embedding_api_key_set,
         ),
         mineru=MinerUConfigResponse(
             mode=mineru["mode"],
             source=mineru["source"],
             local_enabled=bool(mineru.get("local_enabled", False)),
+            api_key_set=mineru_api_key_set,
         ),
         asr=ASRConfigResponse(
             provider=asr["provider"],
@@ -268,7 +289,10 @@ async def update_llm_config(req: UpdateLLMRequest, session=Depends(get_db_sessio
     apply_llm_runtime_env(next_cfg)
     reset_llm_singleton()
 
-    return LLMConfigResponse(**next_cfg)
+    return LLMConfigResponse(
+        **next_cfg,
+        api_key_set=bool(resolve_llm_api_key(next_cfg["provider"])),
+    )
 
 
 @router.put("/embedding", response_model=EmbeddingConfigResponse)
@@ -327,12 +351,18 @@ async def update_embedding_config(
     apply_embedding_runtime_env(next_cfg)
     reset_embedding_singleton()
 
+    embedding_api_key = resolve_embedding_api_key(next_cfg["provider"], next_cfg.get("mode"))
+    embedding_api_key_set = (
+        None if embedding_api_key == _NOT_APPLICABLE else bool(embedding_api_key)
+    )
+
     return EmbeddingConfigResponse(
         provider=next_cfg["provider"],
         mode=next_cfg.get("mode"),
         model=next_cfg["model"],
         dim=next_cfg["dim"],
         source=next_cfg["source"],
+        api_key_set=embedding_api_key_set,
     )
 
 
@@ -400,7 +430,10 @@ async def update_mineru_config(req: UpdateMinerURequest, session=Depends(get_db_
 
     apply_mineru_runtime_env(next_cfg)
 
-    return MinerUConfigResponse(**next_cfg)
+    mineru_api_key = resolve_mineru_api_key(next_cfg["mode"])
+    mineru_api_key_set = None if mineru_api_key == _NOT_APPLICABLE else bool(mineru_api_key)
+
+    return MinerUConfigResponse(**next_cfg, api_key_set=mineru_api_key_set)
 
 
 @router.post("/llm/reset", response_model=ResetResponse)

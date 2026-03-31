@@ -207,6 +207,9 @@ export const uiStrings = {
       zh: "请先在环境变量中配置 {provider} 的 API key",
       en: "Please configure {provider} API key in environment variables",
     },
+    apiKeyStatus: { zh: "API Key", en: "API key" },
+    apiKeyConfigured: { zh: "API key 已配置", en: "API key configured" },
+    apiKeyMissing: { zh: "API key 未配置", en: "API key not configured" },
     embeddingSwitchWarning: {
       zh: "切换 Embedding 仅影响后续新文档的索引。已索引文档需通过重新索引才能迁移。",
       en: "Switching Embedding only affects future document indexing. Re-index is required to migrate existing documents.",

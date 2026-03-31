@@ -7,6 +7,7 @@ export interface LLMConfig {
   max_tokens: number;
   top_p: number;
   source: string;
+  api_key_set: boolean;
 }
 
 export interface EmbeddingConfig {
@@ -15,6 +16,7 @@ export interface EmbeddingConfig {
   model: string;
   dim: number;
   source: string;
+  api_key_set: boolean | null;
 }
 
 export interface ASRConfig {
@@ -28,6 +30,7 @@ export interface MinerUConfig {
   mode: string;
   source: string;
   local_enabled: boolean;
+  api_key_set: boolean | null;
 }
 
 export interface ModelsConfig {

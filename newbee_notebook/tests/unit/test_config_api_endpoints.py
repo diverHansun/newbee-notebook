@@ -102,6 +102,26 @@ def _build_client(monkeypatch):
         "resolve_asr_api_key",
         lambda provider: "configured-key" if provider in {"zhipu", "qwen"} else None,
     )
+    monkeypatch.setattr(
+        config_router,
+        "resolve_llm_api_key",
+        lambda provider: "configured-key" if provider in {"zhipu", "qwen"} else None,
+    )
+    monkeypatch.setattr(config_router, "_NOT_APPLICABLE", "__not_applicable__", raising=False)
+    monkeypatch.setattr(
+        config_router,
+        "resolve_embedding_api_key",
+        lambda provider, mode: (
+            "__not_applicable__"
+            if provider == "qwen3-embedding" and str(mode or "").strip().lower() == "local"
+            else ("configured-key" if provider in {"qwen3-embedding", "zhipu"} else None)
+        ),
+    )
+    monkeypatch.setattr(
+        config_router,
+        "resolve_mineru_api_key",
+        lambda mode: "__not_applicable__" if str(mode or "").strip().lower() == "local" else "configured-key",
+    )
     monkeypatch.setattr(config_router, "get_registered_llm_providers", lambda: ["qwen", "zhipu"])
     monkeypatch.setattr(
         config_router,
@@ -123,11 +143,29 @@ def test_get_models_returns_effective_config(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["llm"]["provider"] == "qwen"
+    assert payload["llm"]["api_key_set"] is True
     assert payload["embedding"]["provider"] == "qwen3-embedding"
+    assert payload["embedding"]["api_key_set"] is True
     assert payload["mineru"]["mode"] == "cloud"
     assert payload["mineru"]["local_enabled"] is True
+    assert payload["mineru"]["api_key_set"] is True
     assert payload["asr"]["provider"] == "zhipu"
     assert payload["asr"]["api_key_set"] is True
+
+
+def test_get_models_returns_null_api_key_status_for_local_modes(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+    store["embedding.mode"] = "local"
+    store["mineru.mode"] = "local"
+
+    response = client.get("/api/v1/config/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["embedding"]["mode"] == "local"
+    assert payload["embedding"]["api_key_set"] is None
+    assert payload["mineru"]["mode"] == "local"
+    assert payload["mineru"]["api_key_set"] is None
 
 
 def test_put_llm_rejects_unknown_provider(monkeypatch):

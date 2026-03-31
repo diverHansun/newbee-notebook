@@ -30,6 +30,7 @@ type LLMDraft = {
   temperature: number;
   max_tokens: number;
   top_p: number;
+  api_key_set: boolean;
 };
 
 type EmbeddingDraft = {
@@ -38,6 +39,7 @@ type EmbeddingDraft = {
   api_model: string;
   model: string;
   dim: number;
+  api_key_set: boolean | null;
 };
 
 type ASRDraft = {
@@ -50,6 +52,7 @@ type MinerUDraft = {
   mode: string;
   source: string;
   local_enabled: boolean;
+  api_key_set: boolean | null;
 };
 
 function formatFloat(value: number): string {
@@ -82,6 +85,7 @@ function toLLMDraft(config: LLMConfig): LLMDraft {
     temperature: config.temperature,
     max_tokens: config.max_tokens,
     top_p: config.top_p,
+    api_key_set: config.api_key_set,
   };
 }
 
@@ -92,6 +96,7 @@ function toEmbeddingDraft(config: EmbeddingConfig): EmbeddingDraft {
     api_model: config.model,
     model: config.model,
     dim: config.dim,
+    api_key_set: config.api_key_set,
   };
 }
 
@@ -108,6 +113,7 @@ function toMinerUDraft(config: MinerUConfig): MinerUDraft {
     mode: config.mode,
     source: config.source,
     local_enabled: config.local_enabled,
+    api_key_set: config.api_key_set,
   };
 }
 
@@ -479,6 +485,23 @@ export function ModelConfigPanel() {
               onTouchEnd={() => commitLLM(llmDraft)}
             />
           </div>
+
+          {llmDraft.api_key_set !== null ? (
+            <div className="control-panel-readonly-row">
+              <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.apiKeyStatus)}</span>
+              <span className="control-panel-status">
+                <span
+                  className={`control-panel-status-dot${llmDraft.api_key_set ? " is-ok" : ""}`}
+                  aria-hidden="true"
+                />
+                <span>
+                  {llmDraft.api_key_set
+                    ? t(uiStrings.controlPanel.apiKeyConfigured)
+                    : t(uiStrings.controlPanel.apiKeyMissing)}
+                </span>
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -608,6 +631,23 @@ export function ModelConfigPanel() {
             <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.embeddingDim)}</span>
             <span>{embeddingDraft.dim}</span>
           </div>
+
+          {embeddingDraft.api_key_set !== null ? (
+            <div className="control-panel-readonly-row">
+              <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.apiKeyStatus)}</span>
+              <span className="control-panel-status">
+                <span
+                  className={`control-panel-status-dot${embeddingDraft.api_key_set ? " is-ok" : ""}`}
+                  aria-hidden="true"
+                />
+                <span>
+                  {embeddingDraft.api_key_set
+                    ? t(uiStrings.controlPanel.apiKeyConfigured)
+                    : t(uiStrings.controlPanel.apiKeyMissing)}
+                </span>
+              </span>
+            </div>
+          ) : null}
 
           <div className="control-panel-warning">{t(uiStrings.controlPanel.embeddingSwitchWarning)}</div>
         </div>
@@ -746,6 +786,23 @@ export function ModelConfigPanel() {
           ) : (
             <div className="control-panel-warning">{t(uiStrings.controlPanel.mineruLocalDisabledHint)}</div>
           )}
+
+          {mineruDraft.api_key_set !== null ? (
+            <div className="control-panel-readonly-row">
+              <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.apiKeyStatus)}</span>
+              <span className="control-panel-status">
+                <span
+                  className={`control-panel-status-dot${mineruDraft.api_key_set ? " is-ok" : ""}`}
+                  aria-hidden="true"
+                />
+                <span>
+                  {mineruDraft.api_key_set
+                    ? t(uiStrings.controlPanel.apiKeyConfigured)
+                    : t(uiStrings.controlPanel.apiKeyMissing)}
+                </span>
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
