@@ -48,7 +48,7 @@ class AgentLoop:
         confirmation_meta: dict[str, ConfirmationMeta] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
-        required_tool_call_before_response: str | None = None,
+        required_tool_call_before_response: str | frozenset[str] | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -274,13 +274,40 @@ class AgentLoop:
         }
 
     def _completion_tool_repair_message(self) -> dict[str, str]:
-        required = self._required_tool_call_before_response or "the required tool"
+        required = self._required_tool_call_before_response
+        if isinstance(required, frozenset):
+            if required:
+                required_text = ", ".join(sorted(required))
+                requirement_text = f"at least one of: {required_text}"
+            else:
+                requirement_text = "the required tool"
+        else:
+            requirement_text = required or "the required tool"
         return {
             "role": "system",
             "content": (
-                f"Repair: before you answer the user, you must call {required}. "
-                f"Do not provide a prose-only reply yet. Generate a valid {required} tool call now."
+                f"Repair: before you answer the user, you must call {requirement_text}. "
+                "Do not provide a prose-only reply yet. Generate a valid tool call now."
             ),
+        }
+
+    def _required_tool_satisfied(self, tool_calls_made: list[str]) -> bool:
+        required = self._required_tool_call_before_response
+        if not required:
+            return True
+        if isinstance(required, frozenset):
+            return bool(required.intersection(tool_calls_made))
+        return required in tool_calls_made
+
+    def _required_tool_enforcement_choice(self) -> dict[str, Any] | str | None:
+        required = self._required_tool_call_before_response
+        if not required:
+            return None
+        if isinstance(required, frozenset):
+            return "required"
+        return {
+            "type": "function",
+            "function": {"name": required},
         }
 
     @staticmethod
@@ -295,6 +322,16 @@ class AgentLoop:
                 f"The current notebook already has grounded context available. "
                 f"For this request, you should consider calling {tool_name} first so the answer is based on notebook evidence "
                 f"instead of a generic response."
+            ),
+        }
+
+    @staticmethod
+    def _force_first_tool_repair_message() -> dict[str, str]:
+        return {
+            "role": "system",
+            "content": (
+                "Repair: this skill run requires calling at least one tool before giving a prose answer. "
+                "Generate a valid tool call now."
             ),
         }
 
@@ -339,6 +376,7 @@ class AgentLoop:
         low_quality_tool_streak = 0
         repair_attempts = 0
         first_turn_repair_attempts = 0
+        force_first_tool_repair_attempts = 0
         force_synthesis = False
         forced_tool_choice: dict[str, Any] | str | None = (
             "required" if self._force_first_tool_call and tool_specs else None
@@ -371,6 +409,18 @@ class AgentLoop:
                 tool_calls = self._extract_tool_calls(response)
                 assistant_content = self._extract_message_content(response).strip()
                 if not tool_calls:
+                    if self._force_first_tool_call and not tool_calls_made:
+                        if force_first_tool_repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
+                            yield ErrorEvent(
+                                code="invalid_tool_output",
+                                message="first turn required a tool call but none was produced",
+                                retriable=False,
+                            )
+                            return
+                        force_first_tool_repair_attempts += 1
+                        messages.append(self._force_first_tool_repair_message())
+                        forced_tool_choice = "required"
+                        continue
                     if (
                         self._mode_config.loop_policy.require_tool_every_iteration
                         and retrieval_iterations < self._mode_config.loop_policy.max_retrieval_iterations
@@ -402,13 +452,10 @@ class AgentLoop:
                     if (
                         assistant_content
                         and self._required_tool_call_before_response
-                        and self._required_tool_call_before_response not in tool_calls_made
+                        and not self._required_tool_satisfied(tool_calls_made)
                     ):
                         messages.append(self._completion_tool_repair_message())
-                        forced_tool_choice = {
-                            "type": "function",
-                            "function": {"name": self._required_tool_call_before_response},
-                        }
+                        forced_tool_choice = self._required_tool_enforcement_choice()
                         continue
                     if assistant_content and not self._mode_config.loop_policy.require_tool_every_iteration:
                         yield PhaseEvent(stage="synthesizing")
@@ -421,6 +468,7 @@ class AgentLoop:
                     break
 
                 repair_attempts = 0
+                force_first_tool_repair_attempts = 0
                 forced_tool_choice = None
                 messages.append(self._assistant_tool_message(tool_calls))
                 yield PhaseEvent(stage="retrieving")
@@ -500,13 +548,10 @@ class AgentLoop:
                     self._relax_scope_if_needed(tool_name, result)
                     if (
                         self._required_tool_call_before_response
-                        and tool_name != self._required_tool_call_before_response
+                        and not self._required_tool_satisfied(tool_calls_made)
                         and result.error is None
                     ):
-                        forced_tool_choice = {
-                            "type": "function",
-                            "function": {"name": self._required_tool_call_before_response},
-                        }
+                        forced_tool_choice = self._required_tool_enforcement_choice()
 
                     if self._mode_config.loop_policy.require_tool_every_iteration:
                         retrieval_iterations += 1
@@ -619,13 +664,10 @@ class AgentLoop:
                     self._relax_scope_if_needed(tool_name, result)
                     if (
                         self._required_tool_call_before_response
-                        and tool_name != self._required_tool_call_before_response
+                        and not self._required_tool_satisfied(tool_calls_made)
                         and result.error is None
                     ):
-                        forced_tool_choice = {
-                            "type": "function",
-                            "function": {"name": self._required_tool_call_before_response},
-                        }
+                        forced_tool_choice = self._required_tool_enforcement_choice()
 
                 force_synthesis = False
                 continue
@@ -633,13 +675,10 @@ class AgentLoop:
             if (
                 synthesized_response
                 and self._required_tool_call_before_response
-                and self._required_tool_call_before_response not in tool_calls_made
+                and not self._required_tool_satisfied(tool_calls_made)
             ):
                 messages.append(self._completion_tool_repair_message())
-                forced_tool_choice = {
-                    "type": "function",
-                    "function": {"name": self._required_tool_call_before_response},
-                }
+                forced_tool_choice = self._required_tool_enforcement_choice()
                 force_synthesis = False
                 continue
 

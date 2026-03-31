@@ -1,6 +1,8 @@
-﻿import copy
+﻿import asyncio
+import copy
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
@@ -11,8 +13,11 @@ from newbee_notebook.api.dependencies import get_chat_service, get_session_servi
 from newbee_notebook.api.routers.chat import router as chat_router
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.session_service import SessionService
+from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.session import SessionManager
+from newbee_notebook.core.skills import SkillContext, SkillManifest
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
+from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 from newbee_notebook.core.tools.registry import ToolRegistry
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.entities.session import Session
@@ -153,6 +158,37 @@ class _RecordingSearchExecutor:
         return []
 
 
+@dataclass
+class _StaticSkillProvider:
+    manifest: SkillManifest
+
+    @property
+    def skill_name(self) -> str:
+        return self.manifest.name
+
+    @property
+    def slash_commands(self) -> list[str]:
+        return [self.manifest.slash_command]
+
+    def build_manifest(self, context: SkillContext) -> SkillManifest:
+        assert context.notebook_id == "nb-1"
+        assert context.activated_command == "/diagram"
+        return self.manifest
+
+
+class _StaticSkillRegistry:
+    def __init__(self, provider: _StaticSkillProvider):
+        self.provider = provider
+
+    def match_command(self, message: str):
+        stripped = str(message or "").strip()
+        if stripped == "/diagram":
+            return self.provider, "/diagram", ""
+        if stripped.startswith("/diagram "):
+            return self.provider, "/diagram", stripped[len("/diagram") :].strip()
+        return None
+
+
 def _tool_call(name: str, arguments: dict, tool_call_id: str = "call-1") -> dict:
     return {
         "id": tool_call_id,
@@ -182,9 +218,23 @@ def _stream_chunk(delta: str) -> dict:
     return {"choices": [{"delta": {"content": delta}}]}
 
 
-def _build_client(*, llm_client: _FakeLLMClient, hybrid_results=(), keyword_results=()):
+def _build_client(
+    *,
+    llm_client: _FakeLLMClient,
+    hybrid_results=(),
+    keyword_results=(),
+    skill_registry=None,
+    confirmation_gateway=None,
+    seeded_session_ids=(),
+):
     notebook_repo = _InMemoryNotebookRepo()
     session_repo = _InMemorySessionRepo()
+    for session_id in seeded_session_ids:
+        session_repo._sessions[session_id] = Session(
+            session_id=session_id,
+            notebook_id="nb-1",
+            message_count=0,
+        )
     message_repo = _InMemoryMessageRepo()
     reference_repo = _InMemoryReferenceRepo()
     notebook_ref_repo = _InMemoryNotebookDocumentRefRepo({"nb-1": ["doc-1"]})
@@ -220,6 +270,8 @@ def _build_client(*, llm_client: _FakeLLMClient, hybrid_results=(), keyword_resu
         ref_repo=notebook_ref_repo,
         message_repo=message_repo,
         session_manager=session_manager,
+        skill_registry=skill_registry,
+        confirmation_gateway=confirmation_gateway,
     )
     session_service = SessionService(
         session_repo=session_repo,
@@ -372,6 +424,123 @@ def test_stream_explain_route_uses_document_scope_and_emits_runtime_events():
     assert keyword_search.payloads[0]["search_type"] == "keyword"
     assert keyword_search.payloads[0]["max_results"] == 4
     assert "Selected text:\nSelected sentence" in llm_client.chat_calls[0]["messages"][-1]["content"]
+
+
+@pytest.mark.integration
+def test_stream_diagram_command_requires_operation_tool_before_done():
+    async def _list_diagrams_execute(_: dict) -> ToolCallResult:
+        return ToolCallResult(content="Found 1 diagram")
+
+    list_diagrams_tool = ToolDefinition(
+        name="list_diagrams",
+        description="List diagrams in notebook",
+        parameters={"type": "object", "properties": {}, "required": []},
+        execute=_list_diagrams_execute,
+    )
+
+    skill_manifest = SkillManifest(
+        name="diagram",
+        slash_command="/diagram",
+        description="diagram operations",
+        tools=[list_diagrams_tool],
+        force_first_tool_call=True,
+        required_tool_call_before_response=frozenset(
+            {
+                "create_diagram",
+                "update_diagram",
+                "delete_diagram",
+                "list_diagrams",
+                "read_diagram",
+            }
+        ),
+    )
+    skill_registry = _StaticSkillRegistry(_StaticSkillProvider(skill_manifest))
+
+    client, _, _, _, _, _ = _build_client(
+        llm_client=_FakeLLMClient(
+            chat_responses=[
+                _chat_response(content="正在为您创建思维导图，请稍候。"),
+                _chat_response(tool_calls=[_tool_call("list_diagrams", {}, "call-diagram")]),
+                _chat_response(content="已完成图表操作。"),
+            ],
+            stream_chunks=[],
+        ),
+        skill_registry=skill_registry,
+    )
+
+    with client.stream(
+        "POST",
+        "/api/v1/chat/notebooks/nb-1/chat/stream",
+        json={
+            "message": "/diagram 删除旧图表并创建新的",
+            "mode": "chat",
+        },
+    ) as response:
+        events = _collect_sse_events(response)
+
+    assert response.status_code == 200
+    event_types = [event["type"] for event in events]
+    assert event_types[0] == "start"
+    assert "error" not in event_types
+    assert "tool_call" in event_types
+    assert event_types[-1] == "done"
+
+    first_tool_call_index = event_types.index("tool_call")
+    done_index = len(event_types) - 1
+    assert first_tool_call_index < done_index
+
+    tool_call_event = next(event for event in events if event["type"] == "tool_call")
+    assert tool_call_event["tool_name"] == "list_diagrams"
+
+    content_chunks = [event["delta"] for event in events if event["type"] == "content"]
+    assert all("正在为您创建思维导图" not in chunk for chunk in content_chunks)
+    assert any("已完成图表操作" in chunk for chunk in content_chunks)
+
+
+@pytest.mark.integration
+def test_confirm_endpoint_resolves_pending_request_and_returns_404_after_consumed():
+    session_id = "session-confirm-approve"
+    confirmation_gateway = ConfirmationGateway()
+    confirmation_gateway.create("req-approve")
+
+    client, _, _, _, _, _ = _build_client(
+        llm_client=_FakeLLMClient(chat_responses=[], stream_chunks=[]),
+        confirmation_gateway=confirmation_gateway,
+        seeded_session_ids=[session_id],
+    )
+
+    confirm_response = client.post(
+        f"/api/v1/chat/{session_id}/confirm",
+        json={"request_id": "req-approve", "approved": True},
+    )
+    assert confirm_response.status_code == 200
+    assert confirm_response.json() == {"status": "resolved"}
+
+    approved = asyncio.run(confirmation_gateway.wait("req-approve", timeout=0.01))
+    assert approved is True
+
+    duplicate_confirm = client.post(
+        f"/api/v1/chat/{session_id}/confirm",
+        json={"request_id": "req-approve", "approved": True},
+    )
+    assert duplicate_confirm.status_code == 404
+    assert duplicate_confirm.json()["detail"] == "Confirmation request not found"
+
+
+@pytest.mark.integration
+def test_confirm_endpoint_returns_404_when_session_not_found():
+    client, _, _, _, _, _ = _build_client(
+        llm_client=_FakeLLMClient(chat_responses=[], stream_chunks=[]),
+        confirmation_gateway=ConfirmationGateway(),
+    )
+
+    response = client.post(
+        "/api/v1/chat/missing-session/confirm",
+        json={"request_id": "req-missing", "approved": False},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Session not found: missing-session"
 
 
 

@@ -592,7 +592,14 @@ class ChatService:
         runtime_mode: ModeType,
         source_document_ids: Optional[List[str]],
     ) -> tuple[
-        str, ModeType, list[Any] | None, str, frozenset[str], dict, bool, str | None
+        str,
+        ModeType,
+        list[Any] | None,
+        str,
+        frozenset[str],
+        dict,
+        bool,
+        str | frozenset[str] | None,
     ]:
         if not self._skill_registry:
             return message, runtime_mode, None, "", frozenset(), {}, False, None

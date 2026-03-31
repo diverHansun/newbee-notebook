@@ -178,7 +178,15 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
     assert manifest.name == "diagram"
     assert manifest.slash_command == "/diagram"
     assert manifest.force_first_tool_call is True
-    assert manifest.required_tool_call_before_response == "create_diagram"
+    assert manifest.required_tool_call_before_response == frozenset(
+        {
+            "create_diagram",
+            "update_diagram",
+            "delete_diagram",
+            "list_diagrams",
+            "read_diagram",
+        }
+    )
     assert manifest.confirmation_required == frozenset(
         {"confirm_diagram_type", "update_diagram", "delete_diagram"}
     )

@@ -227,6 +227,37 @@ async def test_agent_loop_can_require_a_first_turn_tool_call_for_skill_runs():
 
 
 @pytest.mark.anyio
+async def test_force_first_tool_call_repairs_plain_text_first_turn_instead_of_finishing_early():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(content="正在为您创建思维导图，请稍候。"),
+            _chat_response(tool_calls=[_tool_call("create_diagram", {"title": "Plan"})]),
+            _chat_response(content="Diagram created successfully."),
+        ],
+        stream_chunks=[],
+    )
+    tool = _tool(
+        "create_diagram",
+        ToolCallResult(content="Diagram created: [Plan]"),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[tool],
+        mode_config=config,
+        force_first_tool_call=True,
+    )
+
+    result = await loop.run(message="/diagram 请生成图", chat_history=[])
+
+    assert result.response == "Diagram created successfully."
+    assert result.tool_calls_made == ["create_diagram"]
+    assert len(llm.chat_calls) == 3
+    assert llm.chat_calls[0]["tool_choice"] == "required"
+    assert llm.chat_calls[1]["tool_choice"] == "required"
+
+
+@pytest.mark.anyio
 async def test_agent_loop_early_synthesizes_when_quality_gate_is_high():
     llm = _FakeLLMClient(
         chat_responses=[_chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})])],
@@ -711,6 +742,42 @@ async def test_agent_loop_forces_completion_tool_after_supporting_tool_call():
         "type": "function",
         "function": {"name": "create_diagram"},
     }
+
+
+@pytest.mark.anyio
+async def test_agent_loop_accepts_any_required_tool_when_requirement_is_frozenset():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("list_diagrams", {})]),
+            _chat_response(content="Found diagrams successfully."),
+        ],
+        stream_chunks=[],
+    )
+    list_tool = _tool(
+        "list_diagrams",
+        ToolCallResult(content="Found 2 diagram(s)"),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[list_tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[list_tool],
+        mode_config=config,
+        required_tool_call_before_response=frozenset(
+            {
+                "create_diagram",
+                "update_diagram",
+                "delete_diagram",
+                "list_diagrams",
+                "read_diagram",
+            }
+        ),
+    )
+
+    result = await loop.run(message="/diagram list", chat_history=[])
+
+    assert result.response == "Found diagrams successfully."
+    assert result.tool_calls_made == ["list_diagrams"]
+    assert llm.chat_calls[1]["tool_choice"] is None
 
 
 @pytest.mark.anyio

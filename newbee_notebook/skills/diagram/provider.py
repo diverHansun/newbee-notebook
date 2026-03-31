@@ -17,26 +17,15 @@ from newbee_notebook.skills.diagram.tools import (
 
 DIAGRAM_SLASH_COMMAND = "/diagram"
 
-
-def _required_diagram_tool_for_request(message: str) -> str | None:
-    normalized = str(message or "").strip().lower()
-    if not normalized:
-        return "create_diagram"
-
-    delete_hints = ("delete", "remove", "删除", "移除")
-    update_hints = ("update", "edit", "modify", "修改", "更新", "调整")
-    list_hints = ("list", "show all", "all diagrams", "列表", "全部图", "有哪些图")
-    read_hints = ("read", "open", "show", "detail", "查看", "打开", "详情", "内容")
-
-    if any(hint in normalized for hint in delete_hints):
-        return None
-    if any(hint in normalized for hint in update_hints):
-        return None
-    if any(hint in normalized for hint in list_hints):
-        return None
-    if any(hint in normalized for hint in read_hints):
-        return None
-    return "create_diagram"
+DIAGRAM_OPERATION_TOOLS = frozenset(
+    {
+        "create_diagram",
+        "update_diagram",
+        "delete_diagram",
+        "list_diagrams",
+        "read_diagram",
+    }
+)
 
 
 class DiagramSkillProvider:
@@ -62,7 +51,7 @@ class DiagramSkillProvider:
                 "---\n"
                 "Active skill: /diagram\n"
                 "Supported diagram types: mindmap, flowchart, sequence.\n"
-                "Creation requests must finish by calling create_diagram.\n"
+                "A /diagram request must call at least one real diagram operation tool before final response.\n"
                 "Do not output raw <tool_call>...</tool_call> markup in assistant text.\n"
                 "You must infer the target diagram type from user intent.\n"
                 "When type is explicit, call create_diagram directly with diagram_type.\n"
@@ -126,7 +115,5 @@ class DiagramSkillProvider:
                 ),
             },
             force_first_tool_call=True,
-            required_tool_call_before_response=_required_diagram_tool_for_request(
-                context.request_message
-            ),
+            required_tool_call_before_response=DIAGRAM_OPERATION_TOOLS,
         )

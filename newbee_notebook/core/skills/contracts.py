@@ -32,7 +32,7 @@ class SkillManifest:
     confirmation_required: frozenset[str] = field(default_factory=frozenset)
     confirmation_meta: dict[str, ConfirmationMeta] = field(default_factory=dict)
     force_first_tool_call: bool = False
-    required_tool_call_before_response: str | None = None
+    required_tool_call_before_response: str | frozenset[str] | None = None
 
 
 class SkillProvider(Protocol):

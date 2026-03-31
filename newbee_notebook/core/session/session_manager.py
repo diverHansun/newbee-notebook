@@ -335,7 +335,7 @@ class SessionManager:
         confirmation_meta: dict | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
-        required_tool_call_before_response: str | None = None,
+        required_tool_call_before_response: str | frozenset[str] | None = None,
     ):
         effective_confirmation_gateway = (
             confirmation_gateway or self._confirmation_gateway
@@ -381,7 +381,7 @@ class SessionManager:
         confirmation_meta: dict | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
-        required_tool_call_before_response: str | None = None,
+        required_tool_call_before_response: str | frozenset[str] | None = None,
         lang: str = "en",
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
@@ -440,7 +440,7 @@ class SessionManager:
         confirmation_meta: dict | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
-        required_tool_call_before_response: str | None = None,
+        required_tool_call_before_response: str | frozenset[str] | None = None,
         lang: str = "en",
     ) -> SessionRunResult:
         content_parts: list[str] = []
