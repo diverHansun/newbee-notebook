@@ -1,38 +1,199 @@
-# Newbee Notebook
+<div align="center">
 
-Newbee Notebook 是一个面向医疗学习与知识问答的多模式智能助手项目，支持文档上传、知识检索问答和内容总结讲解。
+<img src="assets/pic/logo.png" alt="Newbee Notebook" width="120">
 
-## 功能概览
+# 🐝Newbee Notebook
 
-- `Chat`：通用对话与工具辅助查询
-- `Ask`：基于知识库文档的问答
-- `Conclude`：对文档内容进行总结
-- `Explain`：对概念进行解释和拆解
-- 文档处理：统一转为 Markdown 后进入检索链路
+**新蜂阅读器**
 
-## 文档处理规则
+AI 驱动的交互式文档阅读器。高精度内容解析与检索、Agent 笔记与图表、Bilibili 视频总结——自托管，数据完全由你掌控。
 
-- PDF：`MinerU (cloud/local) -> PyPdf fallback`
-- CSV / Word / TXT / Markdown / HTML 等：`MarkItDown -> Markdown`
+Read, search, and interact with your documents through AI agents — self-hosted, private, extensible.
 
-## 快速入口
+[快速启动](#快速启动) · [详细配置](quickstart.md) · [功能介绍](#核心特性) · [English](README_en.md)
 
-- API 文档：`http://localhost:8000/docs`
-- API 启动脚本：`python main.py --reload --port 8000`
-- 文档上传脚本：`python scripts/upload_documents.py "<file-path>"`
-- 脚本分层说明：`scripts/README.md`
-- Postman 集合：`postman_collection.json`
+<!-- 徽章：GitHub org/repo 路径后续替换 -->
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![GitHub Stars](https://img.shields.io/github/stars/xxx/newbee-notebook)
+![GitHub Issues](https://img.shields.io/github/issues/xxx/newbee-notebook)
 
-## 使用前准备
+</div>
 
-- 详细启动步骤：`quickstart.md`
-- 先复制环境模板：`cp .env.example .env`
-- 至少配置：`ZHIPU_API_KEY`、数据库连接、`MINERU_MODE`
-- 文档转换 Cloud 模式必填：`MINERU_API_KEY`
+---
 
-## 项目文档
+## 产品预览
 
-- 后端文档：`docs/backend-v1/`
-- 前端规划：`docs/frontend-v1/`
-- MinerU V4 改造：`docs/backend-v1/improve-3/`
-- Postman 指南：`POSTMAN_GUIDE.md`
+<!-- 后续会加入演示视频 -->
+
+<div align="center">
+  <img src="assets/screenshots/notebook-dashboard.png" alt="笔记本仪表盘" width="720">
+  <p><em>笔记本仪表盘 — 创建和管理你的知识空间</em></p>
+</div>
+
+<div align="center">
+  <img src="assets/screenshots/markdown-viewer.png" alt="交互式文档阅读" width="720">
+  <p><em>交互式文档阅读 — 左侧文档源、中间 Markdown 渲染、右侧 Studio 面板</em></p>
+</div>
+
+<details>
+<summary>更多截图</summary>
+<br>
+
+<div align="center">
+  <img src="assets/screenshots/AI.png" alt="AI Agent 对话" width="720">
+  <p><em>AI Agent 对话 — 基于文档内容的智能问答与引用溯源</em></p>
+</div>
+
+<div align="center">
+  <img src="assets/screenshots/diagram-display.png" alt="Agent 图表生成" width="480">
+  <p><em>Agent 图表生成 — /diagram 自动创建知识图谱与思维导图</em></p>
+</div>
+
+<div align="center">
+  <img src="assets/screenshots/bilibili-summary.png" alt="Bilibili 视频总结" width="480">
+  <p><em>Bilibili 视频总结 — 视频转录与结构化摘要</em></p>
+</div>
+
+</details>
+
+---
+
+## 核心特性
+
+**交互式文档阅读** — 不仅是看文档，还是和文档对话。选中任意段落即可触发总结（Conclude）或讲解（Explain），阅读过程中遇到的疑问当场解决。书签系统帮你标记和回顾重要内容，不再丢失灵感。
+
+**高精度文档解析与检索** — 基于 [MinerU](https://github.com/opendatalab/MinerU) 的高保真 PDF 解析，表格、公式、多栏排版都能准确还原为 Markdown，数百页的大文件也能从容处理。向量与全文混合检索（pgvector + Elasticsearch）双管齐下，引用溯源精确到原文段落，找到的就是你要的。
+
+**Agent 笔记、图表与视频** — 输入 `/note` 让 Agent 帮你整理笔记，`/diagram` 自动生成思维导图和知识图谱。支持 Bilibili 视频转录与智能总结，从视频内容中快速提炼关键信息。Agent 不是噱头，是真正帮你从文档里提炼结构化知识的工具。
+
+**可配置的 MCP 工具链** — 通过 MCP（Model Context Protocol）和 Skills 系统，你可以自由扩展 Agent 的能力边界。需要接入什么外部工具和服务，自己动手配就行。
+
+**自托管，数据隐私优先** — 完全本地部署，不依赖任何第三方云服务存储你的数据。文档和对话全部留在你自己的服务器上，没有数据上报，没有使用追踪。开源免费（AGPL-3.0），你只需要准备好自己的 API Key。
+
+---
+
+## 横向对比
+
+| 特性 | Google NotebookLM | Open Notebook | Newbee Notebook |
+|---|:---:|:---:|:---:|
+| 开源 | - | MIT | AGPL-3.0 |
+| 自托管 | - | ✓ | ✓ |
+| 数据隐私 | 云端存储 | 本地 | 本地 |
+| 文档解析 | 黑盒 | 基础解析 | MinerU 高精度解析 |
+| 交互式阅读（Conclude / Explain） | 有限 | - | ✓ 选中即触发 |
+| 书签系统 | - | - | ✓ |
+| Agent 笔记 / 图表 | - | Transformations | /note · /diagram |
+| 视频总结 | YouTube | - | Bilibili |
+| 检索方式 | 黑盒 | 向量检索 | 混合检索 + 引用溯源 |
+| 大文件支持 | 有限 | 有限 | MinerU 分块，支持数百页 |
+| LLM 选择 | 仅 Gemini | 多模型 | 可配置（智谱 / 通义等） |
+| 扩展机制 | 封闭 | 插件 | MCP + Skills |
+
+---
+
+## 快速启动
+
+三步开始使用。更多进阶配置（GPU 模式、MinIO 存储、本地 Embedding 等）请查看 [quickstart.md](quickstart.md)。
+
+### 1. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，填入必要的 API Key：
+
+```bash
+# LLM 服务（建议都填写）
+# 智谱 AI — 获取地址：https://open.bigmodel.cn/
+ZHIPU_API_KEY=your_key_here
+
+# 通义千问 — 获取地址：https://bailian.console.aliyun.com/
+DASHSCOPE_API_KEY=your_key_here
+
+# 如需在前端设置面板 / API 中切换 LLM、Embedding、MinerU
+FEATURE_MODEL_SWITCH=true
+
+# 数据库密码
+POSTGRES_PASSWORD=your_password
+
+# PDF 解析（默认 Docker 模式使用云端 MinerU）
+# MinerU API Key — 获取地址：https://mineru.net/apiManage/token
+MINERU_MODE=cloud
+MINERU_API_KEY=your_mineru_key
+```
+
+### 2. 选择启动模式
+
+根据你的硬件选择合适的模式：
+
+| 模式 | 硬件要求 | 命令 |
+|---|---|---|
+| **默认 Docker 模式**（推荐） | 无特殊要求 | `docker compose up -d` |
+| **GPU 本地增强模式** | NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
+| **纯 CPU 全本地**（不推荐） | 无独立显卡，内存 ≥ 32GB | 当前不提供官方一键 Compose，需自行扩展 |
+
+**默认 Docker 模式**（最简单，开箱即用）：
+
+```bash
+docker compose up -d
+```
+
+首次启动会自动构建前端镜像和后端服务，请耐心等待。这个模式下默认使用 `MinIO + 云端 MinerU + API Embedding`，不会启动本地 `mineru-api` 容器。
+
+如果你有 NVIDIA GPU（显存 ≥ 8GB，系统内存 ≥ 32GB），可以切换到 GPU 本地增强模式，让 MinerU 和 Embedding 都在本地 GPU 上运行。使用前需要先下载 Embedding 模型，详见 [quickstart.md — 本地 GPU 模式](quickstart.md#模式二gpu-本地增强模式nvidia-显存--8gb系统内存--32gb)。
+
+### 3. 开始使用
+
+| 服务 | 地址 |
+|---|---|
+| 前端界面 | http://localhost:3000 |
+| API 文档（Swagger） | http://localhost:8000/docs |
+
+> 遇到问题？查看 [quickstart.md](quickstart.md) 中的常见问题部分。
+
+---
+
+## 文档
+
+| 文档 | 说明 |
+|---|---|
+| [quickstart.md](quickstart.md) | 完整的安装配置指南，包括 GPU 模式、MinIO 存储等进阶选项 |
+| [API 文档](http://localhost:8000/docs) | Swagger UI，启动服务后可访问 |
+| [docs/](docs/) | 架构设计与技术文档 |
+
+---
+
+## 近期计划
+
+- [ ] skill机制扩展
+- [ ] 文档处理支持.epub文件
+- [ ] Youtube视频总结
+
+有想法？欢迎通过 [Issues](https://github.com/xxx/newbee-notebook/issues) 告诉我。
+
+---
+
+## 致谢
+
+本项目的pdf文档解析能力由 [MinerU](https://github.com/opendatalab/MinerU) 提供支持，感谢 [OpenDataLab](https://github.com/opendatalab) 团队的出色工作。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。
+
+<!-- 贡献指南规划中 -->
+
+## License
+
+[AGPL-3.0](LICENSE)
+
+---
+
+## 交流
+
+<!-- 微信群二维码，后续替换 -->
+<div align="center">
+  <p>扫码加入微信交流群</p>
+  <img src="assets/wechat-group.png" alt="微信交流群" width="200">
+</div>
