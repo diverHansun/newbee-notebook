@@ -229,6 +229,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        INTERNAL_API_URL: http://api:8000
     image: newbee-notebook/frontend:latest
     container_name: newbee-notebook-frontend
     environment:

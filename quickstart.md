@@ -169,6 +169,7 @@ MINERU_API_KEY=your_key_here
 - `docker compose up -d` 默认固定为云端 MinerU，不会拉起本地 `mineru-api` 容器。
 - 只有 GPU 覆盖栈才内置了本地 `mineru-api` 容器与 `MINERU_LOCAL_ENABLED=true`，可在设置面板中切换 `cloud/local`。
 - 纯 CPU 机器如果想本地跑 MinerU，需要自行准备 CPU 版 `mineru-api` 服务；这条路径至少建议 32GB 内存，且不推荐。
+- 如果开启 Clash Verge 或系统代理后，`cdn-mineru.openxlab.org.cn` 报 `UNEXPECTED_EOF_WHILE_READING` / `curl: (35) TLS connect error`，说明问题已经发生在 OpenXLab CDN 的 TLS 握手阶段，单纯给 Docker 容器补 `HTTP_PROXY` 不一定能修复。优先在 Clash 中给 `cdn-mineru.openxlab.org.cn`、`openxlab.org.cn` 配置 DIRECT 规则；只有在你已经准备好可访问的本地 `mineru-api` 服务时，才建议切到 `MINERU_MODE=local`。仅修改这个变量并不会自动绕过 CDN；如果本地 MinerU 不可用，PDF 最终仍可能回退到 MarkItDown。
 
 **GPU 本地模式（随 GPU 覆盖栈使用）：**
 
@@ -217,6 +218,10 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 STORAGE_BACKEND=local
 DOCUMENTS_DIR=data/documents
 ```
+
+补充说明：
+- `MINIO_ENDPOINT` 是 API / worker 访问 MinIO 的内部地址。
+- `MINIO_PUBLIC_ENDPOINT` 是浏览器访问预签名 URL 的外部地址。在 Docker Desktop 本地开发下，通常保持 `localhost:9000` 即可。
 
 ### 文件处理策略
 
@@ -484,7 +489,7 @@ python -m newbee_notebook.scripts.rebuild_es
 | Apple Silicon / AMD / Intel GPU 该选哪种模式 | 使用默认 Docker 模式；当前官方 GPU 覆盖只支持 NVIDIA CUDA |
 | 没有独立显卡是不是要选“纯 CPU 全本地” | 不需要；大多数无 GPU 设备直接使用默认 Docker 模式即可 |
 | 用户应该在哪里改 torch 版本 | 默认 Docker 模式改 `.env` 中的 `PYTHON_RUNTIME_TORCH_VERSION`；NVIDIA GPU 模式改 `.env` 中的 `CELERY_WORKER_BASE_IMAGE` |
-| 本地模式仍走云端 | 检查 `.env` 中 `MINERU_MODE` 是否为 `local` |
+| 本地模式仍走云端或 PDF 仍回退到 MarkItDown | 检查 `.env` 中 `MINERU_MODE` 是否为 `local`，并确认本地 `mineru-api` 服务真实可达；仅修改这个变量不会自动启用本地 MinerU |
 | Cloud 模式无法处理 PDF | 检查 `.env` 中 `MINERU_API_KEY` 是否已填写 |
 | 默认模式下没有 `mineru-api` 容器 | 这是正常现象；默认模式使用云端 MinerU，只有 GPU 覆盖栈才会启动本地 `mineru-api` |
 | `docker compose down -v` 后文档丢失 | 默认 Docker 模式的文档在 MinIO volume 中，执行该命令会一并删除 |

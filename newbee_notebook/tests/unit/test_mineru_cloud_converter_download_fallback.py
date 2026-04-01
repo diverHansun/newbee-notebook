@@ -80,6 +80,35 @@ def test_download_zip_reports_both_requests_and_curl_errors(monkeypatch):
     assert "curl failed" in text
 
 
+def test_download_zip_reports_clash_guidance_for_openxlab_tls_eof(monkeypatch):
+    converter = _make_converter(enable_curl_fallback=True)
+
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *args, **kwargs: _RaiseInContext(
+            requests.exceptions.SSLError("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred")
+        ),  # noqa: ARG005
+    )
+    monkeypatch.setattr(converter, "_resolve_host_ips", lambda _host: ["112.16.251.61"])
+    monkeypatch.setattr(
+        converter,
+        "_download_zip_with_curl",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("curl: (35) TLS connect error: error:0A000126:SSL routines::unexpected eof while reading")
+        ),
+    )
+    monkeypatch.setattr(time, "sleep", lambda _secs: None)
+
+    with pytest.raises(MinerUCloudTransientError) as exc_info:
+        converter._download_zip("https://cdn-mineru.openxlab.org.cn/pdf/result.zip", max_retries=3)
+
+    text = str(exc_info.value)
+    assert "OpenXLab CDN TLS failure" in text
+    assert "Clash Verge" in text
+    assert "MINERU_MODE=local" in text
+
+
 def test_download_zip_without_curl_fallback_keeps_original_error(monkeypatch):
     converter = _make_converter(enable_curl_fallback=False)
 

@@ -1,5 +1,6 @@
 import asyncio
 import io
+import ipaddress
 import json
 import logging
 import os
@@ -31,6 +32,10 @@ class MinerUCloudConverter(Converter):
     DONE_STATES = {"done"}
     RUNNING_STATES = {"waiting-file", "pending", "running", "converting"}
     SUPPORTED_EXTENSIONS = frozenset({".pdf", ".doc", ".docx"})
+    _FAKE_IP_NETWORKS = (
+        ipaddress.ip_network("198.18.0.0/15"),
+        ipaddress.ip_network("100.64.0.0/10"),
+    )
 
     def __init__(
         self,
@@ -210,17 +215,31 @@ class MinerUCloudConverter(Converter):
                 )
                 return self._download_zip_with_curl(full_zip_url, max_retries=max_retries)
             except Exception as curl_exc:  # noqa: BLE001
+                guidance = self._build_cdn_troubleshooting_hint(
+                    host=host,
+                    resolved_ips=resolved_ips,
+                    requests_error=last_exc,
+                    curl_error=curl_exc,
+                )
                 raise MinerUCloudTransientError(
                     "MinerU CDN download failed in both requests and curl fallback "
                     f"(host={host or 'unknown'}, "
                     f"ips={','.join(resolved_ips) if resolved_ips else 'unknown'}). "
                     f"requests_error={last_exc}; curl_error={curl_exc}"
+                    f"{guidance}"
                 ) from curl_exc
 
+        guidance = self._build_cdn_troubleshooting_hint(
+            host=host,
+            resolved_ips=resolved_ips,
+            requests_error=last_exc,
+            curl_error=None,
+        )
         raise MinerUCloudTransientError(
             "MinerU CDN download failed after "
             f"{max_retries} retries (host={host or 'unknown'}, "
             f"ips={','.join(resolved_ips) if resolved_ips else 'unknown'}): {last_exc}"
+            f"{guidance}"
         ) from last_exc
 
     def _download_zip_with_curl(self, full_zip_url: str, max_retries: int = 3) -> bytes:
@@ -289,6 +308,53 @@ class MinerUCloudConverter(Converter):
             return []
         ips = sorted({str(info[4][0]) for info in infos if info and info[4]})
         return ips
+
+    @classmethod
+    def _is_fake_ip(cls, ip_text: str) -> bool:
+        try:
+            ip_addr = ipaddress.ip_address(ip_text)
+        except ValueError:
+            return False
+        return any(ip_addr in network for network in cls._FAKE_IP_NETWORKS)
+
+    @staticmethod
+    def _looks_like_tls_eof_error(error: object) -> bool:
+        if error is None:
+            return False
+        text = str(error).lower()
+        return any(
+            marker in text
+            for marker in (
+                "unexpected eof while reading",
+                "ssleoferror",
+                "tls connect error",
+            )
+        )
+
+    @classmethod
+    def _build_cdn_troubleshooting_hint(
+        cls,
+        *,
+        host: str,
+        resolved_ips: list[str],
+        requests_error: object,
+        curl_error: object,
+    ) -> str:
+        normalized_host = (host or "").strip().lower()
+        fake_ip_detected = any(cls._is_fake_ip(ip) for ip in resolved_ips)
+        tls_eof_detected = cls._looks_like_tls_eof_error(requests_error) or cls._looks_like_tls_eof_error(
+            curl_error
+        )
+
+        if normalized_host.endswith("openxlab.org.cn") and (fake_ip_detected or tls_eof_detected):
+            return (
+                " Troubleshooting: detected an OpenXLab CDN TLS failure. "
+                "If Clash Verge or another proxy is enabled, add DIRECT rules for "
+                "cdn-mineru.openxlab.org.cn and openxlab.org.cn, or bypass proxying for Docker traffic. "
+                "If proxy rules cannot be changed, switch to MINERU_MODE=local as the durable fallback."
+            )
+
+        return ""
 
     @staticmethod
     def _parse_result_zip(zip_bytes: bytes) -> tuple[str, dict[str, bytes], dict[str, bytes], int]:

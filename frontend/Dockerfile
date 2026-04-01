@@ -10,7 +10,10 @@ RUN pnpm install --frozen-lockfile
 
 FROM node:20-alpine AS builder
 
-ENV NEXT_TELEMETRY_DISABLED=1
+ARG INTERNAL_API_URL=http://localhost:8000
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    INTERNAL_API_URL=${INTERNAL_API_URL}
 
 RUN corepack enable
 WORKDIR /app
@@ -21,8 +24,11 @@ RUN pnpm build
 
 FROM node:20-alpine AS runner
 
+ARG INTERNAL_API_URL=http://localhost:8000
+
 ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    INTERNAL_API_URL=${INTERNAL_API_URL}
 
 RUN corepack enable
 WORKDIR /app

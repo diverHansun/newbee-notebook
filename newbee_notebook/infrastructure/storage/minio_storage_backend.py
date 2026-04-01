@@ -70,6 +70,10 @@ class MinIOStorageBackend(StorageBackend):
             secure=endpoint_secure,
         )
         self._bucket = bucket_name
+        self._public_client = self._client
+
+        self._ensure_bucket()
+        bucket_region = self._client._get_region(self._bucket)
 
         if public_endpoint:
             public_host, public_secure = _normalize_endpoint(public_endpoint, endpoint_secure)
@@ -78,11 +82,8 @@ class MinIOStorageBackend(StorageBackend):
                 access_key=access_key,
                 secret_key=secret_key,
                 secure=public_secure,
+                region=bucket_region,
             )
-        else:
-            self._public_client = self._client
-
-        self._ensure_bucket()
 
     def _ensure_bucket(self) -> None:
         if not self._client.bucket_exists(self._bucket):
