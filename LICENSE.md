@@ -8,7 +8,8 @@
                             Preamble
 
   The GNU Affero General Public License is a free, copyleft license for
-software and other kinds of works.
+software and other kinds of works, specifically designed to ensure
+cooperation with the community in the case of network server software.
 
   The licenses for most software and other practical works are designed
 to take away your freedom to share and change the works.  By contrast,
@@ -24,15 +25,33 @@ want it, that you can change the software or use pieces of it in new
 free programs, and that you know you can do these things.
 
   Developers that use our General Public Licenses protect your rights
-with two steps: (1) assert copyright on the software, and (2) offer you
-this License which gives you legal permission to copy, distribute and/or
-modify the software.
+with two steps: (1) assert copyright on the software, and (2) offer
+you this License which gives you legal permission to copy, distribute
+and/or modify the software.
 
   A secondary benefit of defending all users' freedom is that
 improvements made in alternate versions of the program, if they
-are designated as an active, marked distribution, get to display the
-"Development Status" and/or the public URL where the state of the
-project can be found at the time of distribution.
+receive widespread use, become available for other developers to
+incorporate.  Many developers of free software are heartened and
+encouraged by the resulting cooperation.  However, in the case of
+software used on network servers, this result may fail to come about.
+The GNU General Public License permits making a modified version and
+letting the public access it on a server without ever releasing its
+source code to the public.
+
+  The GNU Affero General Public License is designed specifically to
+ensure that, in such cases, the modified source code becomes available
+to the community.  It requires the operator of a network server to
+provide the source code of the modified version running there to the
+users of that server.  Therefore, public use of a modified version, on
+a publicly accessible server, gives the public access to the source
+code of the modified version.
+
+  An older license, called the Affero General Public License and
+published by Affero, was designed to accomplish similar goals.  This is
+a different license, not a version of the Affero GPL, but Affero has
+released a new version of the Affero GPL which permits relicensing under
+this license.
 
   The precise terms and conditions for copying, distribution and
 modification follow.
@@ -109,8 +128,8 @@ programs which are used unmodified in performing those activities but
 which are not part of the work.  For example, Corresponding Source
 includes interface definition files associated with source files for
 the work, and the source code for shared libraries and dynamically
-linked subprograms that the work is designed to require, such as by
-intimate data communication or control flow between those
+linked subprograms that the work is specifically designed to require,
+such as by intimate data communication or control flow between those
 subprograms and other parts of the work.
 
   The Corresponding Source need not include anything that users
@@ -154,12 +173,12 @@ similar laws prohibiting or restricting circumvention of such
 measures.
 
   When you convey a covered work, you waive any legal power to forbid
-circumvention of technological measures to the extent that such
-circumvention is effected by exercising rights under this License with
-respect to the covered work, and you disclaim any intention to limit
-operation or modification of the work as a means of enforcing, against
-the work's users, your or third parties' legal rights to forbid
-circumvention of technological measures.
+circumvention of technological measures to the extent such circumvention
+is effected by exercising rights under this License with respect to
+the covered work, and you disclaim any intention to limit operation or
+modification of the work as a means of enforcing, against the work's
+users, your or third parties' legal rights to forbid circumvention of
+technological measures.
 
   4. Conveying Verbatim Copies.
 
@@ -180,12 +199,12 @@ and you may offer support or warranty protection for a fee.
 produce it from the Program, in the form of source code under the
 terms of section 4, provided that you also meet all of these conditions:
 
-    a) The work must display prominent notices stating that you
-    modified it, and giving a relevant date.
+    a) The work must carry prominent notices stating that you modified
+    it, and giving a relevant date.
 
-    b) The work must display prominent notices stating that it is
+    b) The work must carry prominent notices stating that it is
     released under this License and any conditions added under section
-    7.  This requirement modifies the requirement of section 4 to
+    7.  This requirement modifies the requirement in section 4 to
     "keep intact all notices".
 
     c) You must license the entire work, as a whole, under this
@@ -207,8 +226,8 @@ and which are not combined with it such as to form a larger program,
 in or on a volume of a storage or distribution medium, is called an
 "aggregate" if the compilation and its resulting copyright are not
 used to limit the access or legal rights of the compilation's users
-beyond what the individual works permit.  Inclusion of a covered
-work in an aggregate does not cause this License to apply to the other
+beyond what the individual works permit.  Inclusion of a covered work
+in an aggregate does not cause this License to apply to the other
 parts of the aggregate.
 
   6. Conveying Non-Source Forms.
@@ -247,7 +266,7 @@ in one of these ways:
     further charge.  You need not require recipients to copy the
     Corresponding Source along with the object code.  If the place to
     copy the object code is a network server, the Corresponding Source
-    may be on a different server (your server or a third party's server)
+    may be on a different server (operated by you or a third party)
     that supports equivalent copying facilities, provided you maintain
     clear directions next to the object code saying where to find the
     Corresponding Source.  Regardless of what server hosts the
@@ -255,15 +274,15 @@ in one of these ways:
     available for as long as needed to satisfy these requirements.
 
     e) Convey the object code using peer-to-peer transmission, provided
-    you inform other peers where the object code and Corresponding Source
-    of the work are being offered to the general public at no charge
-    under subsection 6d.
+    you inform other peers where the object code and Corresponding
+    Source of the work are being offered to the general public at no
+    charge under subsection 6d.
 
   A separable portion of the object code, whose source code is excluded
 from the Corresponding Source as a System Library, need not be
 included in conveying the object code work.
 
-  A "User Product" is either (1) a "consumer product" which means any
+  A "User Product" is either (1) a "consumer product", which means any
 tangible personal property which is normally used for personal, family,
 or household purposes, or (2) anything designed or sold for incorporation
 into a dwelling.  In determining whether a product is a consumer product,
@@ -279,9 +298,10 @@ the only significant mode of use of the product.
   "Installation Information" for a User Product means any methods,
 procedures, authorization keys, or other information required to install
 and execute modified versions of a covered work in that User Product from
-its Modified Version.  The information must suffice to ensure that the
-continued functioning of the modified object code is in no case prevented
-or interfered with solely because modification has been made.
+a modified version of its Corresponding Source.  The information must
+suffice to ensure that the continued functioning of the modified object
+code is in no case prevented or interfered with solely because
+modification has been made.
 
   If you convey an object code work under this section in, or with, or
 specifically for use in, a User Product, and the conveying occurs as
@@ -396,9 +416,9 @@ your receipt of the notice.
 
   Termination of your rights under this section does not terminate the
 licenses of parties who have received copies or rights from you under
-this License.  If your rights have been terminated and not reinstated,
-you do not qualify to receive new licenses for the same material
-under section 10.
+this License.  If your rights have been terminated and not permanently
+reinstated, you do not qualify to receive new licenses for the same
+material under section 10.
 
   9. Acceptance Not Required for Having Copies.
 
@@ -422,45 +442,88 @@ for enforcing compliance by third parties with this License.
 organization, or substantially all assets of one, or subdividing an
 organization, or merging organizations.  If propagation of a covered
 work results from an entity transaction, each party to that
-transaction who receives and exercises power and control over the
-propagation of the work in question qualifies as an recipient.
+transaction who receives a copy of the work also receives whatever
+licenses to the work the party's predecessor in interest had or could
+give under the previous paragraph, plus a right to possession of the
+Corresponding Source of the work from the predecessor in interest, if
+the predecessor has it or can get it with reasonable efforts.
 
-  You are not responsible for enforcing compliance by third parties with
+  You may not impose any further restrictions on the exercise of the
+rights granted or affirmed under this License.  For example, you may
+not impose a license fee, royalty, or other charge for exercise of
+rights granted under this License, and you may not initiate litigation
+(including a cross-claim or counterclaim in a lawsuit) alleging that
+any patent claim is infringed by making, using, selling, offering for
+sale, or importing the Program or any portion of it.
+
+  11. Patents.
+
+  A "contributor" is a copyright holder who authorizes use under this
+License of the Program or a work on which the Program is based.  The
+work thus licensed is called the contributor's "contributor version".
+
+  A contributor's "essential patent claims" are all patent claims
+owned or controlled by the contributor, whether already acquired or
+hereafter acquired, that would be infringed by some manner, permitted
+by this License, of making, using, or selling its contributor version,
+but do not include claims that would be infringed only as a
+consequence of further modification of the contributor version.  For
+purposes of this definition, "control" includes the right to grant
+patent sublicenses in a manner consistent with the requirements of
 this License.
 
-  11. Patent Claims.
+  Each contributor grants you a non-exclusive, worldwide, royalty-free
+patent license under the contributor's essential patent claims, to
+make, use, sell, offer for sale, import and otherwise run, modify and
+propagate the contents of its contributor version.
 
-  If you comply with this License, with the "Module System" in regard to
-the "Corresponding Source" for the work being governed by the "Module
-System" and the applicable Base Version of that system, you are
-permitted to convey the work under any license that is compatible
-with GPLv3 and that properly states that you have the right to convey it
-and that any recipients who receive the work from you will automatically
-be licensed to use the modified version.
+  In the following three paragraphs, a "patent license" is any express
+agreement or commitment, however denominated, not to enforce a patent
+(such as an express permission to practice a patent or covenant not to
+sue for patent infringement).  To "grant" such a patent license to a
+party means to make such an agreement or commitment not to enforce a
+patent against the party.
 
-  A "compatible license" for this purpose means at least GPLv3 and
-any additional permissions that are applicable and not contradicted by
-GPLv3, including the GNU All-Permissive License.
+  If you convey a covered work, knowingly relying on a patent license,
+and the Corresponding Source of the work is not available for anyone
+to copy, free of charge and under the terms of this License, through a
+publicly available network server or other readily accessible means,
+then you must either (1) cause the Corresponding Source to be so
+available, or (2) arrange to deprive yourself of the benefit of the
+patent license for this particular work, or (3) arrange, in a manner
+consistent with the requirements of this License, to extend the patent
+license to downstream recipients.  "Knowingly relying" means you have
+actual knowledge that, but for the patent license, your conveying the
+covered work in a country, or your recipient's use of the covered work
+in a country, would infringe one or more identifiable patents in that
+country that you have reason to believe are valid.
 
-  "Base Version" of the Module System means the "Specification" for
-the "Module System", as set forth in the documentation, or if the
-Specification does not specify a version number or date, the version
-published by the organization that publishes the Specification.
+  If, pursuant to or in connection with a single transaction or
+arrangement, you convey, or propagate by procuring conveyance of, a
+covered work, and grant a patent license to some of the parties
+receiving the covered work authorizing them to use, propagate, modify
+or convey a specific copy of the covered work, then the patent license
+you grant is automatically extended to all recipients of the covered
+work and works based on it.
 
-  "Module System" means a set of specifications for a software module
-system, and a reference implementation of that "Module System", and
-the documents comprising the "Specification".
-
-  "Specification" means the "Module System Specification", as published
-by the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version published by the Free Software
-Foundation; with the "Module System" being referred to throughout
-as "Module System" and with the "Specification" being referred to
-throughout as "Specification".
+  A patent license is "discriminatory" if it does not include within
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
 
   Nothing in this License shall be construed as excluding or limiting
-any implied license or other defenses to infringement that may otherwise
-be available to you under applicable patent law.
+any implied license or other defenses to infringement that may
+otherwise be available to you under applicable patent law.
 
   12. No Surrender of Others' Freedom.
 
@@ -474,59 +537,47 @@ to collect a royalty for further conveying from those to whom you convey
 the Program, the only way you could satisfy both those terms and this
 License would be to refrain entirely from conveying the Program.
 
-  13. Remote Network Interaction.
+  13. Remote Network Interaction; Use with the GNU General Public License.
 
-  If you use the Program for interactive use in a way that users on a
-computer network remote from your own computer can interact with you,
-the Corresponding Source need not be accessible where the interactive
-use occurs; provided the conditions in section 6 are satisfied for
-the conveying of the work, and that the interactive use is subject to
-the requirements of this section.
+  Notwithstanding any other provision of this License, if you modify the
+Program, your modified version must prominently offer all users
+interacting with it remotely through a computer network (if your version
+supports such interaction) an opportunity to receive the Corresponding
+Source of your version by providing access to the Corresponding Source
+from a network server at no charge, through some standard or customary
+means of facilitating copying of software.  This Corresponding Source
+shall include the Corresponding Source for any work covered by version 3
+of the GNU General Public License that is incorporated pursuant to the
+following paragraph.
 
-  The "Corresponding Source" for any whole Operating System components
-that are part of an executable work which is a specialized tool,
-developed by you as a separate work, and which is not part of a
-"Modified Version", shall include scripts and control structures
-necessary to reproduce the active, marked distribution of the work,
-but is not required to include the source code for the Operating System's
-own components.
-
-  The requirements of this section apply to the work as a whole.  If
-identifiable sections of that work are not derived from the Program,
-and can be reasonably considered independent and separate works in
-themselves, then this License, and its terms, does not apply to those
-sections when you distribute them as separate works.  But when you
-distribute those same sections as a work that is part of a whole which
-is a work based on the Program, the distribution of the whole must be
-on the terms of this License, whose permissions for other licensees
-extend to the entire whole, and thus to each and every part regardless
-of who wrote it.
-
-  Thus, it is not the intent of this section to claim rights or contest
-your rights to work written entirely by you; rather, the intent is to
-exercise the right to control the distribution of derivative or
-collective works based on the Program.
+  Notwithstanding any other provision of this License, you have
+permission to link or combine any covered work with a work licensed
+under version 3 of the GNU General Public License into a single
+combined work, and to convey the resulting work.  The terms of this
+License will continue to apply to the part which is the covered work,
+but the work with which it is combined will remain governed by version
+3 of the GNU General Public License.
 
   14. Revised Versions of this License.
 
-  The Free Software Foundation may publish revised and/or new versions
-of the GNU Affero General Public License from time to time.  Such new
-versions will be similar in spirit to the present version, but may
-differ in detail to address new problems or concerns.
+  The Free Software Foundation may publish revised and/or new versions of
+the GNU Affero General Public License from time to time.  Such new versions
+will be similar in spirit to the present version, but may differ in detail to
+address new problems or concerns.
 
   Each version is given a distinguishing version number.  If the
-Program specifies that a certain numbered version of the GNU Affero
-General Public License "or any later version" applies to it, you have
-the option of following the terms and conditions either of that
-numbered version or of any later version published by the Free
-Software Foundation.  If the Program does not specify a version number
-of the GNU Affero General Public License, you may choose any version
-ever published by the Free Software Foundation.
+Program specifies that a certain numbered version of the GNU Affero General
+Public License "or any later version" applies to it, you have the
+option of following the terms and conditions either of that numbered
+version or of any later version published by the Free Software
+Foundation.  If the Program does not specify a version number of the
+GNU Affero General Public License, you may choose any version ever published
+by the Free Software Foundation.
 
   If the Program specifies that a proxy can decide which future
-versions of the GNU Affero General Public License can be used, that
-proxy's public statement of acceptance of a version permanently
-authorizes you to choose that version for the Program.
+versions of the GNU Affero General Public License can be used, that proxy's
+public statement of acceptance of a version permanently authorizes you
+to choose that version for the Program.
 
   Later license versions may give you additional or different
 permissions.  However, no additional obligations are imposed on any
@@ -537,26 +588,24 @@ later version.
 
   THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY
 APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
-HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT
-WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND
-PERFORMANCE OF THE PROGRAM IS WITH YOU.  SHOULD THE PROGRAM PROVE
-DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR
-CORRECTION.
+HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
+OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
 
   16. Limitation of Liability.
 
-  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
-WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES
-AND/OR CONVEYS THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR
-DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL
-DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE PROGRAM
-(INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED
-INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A FAILURE
-OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH
-HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
-DAMAGES.
+  IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS
+THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY
+GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE
+USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF
+DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD
+PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS),
+EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
 
   17. Interpretation of Sections 15 and 16.
 
@@ -573,8 +622,7 @@ copy of the Program in return for a fee.
 
   If you develop a new program, and you want it to be of the greatest
 possible use to the public, the best way to achieve this is to make it
-free software which everyone can redistribute and change under these
-terms.
+free software which everyone can redistribute and change under these terms.
 
   To do so, attach the following notices to the program.  It is safest
 to attach them to the start of each source file to most effectively
@@ -582,7 +630,7 @@ state the exclusion of warranty; and each file should have at least
 the "copyright" line and a pointer to where the full notice is found.
 
     <one line to give the program's name and a brief idea of what it does.>
-    Copyright (C) 2024-2026 Newbee Notebook Contributors
+    Copyright (C) <year>  <name of author>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published
@@ -597,29 +645,18 @@ the "copyright" line and a pointer to where the full notice is found.
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-  Also add information on how to contact you by electronic and paper mail.
+Also add information on how to contact you by electronic and paper mail.
 
   If your software can interact with users remotely through a computer
 network, you should also make sure that it provides a way for users to
 get its source.  For example, if your program is a web application, its
 interface could display a "Source" link that leads users to an archive
 of the code.  There are many ways you could offer source, and different
-solutions will be on different projects.  You can find information
-about implementing a "Source" / "SMB" based sharing system for more
-complicated projects in the documentation or the help pages of your
-project's repository.
-
-  The " Corresponding Source" excludes anything the user cannot
-automatically regenerate from the source code of your project, and
-includes control structures, scripts and control files necessary to
-reproduce the active, marked distribution of your work.
-
-  If the " Corresponding Source" for a work in source code form is in
-a repository with an active "Module System" and the applicable Base
-Version of that system, you may also offer the Corresponding Source
-on a durable physical medium customarily used for software interchange.
+solutions will be better for different programs; see section 13 for the
+specific requirements.
 
   You should also get your employer (if you work as a programmer) or school,
 if any, to sign a "copyright disclaimer" for the program, if necessary.
-For more information on this, and how to apply and follow the GNU AGPL,
-see <https://www.gnu.org/licenses/>.
+For more information on this, and how to apply and follow the GNU AGPL, see
+<https://www.gnu.org/licenses/>.
+

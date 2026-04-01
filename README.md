@@ -97,6 +97,14 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 ### 1. 配置环境变量
 
+Windows PowerShell：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+macOS / Linux / Git Bash：
+
 ```bash
 cp .env.example .env
 ```
@@ -127,6 +135,16 @@ MINERU_API_KEY=your_mineru_key
 
 根据你的硬件选择合适的模式：
 
+> 没有独立显卡也可以直接使用，选择“默认 Docker 模式”即可。
+> 这里的“纯 CPU 全本地”特指 MinerU 和 Embedding 都在本机 CPU 上运行，不等于默认 Docker 模式。
+
+| 常见设备 | 推荐模式 | 命令 |
+|---|---|---|
+| Windows / macOS / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | `docker compose up -d` |
+| Apple Silicon Mac / Intel Mac | **默认 Docker 模式** | `docker compose up -d` |
+| AMD / Intel GPU 设备 | **默认 Docker 模式** | `docker compose up -d` |
+| NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | **GPU 本地增强模式** | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
+
 | 模式 | 硬件要求 | 命令 |
 |---|---|---|
 | **默认 Docker 模式**（推荐） | 无特殊要求 | `docker compose up -d` |
@@ -139,9 +157,17 @@ MINERU_API_KEY=your_mineru_key
 docker compose up -d
 ```
 
-首次启动会自动构建前端镜像和后端服务，请耐心等待。这个模式下默认使用 `MinIO + 云端 MinerU + API Embedding`，不会启动本地 `mineru-api` 容器。
+首次启动会自动构建前端、API、Celery Worker 镜像，并在构建阶段安装 Python 依赖，请耐心等待。默认 Docker 模式会给 API / Worker 安装 CPU 版 torch，这样后续重启 `celery-worker` 时不会再重复执行 `pip install`。这个模式下默认使用 `MinIO + 云端 MinerU + API Embedding`，不会启动本地 `mineru-api` 容器。
+
+这个模式适合大多数设备，包括 Windows / macOS / Linux 的无 GPU 机器、只有集显的机器、Apple Silicon，以及当前没有官方 GPU 覆盖配置的 AMD / Intel GPU 设备。
+
+如果你需要调整默认 Docker 模式里的 CPU 版 torch 版本，可在 `.env` 中设置 `PYTHON_RUNTIME_TORCH_VERSION`，然后重新执行 `docker compose up -d --build`。
 
 如果你有 NVIDIA GPU（显存 ≥ 8GB，系统内存 ≥ 32GB），可以切换到 GPU 本地增强模式，让 MinerU 和 Embedding 都在本地 GPU 上运行。使用前需要先下载 Embedding 模型，详见 [quickstart.md — 本地 GPU 模式](quickstart.md#模式二gpu-本地增强模式nvidia-显存--8gb系统内存--32gb)。
+
+如果你使用的是 Apple Silicon、AMD GPU 或 Intel GPU，目前仓库没有提供对应的 Metal / ROCm / oneAPI 本地加速覆盖配置，建议继续使用默认 Docker 模式。
+
+如果你使用的是 NVIDIA GPU，不建议单独改 `torch==x.y.z`；应在 `.env` 中设置 `CELERY_WORKER_BASE_IMAGE` 为与你驱动匹配的 `pytorch/pytorch` 镜像 tag，再执行 GPU 模式的 `--build` 启动命令。
 
 ### 3. 开始使用
 
@@ -186,7 +212,7 @@ docker compose up -d
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[AGPL-3.0](LICENSE.md)
 
 ---
 

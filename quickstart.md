@@ -31,9 +31,23 @@
 | Python | 3.11+ | 本地开发时需要（Docker 部署可跳过） |
 | Node.js | 18+ | 前端本地开发时需要（Docker 部署可跳过） |
 
+补充说明：
+- Windows / macOS：建议使用 Docker Desktop
+- Linux：建议使用 Docker Engine + Docker Compose Plugin
+
 ### 硬件要求与启动模式选择
 
 根据机器配置选择合适的部署模式：
+
+#### 按设备快速选路
+
+| 你的设备 | 推荐启动方式 | 是否支持官方本地 GPU 加速 | 说明 |
+|---|---|---|---|
+| Windows / macOS / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | 否 | 最推荐，直接用云端 MinerU + API Embedding |
+| Apple Silicon Mac / Intel Mac | **默认 Docker 模式** | 否 | 当前仓库没有提供 Metal 本地加速覆盖配置 |
+| AMD / Intel GPU 设备 | **默认 Docker 模式** | 否 | 当前仓库没有提供 ROCm / oneAPI 本地加速覆盖配置 |
+| NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | **GPU 本地增强模式** | 是 | 可使用本地 MinerU + 本地 Embedding |
+| 无 GPU，但希望 MinerU 和 Embedding 全部本地运行 | **手工扩展 CPU 全本地** | 否 | 当前无官方一键 Compose，不推荐 |
 
 | 模式 | 显存 | 内存 | 说明 |
 |---|---|---|---|
@@ -42,6 +56,8 @@
 | **纯 CPU 全本地**（不推荐） | 无独立显卡 | ≥ 32GB | 如需同时本地跑 MinerU 和本地 Embedding，需要额外手工扩展 CPU 版服务，仓库当前不提供官方一键 Compose |
 
 > GPU 模式会为 `mineru-api` 容器分配 32GB 共享内存、为 `celery-worker` 容器分配 16GB 共享内存，请确保系统内存充裕。
+> 默认模式下首次启动会构建 `api` 与 `celery-worker` 镜像，并在构建阶段安装 Python 依赖。CPU 模式会安装 CPU 版 torch；后续重启容器不会再重复 `pip install`。如果你改了 `requirements.txt`，请重新执行 `docker compose up -d --build`。
+> 没有独立显卡并不意味着你必须走“纯 CPU 全本地”。对大多数无 GPU 设备，默认 Docker 模式就是正确选择。
 
 ---
 
@@ -93,6 +109,14 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 ---
 
 ## 配置环境变量
+
+Windows PowerShell：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+macOS / Linux / Git Bash：
 
 ```bash
 cp .env.example .env
@@ -166,6 +190,19 @@ MINERU_LANG_LIST=ch,en
 MINERU_LOCAL_TIMEOUT=0
 ```
 
+### Torch 版本配置
+
+默认 Docker 模式和 NVIDIA GPU 模式的配置方式不同：
+
+- 默认 Docker 模式：通常不需要手动修改。若你确实要更换 CPU 版 torch，可在 `.env` 中设置 `PYTHON_RUNTIME_TORCH_VERSION=2.9.0`，然后重新执行 `docker compose up -d --build`。
+- NVIDIA GPU 模式：不要单独修改 `torch==x.y.z`。请在 `.env` 中设置 `CELERY_WORKER_BASE_IMAGE=pytorch/pytorch:<torch+cuda-tag>`，例如 `pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime`，再执行 `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`。
+- Apple Silicon、AMD GPU、Intel GPU：当前仓库没有官方本地 GPU 加速覆盖配置，建议继续使用默认 Docker 模式。
+
+选择原则：
+- 你关心 CPU 模式能不能跑：通常不用改 torch 版本，直接用默认 Docker 模式。
+- 你关心 NVIDIA GPU 能不能本地加速：不要只看 torch 版本，要看 torch 与 CUDA 的组合是否和驱动匹配，因此优先改 `CELERY_WORKER_BASE_IMAGE`。
+- 无论修改 `PYTHON_RUNTIME_TORCH_VERSION` 还是 `CELERY_WORKER_BASE_IMAGE`，都需要重新执行带 `--build` 的启动命令，让镜像重新构建。
+
 ### 存储后端
 
 通过 Docker Compose 启动时，默认使用 **MinIO 对象存储**（`docker-compose.yml` 已内置 MinIO 服务）。本地开发不通过 Docker 运行 API 时，才使用本地文件系统。
@@ -226,10 +263,13 @@ docker compose logs -f
 - 不会启动本地 `mineru-api` 容器，MinerU 只能走云端。
 - 如果开启了 `FEATURE_MODEL_SWITCH=true`，设置面板中 MinerU 不可切到本地。
 - Embedding 默认是 API 模式；如果你已经准备了本地 Embedding 模型，仍可切到本地 CPU 模式。
+- 适用于大多数设备，包括 Windows / macOS / Linux 的无 GPU 机器、Apple Silicon，以及当前没有官方 GPU 覆盖配置的 AMD / Intel GPU 设备。
 
 ### 模式二：GPU 本地增强模式（NVIDIA 显存 ≥ 8GB，系统内存 ≥ 32GB）
 
 这个模式在默认 Docker 栈上叠加 GPU 覆盖配置：MinerU 与 Embedding 都可以走本地 GPU，也都可以在设置面板里切回云端/API。
+
+适用范围说明：当前官方 GPU 覆盖只支持 NVIDIA CUDA。Apple Silicon、AMD GPU、Intel GPU 不在这一套覆盖配置内。
 
 前置条件：安装 [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 
@@ -247,13 +287,16 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 
 GPU 模式配置说明：
 - Worker 默认使用 `pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime` 镜像（对应 CUDA 12.8），Embedding 在 CUDA 上运行
+- 可在 `.env` 中通过 `CELERY_WORKER_BASE_IMAGE` 覆盖默认 PyTorch/CUDA 镜像 tag，按你的 NVIDIA 驱动版本选择合适的 CUDA 版本
+- 如果你只是想改默认 CPU 镜像里的 torch 版本，而不是切换 CUDA 版本，请改 `.env` 中的 `PYTHON_RUNTIME_TORCH_VERSION`
+- Worker 依赖会在镜像构建阶段一次性安装完成，后续重启不会再次执行 `pip install`
 - mineru-api 设置 `MINERU_VIRTUAL_VRAM_SIZE=8`，触发每次推理后清理显存，适配 8GB 显卡
 - mineru-api 容器 `shm_size=32gb`，Worker 容器 `shm_size=16gb`，请确保系统内存充裕
 - `MINERU_BACKEND` 默认为 `hybrid-auto-engine`
 - 这个模式会新增本地 `mineru-api` 容器（端口 `8001`）
 
 > **注意：PyTorch 镜像版本需与你的显卡驱动匹配。**
-> 上述 `cuda12.8` 是默认配置，如果你的驱动不支持 CUDA 12.8，请修改 `docker-compose.gpu.yml` 中 `celery-worker` 的 `image` 字段，换成与你的环境匹配的 PyTorch 镜像版本。
+> 上述 `cuda12.8` 是默认配置，如果你的驱动不支持 CUDA 12.8，请在 `.env` 中设置 `CELERY_WORKER_BASE_IMAGE`，换成与你环境匹配的 PyTorch 镜像版本。
 > - NVIDIA 显卡：参考 [PyTorch 官方安装页面](https://pytorch.org/get-started/locally/) 查询与驱动版本对应的镜像 tag
 > - 其他品牌显卡（AMD / Intel）：请参照 [MinerU 的相关文档](https://github.com/opendatalab/MinerU) 了解支持情况
 
@@ -293,6 +336,8 @@ QWEN3_EMBEDDING_DEVICE=cuda
 - 你需要自行准备 CPU 版 `mineru-api` 服务与本地 Embedding 模型，因此文档这里不提供一键启动命令。
 
 对于大多数无 GPU 机器，更推荐直接使用默认 Docker 模式；如果确实需要本地 Embedding，可在准备好模型后，把 Embedding 单独切到本地 CPU。
+
+如果你的目标只是“没有 GPU 也能跑起来”，请不要选这一模式，直接使用“默认 Docker 模式”。
 
 ---
 
@@ -436,6 +481,9 @@ python -m newbee_notebook.scripts.rebuild_es
 | 依赖安装失败 | 尝试 `uv sync --reinstall` |
 | Docker 服务启动慢 | 首次构建镜像需要时间；GPU 模式下本地 MinerU 首次启动还需下载模型 |
 | GPU 不可用 | 确保安装了 [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)，或改用默认 Docker 模式 |
+| Apple Silicon / AMD / Intel GPU 该选哪种模式 | 使用默认 Docker 模式；当前官方 GPU 覆盖只支持 NVIDIA CUDA |
+| 没有独立显卡是不是要选“纯 CPU 全本地” | 不需要；大多数无 GPU 设备直接使用默认 Docker 模式即可 |
+| 用户应该在哪里改 torch 版本 | 默认 Docker 模式改 `.env` 中的 `PYTHON_RUNTIME_TORCH_VERSION`；NVIDIA GPU 模式改 `.env` 中的 `CELERY_WORKER_BASE_IMAGE` |
 | 本地模式仍走云端 | 检查 `.env` 中 `MINERU_MODE` 是否为 `local` |
 | Cloud 模式无法处理 PDF | 检查 `.env` 中 `MINERU_API_KEY` 是否已填写 |
 | 默认模式下没有 `mineru-api` 容器 | 这是正常现象；默认模式使用云端 MinerU，只有 GPU 覆盖栈才会启动本地 `mineru-api` |

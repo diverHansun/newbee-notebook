@@ -2,9 +2,22 @@ services:
   # Worker override: GPU-capable PyTorch image so local embedding runs on CUDA.
   # Uses pytorch/pytorch base and skips re-installing CPU torch from requirements.txt.
   celery-worker:
-    image: pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime
-    command: >
-      bash -c "grep -v '^torch' requirements.txt | pip install -q -r /dev/stdin && celery -A newbee_notebook.infrastructure.tasks.celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-1} --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-1} --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-4}"
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+      args:
+        BASE_IMAGE: ${CELERY_WORKER_BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}
+        TORCH_INSTALL_MODE: skip
+    image: newbee-notebook/worker:gpu
+    command:
+      - celery
+      - -A
+      - newbee_notebook.infrastructure.tasks.celery_app
+      - worker
+      - --loglevel=info
+      - --concurrency=${CELERY_CONCURRENCY:-1}
+      - --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-1}
+      - --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-4}
     environment:
       MINERU_MODE: local
       MINERU_LOCAL_ENABLED: "true"
