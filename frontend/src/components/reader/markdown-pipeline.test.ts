@@ -19,4 +19,18 @@ describe("renderMarkdownToHtml", () => {
     expect(html).toContain("①");
     expect(html).not.toContain("\\textcircled");
   });
+
+  it("keeps inline code examples unchanged when they contain textcircled", () => {
+    const html = renderMarkdownToHtml("示例：`\\\\textcircled{1}`");
+
+    expect(html).toContain("\\textcircled{1}");
+    expect(html).not.toContain("①");
+  });
+
+  it("keeps fenced code blocks unchanged when they contain textcircled", () => {
+    const html = renderMarkdownToHtml("```tex\n\\\\textcircled{2}\n```");
+
+    expect(html).toContain("\\textcircled{2}");
+    expect(html).not.toContain("②");
+  });
 });

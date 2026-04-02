@@ -9,6 +9,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import type { Root, Element } from "hast";
+import type { Plugin } from "unified";
 import { visit } from "unist-util-visit";
 
 type RenderMarkdownOptions = {
@@ -18,6 +19,14 @@ type RenderMarkdownOptions = {
 type RehypeImgEnhanceOptions = {
   documentId?: string;
 };
+
+type MarkdownNode = {
+  type: string;
+  value?: string;
+  children?: MarkdownNode[];
+};
+
+type MarkdownRoot = MarkdownNode;
 
 const CIRCLED_DIGITS = ["⓪", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
 
@@ -44,11 +53,39 @@ function _toCircledText(value: string): string {
   return `(${normalized})`;
 }
 
-function _normalizeTextCircled(content: string): string {
-  return content
-    .replace(/\$\s*\\textcircled\{([^{}]+)\}\s*\$/g, (_match, value: string) => _toCircledText(value))
-    .replace(/\\textcircled\{([^{}]+)\}/g, (_match, value: string) => _toCircledText(value));
+function _normalizeTextCircledInText(content: string): string {
+  return content.replace(/\\textcircled\{([^{}]+)\}/g, (_match, value: string) => _toCircledText(value));
 }
+
+const remarkNormalizeTextCircled: Plugin<[], MarkdownRoot> = () => {
+  return (tree) => {
+    visit(tree, (node, index, parent) => {
+      if (node.type === "text" && "value" in node && typeof node.value === "string") {
+        node.value = _normalizeTextCircledInText(node.value);
+        return;
+      }
+
+      if (
+        (node.type === "inlineMath" || node.type === "math") &&
+        "value" in node &&
+        typeof node.value === "string" &&
+        parent &&
+        typeof index === "number"
+      ) {
+        const markdownParent = parent as MarkdownNode;
+        if (!Array.isArray(markdownParent.children)) return;
+
+        const match = node.value.match(/^\s*\\textcircled\{([^{}]+)\}\s*$/);
+        if (!match) return;
+
+        markdownParent.children.splice(index, 1, {
+          type: "text",
+          value: _toCircledText(match[1] || ""),
+        });
+      }
+    });
+  };
+};
 
 function _normalizeImageSrc(src: unknown, documentId?: string): string {
   const value = String(src || "").trim();
@@ -118,22 +155,23 @@ function _shouldEnableCodeHighlight(content: string): boolean {
 }
 
 export function renderMarkdownToHtml(content: string, options: RenderMarkdownOptions = {}): string {
-  const normalizedContent = _normalizeTextCircled(content || "");
+  const sourceContent = content || "";
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkCjkFriendly);
 
-  const enableMath = _shouldEnableMath(normalizedContent);
+  const enableMath = _shouldEnableMath(sourceContent);
   if (enableMath) {
     processor.use(remarkMath);
   }
+  processor.use(remarkNormalizeTextCircled);
 
   processor
     .use(remarkRehype)
     .use(rehypeSlug);
 
-  if (_shouldEnableCodeHighlight(content)) {
+  if (_shouldEnableCodeHighlight(sourceContent)) {
     processor.use(rehypeHighlight);
   }
   if (enableMath) {
@@ -144,5 +182,5 @@ export function renderMarkdownToHtml(content: string, options: RenderMarkdownOpt
     .use(rehypeImgEnhance, options)
     .use(rehypeStringify);
 
-  return String(processor.processSync(normalizedContent));
+  return String(processor.processSync(sourceContent));
 }
