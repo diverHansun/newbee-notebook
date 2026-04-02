@@ -19,6 +19,37 @@ type RehypeImgEnhanceOptions = {
   documentId?: string;
 };
 
+const CIRCLED_DIGITS = ["⓪", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"];
+
+function _toCircledText(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return value;
+
+  if (/^(?:[0-9]|1[0-9]|20)$/.test(normalized)) {
+    return CIRCLED_DIGITS[Number(normalized)] ?? normalized;
+  }
+
+  if (/^[A-Z]$/.test(normalized)) {
+    return String.fromCodePoint(0x24b6 + normalized.charCodeAt(0) - 65);
+  }
+
+  if (/^[a-z]$/.test(normalized)) {
+    return String.fromCodePoint(0x24d0 + normalized.charCodeAt(0) - 97);
+  }
+
+  if ([...normalized].length === 1) {
+    return `${normalized}\u20DD`;
+  }
+
+  return `(${normalized})`;
+}
+
+function _normalizeTextCircled(content: string): string {
+  return content
+    .replace(/\$\s*\\textcircled\{([^{}]+)\}\s*\$/g, (_match, value: string) => _toCircledText(value))
+    .replace(/\\textcircled\{([^{}]+)\}/g, (_match, value: string) => _toCircledText(value));
+}
+
 function _normalizeImageSrc(src: unknown, documentId?: string): string {
   const value = String(src || "").trim();
   if (!value) return value;
@@ -87,12 +118,13 @@ function _shouldEnableCodeHighlight(content: string): boolean {
 }
 
 export function renderMarkdownToHtml(content: string, options: RenderMarkdownOptions = {}): string {
+  const normalizedContent = _normalizeTextCircled(content || "");
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkCjkFriendly);
 
-  const enableMath = _shouldEnableMath(content);
+  const enableMath = _shouldEnableMath(normalizedContent);
   if (enableMath) {
     processor.use(remarkMath);
   }
@@ -112,5 +144,5 @@ export function renderMarkdownToHtml(content: string, options: RenderMarkdownOpt
     .use(rehypeImgEnhance, options)
     .use(rehypeStringify);
 
-  return String(processor.processSync(content || ""));
+  return String(processor.processSync(normalizedContent));
 }

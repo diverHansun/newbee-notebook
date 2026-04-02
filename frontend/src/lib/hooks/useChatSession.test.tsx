@@ -69,16 +69,33 @@ describe("useChatSession", () => {
           created_at: "2026-03-19T00:00:00.000Z",
           updated_at: "2026-03-19T00:00:00.000Z",
         },
+        {
+          session_id: "session-2",
+          notebook_id: "nb-1",
+          title: "Session 2",
+          message_count: 0,
+          include_ec_context: false,
+          created_at: "2026-03-19T00:01:00.000Z",
+          updated_at: "2026-03-19T00:01:00.000Z",
+        },
       ],
       pagination: {
-        total: 1,
+        total: 2,
         limit: 20,
         offset: 0,
         has_next: false,
         has_prev: false,
       },
     });
-    listSessionMessages.mockResolvedValue({ data: [] });
+    listSessionMessages.mockImplementation(async (sessionId: string) => {
+      if (sessionId === "session-1") {
+        return { data: [] };
+      }
+      if (sessionId === "session-2") {
+        return { data: [] };
+      }
+      return { data: [] };
+    });
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
@@ -158,5 +175,63 @@ describe("useChatSession", () => {
         queryKey: ["video-summaries", "all"],
       });
     });
+  });
+
+  it("keeps local streaming messages when switching away and back to the active session", async () => {
+    let resolveStream: (() => void) | undefined;
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 789 });
+        await new Promise<void>((resolve) => {
+          resolveStream = resolve;
+        });
+      }
+    );
+
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    act(() => {
+      void result.current.sendMessage("What is Jungian psychology?", "agent");
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2);
+      expect(result.current.messages[0]?.role).toBe("user");
+      expect(result.current.messages[1]?.role).toBe("assistant");
+      expect(result.current.messages[0]?.content).toBe("What is Jungian psychology?");
+      expect(result.current.messages[1]?.status).toBe("streaming");
+    });
+
+    act(() => {
+      result.current.switchSession("session-2");
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-2");
+    });
+
+    expect(result.current.messages).toHaveLength(0);
+
+    act(() => {
+      result.current.switchSession("session-1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+      expect(result.current.messages).toHaveLength(2);
+      expect(result.current.messages[0]?.role).toBe("user");
+      expect(result.current.messages[1]?.role).toBe("assistant");
+      expect(result.current.messages[0]?.content).toBe("What is Jungian psychology?");
+      expect(result.current.messages[1]?.status).toBe("streaming");
+    });
+
+    resolveStream?.();
   });
 });

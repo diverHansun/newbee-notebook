@@ -17,6 +17,11 @@ const sora = Sora({
 export const metadata: Metadata = {
   title: "Newbee Notebook",
   description: "Frontend P1 architecture scaffold",
+  icons: {
+    icon: "/assets/images/newbee-icon.jpg",
+    shortcut: "/assets/images/newbee-icon.jpg",
+    apple: "/assets/images/newbee-icon.jpg",
+  },
 };
 
 type RootLayoutProps = {
