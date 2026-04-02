@@ -12,10 +12,9 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 [快速启动](#快速启动) · [详细配置](quickstart.md) · [功能介绍](#核心特性) · [English](README_en.md)
 
-<!-- 徽章：GitHub org/repo 路径后续替换 -->
-![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![GitHub Stars](https://img.shields.io/github/stars/xxx/newbee-notebook)
-![GitHub Issues](https://img.shields.io/github/issues/xxx/newbee-notebook)
+[![License](https://img.shields.io/github/license/diverHansun/newbee-notebook)](LICENSE.md)
+[![GitHub Stars](https://img.shields.io/github/stars/diverHansun/newbee-notebook?style=social)](https://github.com/diverHansun/newbee-notebook/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/diverHansun/newbee-notebook)](https://github.com/diverHansun/newbee-notebook/issues)
 
 </div>
 
@@ -23,7 +22,13 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 ## 产品预览
 
-<!-- 后续会加入演示视频 -->
+<div align="center">
+  <a href="https://github.com/user-attachments/assets/ec24276f-4adf-4986-98fc-8fadb01867f5">
+    <img src="assets/screenshots/markdown-viewer.png" alt="Newbee Notebook 演示视频" width="720">
+  </a>
+  <p><em>演示视频 — 点击封面在 GitHub Release 中观看完整演示</em></p>
+  <p><a href="https://github.com/user-attachments/assets/ec24276f-4adf-4986-98fc-8fadb01867f5">观看发布演示视频</a></p>
+</div>
 
 <div align="center">
   <img src="assets/screenshots/notebook-dashboard.png" alt="笔记本仪表盘" width="720">
@@ -196,7 +201,7 @@ docker compose up -d
 - [ ] 文档处理支持.epub文件
 - [ ] Youtube视频总结
 
-有想法？欢迎通过 [Issues](https://github.com/xxx/newbee-notebook/issues) 告诉我。
+有想法？欢迎通过 [Issues](https://github.com/diverHansun/newbee-notebook/issues) 告诉我。
 
 ---
 
@@ -207,8 +212,6 @@ docker compose up -d
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request。
-
-<!-- 贡献指南规划中 -->
 
 ## License
 
