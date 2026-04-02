@@ -216,10 +216,3 @@ docker compose up -d
 
 ---
 
-## 交流
-
-<!-- 微信群二维码，后续替换 -->
-<div align="center">
-  <p>扫码加入微信交流群</p>
-  <img src="assets/wechat-group.png" alt="微信交流群" width="200">
-</div>
