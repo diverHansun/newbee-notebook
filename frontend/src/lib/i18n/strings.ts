@@ -461,6 +461,14 @@ export const uiStrings = {
         zh: "B站登录已过期或未登录，请重新登录后再试。",
         en: "Bilibili session expired or not logged in. Please login and try again.",
       },
+      inProgressError: {
+        zh: "该视频正在处理中，请稍后查看结果。",
+        en: "This video is already being processed. Please check back shortly.",
+      },
+      maxConcurrentError: {
+        zh: "最多同时处理 5 个视频，请稍后再试。",
+        en: "Up to 5 videos can be processed at the same time. Please try again later.",
+      },
     },
     notes: {
       title: { zh: "笔记", en: "Notes" },

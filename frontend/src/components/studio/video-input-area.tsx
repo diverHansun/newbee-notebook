@@ -96,6 +96,19 @@ function getStepLabel(
   }
 }
 
+function getFriendlyErrorMessage(
+  event: Extract<VideoStreamEvent, { type: "error" }>,
+  t: (value: { zh: string; en: string }) => string
+): string {
+  if (event.error_code === "E_VIDEO_SUMMARIZE_IN_PROGRESS") {
+    return t(uiStrings.video.inProgressError);
+  }
+  if (event.error_code === "E_VIDEO_MAX_CONCURRENT_LIMIT") {
+    return t(uiStrings.video.maxConcurrentError);
+  }
+  return event.message;
+}
+
 export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
   const { lang, t } = useLang();
   const queryClient = useQueryClient();
@@ -238,7 +251,7 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
                 setStreamError(t(uiStrings.video.authError));
                 setIsAuthRelatedError(true);
               } else {
-                setStreamError(event.message);
+                setStreamError(getFriendlyErrorMessage(event, t));
               }
               setProgressSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
             }

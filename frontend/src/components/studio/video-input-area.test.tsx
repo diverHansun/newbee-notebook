@@ -227,6 +227,30 @@ describe("VideoInputArea", () => {
     });
   });
 
+  it("shows a localized friendly message when the processing capacity is full", async () => {
+    const user = userEvent.setup();
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({
+          type: "error",
+          error_code: "E_VIDEO_MAX_CONCURRENT_LIMIT",
+          message: "At most 5 videos can be processed at the same time. Please try again later.",
+        });
+      }
+    );
+
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "https://youtu.be/dQw4w9WgXcQ");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/up to 5 videos can be processed at the same time/i)
+      ).toBeInTheDocument();
+    });
+  });
+
   it("falls back to a qr link when the backend only returns qr_url", async () => {
     const user = userEvent.setup();
     apiMocks.streamBilibiliQrLogin.mockImplementation(
