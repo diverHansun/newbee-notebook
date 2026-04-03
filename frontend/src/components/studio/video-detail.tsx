@@ -19,6 +19,17 @@ type VideoDetailProps = {
   onBack: () => void;
 };
 
+function formatDuration(durationSeconds: number): string {
+  const totalSeconds = Math.max(0, durationSeconds || 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatPlatform(platform: string): string {
+  return platform === "youtube" ? "YouTube" : "Bilibili";
+}
+
 export function VideoDetail({ notebookId, summaryId, onBack }: VideoDetailProps) {
   const { t } = useLang();
   const summaryQuery = useVideoSummary(summaryId);
@@ -75,18 +86,19 @@ export function VideoDetail({ notebookId, summaryId, onBack }: VideoDetailProps)
           </div>
         </div>
 
-        <div className="card" style={{ padding: 12 }}>
+        <div className="card video-detail-card">
           <div className="stack-sm">
             <strong>{summary.title}</strong>
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <span className="chip">{summary.uploader_name}</span>
+            <div className="video-summary-meta">
+              <span className="chip">{formatPlatform(summary.platform)}</span>
+              <span className="chip">{summary.uploader_name || t(uiStrings.video.unknownUploader)}</span>
+              <span className="chip">{formatDuration(summary.duration_seconds)}</span>
               <span className="chip">{summary.video_id}</span>
-              <span className="chip">{summary.platform}</span>
             </div>
           </div>
         </div>
 
-        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "auto" }}>
+        <div className="card video-detail-markdown">
           <MarkdownViewer content={summary.summary_content} />
         </div>
       </div>

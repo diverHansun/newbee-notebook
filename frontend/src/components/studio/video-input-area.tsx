@@ -256,8 +256,13 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
 
   const platformStatus =
     detectedPlatform === "bilibili" ? (
-      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <span className="chip">{authQuery.data?.logged_in ? t(uiStrings.video.authConnected) : t(uiStrings.video.authDisconnected)}</span>
+      <div className="video-platform-status">
+        <span className="chip">{t(uiStrings.video.platformBilibili)}</span>
+        <span className="chip">
+          {authQuery.data?.logged_in
+            ? t(uiStrings.video.authConnected)
+            : t(uiStrings.video.authDisconnected)}
+        </span>
         {authQuery.data?.logged_in ? (
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => void handleLogout()}>
             {t(uiStrings.video.logout)}
@@ -269,39 +274,39 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
         )}
       </div>
     ) : detectedPlatform === "youtube" ? (
-      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+      <div className="video-platform-status">
         <span className="chip">{t(uiStrings.video.platformYouTube)}</span>
         <span className="chip">{t(uiStrings.video.youtubeNoLogin)}</span>
-        <span className="muted" style={{ fontSize: 12 }}>
+        <span className="muted video-input-description">
           {t(uiStrings.video.youtubeLangHint)}
         </span>
       </div>
     ) : detectedPlatform === "unknown" ? (
-      <span className="muted" style={{ fontSize: 12 }}>
+      <span className="muted video-input-description">
         {t(uiStrings.video.unknownPlatformHint)}
       </span>
     ) : (
-      <span className="muted" style={{ fontSize: 12 }}>
+      <span className="muted video-input-description">
         {t(uiStrings.video.supportedPlatformsHint)}
       </span>
     );
 
   return (
-    <div className="card stack-md" style={{ padding: 12 }}>
-      <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+    <div className="card stack-md video-input-card">
+      <div className="video-input-header">
         <div className="stack-sm">
           <strong>{t(uiStrings.video.title)}</strong>
-          <span className="muted" style={{ fontSize: 12 }}>
+          <span className="muted video-input-description">
             {t(uiStrings.video.description)}
           </span>
         </div>
         {platformStatus}
       </div>
 
-      <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+      <div className="video-input-form">
         <input
           className="input"
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0 }}
           placeholder={t(uiStrings.video.inputPlaceholder)}
           value={input}
           onChange={(event) => {
@@ -322,39 +327,29 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
       </div>
 
       {validationError ? (
-        <span className="muted" style={{ color: "#b91c1c", fontSize: 12 }}>
-          {validationError}
-        </span>
+        <span className="video-error-text">{validationError}</span>
       ) : null}
 
       {streamInfo ? (
-        <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <strong>{streamInfo.title}</strong>
-          {streamInfo.uploaderName ? <span className="chip">{streamInfo.uploaderName}</span> : null}
-          {typeof streamInfo.durationSeconds === "number" ? (
-            <span className="chip">{formatDuration(streamInfo.durationSeconds)}</span>
-          ) : null}
+        <div className="video-info-card">
+          <strong className="video-info-title">{streamInfo.title}</strong>
+          <div className="video-meta-row">
+            {streamInfo.uploaderName ? <span className="chip">{streamInfo.uploaderName}</span> : null}
+            {typeof streamInfo.durationSeconds === "number" ? (
+              <span className="chip">{formatDuration(streamInfo.durationSeconds)}</span>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
       {progressSteps.length > 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div className="video-progress-list">
           {progressSteps.map((step, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+            <div key={i} className="video-progress-item">
               {step.status === "done" ? (
-                <span style={{ color: "#16a34a", fontWeight: 600, width: 14, textAlign: "center" }}>✓</span>
+                <span className="video-progress-done">✓</span>
               ) : (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 14,
-                    height: 14,
-                    border: "2px solid currentColor",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "thinking-spin 0.8s linear infinite",
-                  }}
-                />
+                <span className="video-progress-pending" />
               )}
               <span className="muted">{step.label}</span>
             </div>
@@ -363,10 +358,8 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
       ) : null}
 
       {streamError ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span className="muted" style={{ color: "#b91c1c", fontSize: 12 }}>
-            {streamError}
-          </span>
+        <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="video-error-text">{streamError}</span>
           {isAuthRelatedError && detectedPlatform === "bilibili" && !authQuery.data?.logged_in ? (
             <button
               className="btn btn-ghost btn-sm"

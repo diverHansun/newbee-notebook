@@ -1,0 +1,226 @@
+/* ================================================================
+   Studio Video
+   ================================================================ */
+
+.video-panel-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.video-toolbar {
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    linear-gradient(
+      140deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--secondary) / 0.65) 100%
+    );
+}
+
+.video-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-filter-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-filter-label {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.video-input-card {
+  padding: 14px;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid hsl(var(--border));
+  border-top: 2px solid var(--studio-video-glow);
+  background:
+    radial-gradient(
+      ellipse at 0% 0%,
+      var(--studio-video-bg),
+      transparent 55%
+    ),
+    hsl(var(--card));
+}
+
+.video-input-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.video-input-description {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.video-platform-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.video-input-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.video-error-text {
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.video-info-card {
+  border: 1px dashed hsl(var(--border));
+  border-radius: calc(var(--radius) + 1px);
+  padding: 10px;
+  background: hsl(var(--secondary) / 0.55);
+}
+
+.video-info-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.video-meta-row {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.video-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 1px);
+  background: hsl(var(--secondary) / 0.45);
+}
+
+.video-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.video-progress-done {
+  color: #16a34a;
+  font-weight: 600;
+  width: 14px;
+  text-align: center;
+}
+
+.video-progress-pending {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: thinking-spin 0.8s linear infinite;
+}
+
+.video-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.video-summary-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--card));
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.video-summary-item:hover {
+  transform: translateY(-1px);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.6);
+}
+
+.video-summary-title {
+  line-height: 1.4;
+}
+
+.video-summary-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-status-chip[data-status="completed"] {
+  border-color: hsl(142 70% 40% / 0.38);
+  background: hsl(142 70% 40% / 0.12);
+  color: hsl(142 70% 32%);
+}
+
+.video-status-chip[data-status="processing"] {
+  border-color: hsl(36 92% 44% / 0.38);
+  background: hsl(36 92% 44% / 0.12);
+  color: hsl(31 92% 34%);
+}
+
+.video-status-chip[data-status="failed"] {
+  border-color: hsl(0 84% 54% / 0.4);
+  background: hsl(0 84% 54% / 0.12);
+  color: hsl(0 76% 42%);
+}
+
+.video-summary-subline {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.video-detail-card {
+  padding: 12px;
+}
+
+.video-detail-markdown {
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .video-input-form {
+    flex-direction: column;
+  }
+
+  .video-input-form > .input,
+  .video-input-form > .btn {
+    width: 100%;
+  }
+}
