@@ -12,6 +12,7 @@ export type StudioView =
   | "video-detail";
 
 export type VideoFilterMode = "all" | "notebook";
+export type VideoPlatformFilter = "all" | "bilibili" | "youtube";
 
 type StudioState = {
   studioView: StudioView;
@@ -20,6 +21,7 @@ type StudioState = {
   activeVideoId: string | null;
   activeMarkId: string | null;
   videoFilterMode: VideoFilterMode;
+  videoPlatformFilter: VideoPlatformFilter;
   /** Filter notes by associated document ID (null = show all) */
   noteDocFilter: string | null;
   /** Filter marks by document ID within current notebook (null = show all) */
@@ -34,6 +36,7 @@ type StudioState = {
   backToHome: () => void;
   setActiveMarkId: (markId: string | null) => void;
   setVideoFilterMode: (mode: VideoFilterMode) => void;
+  setVideoPlatformFilter: (mode: VideoPlatformFilter) => void;
   setNoteDocFilter: (documentId: string | null) => void;
   setMarkDocFilter: (documentId: string | null) => void;
 };
@@ -45,6 +48,7 @@ export const useStudioStore = create<StudioState>((set) => ({
   activeVideoId: null,
   activeMarkId: null,
   videoFilterMode: "all",
+  videoPlatformFilter: "all",
   noteDocFilter: null,
   markDocFilter: null,
   navigateTo: (view) => set({ studioView: view }),
@@ -92,6 +96,7 @@ export const useStudioStore = create<StudioState>((set) => ({
       activeMarkId: markId,
     }),
   setVideoFilterMode: (mode) => set({ videoFilterMode: mode }),
+  setVideoPlatformFilter: (mode) => set({ videoPlatformFilter: mode }),
   setNoteDocFilter: (documentId) => set({ noteDocFilter: documentId }),
   setMarkDocFilter: (documentId) => set({ markDocFilter: documentId }),
 }));

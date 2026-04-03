@@ -153,7 +153,7 @@ describe("video api client", () => {
     const result = await getVideoInfo("BV1");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/videos/info?url_or_bvid=BV1",
+      "/api/v1/videos/info?url_or_id=BV1",
       expect.any(Object)
     );
     expect(result.video_id).toBe("BV1");
@@ -163,6 +163,7 @@ describe("video api client", () => {
     fetchMock.mockResolvedValue(
       createSseResponse([
         'event: start\ndata: {"video_id":"BV1"}\n\n',
+        'event: info\ndata: {"video_id":"BV1","title":"Video 1","duration_seconds":120,"uploader_name":"UP"}\n\n',
         'event: subtitle\ndata: {"video_id":"BV1"}\n\n',
         'event: done\ndata: {"summary_id":"sum-1","status":"completed","reused":false}\n\n',
       ])
@@ -172,8 +173,9 @@ describe("video api client", () => {
 
     await summarizeVideoStream(
       {
-        url_or_bvid: "BV1",
+        url_or_id: "BV1",
         notebook_id: "notebook-1",
+        lang: "en",
       },
       {
         onEvent: (event) => events.push(event),
@@ -188,7 +190,23 @@ describe("video api client", () => {
     );
     expect(events).toEqual([
       { type: "start", video_id: "BV1" },
-      { type: "subtitle", video_id: "BV1" },
+      {
+        type: "info",
+        video_id: "BV1",
+        title: "Video 1",
+        duration_seconds: 120,
+        uploader_name: "UP",
+        cover_url: undefined,
+      },
+      {
+        type: "subtitle",
+        video_id: "BV1",
+        source: undefined,
+        char_count: undefined,
+        step: undefined,
+        message: undefined,
+        lang: undefined,
+      },
       { type: "done", summary_id: "sum-1", status: "completed", reused: false },
     ]);
   });

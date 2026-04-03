@@ -65,11 +65,11 @@ describe("VideoInputArea", () => {
     const user = userEvent.setup();
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "https://example.com/video/123");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "https://example.com/video/123");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     expect(apiMocks.summarizeVideoStream).not.toHaveBeenCalled();
-    expect(screen.getByText(/enter a bilibili url or bv id/i)).toBeInTheDocument();
+    expect(screen.getByText(/enter a valid bilibili or youtube link or id/i)).toBeInTheDocument();
   });
 
   it("runs the summarize stream and refreshes the shared video list when done", async () => {
@@ -90,7 +90,7 @@ describe("VideoInputArea", () => {
     const { queryClient } = renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     await waitFor(() => {
@@ -112,7 +112,7 @@ describe("VideoInputArea", () => {
     const { queryClient } = renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     await waitFor(() => {
@@ -140,6 +140,7 @@ describe("VideoInputArea", () => {
 
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /bilibili login/i }));
 
     await waitFor(() => {
@@ -166,7 +167,7 @@ describe("VideoInputArea", () => {
 
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     await waitFor(() => {
@@ -192,7 +193,7 @@ describe("VideoInputArea", () => {
 
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     await waitFor(() => {
@@ -214,7 +215,7 @@ describe("VideoInputArea", () => {
 
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
-    await user.type(screen.getByPlaceholderText(/bilibili url or bv id/i), "BV1abc411c7mD");
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /summarize/i }));
 
     await waitFor(() => {
@@ -222,7 +223,7 @@ describe("VideoInputArea", () => {
         screen.getByText(/bilibili session expired or not logged in/i)
       ).toBeInTheDocument();
       const loginButtons = screen.getAllByRole("button", { name: /bilibili login/i });
-      expect(loginButtons.length).toBeGreaterThanOrEqual(2);
+      expect(loginButtons.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -239,6 +240,7 @@ describe("VideoInputArea", () => {
 
     renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
 
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
     await user.click(screen.getByRole("button", { name: /bilibili login/i }));
 
     await waitFor(() => {
@@ -247,5 +249,16 @@ describe("VideoInputArea", () => {
         "https://qr.example/fallback"
       );
     });
+  });
+
+  it("shows youtube status without bilibili login controls for youtube input", async () => {
+    const user = userEvent.setup();
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "https://youtu.be/dQw4w9WgXcQ");
+
+    expect(screen.getByText("YouTube")).toBeInTheDocument();
+    expect(screen.getByText(/no login required/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /bilibili login/i })).not.toBeInTheDocument();
   });
 });

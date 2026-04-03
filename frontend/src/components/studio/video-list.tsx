@@ -18,19 +18,27 @@ type VideoListProps = {
 
 export function VideoList({ notebookId, onOpenSummary, onBack }: VideoListProps) {
   const { t } = useLang();
-  const { videoFilterMode, setVideoFilterMode } = useStudioStore();
+  const {
+    videoFilterMode,
+    videoPlatformFilter,
+    setVideoFilterMode,
+    setVideoPlatformFilter,
+  } = useStudioStore();
   const allVideosQuery = useAllVideoSummaries();
   const notebookVideosQuery = useVideoSummaries(notebookId);
 
   const activeQuery = videoFilterMode === "all" ? allVideosQuery : notebookVideosQuery;
   const summaries = useMemo(
-    () => activeQuery.data?.summaries ?? [],
-    [activeQuery.data?.summaries]
+    () =>
+      (activeQuery.data?.summaries ?? []).filter((summary) =>
+        videoPlatformFilter === "all" ? true : summary.platform === videoPlatformFilter
+      ),
+    [activeQuery.data?.summaries, videoPlatformFilter]
   );
 
   return (
     <div className="stack-md" style={{ height: "100%", padding: 0 }}>
-      <div className="row-between" style={{ gap: 8, alignItems: "center" }}>
+      <div className="row-between" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button className="btn btn-ghost btn-sm" type="button" onClick={onBack}>
           {t(uiStrings.studio.backToStudio)}
         </button>
@@ -41,6 +49,21 @@ export function VideoList({ notebookId, onOpenSummary, onBack }: VideoListProps)
             { value: "notebook", label: t(uiStrings.studio.thisNotebook) },
           ]}
           onChange={(value) => setVideoFilterMode(value as "all" | "notebook")}
+        />
+      </div>
+
+      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {t(uiStrings.video.platformFilterLabel)}
+        </span>
+        <SegmentedControl
+          value={videoPlatformFilter}
+          options={[
+            { value: "all", label: t(uiStrings.video.platformAll) },
+            { value: "bilibili", label: t(uiStrings.video.platformBilibili) },
+            { value: "youtube", label: t(uiStrings.video.platformYouTube) },
+          ]}
+          onChange={(value) => setVideoPlatformFilter(value as "all" | "bilibili" | "youtube")}
         />
       </div>
 

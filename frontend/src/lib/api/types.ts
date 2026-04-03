@@ -248,14 +248,28 @@ export type VideoInfo = {
 };
 
 export type VideoSummarizeRequest = {
-  url_or_bvid: string;
+  url_or_id: string;
   notebook_id?: string | null;
+  lang?: "zh" | "en";
 };
 
 export type VideoStreamEvent =
   | {
       type: "start" | "subtitle" | "asr" | "summarize";
       video_id: string;
+      source?: string;
+      char_count?: number;
+      step?: string;
+      message?: string;
+      lang?: "zh" | "en";
+    }
+  | {
+      type: "info";
+      video_id: string;
+      title: string;
+      duration_seconds: number;
+      uploader_name?: string;
+      cover_url?: string | null;
     }
   | {
       type: "done";

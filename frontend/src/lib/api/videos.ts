@@ -40,7 +40,18 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
 function mapVideoStreamEvent(
   eventName: string,
   payload: Record<string, unknown>
-): VideoStreamEvent {
+): VideoStreamEvent | null {
+  if (eventName === "info") {
+    return {
+      type: "info",
+      video_id: String(payload.video_id ?? ""),
+      title: String(payload.title ?? ""),
+      duration_seconds: Number(payload.duration_seconds ?? payload.duration ?? 0),
+      uploader_name: payload.uploader_name ? String(payload.uploader_name) : undefined,
+      cover_url: payload.cover_url ? String(payload.cover_url) : undefined,
+    };
+  }
+
   if (eventName === "done") {
     return {
       type: "done",
@@ -68,10 +79,15 @@ function mapVideoStreamEvent(
     return {
       type: eventName,
       video_id: String(payload.video_id ?? ""),
+      source: payload.source ? String(payload.source) : undefined,
+      char_count: typeof payload.char_count === "number" ? payload.char_count : undefined,
+      step: payload.step ? String(payload.step) : undefined,
+      message: payload.message ? String(payload.message) : undefined,
+      lang: payload.lang === "en" ? "en" : payload.lang === "zh" ? "zh" : undefined,
     };
   }
 
-  throw new ApiError(500, "E_VIDEO_STREAM_EVENT", `Unsupported video stream event: ${eventName}`);
+  return null;
 }
 
 export function listAllVideoSummaries() {
@@ -109,8 +125,8 @@ export function disassociateVideoSummary(summaryId: string) {
   });
 }
 
-export function getVideoInfo(urlOrBvid: string) {
-  const search = new URLSearchParams({ url_or_bvid: urlOrBvid });
+export function getVideoInfo(urlOrId: string) {
+  const search = new URLSearchParams({ url_or_id: urlOrId });
   return fetchJson<VideoInfo>(`/videos/info?${search.toString()}`);
 }
 

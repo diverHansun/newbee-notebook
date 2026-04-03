@@ -349,8 +349,8 @@ export const uiStrings = {
       notesAndMarksDescription: { zh: "管理笔记、关联文档和书签", en: "Manage notes, linked documents, and bookmarks" },
       video: { zh: "视频", en: "Video" },
       videoDescription: {
-        zh: "总结和管理 Bilibili 视频内容",
-        en: "Summarize and manage Bilibili videos",
+        zh: "总结和管理 Bilibili / YouTube 视频内容",
+        en: "Summarize and manage Bilibili / YouTube videos",
       },
       diagrams: { zh: "图表", en: "Diagrams" },
     diagramsDescription: { zh: "在 Studio 中查看与管理图表", en: "View and manage generated diagrams in Studio" },
@@ -381,21 +381,38 @@ export const uiStrings = {
     video: {
       title: { zh: "视频摘要", en: "Video Summary" },
       description: {
-        zh: "输入 Bilibili 视频链接或 BV 号，直接生成摘要并管理结果。",
-        en: "Paste a Bilibili URL or BV ID to summarize and manage videos.",
+        zh: "输入 Bilibili / YouTube 视频链接或 ID，直接生成摘要并管理结果。",
+        en: "Paste a Bilibili or YouTube link or ID to summarize and manage videos.",
       },
       inputPlaceholder: {
-        zh: "输入 Bilibili URL 或 BV 号",
-        en: "Paste a Bilibili URL or BV ID",
+        zh: "输入 Bilibili / YouTube 链接或 ID",
+        en: "Paste a Bilibili / YouTube link or ID",
       },
       summarize: { zh: "总结", en: "Summarize" },
       invalidInput: {
-        zh: "请输入有效的 Bilibili URL 或 BV 号",
-        en: "Enter a Bilibili URL or BV ID",
+        zh: "请输入有效的 Bilibili / YouTube 链接或 ID",
+        en: "Enter a valid Bilibili or YouTube link or ID",
       },
+      supportedPlatformsHint: {
+        zh: "支持 Bilibili / YouTube 链接或 ID",
+        en: "Supports Bilibili / YouTube links or IDs",
+      },
+      youtubeNoLogin: { zh: "YouTube 无需登录", en: "No login required" },
+      youtubeLangHint: {
+        zh: "摘要语言跟随当前界面语言",
+        en: "Summary language follows the current UI language",
+      },
+      unknownPlatformHint: {
+        zh: "暂未识别该链接，请检查输入格式",
+        en: "This link is not recognized yet. Please check the format.",
+      },
+      platformAll: { zh: "全部平台", en: "All Platforms" },
+      platformBilibili: { zh: "Bilibili", en: "Bilibili" },
+      platformYouTube: { zh: "YouTube", en: "YouTube" },
+      platformFilterLabel: { zh: "平台", en: "Platform" },
       emptyState: {
         zh: "还没有视频摘要，先输入一个视频开始。",
-        en: "No video summaries yet. Start with a Bilibili video.",
+        en: "No video summaries yet. Start with a video.",
       },
       emptyDetail: {
         zh: "未找到该视频摘要。",
@@ -427,6 +444,8 @@ export const uiStrings = {
       loginTimeout: { zh: "二维码已过期，请重试。", en: "QR code expired. Try again." },
       stepStart: { zh: "获取视频信息", en: "Loading video info" },
       stepSubtitle: { zh: "获取视频字幕", en: "Fetching subtitles" },
+      stepSubtitleCaptionTracks: { zh: "解析页面字幕", en: "Parsing page captions" },
+      stepSubtitleAsr: { zh: "整理 ASR 转写文本", en: "Preparing ASR transcript" },
       stepAsr: { zh: "执行语音转写", en: "Running speech transcription" },
       stepSummarize: { zh: "生成视频摘要", en: "Generating summary" },
       stepDone: { zh: "摘要生成完成", en: "Summary complete" },

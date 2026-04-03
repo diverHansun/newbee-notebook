@@ -15,6 +15,10 @@ function formatDuration(durationSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatPlatform(platform: string): string {
+  return platform === "youtube" ? "YouTube" : "Bilibili";
+}
+
 export function VideoListItem({
   summary,
   isAssociated,
@@ -34,6 +38,7 @@ export function VideoListItem({
           {isAssociated ? <span className="chip">Notebook</span> : null}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <span className="chip">{formatPlatform(summary.platform)}</span>
           <span className="chip">{summary.uploader_name}</span>
           <span className="chip">{formatDuration(summary.duration_seconds)}</span>
           <span className="chip">{summary.status}</span>
