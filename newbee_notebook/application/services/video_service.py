@@ -7,6 +7,9 @@ import logging
 from io import BytesIO
 from typing import Any, Awaitable, Callable, Literal, Optional
 
+from newbee_notebook.application.services.video_concurrency import (
+    VideoConcurrencyController,
+)
 from newbee_notebook.domain.entities.video_summary import VideoSummary
 from newbee_notebook.domain.repositories.reference_repository import (
     NotebookDocumentRefRepository,
@@ -41,6 +44,10 @@ class VideoTranscriptUnavailableError(RuntimeError):
     """Raised when neither subtitle nor ASR can provide a transcript."""
 
 
+class VideoConcurrentProcessingLimitError(RuntimeError):
+    """Raised when too many video summaries are already processing."""
+
+
 class VideoService:
     """Shared video summarize pipeline for Studio and runtime slash commands."""
 
@@ -54,6 +61,7 @@ class VideoService:
         storage: Optional[StorageBackend] = None,
         ref_repo: Optional[NotebookDocumentRefRepository] = None,
         asr_pipeline: Any | None = None,
+        concurrency_controller: VideoConcurrencyController | None = None,
     ) -> None:
         self._video_repo = video_repo
         self._bili_client = bili_client
@@ -62,6 +70,7 @@ class VideoService:
         self._storage = storage or get_runtime_storage_backend()
         self._ref_repo = ref_repo
         self._asr_pipeline = asr_pipeline
+        self._concurrency_controller = concurrency_controller or VideoConcurrencyController()
 
     async def summarize(
         self,
@@ -140,14 +149,11 @@ class VideoService:
 
             transcript_path = await self._persist_transcript(summary.platform, bvid, transcript_text)
             await self._emit(progress_callback, "summarize", {"video_id": bvid, "lang": lang})
-            llm_response = await self._llm_client.chat(
-                messages=self._build_summary_messages(
-                    info=info,
-                    transcript_text=transcript_text,
-                    lang=lang,
-                ),
+            summary.summary_content = await self._generate_summary_content(
+                info=info,
+                transcript_text=transcript_text,
+                lang=lang,
             )
-            summary.summary_content = self._extract_summary_content(llm_response)
             summary.transcript_source = transcript_source
             summary.transcript_path = transcript_path
             summary.status = "completed"
@@ -266,14 +272,11 @@ class VideoService:
 
             transcript_path = await self._persist_transcript(summary.platform, video_id, transcript_text)
             await self._emit(progress_callback, "summarize", {"video_id": video_id, "lang": lang})
-            llm_response = await self._llm_client.chat(
-                messages=self._build_summary_messages(
-                    info=info,
-                    transcript_text=transcript_text,
-                    lang=lang,
-                ),
+            summary.summary_content = await self._generate_summary_content(
+                info=info,
+                transcript_text=transcript_text,
+                lang=lang,
             )
-            summary.summary_content = self._extract_summary_content(llm_response)
             summary.transcript_source = transcript_source
             summary.transcript_path = transcript_path
             summary.status = "completed"
@@ -423,41 +426,50 @@ class VideoService:
         source_url: str,
         notebook_id: str | None,
     ) -> tuple[VideoSummary, bool]:
-        existing = await self._video_repo.get_by_platform_and_video_id(platform, video_id)
-        if existing is not None:
-            if existing.status == "completed":
-                return existing, True
-            if existing.status == "processing":
-                raise VideoSummarizingInProgressError(
-                    f"Video summary is already processing: {video_id}"
+        async with self._concurrency_controller.admission():
+            existing = await self._video_repo.get_by_platform_and_video_id(platform, video_id)
+            if existing is not None:
+                if existing.status == "completed":
+                    return existing, True
+                if existing.status == "processing":
+                    raise VideoSummarizingInProgressError(
+                        f"Video summary is already processing: {video_id}"
+                    )
+
+            processing_count = await self._video_repo.count_by_status("processing")
+            if processing_count >= self._concurrency_controller.max_processing_videos:
+                raise VideoConcurrentProcessingLimitError(
+                    "At most 5 videos can be processed at the same time. Please try again later."
                 )
-            summary = existing
-            summary.notebook_id = notebook_id or summary.notebook_id
-            summary.status = "processing"
-            summary.error_message = None
-            summary.summary_content = ""
-            summary.transcript_source = ""
-            summary.transcript_path = None
-            summary.touch()
-            summary = await self._video_repo.update(summary)
-        else:
-            summary = await self._video_repo.create(
-                VideoSummary(
-                    notebook_id=notebook_id,
-                    platform=platform,
-                    video_id=video_id,
-                    source_url=source_url,
-                    title=video_id,
-                    cover_url=None,
-                    duration_seconds=0,
-                    uploader_name="",
-                    uploader_id="",
-                    stats=None,
-                    status="processing",
+
+            if existing is not None:
+                summary = existing
+                summary.notebook_id = notebook_id or summary.notebook_id
+                summary.status = "processing"
+                summary.error_message = None
+                summary.summary_content = ""
+                summary.transcript_source = ""
+                summary.transcript_path = None
+                summary.touch()
+                summary = await self._video_repo.update(summary)
+            else:
+                summary = await self._video_repo.create(
+                    VideoSummary(
+                        notebook_id=notebook_id,
+                        platform=platform,
+                        video_id=video_id,
+                        source_url=source_url,
+                        title=video_id,
+                        cover_url=None,
+                        duration_seconds=0,
+                        uploader_name="",
+                        uploader_id="",
+                        stats=None,
+                        status="processing",
+                    )
                 )
-            )
-        await self._video_repo.commit()
-        return summary, False
+            await self._video_repo.commit()
+            return summary, False
 
     async def _persist_transcript(self, platform: str, video_id: str, transcript_text: str) -> str:
         return await self._storage.save_file(
@@ -507,6 +519,23 @@ class VideoService:
         summary.stats = info.get("stats")
         summary.touch()
 
+    async def _generate_summary_content(
+        self,
+        *,
+        info: dict[str, Any],
+        transcript_text: str,
+        lang: Literal["zh", "en"],
+    ) -> str:
+        async with self._concurrency_controller.llm_slot():
+            llm_response = await self._llm_client.chat(
+                messages=self._build_summary_messages(
+                    info=info,
+                    transcript_text=transcript_text,
+                    lang=lang,
+                ),
+            )
+        return self._extract_summary_content(llm_response)
+
     async def _transcribe_with_asr(
         self,
         platform: str,
@@ -517,14 +546,15 @@ class VideoService:
             raise VideoTranscriptUnavailableError(
                 f"Transcript is unavailable because subtitles are missing and ASR is disabled: {video_id}"
             )
-        transcript_text = await self._asr_pipeline.transcribe(
-            {
-                "platform": platform,
-                "video_id": video_id,
-                "source_url": info.get("source_url"),
-                "title": info.get("title", ""),
-            }
-        )
+        async with self._concurrency_controller.asr_slot():
+            transcript_text = await self._asr_pipeline.transcribe(
+                {
+                    "platform": platform,
+                    "video_id": video_id,
+                    "source_url": info.get("source_url"),
+                    "title": info.get("title", ""),
+                }
+            )
         if not str(transcript_text or "").strip():
             raise VideoTranscriptUnavailableError(f"ASR returned an empty transcript: {video_id}")
         return transcript_text
@@ -611,6 +641,11 @@ class VideoService:
         if isinstance(exc, VideoSummarizingInProgressError):
             return {
                 "error_code": "E_VIDEO_SUMMARIZE_IN_PROGRESS",
+                "message": str(exc),
+            }
+        if isinstance(exc, VideoConcurrentProcessingLimitError):
+            return {
+                "error_code": "E_VIDEO_MAX_CONCURRENT_LIMIT",
                 "message": str(exc),
             }
         if isinstance(exc, VideoTranscriptUnavailableError):

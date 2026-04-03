@@ -36,6 +36,9 @@ from newbee_notebook.application.services.app_settings_service import AppSetting
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
+from newbee_notebook.application.services.video_concurrency import (
+    VideoConcurrencyController,
+)
 from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
@@ -219,6 +222,7 @@ _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
 _runtime_confirmation_gateway = None
+_video_concurrency_controller = None
 
 
 def get_llm_singleton():
@@ -233,6 +237,13 @@ def get_llm_client_factory_singleton() -> LLMClientFactory:
     if _llm_client_factory is None:
         _llm_client_factory = LLMClientFactory()
     return _llm_client_factory
+
+
+def get_video_concurrency_controller_singleton() -> VideoConcurrencyController:
+    global _video_concurrency_controller
+    if _video_concurrency_controller is None:
+        _video_concurrency_controller = VideoConcurrencyController()
+    return _video_concurrency_controller
 
 
 def get_embedding_singleton():
@@ -590,6 +601,10 @@ async def get_asr_pipeline_dep(
     return None
 
 
+def get_video_concurrency_controller_dep() -> VideoConcurrencyController:
+    return get_video_concurrency_controller_singleton()
+
+
 async def get_video_service(
     video_repo: VideoSummaryRepositoryImpl = Depends(get_video_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
@@ -597,6 +612,7 @@ async def get_video_service(
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
     youtube_client: YouTubeClient = Depends(get_youtube_client_dep),
     asr_pipeline: AsrPipeline | None = Depends(get_asr_pipeline_dep),
+    concurrency_controller: VideoConcurrencyController = Depends(get_video_concurrency_controller_dep),
 ) -> VideoService:
     return VideoService(
         video_repo=video_repo,
@@ -606,6 +622,7 @@ async def get_video_service(
         storage=get_storage(),
         ref_repo=ref_repo,
         asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
     )
 
 

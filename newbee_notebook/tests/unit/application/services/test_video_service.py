@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from newbee_notebook.application.services.video_concurrency import (
+    VideoConcurrencyController,
+)
 from newbee_notebook.domain.entities.video_summary import VideoSummary
 
 
@@ -26,6 +30,7 @@ def anyio_backend():
 @pytest.fixture
 def video_repo():
     repo = AsyncMock()
+    repo.count_by_status.return_value = 0
     repo.commit = AsyncMock()
     return repo
 
@@ -75,7 +80,16 @@ def asr_pipeline():
 
 
 @pytest.fixture
-def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline):
+def concurrency_controller():
+    return VideoConcurrencyController(
+        max_processing_videos=5,
+        max_llm_concurrency=2,
+        max_asr_concurrency=2,
+    )
+
+
+@pytest.fixture
+def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline, concurrency_controller):
     from newbee_notebook.application.services.video_service import VideoService
 
     return VideoService(
@@ -85,6 +99,7 @@ def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline
         storage=storage,
         ref_repo=ref_repo,
         asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
     )
 
 
@@ -321,6 +336,22 @@ async def test_summarize_rejects_existing_processing_summary(service, video_repo
 
 
 @pytest.mark.anyio
+async def test_summarize_rejects_when_processing_capacity_is_full(service, video_repo):
+    from newbee_notebook.application.services.video_service import (
+        VideoConcurrentProcessingLimitError,
+    )
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.count_by_status.return_value = 5
+
+    with pytest.raises(VideoConcurrentProcessingLimitError):
+        await service.summarize("BV1xx411c7mD")
+
+    video_repo.create.assert_not_awaited()
+    video_repo.commit.assert_not_awaited()
+
+
+@pytest.mark.anyio
 async def test_get_raises_when_summary_missing(service, video_repo):
     from newbee_notebook.application.services.video_service import VideoSummaryNotFoundError
 
@@ -460,6 +491,95 @@ async def test_fetch_video_info_supports_youtube(video_repo, bili_client, llm_cl
     assert info["video_id"] == "dQw4w9WgXcQ"
     youtube_client.get_video_info.assert_awaited_once_with("dQw4w9WgXcQ")
     bili_client.get_video_info.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_llm_calls_wait_in_shared_two_slot_queue(
+    video_repo,
+    bili_client,
+    storage,
+    ref_repo,
+    concurrency_controller,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    active = 0
+    peak = 0
+
+    async def chat(*, messages):
+        nonlocal active, peak
+        assert messages
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return _llm_response("## Summary")
+
+    llm_client = AsyncMock()
+    llm_client.chat.side_effect = chat
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+        concurrency_controller=concurrency_controller,
+    )
+
+    await asyncio.gather(
+        service._generate_summary_content(info={"title": "v1"}, transcript_text="one", lang="zh"),
+        service._generate_summary_content(info={"title": "v2"}, transcript_text="two", lang="zh"),
+        service._generate_summary_content(info={"title": "v3"}, transcript_text="three", lang="zh"),
+    )
+
+    assert peak == 2
+    assert llm_client.chat.await_count == 3
+
+
+@pytest.mark.anyio
+async def test_asr_calls_wait_in_shared_two_slot_queue(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    concurrency_controller,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    active = 0
+    peak = 0
+
+    async def transcribe(payload):
+        nonlocal active, peak
+        assert payload["video_id"]
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return "asr transcript"
+
+    asr_pipeline = AsyncMock()
+    asr_pipeline.transcribe.side_effect = transcribe
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
+    )
+
+    await asyncio.gather(
+        service._transcribe_with_asr("youtube", "vid-1", {"source_url": "https://example.com/1"}),
+        service._transcribe_with_asr("youtube", "vid-2", {"source_url": "https://example.com/2"}),
+        service._transcribe_with_asr("youtube", "vid-3", {"source_url": "https://example.com/3"}),
+    )
+
+    assert peak == 2
+    assert asr_pipeline.transcribe.await_count == 3
 
 
 @pytest.mark.anyio

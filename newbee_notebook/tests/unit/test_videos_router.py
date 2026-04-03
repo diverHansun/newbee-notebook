@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 
 from newbee_notebook.api.dependencies import get_video_service
 from newbee_notebook.api.routers import videos as videos_router
-from newbee_notebook.application.services.video_service import VideoSummaryNotFoundError
+from newbee_notebook.application.services.video_service import (
+    VideoConcurrentProcessingLimitError,
+    VideoSummaryNotFoundError,
+)
 from newbee_notebook.domain.entities.video_summary import VideoSummary
 from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
 
@@ -135,6 +138,26 @@ def test_get_video_returns_404_when_missing():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Video summary not found"
+
+
+def test_summarize_stream_returns_capacity_error_payload():
+    service = AsyncMock()
+    service.summarize = AsyncMock(
+        side_effect=VideoConcurrentProcessingLimitError(
+            "At most 5 videos can be processed at the same time. Please try again later."
+        )
+    )
+
+    client = _build_client(service)
+    response = client.post(
+        "/api/v1/videos/summarize",
+        json={"url_or_id": "dQw4w9WgXcQ", "notebook_id": "nb-1"},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "E_VIDEO_MAX_CONCURRENT_LIMIT" in response.text
+    assert "At most 5 videos can be processed at the same time." in response.text
 
 
 def test_delete_video_returns_204():
