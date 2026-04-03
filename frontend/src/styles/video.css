@@ -45,17 +45,39 @@
 }
 
 .video-input-card {
-  padding: 14px;
-  border-radius: calc(var(--radius) + 4px);
-  border: 1px solid hsl(var(--border));
-  border-top: 2px solid var(--studio-video-glow);
-  background:
-    radial-gradient(
-      ellipse at 0% 0%,
-      var(--studio-video-bg),
-      transparent 55%
-    ),
-    hsl(var(--card));
+  padding: 16px 18px;
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid hsl(340 65% 84%);
+  background: hsl(350 100% 98%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 30px -28px rgba(190, 24, 93, 0.28);
+}
+
+.video-input-card .chip {
+  border-color: hsl(338 42% 86%);
+  background: hsl(0 0% 100% / 0.92);
+  color: hsl(var(--foreground));
+}
+
+.video-input-card .btn {
+  border-color: hsl(338 40% 84%);
+  background: hsl(0 0% 100% / 0.94);
+}
+
+.video-input-card .btn:hover {
+  background: hsl(344 100% 97%);
+  border-color: hsl(338 48% 78%);
+}
+
+.video-input-card .input {
+  border-color: hsl(338 30% 85%);
+  background: hsl(0 0% 100%);
+}
+
+.video-input-card .input:focus {
+  border-color: hsl(338 56% 76%);
+  box-shadow: 0 0 0 3px hsl(338 72% 84% / 0.28);
 }
 
 .video-input-header {
@@ -69,12 +91,13 @@
 .video-input-description {
   font-size: 12px;
   line-height: 1.45;
+  max-width: 580px;
 }
 
 .video-platform-status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -82,7 +105,7 @@
 .video-input-form {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .video-error-text {
@@ -91,10 +114,10 @@
 }
 
 .video-info-card {
-  border: 1px dashed hsl(var(--border));
+  border: 1px solid hsl(338 32% 86%);
   border-radius: calc(var(--radius) + 1px);
   padding: 10px;
-  background: hsl(var(--secondary) / 0.55);
+  background: hsl(0 0% 100% / 0.75);
 }
 
 .video-info-title {
@@ -115,9 +138,9 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  border: 1px solid hsl(var(--border));
+  border: 1px solid hsl(338 28% 87%);
   border-radius: calc(var(--radius) + 1px);
-  background: hsl(var(--secondary) / 0.45);
+  background: hsl(0 0% 100% / 0.7);
 }
 
 .video-progress-item {
@@ -212,6 +235,30 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.dark .video-input-card {
+  border-color: hsl(338 24% 34%);
+  background: hsl(220 24% 17%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.dark .video-input-card .chip,
+.dark .video-input-card .btn,
+.dark .video-info-card,
+.dark .video-progress-list {
+  border-color: hsl(338 18% 30%);
+  background: hsl(220 18% 20% / 0.88);
+}
+
+.dark .video-input-card .input {
+  border-color: hsl(338 18% 30%);
+  background: hsl(220 18% 18%);
+}
+
+.dark .video-input-card .input:focus {
+  border-color: hsl(338 40% 58%);
+  box-shadow: 0 0 0 3px hsl(338 40% 48% / 0.18);
 }
 
 @media (max-width: 768px) {
