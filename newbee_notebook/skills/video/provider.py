@@ -35,14 +35,16 @@ class VideoSkillProvider:
         return SkillManifest(
             name="video",
             slash_command="/video",
-            description="Bilibili video search, lookup, and summarization skill",
+            description="Video metadata lookup and summarization skill",
             system_prompt_addition=(
                 "---\n"
                 "Active skill: /video\n"
                 "Use the available tools for video discovery, metadata lookup, content lookup, "
                 "and summary management requests.\n"
-                "When the user provides a URL or BV identifier, prefer get_video_info first and "
+                "When the user provides a URL or video identifier, prefer get_video_info first and "
                 "then use summarize_video only when a summary is requested.\n"
+                "For YouTube inputs, only use get_video_info and summarize_video. "
+                "Do not use discovery tools for YouTube.\n"
                 "Use discover_videos with source=search for keyword search, source=hot for "
                 "trending videos, source=rank for ranking lists, and source=related for "
                 "recommendations based on another video.\n"

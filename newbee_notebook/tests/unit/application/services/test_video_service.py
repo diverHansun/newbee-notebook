@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -424,3 +423,100 @@ async def test_video_query_helpers_delegate_to_bilibili_client(service, bili_cli
     bili_client.get_hot_videos.assert_awaited_once_with(page=3)
     bili_client.get_rank_videos.assert_awaited_once_with(day=7)
     bili_client.get_related_videos.assert_awaited_once_with("BV1xx411c7mD")
+
+
+@pytest.mark.anyio
+async def test_fetch_video_info_supports_youtube(video_repo, bili_client, llm_client, storage, ref_repo):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(
+            return_value={
+                "video_id": "dQw4w9WgXcQ",
+                "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "title": "YouTube title",
+                "cover_url": "https://example.com/yt-cover.jpg",
+                "duration_seconds": 215,
+                "uploader_name": "YT Channel",
+                "uploader_id": "channel-1",
+                "stats": {"view_count": 99},
+            }
+        ),
+    )
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    info = await service.fetch_video_info("https://youtu.be/dQw4w9WgXcQ")
+
+    assert info["video_id"] == "dQw4w9WgXcQ"
+    youtube_client.get_video_info.assert_awaited_once_with("dQw4w9WgXcQ")
+    bili_client.get_video_info.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_summarize_supports_youtube_with_transcript_chain(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    storage.save_file.return_value = "videos/transcripts/youtube-dQw4w9WgXcQ.txt"
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(
+            return_value={
+                "video_id": "dQw4w9WgXcQ",
+                "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "title": "YouTube title",
+                "cover_url": "https://example.com/yt-cover.jpg",
+                "duration_seconds": 215,
+                "uploader_name": "YT Channel",
+                "uploader_id": "channel-1",
+                "stats": {"view_count": 99},
+            }
+        ),
+        get_transcript=AsyncMock(return_value=("youtube transcript", "subtitle")),
+    )
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    summary = await service.summarize(
+        "https://youtu.be/dQw4w9WgXcQ",
+        notebook_id="nb-1",
+        lang="en",
+        progress_callback=progress,
+    )
+
+    assert summary.platform == "youtube"
+    assert summary.video_id == "dQw4w9WgXcQ"
+    assert summary.transcript_source == "subtitle"
+    assert [event for event, _payload in events] == ["start", "info", "subtitle", "summarize", "done"]

@@ -144,8 +144,9 @@ def build_get_video_content_tool(service: VideoService) -> ToolDefinition:
 
 def build_get_video_info_tool(service: VideoService) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
+        url_or_id = str(args.get("url_or_id") or args.get("url_or_bvid") or "")
         try:
-            info = await service.fetch_video_info(str(args.get("url_or_bvid") or ""))
+            info = await service.fetch_video_info(url_or_id)
         except Exception as exc:
             return _safe_error_result(f"Failed to fetch video info: {exc}", "video_info_failed")
         return ToolCallResult(
@@ -160,13 +161,16 @@ def build_get_video_info_tool(service: VideoService) -> ToolDefinition:
 
     return ToolDefinition(
         name="get_video_info",
-        description="Get Bilibili video metadata by URL or BV identifier.",
+        description="Get video metadata by URL or platform-specific identifier.",
         parameters={
             "type": "object",
             "properties": {
-                "url_or_bvid": {"type": "string", "description": "Video URL or BV identifier"},
+                "url_or_id": {
+                    "type": "string",
+                    "description": "Video URL or platform-specific identifier",
+                },
             },
-            "required": ["url_or_bvid"],
+            "required": ["url_or_id"],
         },
         execute=execute,
     )
@@ -175,9 +179,10 @@ def build_get_video_info_tool(service: VideoService) -> ToolDefinition:
 
 def build_summarize_video_tool(service: VideoService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
+        url_or_id = str(args.get("url_or_id") or args.get("url_or_bvid") or "")
         try:
             summary = await service.summarize(
-                str(args.get("url_or_bvid") or ""),
+                url_or_id,
                 notebook_id=notebook_id,
             )
         except Exception as exc:
@@ -189,13 +194,16 @@ def build_summarize_video_tool(service: VideoService, notebook_id: str) -> ToolD
 
     return ToolDefinition(
         name="summarize_video",
-        description="Generate or reuse an AI summary for a Bilibili video.",
+        description="Generate or reuse an AI summary for a Bilibili or YouTube video.",
         parameters={
             "type": "object",
             "properties": {
-                "url_or_bvid": {"type": "string", "description": "Video URL or BV identifier"},
+                "url_or_id": {
+                    "type": "string",
+                    "description": "Video URL or platform-specific identifier",
+                },
             },
-            "required": ["url_or_bvid"],
+            "required": ["url_or_id"],
         },
         execute=execute,
     )

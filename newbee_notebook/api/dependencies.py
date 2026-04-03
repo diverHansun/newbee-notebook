@@ -66,6 +66,7 @@ from newbee_notebook.infrastructure.storage.base import StorageBackend
 from newbee_notebook.infrastructure.asr import QwenTranscriber, ZhipuTranscriber
 from newbee_notebook.infrastructure.bilibili import AsrPipeline, BilibiliAuthManager, BilibiliClient
 from newbee_notebook.infrastructure.bilibili.audio_processor import AudioProcessor
+from newbee_notebook.infrastructure.youtube import YouTubeClient
 from newbee_notebook.skills.note import NoteSkillProvider
 from newbee_notebook.skills.diagram import DiagramSkillProvider
 from newbee_notebook.skills.video import VideoSkillProvider
@@ -503,8 +504,24 @@ async def get_bilibili_client_dep(
     return BilibiliClient(credential=await auth_manager.get_credential())
 
 
-def _build_asr_audio_fetcher(bili_client: BilibiliClient):
+async def get_youtube_client_dep() -> YouTubeClient:
+    return YouTubeClient()
+
+
+def _build_asr_audio_fetcher(
+    bili_client: BilibiliClient,
+    youtube_client: YouTubeClient,
+):
     async def _fetch_audio(source: dict[str, str]) -> str:
+        direct_audio_path = str(source.get("audio_path") or "").strip()
+        if direct_audio_path:
+            return direct_audio_path
+
+        platform = str(source.get("platform") or "bilibili").strip().lower()
+        video_id = str(source.get("video_id") or "")
+        if platform == "youtube":
+            return await youtube_client.download_audio(video_id)
+
         bvid = str(source.get("video_id") or "")
         workspace = tempfile.mkdtemp(prefix="video-asr-")
         audio_url = await bili_client.get_audio_url(bvid)
@@ -546,6 +563,7 @@ def _resolve_qwen_base_url() -> str:
 
 async def get_asr_pipeline_dep(
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    youtube_client: YouTubeClient = Depends(get_youtube_client_dep),
     session=Depends(get_db_session),
 ) -> AsrPipeline | None:
     asr_config = await get_asr_config_async(session)
@@ -555,13 +573,13 @@ async def get_asr_pipeline_dep(
         return None
     if provider == "zhipu":
         return AsrPipeline(
-            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            audio_fetcher=_build_asr_audio_fetcher(bili_client, youtube_client),
             segmenter=_build_asr_segmenter(25),
             transcriber=ZhipuTranscriber(api_key=api_key, model=asr_config["model"]),
         )
     if provider == "qwen":
         return AsrPipeline(
-            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            audio_fetcher=_build_asr_audio_fetcher(bili_client, youtube_client),
             segmenter=_build_asr_segmenter(180),
             transcriber=QwenTranscriber(
                 api_key=api_key,
@@ -577,11 +595,13 @@ async def get_video_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     llm_client=Depends(get_llm_client_dep),
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    youtube_client: YouTubeClient = Depends(get_youtube_client_dep),
     asr_pipeline: AsrPipeline | None = Depends(get_asr_pipeline_dep),
 ) -> VideoService:
     return VideoService(
         video_repo=video_repo,
         bili_client=bili_client,
+        youtube_client=youtube_client,
         llm_client=llm_client,
         storage=get_storage(),
         ref_repo=ref_repo,

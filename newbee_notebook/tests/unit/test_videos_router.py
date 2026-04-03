@@ -60,7 +60,12 @@ def test_list_videos_returns_response():
 def test_summarize_video_streams_sse_events():
     service = AsyncMock()
 
-    async def _summarize(url_or_bvid: str, notebook_id: str | None = None, progress_callback=None):
+    async def _summarize(
+        url_or_id: str,
+        notebook_id: str | None = None,
+        lang: str = "zh",
+        progress_callback=None,
+    ):
         await progress_callback(
             "info",
             {"title": "Video title", "duration": 120, "author_name": "Uploader"},
@@ -73,7 +78,7 @@ def test_summarize_video_streams_sse_events():
     client = _build_client(service)
     response = client.post(
         "/api/v1/videos/summarize",
-        json={"url_or_bvid": "BV1xx411c7mD", "notebook_id": "nb-1"},
+        json={"url_or_id": "BV1xx411c7mD", "notebook_id": "nb-1", "lang": "en"},
     )
 
     assert response.status_code == 200

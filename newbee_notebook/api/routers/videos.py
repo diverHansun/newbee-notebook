@@ -91,8 +91,9 @@ async def _summarize_stream(
     async def _run() -> None:
         try:
             await service.summarize(
-                request.url_or_bvid,
+                request.url_or_id,
                 notebook_id=request.notebook_id,
+                lang=request.lang,
                 progress_callback=_progress_callback,
             )
         except Exception as exc:  # noqa: BLE001
@@ -133,10 +134,14 @@ async def summarize_video(
 
 @router.get("/videos/info", response_model=VideoInfoResponse)
 async def get_video_info(
-    url_or_bvid: str = Query(..., min_length=1),
+    url_or_id: Optional[str] = Query(None, min_length=1),
+    url_or_bvid: Optional[str] = Query(None, min_length=1),
     service: VideoService = Depends(get_video_service),
 ):
-    return VideoInfoResponse(**(await service.fetch_video_info(url_or_bvid)))
+    value = url_or_id or url_or_bvid
+    if not value:
+        raise HTTPException(status_code=422, detail="url_or_id is required")
+    return VideoInfoResponse(**(await service.fetch_video_info(value)))
 
 
 @router.get("/videos/search", response_model=VideoSearchResponse)

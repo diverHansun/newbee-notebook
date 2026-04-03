@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class SummarizeRequest(BaseModel):
-    url_or_bvid: str = Field(..., min_length=1)
+    url_or_id: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("url_or_id", "url_or_bvid"),
+    )
     notebook_id: str | None = None
+    lang: Literal["zh", "en"] = "zh"
 
 
 class AssociateNotebookRequest(BaseModel):
