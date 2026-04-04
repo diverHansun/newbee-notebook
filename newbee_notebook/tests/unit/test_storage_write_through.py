@@ -2,6 +2,7 @@ import asyncio
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from fastapi import UploadFile
 
 from newbee_notebook.infrastructure.storage.local_storage import save_upload_file_with_storage
@@ -87,3 +88,47 @@ def test_save_markdown_syncs_markdown_and_assets_to_remote_storage(tmp_path: Pat
     assert uploaded["doc-sync-2/assets/images/demo.jpg"] == b"image-bytes"
     assert uploaded["doc-sync-2/assets/meta/layout.json"] == b'{"pdf_info":[1]}'
     assert backend.save_from_path_calls == []
+
+
+@pytest.mark.parametrize(
+    ("filename", "payload", "expected_content_type"),
+    [
+        ("demo.pptx", b"PK\x03\x04pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        ("demo.epub", b"PK\x03\x04epub", "application/epub+zip"),
+    ],
+)
+def test_upload_file_with_storage_accepts_pptx_and_epub(
+    tmp_path: Path,
+    monkeypatch,
+    filename: str,
+    payload: bytes,
+    expected_content_type: str,
+):
+    backend = _FakeRemoteStorageBackend()
+    monkeypatch.setattr(
+        "newbee_notebook.infrastructure.storage.local_storage.get_runtime_storage_backend",
+        lambda: backend,
+        raising=False,
+    )
+
+    upload = UploadFile(filename=filename, file=BytesIO(payload))
+
+    async def _run():
+        rel_path, size, ext = await save_upload_file_with_storage(
+            upload,
+            document_id="doc-sync-3",
+            base_root=str(tmp_path),
+        )
+
+        assert rel_path == f"doc-sync-3/original/{filename}"
+        assert size == len(payload)
+        assert ext == filename.rsplit(".", 1)[1]
+        assert (tmp_path / rel_path).exists() is False
+
+    asyncio.run(_run())
+
+    assert len(backend.save_file_calls) == 1
+    object_key, uploaded_payload, content_type = backend.save_file_calls[0]
+    assert object_key == f"doc-sync-3/original/{filename}"
+    assert uploaded_payload == payload
+    assert content_type == expected_content_type

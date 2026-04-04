@@ -182,6 +182,15 @@ def test_processor_cloud_mode_pptx_uses_markitdown_only():
     assert len(converters) == 1
     assert isinstance(converters[0], MarkItDownConverter)
 
+
+def test_processor_cloud_mode_epub_uses_markitdown_only():
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(".epub")
+    assert len(converters) == 1
+    assert isinstance(converters[0], MarkItDownConverter)
+
 def test_processor_trips_cooldown_after_five_consecutive_mineru_failures(monkeypatch):
     cfg = _base_config()
     cfg["document_processing"]["fail_threshold"] = 5

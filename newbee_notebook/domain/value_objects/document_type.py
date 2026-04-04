@@ -10,6 +10,8 @@ class DocumentType(str, Enum):
     PDF = "pdf"
     TXT = "txt"
     DOCX = "docx"
+    PPTX = "pptx"
+    EPUB = "epub"
     MD = "md"
     CSV = "csv"
     XLSX = "xlsx"
@@ -23,6 +25,8 @@ class DocumentType(str, Enum):
             "txt": cls.TXT,
             "docx": cls.DOCX,
             "doc": cls.DOCX,
+            "pptx": cls.PPTX,
+            "epub": cls.EPUB,
             "md": cls.MD,
             "markdown": cls.MD,
             "csv": cls.CSV,
@@ -34,6 +38,6 @@ class DocumentType(str, Enum):
     @classmethod
     def supported_extensions(cls) -> list:
         """Get list of supported file extensions."""
-        return ["pdf", "txt", "docx", "doc", "md", "csv", "xlsx", "xls"]
+        return ["pdf", "txt", "docx", "doc", "pptx", "epub", "md", "csv", "xlsx", "xls"]
 
 
