@@ -53,6 +53,11 @@ INTERNAL_API_URL=http://localhost:8000
 
 无需重启开发服务器，修改 `.env.local` 后执行 `pnpm dev` 重新启动即可生效。
 
+如果你采用开发者常用的 host-debug 链路，请保持：
+- Docker 只启动基础设施与 worker（不要同时启动 Docker 版 `api` / `frontend`）
+- 宿主机运行 `python main.py --reload --port 8000`
+- 前端继续用 `pnpm dev`
+
 ---
 
 ## 生产构建

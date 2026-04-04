@@ -41,13 +41,17 @@ def test_default_compose_fixes_non_gpu_runtime_defaults() -> None:
     api_env = services["api"]["environment"]
 
     assert worker_env["STORAGE_BACKEND"] == "minio"
+    assert worker_env["MINIO_ENDPOINT"] == "${MINIO_INTERNAL_ENDPOINT:-minio:9000}"
     assert worker_env["MINERU_MODE"] == "cloud"
     assert worker_env["MINERU_LOCAL_ENABLED"] == "false"
+    assert worker_env["MINERU_LOCAL_API_URL"] == "${MINERU_INTERNAL_API_URL:-http://mineru-api:8000}"
     assert worker_env["QWEN3_EMBEDDING_MODE"] == "api"
 
     assert api_env["STORAGE_BACKEND"] == "minio"
+    assert api_env["MINIO_ENDPOINT"] == "${MINIO_INTERNAL_ENDPOINT:-minio:9000}"
     assert api_env["MINERU_MODE"] == "cloud"
     assert api_env["MINERU_LOCAL_ENABLED"] == "false"
+    assert api_env["MINERU_LOCAL_API_URL"] == "${MINERU_INTERNAL_API_URL:-http://mineru-api:8000}"
     assert api_env["QWEN3_EMBEDDING_MODE"] == "api"
 
 
