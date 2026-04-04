@@ -558,6 +558,14 @@ export const uiStrings = {
     backToNotebooks: { zh: "返回 Notebooks", en: "Back to Notebooks" },
     title: { zh: "Library 文档管理", en: "Library document management" },
     uploadDocuments: { zh: "上传文档", en: "Upload documents" },
+    supportedFormatsHint: {
+      zh: "支持 PDF、Word、PowerPoint、EPUB、Markdown、文本、表格与 CSV 文件上传。",
+      en: "Supports PDF, Word, PowerPoint, EPUB, Markdown, text, spreadsheet, and CSV uploads.",
+    },
+    uploadFailedTitle: {
+      zh: "以下文件上传失败，请检查文件类型或前端代理连接。",
+      en: "Some files could not be uploaded. Check the file type or frontend proxy target.",
+    },
     tabsAll: { zh: "全部", en: "All" },
     tabsUploaded: { zh: "已上传", en: "Uploaded" },
     tabsProcessing: { zh: "处理中", en: "Processing" },
