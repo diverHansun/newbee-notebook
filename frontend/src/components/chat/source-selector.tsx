@@ -70,8 +70,7 @@ export function SourceSelector({
     try {
       const res = await listDocumentsInNotebook(notebookId, {
         status: "completed",
-        limit: 100,
-        offset: 0,
+        fetchAll: true,
       });
       if (requestSeqRef.current !== reqId) return;
       setItems(res.data);

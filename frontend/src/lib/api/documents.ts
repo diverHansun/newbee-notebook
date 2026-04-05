@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPaginated, MAX_API_PAGE_LIMIT } from "@/lib/api/pagination";
 import {
   ApiListResponse,
   DocumentContentResponse,
@@ -28,10 +29,21 @@ export function getDocumentContent(documentId: string, format: "markdown" | "tex
 
 export function listDocumentsInNotebook(
   notebookId: string,
-  params?: { limit?: number; offset?: number; status?: DocumentStatus }
-) {
+  params?: { limit?: number; offset?: number; status?: DocumentStatus; fetchAll?: boolean }
+): Promise<ApiListResponse<NotebookDocumentItem>> {
+  if (params?.fetchAll) {
+    return fetchAllPaginated<NotebookDocumentItem>(
+      ({ limit, offset }) =>
+        listDocumentsInNotebook(notebookId, { ...params, limit, offset, fetchAll: false }),
+      {
+        limit: params.limit ?? MAX_API_PAGE_LIMIT,
+        offset: params.offset ?? 0,
+      }
+    );
+  }
+
   const search = new URLSearchParams();
-  search.set("limit", String(params?.limit ?? 20));
+  search.set("limit", String(Math.min(params?.limit ?? 20, MAX_API_PAGE_LIMIT)));
   search.set("offset", String(params?.offset ?? 0));
   if (params?.status) search.set("status", params.status);
   return apiFetch<ApiListResponse<NotebookDocumentItem>>(

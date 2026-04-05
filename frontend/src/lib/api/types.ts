@@ -165,6 +165,7 @@ export type NoteListItem = {
 export type NoteListResponse = {
   notes: NoteListItem[];
   total: number;
+  pagination: PaginationInfo;
 };
 
 export type NoteCreateInput = {

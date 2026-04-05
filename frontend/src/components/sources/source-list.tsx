@@ -33,7 +33,7 @@ export function SourceList({ notebookId, onOpenDocument }: SourceListProps) {
 
   const notebookDocumentsQuery = useQuery({
     queryKey: ["notebook-documents", notebookId],
-    queryFn: () => listDocumentsInNotebook(notebookId, { limit: 100, offset: 0 }),
+    queryFn: () => listDocumentsInNotebook(notebookId, { fetchAll: true }),
     refetchInterval: (query) => {
       const rows = query.state.data?.data || [];
       return rows.some((row) => isNonTerminalStatus(row.status)) ? 3000 : false;
@@ -42,7 +42,7 @@ export function SourceList({ notebookId, onOpenDocument }: SourceListProps) {
 
   const libraryDocumentsQuery = useQuery({
     queryKey: ["library-documents"],
-    queryFn: () => listLibraryDocuments({ limit: 100, offset: 0 }),
+    queryFn: () => listLibraryDocuments({ fetchAll: true }),
     enabled: showLibrary,
   });
 

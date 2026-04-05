@@ -94,8 +94,7 @@ export default function LibraryPage() {
     queryKey: ["library-documents", status],
     queryFn: () =>
       listLibraryDocuments({
-        limit: 100,
-        offset: 0,
+        fetchAll: true,
         status: status === "all" ? undefined : status,
       }),
   });

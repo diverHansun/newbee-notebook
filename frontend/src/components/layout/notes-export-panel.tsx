@@ -75,12 +75,13 @@ export function NotesExportPanel() {
         document_id: documentFilter || undefined,
         sort_by: sortBy,
         order,
+        fetchAll: true,
       }),
   });
 
   const documentsQuery = useQuery({
     queryKey: ["library-documents-for-filter"],
-    queryFn: () => listLibraryDocuments({ limit: 200, offset: 0 }),
+    queryFn: () => listLibraryDocuments({ fetchAll: true }),
     staleTime: 60_000,
   });
 

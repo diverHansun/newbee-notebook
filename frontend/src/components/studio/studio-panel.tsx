@@ -110,12 +110,16 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
 
   const documentsQuery = useQuery({
     queryKey: ["notebook-documents", notebookId],
-    queryFn: () => listDocumentsInNotebook(notebookId, { limit: 100, offset: 0 }),
+    queryFn: () => listDocumentsInNotebook(notebookId, { fetchAll: true }),
   });
 
   const notesQuery = useQuery({
     queryKey: ["notes", notebookId, noteDocFilter ?? "all"],
-    queryFn: () => listNotes(notebookId, noteDocFilter ? { document_id: noteDocFilter } : undefined),
+    queryFn: () =>
+      listNotes(notebookId, {
+        document_id: noteDocFilter ?? undefined,
+        fetchAll: true,
+      }),
   });
 
   const marksQuery = useQuery({
