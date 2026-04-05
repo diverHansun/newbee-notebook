@@ -24,8 +24,45 @@ class NoteRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_notebook_paginated(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[Note]:
+        """List notes for one notebook with pagination."""
+        pass
+
+    @abstractmethod
+    async def count_by_notebook(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+    ) -> int:
+        """Count notes for one notebook."""
+        pass
+
+    @abstractmethod
     async def list_all(self) -> list[Note]:
         """List all notes across all notebooks."""
+        pass
+
+    @abstractmethod
+    async def list_all_paginated(
+        self,
+        document_id: Optional[str] = None,
+        sort_by: str = "updated_at",
+        order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[Note]:
+        """List all notes across all notebooks with pagination."""
+        pass
+
+    @abstractmethod
+    async def count_all(self, document_id: Optional[str] = None) -> int:
+        """Count notes across all notebooks."""
         pass
 
     @abstractmethod

@@ -55,8 +55,8 @@ def test_create_note_returns_201():
 
 def test_list_notes_returns_compact_items():
     service = AsyncMock()
-    service.list_by_notebook = AsyncMock(
-        return_value=[
+    service.list_by_notebook_paginated = AsyncMock(
+        return_value=([
             Note(
                 note_id="note-1",
                 notebook_id="nb-1",
@@ -65,7 +65,7 @@ def test_list_notes_returns_compact_items():
                 document_ids=["doc-1"],
                 mark_ids=["mark-1", "mark-2"],
             )
-        ]
+        ], 1)
     )
 
     client = _build_client(service)
@@ -74,9 +74,56 @@ def test_list_notes_returns_compact_items():
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] == 1
+    assert payload["pagination"] == {
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+        "has_next": False,
+        "has_prev": False,
+    }
     assert payload["notes"][0]["note_id"] == "note-1"
     assert payload["notes"][0]["mark_count"] == 2
     assert "content" not in payload["notes"][0]
+
+
+def test_list_all_notes_returns_pagination():
+    service = AsyncMock()
+    service.list_all_paginated = AsyncMock(
+        return_value=(
+            [
+                Note(
+                    note_id="note-1",
+                    notebook_id="nb-1",
+                    title="Title",
+                    content="Body",
+                    document_ids=["doc-1"],
+                    mark_ids=["mark-1"],
+                )
+            ],
+            3,
+        )
+    )
+
+    client = _build_client(service)
+    response = client.get("/api/v1/notes?limit=1&offset=1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert payload["pagination"] == {
+        "total": 3,
+        "limit": 1,
+        "offset": 1,
+        "has_next": True,
+        "has_prev": True,
+    }
+    service.list_all_paginated.assert_awaited_once_with(
+        document_id=None,
+        sort_by="updated_at",
+        order="desc",
+        limit=1,
+        offset=1,
+    )
 
 
 def test_get_note_returns_detail():

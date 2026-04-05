@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from newbee_notebook.api.models.responses import PaginationInfo
+
 
 class CreateNoteRequest(BaseModel):
     """Request body for creating a note."""
@@ -58,3 +60,4 @@ class NoteListResponse(BaseModel):
 
     notes: list[NoteListItemResponse]
     total: int
+    pagination: PaginationInfo

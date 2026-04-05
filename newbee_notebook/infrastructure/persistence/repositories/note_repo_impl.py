@@ -3,7 +3,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +28,22 @@ class NoteRepositoryImpl(NoteRepository):
             selectinload(NoteModel.mark_refs),
         )
 
+    def _apply_document_filter(self, query, document_id: Optional[str]):
+        if document_id is None:
+            return query
+        return query.join(
+            NoteDocumentTagModel,
+            NoteDocumentTagModel.note_id == NoteModel.id,
+        ).where(NoteDocumentTagModel.document_id == uuid.UUID(document_id))
+
+    def _apply_sort(self, query, sort_by: str = "updated_at", order: str = "desc"):
+        reverse = order == "desc"
+        primary = NoteModel.created_at if sort_by == "created_at" else NoteModel.updated_at
+        secondary = NoteModel.updated_at if sort_by == "created_at" else NoteModel.created_at
+        if reverse:
+            return query.order_by(primary.desc(), secondary.desc())
+        return query.order_by(primary.asc(), secondary.asc())
+
     def _to_entity(self, model: NoteModel) -> Note:
         return Note(
             note_id=str(model.id),
@@ -48,31 +64,73 @@ class NoteRepositoryImpl(NoteRepository):
         return self._to_entity(model) if model else None
 
     async def list_all(self) -> list[Note]:
-        query = (
-            self._query()
-            .order_by(NoteModel.updated_at.desc(), NoteModel.created_at.desc())
-        )
+        query = self._apply_sort(self._query())
         result = await self._session.execute(query)
         return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def list_all_paginated(
+        self,
+        document_id: Optional[str] = None,
+        sort_by: str = "updated_at",
+        order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[Note]:
+        query = self._apply_sort(
+            self._apply_document_filter(self._query(), document_id),
+            sort_by=sort_by,
+            order=order,
+        ).limit(limit).offset(offset)
+        result = await self._session.execute(query)
+        return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def count_all(self, document_id: Optional[str] = None) -> int:
+        query = select(func.count(distinct(NoteModel.id))).select_from(NoteModel)
+        query = self._apply_document_filter(query, document_id)
+        result = await self._session.execute(query)
+        return int(result.scalar_one())
 
     async def list_by_notebook(
         self,
         notebook_id: str,
         document_id: Optional[str] = None,
     ) -> list[Note]:
-        query = (
-            self._query()
-            .where(NoteModel.notebook_id == uuid.UUID(notebook_id))
-            .order_by(NoteModel.updated_at.desc(), NoteModel.created_at.desc())
+        query = self._apply_sort(
+            self._apply_document_filter(
+                self._query().where(NoteModel.notebook_id == uuid.UUID(notebook_id)),
+                document_id,
+            )
         )
-        if document_id is not None:
-            query = query.join(
-                NoteDocumentTagModel,
-                NoteDocumentTagModel.note_id == NoteModel.id,
-            ).where(NoteDocumentTagModel.document_id == uuid.UUID(document_id))
-
         result = await self._session.execute(query)
         return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def list_by_notebook_paginated(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[Note]:
+        query = self._apply_sort(
+            self._apply_document_filter(
+                self._query().where(NoteModel.notebook_id == uuid.UUID(notebook_id)),
+                document_id,
+            )
+        ).limit(limit).offset(offset)
+        result = await self._session.execute(query)
+        return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def count_by_notebook(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+    ) -> int:
+        query = select(func.count(distinct(NoteModel.id))).select_from(NoteModel).where(
+            NoteModel.notebook_id == uuid.UUID(notebook_id)
+        )
+        query = self._apply_document_filter(query, document_id)
+        result = await self._session.execute(query)
+        return int(result.scalar_one())
 
     async def create(self, note: Note) -> Note:
         model = NoteModel(

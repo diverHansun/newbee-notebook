@@ -67,6 +67,28 @@ async def test_list_notes_scopes_to_notebook():
 
 
 @pytest.mark.anyio
+async def test_list_by_notebook_paginated_delegates_to_repo_and_count():
+    repo = AsyncMock()
+    repo.list_by_notebook_paginated.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content="")
+    ]
+    repo.count_by_notebook.return_value = 3
+    service = NoteService(repo)
+
+    notes, total = await service.list_by_notebook_paginated("nb1", document_id="d1", limit=20, offset=40)
+
+    assert [note.note_id for note in notes] == ["n1"]
+    assert total == 3
+    repo.list_by_notebook_paginated.assert_awaited_once_with(
+        "nb1",
+        document_id="d1",
+        limit=20,
+        offset=40,
+    )
+    repo.count_by_notebook.assert_awaited_once_with("nb1", document_id="d1")
+
+
+@pytest.mark.anyio
 async def test_delete_note_raises_for_missing_note():
     repo = AsyncMock()
     repo.get.return_value = None
@@ -89,6 +111,35 @@ async def test_list_all_returns_all_notes():
 
     assert len(result) == 2
     repo.list_all.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_list_all_paginated_delegates_to_repo_and_count():
+    repo = AsyncMock()
+    repo.list_all_paginated.return_value = [
+        Note(note_id="n1", notebook_id="nb1", title="A", content="")
+    ]
+    repo.count_all.return_value = 4
+    service = NoteService(repo)
+
+    notes, total = await service.list_all_paginated(
+        document_id="d1",
+        sort_by="created_at",
+        order="asc",
+        limit=10,
+        offset=20,
+    )
+
+    assert [note.note_id for note in notes] == ["n1"]
+    assert total == 4
+    repo.list_all_paginated.assert_awaited_once_with(
+        document_id="d1",
+        sort_by="created_at",
+        order="asc",
+        limit=10,
+        offset=20,
+    )
+    repo.count_all.assert_awaited_once_with(document_id="d1")
 
 
 @pytest.mark.anyio

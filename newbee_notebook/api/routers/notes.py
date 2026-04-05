@@ -13,6 +13,7 @@ from newbee_notebook.api.models.note_models import (
     TagDocumentRequest,
     UpdateNoteRequest,
 )
+from newbee_notebook.api.models.responses import PaginationInfo
 from newbee_notebook.application.services.note_service import NoteNotFoundError, NoteService
 
 
@@ -66,16 +67,27 @@ async def list_all_notes(
     document_id: Optional[str] = Query(None, description="Filter by document ID"),
     sort_by: str = Query("updated_at", description="Sort field: created_at or updated_at"),
     order: str = Query("desc", description="Sort order: asc or desc"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
     service: NoteService = Depends(get_note_service),
 ):
-    notes = await service.list_all(
+    notes, total = await service.list_all_paginated(
         document_id=document_id,
         sort_by=sort_by,
         order=order,
+        limit=limit,
+        offset=offset,
     )
     return NoteListResponse(
         notes=[_to_note_list_item(note) for note in notes],
-        total=len(notes),
+        total=total,
+        pagination=PaginationInfo(
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_next=offset + limit < total,
+            has_prev=offset > 0,
+        ),
     )
 
 
@@ -83,15 +95,26 @@ async def list_all_notes(
 async def list_notes(
     notebook_id: str = Path(..., description="Notebook ID"),
     document_id: Optional[str] = Query(None, description="Optional document filter"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
     service: NoteService = Depends(get_note_service),
 ):
-    if document_id is None:
-        notes = await service.list_by_notebook(notebook_id)
-    else:
-        notes = await service.list_by_notebook(notebook_id, document_id=document_id)
+    notes, total = await service.list_by_notebook_paginated(
+        notebook_id,
+        document_id=document_id,
+        limit=limit,
+        offset=offset,
+    )
     return NoteListResponse(
         notes=[_to_note_list_item(note) for note in notes],
-        total=len(notes),
+        total=total,
+        pagination=PaginationInfo(
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_next=offset + limit < total,
+            has_prev=offset > 0,
+        ),
     )
 
 
