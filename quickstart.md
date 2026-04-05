@@ -369,6 +369,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d postgres re
 - 这两条命令都不会启动 Docker 版 `api` / `frontend`，避免和本机 `FastAPI --reload` / `pnpm dev` 端口冲突。
 - 共享一套 `.env` 时，宿主机 FastAPI 默认读取 `localhost` 地址；Docker 中的 API / worker 由 compose 自动覆盖为容器内地址。
 - 如果你要在宿主机调试本地 MinerU 模式，请把 `.env` 中的 `MINERU_LOCAL_API_URL` 设为 `http://localhost:8001`；Docker 内 worker 仍会通过 compose 覆盖访问 `http://mineru-api:8000`。
+- `celery-worker` 使用源码挂载，但 Celery 进程不会热重载 Python 模块；如果你修改了 `document_tasks.py`、`document_processing/` 或其它 worker 侧代码，请执行 `docker restart newbee-notebook-celery-worker` 再重试任务。
 
 ```bash
 # 确保虚拟环境已激活
