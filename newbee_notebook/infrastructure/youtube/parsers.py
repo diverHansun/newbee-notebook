@@ -47,6 +47,13 @@ def extract_initial_player_response(html: str) -> dict[str, Any] | None:
     return None
 
 
+def extract_innertube_api_key(html: str) -> str | None:
+    match = re.search(r'"INNERTUBE_API_KEY":"([^"]+)"', html)
+    if match is None:
+        return None
+    return match.group(1).strip() or None
+
+
 def extract_caption_tracks(player_response: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(player_response, dict):
         return []
@@ -69,6 +76,22 @@ def extract_caption_tracks(player_response: dict[str, Any] | None) -> list[dict[
                 tracks.extend(item for item in value if isinstance(item, dict))
 
     return tracks
+
+
+def extract_streaming_formats(player_response: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(player_response, dict):
+        return []
+
+    streaming_data = player_response.get("streamingData") or {}
+    if not isinstance(streaming_data, dict):
+        return []
+
+    formats: list[dict[str, Any]] = []
+    for key in ("adaptiveFormats", "formats"):
+        values = streaming_data.get(key) or []
+        if isinstance(values, list):
+            formats.extend(item for item in values if isinstance(item, dict))
+    return formats
 
 
 def pick_best_track(

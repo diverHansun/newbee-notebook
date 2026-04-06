@@ -217,20 +217,43 @@ class VideoService:
         )
 
         try:
-            info = await self._youtube_client.get_video_info(video_id)
+            try:
+                info = await self._youtube_client.get_video_info(video_id)
+            except YouTubeVideoUnavailableError:
+                raise
+            except Exception as info_exc:
+                logger.warning("get_video_info failed for %s, using minimal info: %s", video_id, info_exc)
+                info = {
+                    "video_id": video_id,
+                    "source_url": url_or_id,
+                    "title": video_id,
+                    "description": "",
+                    "cover_url": None,
+                    "duration_seconds": 0,
+                    "uploader_name": "",
+                    "uploader_id": "",
+                    "stats": {},
+                }
+            metadata_ready = self._is_metadata_ready(
+                video_id,
+                title=str(info.get("title") or ""),
+                duration_seconds=int(info.get("duration_seconds") or 0),
+                uploader_name=str(info.get("uploader_name") or ""),
+            )
             self._apply_info(summary, info, fallback_source_url=url_or_id)
             summary = await self._video_repo.update(summary)
-            await self._emit(
-                progress_callback,
-                "info",
-                {
-                    "video_id": video_id,
-                    "title": summary.title,
-                    "duration_seconds": summary.duration_seconds,
-                    "uploader_name": summary.uploader_name,
-                    "cover_url": summary.cover_url,
-                },
-            )
+            if metadata_ready:
+                await self._emit(
+                    progress_callback,
+                    "info",
+                    {
+                        "video_id": video_id,
+                        "title": summary.title,
+                        "duration_seconds": summary.duration_seconds,
+                        "uploader_name": summary.uploader_name,
+                        "cover_url": summary.cover_url,
+                    },
+                )
 
             transcript_text, transcript_source = await self._youtube_client.get_transcript(
                 video_id,
@@ -306,7 +329,8 @@ class VideoService:
         return summary
 
     async def list_all(self, *, status: str | None = None) -> list[VideoSummary]:
-        return await self._video_repo.list_all(status=status)
+        summaries = await self._video_repo.list_all(status=status)
+        return [summary for summary in summaries if self._should_expose_in_list(summary)]
 
     async def list_by_notebook(
         self,
@@ -314,7 +338,8 @@ class VideoService:
         *,
         status: str | None = None,
     ) -> list[VideoSummary]:
-        return await self._video_repo.list_by_notebook(notebook_id, status=status)
+        summaries = await self._video_repo.list_by_notebook(notebook_id, status=status)
+        return [summary for summary in summaries if self._should_expose_in_list(summary)]
 
     async def delete(self, summary_id: str) -> bool:
         summary = await self.get(summary_id)
@@ -503,6 +528,15 @@ class VideoService:
             return "youtube"
         return "bilibili"
 
+    @classmethod
+    def is_summary_metadata_ready(cls, summary: VideoSummary) -> bool:
+        return cls._is_metadata_ready(
+            summary.video_id,
+            title=summary.title,
+            duration_seconds=summary.duration_seconds,
+            uploader_name=summary.uploader_name,
+        )
+
     @staticmethod
     def _apply_info(
         summary: VideoSummary,
@@ -518,6 +552,28 @@ class VideoService:
         summary.uploader_id = str(info.get("uploader_id") or "")
         summary.stats = info.get("stats")
         summary.touch()
+
+    @staticmethod
+    def _is_metadata_ready(
+        video_id: str,
+        *,
+        title: str,
+        duration_seconds: int,
+        uploader_name: str,
+    ) -> bool:
+        normalized_title = str(title or "").strip()
+        normalized_uploader = str(uploader_name or "").strip()
+        return bool(
+            (normalized_title and normalized_title != video_id)
+            or duration_seconds > 0
+            or normalized_uploader
+        )
+
+    @staticmethod
+    def _should_expose_in_list(summary: VideoSummary) -> bool:
+        if summary.platform == "youtube" and summary.status == "processing":
+            return False
+        return True
 
     async def _generate_summary_content(
         self,

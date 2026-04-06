@@ -640,3 +640,107 @@ async def test_summarize_supports_youtube_with_transcript_chain(
     assert summary.video_id == "dQw4w9WgXcQ"
     assert summary.transcript_source == "subtitle"
     assert [event for event, _payload in events] == ["start", "info", "subtitle", "summarize", "done"]
+
+
+@pytest.mark.anyio
+async def test_summarize_youtube_continues_with_minimal_metadata_and_asr_fallback(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.youtube.exceptions import YouTubeNetworkError
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    storage.save_file.return_value = "videos/transcripts/youtube-dQw4w9WgXcQ.txt"
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(side_effect=YouTubeNetworkError("metadata unavailable")),
+        get_transcript=AsyncMock(return_value=(None, "asr")),
+    )
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    summary = await service.summarize(
+        "https://youtu.be/dQw4w9WgXcQ",
+        notebook_id="nb-1",
+        lang="zh",
+        progress_callback=progress,
+    )
+
+    assert summary.status == "completed"
+    assert summary.title == "dQw4w9WgXcQ"
+    assert summary.duration_seconds == 0
+    assert summary.uploader_name == ""
+    assert summary.transcript_source == "asr"
+    assert service.is_summary_metadata_ready(summary) is False
+    assert [event for event, _payload in events] == ["start", "asr", "subtitle", "summarize", "done"]
+
+
+@pytest.mark.anyio
+async def test_video_lists_hide_processing_youtube_items(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    processing_youtube = VideoSummary(
+        summary_id="yt-processing",
+        platform="youtube",
+        video_id="dQw4w9WgXcQ",
+        title="dQw4w9WgXcQ",
+        status="processing",
+    )
+    completed_youtube = VideoSummary(
+        summary_id="yt-completed",
+        platform="youtube",
+        video_id="dQw4w9WgXcQ",
+        title="dQw4w9WgXcQ",
+        status="completed",
+    )
+    processing_bilibili = VideoSummary(
+        summary_id="bili-processing",
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="Video title",
+        status="processing",
+    )
+    video_repo.list_all.return_value = [processing_youtube, completed_youtube, processing_bilibili]
+    video_repo.list_by_notebook.return_value = [processing_youtube, completed_youtube, processing_bilibili]
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    all_summaries = await service.list_all()
+    notebook_summaries = await service.list_by_notebook("nb-1")
+
+    assert [summary.summary_id for summary in all_summaries] == ["yt-completed", "bili-processing"]
+    assert [summary.summary_id for summary in notebook_summaries] == ["yt-completed", "bili-processing"]

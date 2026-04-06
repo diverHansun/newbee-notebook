@@ -33,7 +33,7 @@ async def test_get_asr_pipeline_dep_builds_qwen_pipeline(monkeypatch):
         assert provider == "qwen"
         return "dashscope-token"
 
-    def fake_build_audio_fetcher(_client):
+    def fake_build_audio_fetcher(_bili_client, _youtube_client):
         recorded["audio_fetcher"] = True
 
         async def _fetch(_source):
@@ -59,7 +59,11 @@ async def test_get_asr_pipeline_dep_builds_qwen_pipeline(monkeypatch):
         lambda: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     )
 
-    pipeline = await dependencies.get_asr_pipeline_dep(bili_client=object(), session=object())
+    pipeline = await dependencies.get_asr_pipeline_dep(
+        bili_client=object(),
+        youtube_client=object(),
+        session=object(),
+    )
 
     assert pipeline is not None
     assert recorded["audio_fetcher"] is True
