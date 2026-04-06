@@ -216,6 +216,7 @@ export type VideoSummaryListItem = {
   duration_seconds: number;
   uploader_name: string;
   status: VideoSummaryStatus;
+  metadata_ready?: boolean;
   created_at: string;
   updated_at: string;
 };

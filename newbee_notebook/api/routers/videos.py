@@ -49,6 +49,7 @@ def _to_summary_response(summary) -> VideoSummaryResponse:
         uploader_id=summary.uploader_id,
         summary_content=summary.summary_content,
         status=summary.status,
+        metadata_ready=VideoService.is_summary_metadata_ready(summary),
         error_message=summary.error_message,
         document_ids=list(summary.document_ids),
         stats=summary.stats,
@@ -70,6 +71,7 @@ def _to_summary_list_item(summary) -> VideoSummaryListItemResponse:
         duration_seconds=summary.duration_seconds,
         uploader_name=summary.uploader_name,
         status=summary.status,
+        metadata_ready=VideoService.is_summary_metadata_ready(summary),
         created_at=summary.created_at,
         updated_at=summary.updated_at,
     )

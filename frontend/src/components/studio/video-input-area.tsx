@@ -198,7 +198,7 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               event.type === "asr" ||
               event.type === "summarize"
             ) {
-              if (!hasRefreshedProcessingLists) {
+              if (!hasRefreshedProcessingLists && detectedPlatform !== "youtube") {
                 hasRefreshedProcessingLists = true;
                 await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
                 await queryClient.invalidateQueries({
@@ -253,7 +253,13 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               } else {
                 setStreamError(getFriendlyErrorMessage(event, t));
               }
-              setProgressSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
+              if (detectedPlatform === "youtube") {
+                await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
+                await queryClient.invalidateQueries({
+                  queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
+                });
+              }
+              setProgressSteps([]);
             }
           },
         }

@@ -48,6 +48,7 @@ export function VideoListItem({
   const { lang, t, ti } = useLang();
   const locale = lang === "en" ? "en-US" : "zh-CN";
   const uploaderName = summary.uploader_name || t(uiStrings.video.unknownUploader);
+  const shouldShowMetadataChips = !(summary.platform === "youtube" && summary.metadata_ready === false);
 
   return (
     <button
@@ -63,8 +64,8 @@ export function VideoListItem({
         </div>
         <div className="video-summary-meta">
           <span className="chip">{formatPlatform(summary.platform)}</span>
-          <span className="chip">{uploaderName}</span>
-          <span className="chip">{formatDuration(summary.duration_seconds)}</span>
+          {shouldShowMetadataChips ? <span className="chip">{uploaderName}</span> : null}
+          {shouldShowMetadataChips ? <span className="chip">{formatDuration(summary.duration_seconds)}</span> : null}
           <span className="chip video-status-chip" data-status={summary.status}>
             {formatStatus(summary.status, t)}
           </span>

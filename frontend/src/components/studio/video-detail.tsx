@@ -56,6 +56,7 @@ export function VideoDetail({ notebookId, summaryId, onBack }: VideoDetailProps)
   }
 
   const isAssociated = summary.notebook_id === notebookId;
+  const shouldShowMetadataChips = !(summary.platform === "youtube" && summary.metadata_ready === false);
 
   return (
     <>
@@ -91,8 +92,10 @@ export function VideoDetail({ notebookId, summaryId, onBack }: VideoDetailProps)
             <strong>{summary.title}</strong>
             <div className="video-summary-meta">
               <span className="chip">{formatPlatform(summary.platform)}</span>
-              <span className="chip">{summary.uploader_name || t(uiStrings.video.unknownUploader)}</span>
-              <span className="chip">{formatDuration(summary.duration_seconds)}</span>
+              {shouldShowMetadataChips ? (
+                <span className="chip">{summary.uploader_name || t(uiStrings.video.unknownUploader)}</span>
+              ) : null}
+              {shouldShowMetadataChips ? <span className="chip">{formatDuration(summary.duration_seconds)}</span> : null}
               <span className="chip">{summary.video_id}</span>
             </div>
           </div>

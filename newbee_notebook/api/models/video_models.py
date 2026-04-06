@@ -39,6 +39,7 @@ class VideoSummaryResponse(BaseModel):
     uploader_id: str
     summary_content: str
     status: str
+    metadata_ready: bool = True
     error_message: str | None = None
     document_ids: list[str] = Field(default_factory=list)
     stats: dict | None = None
@@ -58,6 +59,7 @@ class VideoSummaryListItemResponse(BaseModel):
     duration_seconds: int
     uploader_name: str
     status: str
+    metadata_ready: bool = True
     created_at: datetime
     updated_at: datetime
 
