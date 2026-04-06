@@ -143,6 +143,13 @@
   background: hsl(0 0% 100% / 0.7);
 }
 
+.video-background-hint {
+  padding: 10px 12px;
+  border: 1px dashed hsl(338 32% 80%);
+  border-radius: calc(var(--radius) + 1px);
+  background: hsl(0 0% 100% / 0.55);
+}
+
 .video-progress-item {
   display: flex;
   align-items: center;
@@ -246,7 +253,8 @@
 .dark .video-input-card .chip,
 .dark .video-input-card .btn,
 .dark .video-info-card,
-.dark .video-progress-list {
+.dark .video-progress-list,
+.dark .video-background-hint {
   border-color: hsl(338 18% 30%);
   background: hsl(220 18% 20% / 0.88);
 }

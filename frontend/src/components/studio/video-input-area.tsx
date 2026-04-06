@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { streamBilibiliQrLogin } from "@/lib/api/bilibili-auth";
+import { ApiError } from "@/lib/api/client";
 import type { VideoStreamEvent } from "@/lib/api/types";
 import { summarizeVideoStream } from "@/lib/api/videos";
 import {
@@ -15,6 +16,12 @@ import {
 import { ALL_VIDEO_SUMMARIES_QUERY_KEY, VIDEO_SUMMARIES_QUERY_KEY, VIDEO_SUMMARY_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
+import {
+  type VideoTaskError,
+  type VideoTaskPlatform,
+  type VideoTaskStep,
+  useVideoProcessingStore,
+} from "@/stores/video-processing-store";
 
 type VideoInputAreaProps = {
   notebookId: string;
@@ -75,7 +82,7 @@ function formatDuration(durationSeconds: number): string {
 }
 
 function getStepLabel(
-  event: Extract<VideoStreamEvent, { type: StepType }>,
+  event: Pick<VideoTaskStep, "type" | "source">,
   t: (value: { zh: string; en: string }) => string
 ): string {
   switch (event.type) {
@@ -93,45 +100,80 @@ function getStepLabel(
       return t(uiStrings.video.stepAsr);
     case "summarize":
       return t(uiStrings.video.stepSummarize);
+    case "done":
+      return t(uiStrings.video.stepDone);
+    case "reused":
+      return t(uiStrings.video.stepReused);
   }
 }
 
 function getFriendlyErrorMessage(
-  event: Extract<VideoStreamEvent, { type: "error" }>,
+  event: Pick<VideoTaskError, "message" | "errorCode">,
   t: (value: { zh: string; en: string }) => string
 ): string {
-  if (event.error_code === "E_VIDEO_SUMMARIZE_IN_PROGRESS") {
+  if (event.errorCode === "E_VIDEO_SUMMARIZE_IN_PROGRESS") {
     return t(uiStrings.video.inProgressError);
   }
-  if (event.error_code === "E_VIDEO_MAX_CONCURRENT_LIMIT") {
+  if (event.errorCode === "E_VIDEO_MAX_CONCURRENT_LIMIT") {
     return t(uiStrings.video.maxConcurrentError);
   }
   return event.message;
 }
 
 export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
-  const { lang, t } = useLang();
+  const { lang, t, ti } = useLang();
   const queryClient = useQueryClient();
   const authQuery = useBilibiliAuthStatus();
   const logoutMutation = useBilibiliLogout();
+  const input = useVideoProcessingStore((state) => state.draftInputByNotebook[notebookId] ?? "");
+  const foregroundTaskId = useVideoProcessingStore(
+    (state) => state.foregroundTaskIdByNotebook[notebookId] ?? null
+  );
+  const tasks = useVideoProcessingStore((state) => state.tasks);
+  const setDraftInput = useVideoProcessingStore((state) => state.setDraftInput);
+  const startTask = useVideoProcessingStore((state) => state.startTask);
+  const applyInfoEvent = useVideoProcessingStore((state) => state.applyInfoEvent);
+  const applyProgressEvent = useVideoProcessingStore((state) => state.applyProgressEvent);
+  const completeTask = useVideoProcessingStore((state) => state.completeTask);
+  const failTask = useVideoProcessingStore((state) => state.failTask);
+  const dismissForegroundTask = useVideoProcessingStore((state) => state.dismissForegroundTask);
 
-  const [input, setInput] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [streamError, setStreamError] = useState<string | null>(null);
-  const [isAuthRelatedError, setIsAuthRelatedError] = useState(false);
-  const [progressSteps, setProgressSteps] = useState<ProgressEntry[]>([]);
-  const [streamInfo, setStreamInfo] = useState<VideoInfoPreview | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginDialogMessage, setLoginDialogMessage] = useState<string | null>(null);
   const [qrImageBase64, setQrImageBase64] = useState<string | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
 
   const detectedPlatform = useMemo(() => detectPlatform(input), [input]);
+  const foregroundTask = foregroundTaskId ? tasks[foregroundTaskId] ?? null : null;
+  const activeTaskPlatform = foregroundTask?.platform ?? null;
+  const isSubmitting = foregroundTask?.status === "processing";
   const qrImageSrc = useMemo(() => {
     if (!qrImageBase64) return null;
     return `data:image/png;base64,${qrImageBase64}`;
   }, [qrImageBase64]);
+  const streamInfo = foregroundTask?.info ?? null;
+  const isAuthRelatedError = foregroundTask?.error
+    ? foregroundTask.error.errorCode === "E_BILIBILI_AUTH" || isAuthError(foregroundTask.error.message)
+    : false;
+  const streamError = foregroundTask?.error
+    ? isAuthRelatedError
+      ? t(uiStrings.video.authError)
+      : getFriendlyErrorMessage(foregroundTask.error, t)
+    : null;
+  const progressSteps = useMemo<ProgressEntry[]>(
+    () =>
+      (foregroundTask?.steps ?? []).map((step) => ({
+        label: getStepLabel(step, t),
+        status: step.status,
+      })),
+    [foregroundTask?.steps, t]
+  );
+  const backgroundProcessingCount = useVideoProcessingStore((state) =>
+    Object.values(state.tasks).filter(
+      (task) => task.notebookId === notebookId && task.dismissed && task.status === "processing"
+    ).length
+  );
 
   const handleStartLogin = async () => {
     setLoginDialogOpen(true);
@@ -169,19 +211,25 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
 
   const handleSummarize = async () => {
     const trimmedInput = input.trim();
-    let hasRefreshedProcessingLists = false;
     setValidationError(null);
-    setStreamError(null);
-    setIsAuthRelatedError(false);
-    setProgressSteps([]);
-    setStreamInfo(null);
 
     if (!isValidVideoInput(trimmedInput)) {
       setValidationError(t(uiStrings.video.invalidInput));
       return;
     }
 
-    setIsSubmitting(true);
+    const platform = detectPlatform(trimmedInput);
+    if (platform !== "bilibili" && platform !== "youtube") {
+      setValidationError(t(uiStrings.video.invalidInput));
+      return;
+    }
+
+    const taskId = startTask({
+      notebookId,
+      requestInput: trimmedInput,
+      platform: platform as VideoTaskPlatform,
+    });
+
     try {
       await summarizeVideoStream(
         {
@@ -191,28 +239,8 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
         },
         {
           onEvent: async (event) => {
-            if (
-              event.type === "start" ||
-              event.type === "info" ||
-              event.type === "subtitle" ||
-              event.type === "asr" ||
-              event.type === "summarize"
-            ) {
-              if (!hasRefreshedProcessingLists && detectedPlatform !== "youtube") {
-                hasRefreshedProcessingLists = true;
-                await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
-                await queryClient.invalidateQueries({
-                  queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
-                });
-              }
-            }
-
             if (event.type === "info") {
-              setStreamInfo({
-                title: event.title,
-                uploaderName: event.uploader_name,
-                durationSeconds: event.duration_seconds,
-              });
+              applyInfoEvent(taskId, event);
               return;
             }
 
@@ -222,13 +250,11 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               event.type === "asr" ||
               event.type === "summarize"
             ) {
-              setProgressSteps((prev) => {
-                const updated = prev.map((s) => ({ ...s, status: "done" as const }));
-                return [...updated, { label: getStepLabel(event, t), status: "active" as const }];
-              });
+              applyProgressEvent(taskId, event);
               return;
             }
             if (event.type === "done") {
+              completeTask(taskId, event);
               await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
               await queryClient.invalidateQueries({
                 queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
@@ -236,36 +262,25 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
               await queryClient.invalidateQueries({
                 queryKey: VIDEO_SUMMARY_QUERY_KEY(event.summary_id),
               });
-              if (event.reused) {
-                setProgressSteps([{ label: t(uiStrings.video.stepReused), status: "done" }]);
-              } else {
-                setProgressSteps((prev) => {
-                  const updated = prev.map((s) => ({ ...s, status: "done" as const }));
-                  return [...updated, { label: t(uiStrings.video.stepDone), status: "done" }];
-                });
-              }
               return;
             }
             if (event.type === "error") {
-              if (event.error_code === "E_BILIBILI_AUTH" || isAuthError(event.message)) {
-                setStreamError(t(uiStrings.video.authError));
-                setIsAuthRelatedError(true);
-              } else {
-                setStreamError(getFriendlyErrorMessage(event, t));
-              }
-              if (detectedPlatform === "youtube") {
-                await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
-                await queryClient.invalidateQueries({
-                  queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
-                });
-              }
-              setProgressSteps([]);
+              failTask(taskId, event);
+              await queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
+              await queryClient.invalidateQueries({
+                queryKey: VIDEO_SUMMARIES_QUERY_KEY(notebookId),
+              });
             }
           },
         }
       );
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      const event = {
+        type: "error" as const,
+        message: error instanceof Error ? error.message : t(uiStrings.common.retry),
+        error_code: error instanceof ApiError ? error.errorCode : undefined,
+      };
+      failTask(taskId, event);
     }
   };
 
@@ -329,10 +344,12 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
           placeholder={t(uiStrings.video.inputPlaceholder)}
           value={input}
           onChange={(event) => {
-            setInput(event.target.value);
+            const nextValue = event.target.value;
+            setDraftInput(notebookId, nextValue);
             setValidationError(null);
-            setStreamError(null);
-            setStreamInfo(null);
+            if (!nextValue.trim()) {
+              dismissForegroundTask(notebookId);
+            }
           }}
         />
         <button
@@ -376,10 +393,16 @@ export function VideoInputArea({ notebookId }: VideoInputAreaProps) {
         </div>
       ) : null}
 
+      {backgroundProcessingCount > 0 ? (
+        <div className="video-background-hint">
+          <span className="muted">{ti(uiStrings.video.backgroundProcessingHint, { n: backgroundProcessingCount })}</span>
+        </div>
+      ) : null}
+
       {streamError ? (
         <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="video-error-text">{streamError}</span>
-          {isAuthRelatedError && detectedPlatform === "bilibili" && !authQuery.data?.logged_in ? (
+          {isAuthRelatedError && activeTaskPlatform === "bilibili" && !authQuery.data?.logged_in ? (
             <button
               className="btn btn-ghost btn-sm"
               type="button"

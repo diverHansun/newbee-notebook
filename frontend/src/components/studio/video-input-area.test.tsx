@@ -1,11 +1,12 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageContext } from "@/lib/i18n/language-context";
 import { createQueryClient } from "@/test/test-utils";
+import { useVideoProcessingStore } from "@/stores/video-processing-store";
 
 const apiMocks = vi.hoisted(() => ({
   streamBilibiliQrLogin: vi.fn(),
@@ -59,6 +60,12 @@ describe("VideoInputArea", () => {
       isPending: false,
       mutateAsync: vi.fn().mockResolvedValue(undefined),
     });
+
+    useVideoProcessingStore.setState({
+      draftInputByNotebook: {},
+      foregroundTaskIdByNotebook: {},
+      tasks: {},
+    });
   });
 
   it("rejects non-bilibili urls before starting summarize stream", async () => {
@@ -101,7 +108,7 @@ describe("VideoInputArea", () => {
     });
   });
 
-  it("refreshes video lists as soon as the summarize stream starts", async () => {
+  it("does not refresh video lists before a terminal summarize event arrives", async () => {
     const user = userEvent.setup();
     apiMocks.summarizeVideoStream.mockImplementation(
       async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
@@ -117,13 +124,107 @@ describe("VideoInputArea", () => {
 
     await waitFor(() => {
       expect(apiMocks.summarizeVideoStream).toHaveBeenCalledOnce();
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ["video-summaries", "all"],
-      });
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ["video-summaries", "notebook-1"],
-      });
     });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("restores the processing panel after the component remounts", async () => {
+    const user = userEvent.setup();
+    let finishStream: (() => void) | undefined;
+
+    apiMocks.summarizeVideoStream.mockImplementation(
+      async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+        options?.onEvent?.({ type: "start", video_id: "BV1" });
+        finishStream = () => {
+          options?.onEvent?.({
+            type: "done",
+            summary_id: "sum-1",
+            status: "completed",
+            reused: false,
+          });
+        };
+        await new Promise<void>((resolve) => {
+          const complete = finishStream;
+          finishStream = () => {
+            complete?.();
+            resolve();
+          };
+        });
+      }
+    );
+
+    const firstRender = renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    await user.type(screen.getByPlaceholderText(/bilibili.*youtube/i), "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Loading video info")).toBeInTheDocument();
+    });
+
+    firstRender.unmount();
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    expect(screen.getByText("Loading video info")).toBeInTheDocument();
+
+    await act(async () => {
+      finishStream?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Summary complete")).toBeInTheDocument();
+    });
+  });
+
+  it("moves a processing task into background when the input is cleared", async () => {
+    const user = userEvent.setup();
+    let resolveFirstStream: (() => void) | undefined;
+
+    apiMocks.summarizeVideoStream
+      .mockImplementationOnce(
+        async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+          options?.onEvent?.({ type: "start", video_id: "BV1" });
+          await new Promise<void>((resolve) => {
+            resolveFirstStream = resolve;
+          });
+        }
+      )
+      .mockImplementationOnce(
+        async (_request: unknown, options?: { onEvent?: (event: unknown) => void }) => {
+          options?.onEvent?.({ type: "start", video_id: "dQw4w9WgXcQ" });
+          options?.onEvent?.({
+            type: "done",
+            summary_id: "sum-2",
+            status: "completed",
+            reused: false,
+          });
+        }
+      );
+
+    renderVideoInputArea(<VideoInputArea notebookId="notebook-1" />);
+
+    const input = screen.getByPlaceholderText(/bilibili.*youtube/i);
+    await user.type(input, "BV1abc411c7mD");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Loading video info")).toBeInTheDocument();
+    });
+
+    await user.clear(input);
+
+    expect(screen.queryByText("Loading video info")).not.toBeInTheDocument();
+    expect(screen.getByText(/still processing in the background/i)).toBeInTheDocument();
+
+    await user.type(input, "https://youtu.be/dQw4w9WgXcQ");
+    await user.click(screen.getByRole("button", { name: /summarize/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.summarizeVideoStream).toHaveBeenCalledTimes(2);
+    });
+
+    resolveFirstStream?.();
   });
 
   it("opens the qr login dialog and shows the qr image when login starts", async () => {

@@ -137,6 +137,7 @@ class VideoService:
             info = await self._bili_client.get_video_info(bvid)
             self._apply_info(summary, info, fallback_source_url=url_or_id)
             summary = await self._video_repo.update(summary)
+            await self._emit_summary_info(progress_callback, summary, video_id=bvid)
 
             transcript_text, _tracks = await self._bili_client.get_video_subtitle(bvid)
             transcript_source = "subtitle"
@@ -571,9 +572,28 @@ class VideoService:
 
     @staticmethod
     def _should_expose_in_list(summary: VideoSummary) -> bool:
-        if summary.platform == "youtube" and summary.status == "processing":
+        if summary.status == "processing":
             return False
         return True
+
+    async def _emit_summary_info(
+        self,
+        progress_callback: ProgressCallback | None,
+        summary: VideoSummary,
+        *,
+        video_id: str,
+    ) -> None:
+        await self._emit(
+            progress_callback,
+            "info",
+            {
+                "video_id": video_id,
+                "title": summary.title,
+                "duration_seconds": summary.duration_seconds,
+                "uploader_name": summary.uploader_name,
+                "cover_url": summary.cover_url,
+            },
+        )
 
     async def _generate_summary_content(
         self,

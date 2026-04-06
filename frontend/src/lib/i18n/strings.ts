@@ -469,6 +469,10 @@ export const uiStrings = {
         zh: "最多同时处理 5 个视频，请稍后再试。",
         en: "Up to 5 videos can be processed at the same time. Please try again later.",
       },
+      backgroundProcessingHint: {
+        zh: "当前有 {n} 个视频正在后台处理中，你可以继续粘贴新的链接。",
+        en: "{n} video task(s) are still processing in the background. You can paste another link.",
+      },
     },
     notes: {
       title: { zh: "笔记", en: "Notes" },

@@ -263,7 +263,7 @@ async def test_summarize_uses_asr_fallback_when_subtitle_missing(
     assert summary.status == "completed"
     assert summary.transcript_source == "asr"
     asr_pipeline.transcribe.assert_awaited_once()
-    assert [event for event, _payload in events] == ["start", "asr", "summarize", "done"]
+    assert [event for event, _payload in events] == ["start", "info", "asr", "summarize", "done"]
 
 
 @pytest.mark.anyio
@@ -742,5 +742,5 @@ async def test_video_lists_hide_processing_youtube_items(
     all_summaries = await service.list_all()
     notebook_summaries = await service.list_by_notebook("nb-1")
 
-    assert [summary.summary_id for summary in all_summaries] == ["yt-completed", "bili-processing"]
-    assert [summary.summary_id for summary in notebook_summaries] == ["yt-completed", "bili-processing"]
+    assert [summary.summary_id for summary in all_summaries] == ["yt-completed"]
+    assert [summary.summary_id for summary in notebook_summaries] == ["yt-completed"]
