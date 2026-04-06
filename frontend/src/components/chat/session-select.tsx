@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Session } from "@/lib/api/types";
+import {
+  buildSessionDisplayTitleMap,
+  getSessionDisplayTitle,
+} from "@/lib/chat/session-labels";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
@@ -26,22 +30,22 @@ function ChevronDownIcon() {
   );
 }
 
-function getSessionLabel(session: Session | null, placeholder: string) {
-  if (!session) return placeholder;
-  return session.title || session.session_id.slice(0, 8);
-}
-
 export function SessionSelect({ sessions, currentSessionId, onChange }: SessionSelectProps) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const placeholder = t(uiStrings.chat.sessionSelect);
+  const sessionTitleMap = useMemo(
+    () => buildSessionDisplayTitleMap(sessions, t(uiStrings.chat.defaultSessionTitle)),
+    [sessions, t]
+  );
 
   const currentSession = useMemo(
     () => sessions.find((item) => item.session_id === currentSessionId) || null,
     [currentSessionId, sessions]
   );
+  const currentSessionLabel = getSessionDisplayTitle(currentSession, sessionTitleMap, placeholder);
 
   useEffect(() => {
     if (!open) return;
@@ -74,7 +78,7 @@ export function SessionSelect({ sessions, currentSessionId, onChange }: SessionS
         className={`session-select-trigger${open ? " is-open" : ""}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={getSessionLabel(currentSession, placeholder)}
+        aria-label={currentSessionLabel}
         disabled={sessions.length === 0}
         onClick={() => {
           if (sessions.length === 0) return;
@@ -82,7 +86,7 @@ export function SessionSelect({ sessions, currentSessionId, onChange }: SessionS
         }}
       >
         <span className={`session-select-trigger-label${currentSession ? "" : " is-placeholder"}`}>
-          {getSessionLabel(currentSession, placeholder)}
+          {currentSessionLabel}
         </span>
         <span className="session-select-trigger-icon">
           <ChevronDownIcon />
@@ -98,7 +102,7 @@ export function SessionSelect({ sessions, currentSessionId, onChange }: SessionS
         >
           {sessions.map((session) => {
             const selected = session.session_id === currentSessionId;
-            const label = getSessionLabel(session, placeholder);
+            const label = getSessionDisplayTitle(session, sessionTitleMap, placeholder);
 
             return (
               <button

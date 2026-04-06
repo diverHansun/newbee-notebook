@@ -76,11 +76,26 @@ class _InMemoryMessageRepo:
             created.append(await self.create(message))
         return created
 
-    async def list_by_session(self, session_id: str, limit: int = 50, offset: int = 0, modes=None):
+    async def list_by_session(
+        self,
+        session_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        modes=None,
+        descending: bool = False,
+    ):
         allowed = None if modes is None else {mode.value if hasattr(mode, "value") else str(mode) for mode in modes}
         rows = [item for item in self.messages if item.session_id == session_id]
         if allowed is not None:
             rows = [item for item in rows if (item.mode.value if hasattr(item.mode, "value") else str(item.mode)) in allowed]
+        rows = sorted(
+            rows,
+            key=lambda item: (
+                item.created_at,
+                item.message_id if item.message_id is not None else 0,
+            ),
+            reverse=descending,
+        )
         return rows[offset: offset + limit]
 
     async def list_after_boundary(self, session_id: str, boundary_message_id: int | None, track_modes=None):

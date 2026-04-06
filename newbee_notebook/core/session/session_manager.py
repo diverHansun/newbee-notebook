@@ -223,7 +223,9 @@ class SessionManager:
             self._current_session.session_id,
             limit=12,
             modes=list(self.SIDE_TRACK_MODES),
+            descending=True,
         )
+        side_messages.reverse()
 
         self._memory.load_from_messages(
             main_messages=[self._to_stored_message(item) for item in main_messages],

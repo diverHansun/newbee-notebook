@@ -192,8 +192,8 @@ async def test_explain_injects_main_track_history_into_side_context():
         Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.ASSISTANT, content="main answer"),
     ]
     message_repo.list_by_session.return_value = [
-        Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.USER, content="explain this"),
         Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.ASSISTANT, content="prior explain"),
+        Message(session_id="s1", mode=ModeType.EXPLAIN, role=MessageRole.USER, content="explain this"),
     ]
     manager = SessionManager(
         session_repo=session_repo,
@@ -214,6 +214,12 @@ async def test_explain_injects_main_track_history_into_side_context():
     assert history[0] == {"role": "system", "content": "prompt:explain"}
     assert history[1]["role"] == "system"
     assert "main question" in history[1]["content"]
+    message_repo.list_by_session.assert_awaited_once_with(
+        "s1",
+        limit=12,
+        modes=list(SessionManager.SIDE_TRACK_MODES),
+        descending=True,
+    )
     assert history[-2:] == [
         {"role": "user", "content": "explain this"},
         {"role": "assistant", "content": "prior explain"},

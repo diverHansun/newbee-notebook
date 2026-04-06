@@ -602,15 +602,7 @@ export function useChatSession(notebookId: string) {
       }
 
       if (isExplainOrConclude && !resolvedSessionId) {
-        setExplainCard({
-          visible: true,
-          mode: explainMode,
-          selectedText: context?.selected_text || "",
-          content: t(uiStrings.explainCard.createSessionFirst),
-          isStreaming: false,
-        });
-        setStreaming(false, null);
-        return;
+        resolvedSessionId = await ensureSession();
       }
 
       const sessionId = isExplainOrConclude

@@ -23,6 +23,7 @@ class MessageRepository(ABC):
         limit: int = 100,
         offset: int = 0,
         modes: Optional[List[ModeType]] = None,
+        descending: bool = False,
     ) -> List[Message]:
         pass
 

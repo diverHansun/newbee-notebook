@@ -6,6 +6,10 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { MessageItem } from "@/components/chat/message-item";
 import { SessionSelect } from "@/components/chat/session-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  buildSessionDisplayTitleMap,
+  getSessionDisplayTitle,
+} from "@/lib/chat/session-labels";
 import type { Session } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
@@ -51,6 +55,10 @@ export function ChatPanel({
   const messageListRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const pendingSessionScrollRef = useRef<string | null>(null);
+  const sessionTitleMap = useMemo(
+    () => buildSessionDisplayTitleMap(sessions, t(uiStrings.chat.defaultSessionTitle)),
+    [sessions, t]
+  );
 
   const currentSession = useMemo(
     () => sessions.find((item) => item.session_id === currentSessionId) || null,
@@ -199,7 +207,11 @@ export function ChatPanel({
         message={
           pendingDeleteSession
             ? `${ti(uiStrings.chat.confirmDelete, {
-                name: pendingDeleteSession.title || pendingDeleteSession.session_id.slice(0, 8),
+                name: getSessionDisplayTitle(
+                  pendingDeleteSession,
+                  sessionTitleMap,
+                  t(uiStrings.chat.sessionSelect)
+                ),
               })}\n${t(uiStrings.chat.confirmDeleteSessionDetail)}`
             : ""
         }
