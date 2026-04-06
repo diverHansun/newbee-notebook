@@ -816,13 +816,11 @@ class ChatService:
             return sources
 
         # Display-only fallback: keep retrieval snippets for UI even if document_id
-        # validation failed, while reference persistence still skips invalid IDs.
-        display_candidates = ChatService._filter_sources_by_mode_quality(
-            list(prevalidated_sources),
-            mode_enum,
-        )
+        # validation failed or all scores fell below threshold. Reference persistence
+        # still skips invalid IDs. Do NOT re-apply score filtering here — the whole
+        # point of this fallback is to show something when quality filtering left nothing.
         restored: List[dict] = []
-        for src in display_candidates:
+        for src in prevalidated_sources:
             title = str(src.get("title", "") or "")
             text = str(src.get("text", "") or "")
             if not title and not text:
