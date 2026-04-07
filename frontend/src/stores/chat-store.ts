@@ -37,6 +37,9 @@ export type ChatMessage = {
   role: MessageRole;
   mode: MessageMode;
   content: string;
+  intermediateContent?: string;
+  exitingIntermediateContent?: string | null;
+  intermediateGeneration?: number;
   thinkingStage?: string | null;
   messageId?: number;
   sources?: NormalizedSource[];

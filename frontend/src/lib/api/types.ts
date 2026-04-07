@@ -370,6 +370,16 @@ export type SseEventContent = {
   delta: string;
 };
 
+export type SseEventPhase = {
+  type: "phase";
+  stage?: string | null;
+};
+
+export type SseEventIntermediateContent = {
+  type: "intermediate_content";
+  delta: string;
+};
+
 export type SseEventThinking = {
   type: "thinking";
   stage?: string | null;
@@ -424,7 +434,9 @@ export type SseEventToolResult = {
 
 export type SseEvent =
   | SseEventStart
+  | SseEventPhase
   | SseEventContent
+  | SseEventIntermediateContent
   | SseEventThinking
   | SseEventSources
   | SseEventDone

@@ -2,8 +2,42 @@
    22. Chat Thinking Indicator
    ================================================================ */
 
+.assistant-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(72ch, 100%);
+}
+
+.assistant-message-body {
+  min-width: 0;
+}
+
+.assistant-intermediate {
+  min-width: 0;
+}
+
+.assistant-intermediate-text {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 2px solid hsl(var(--bee-yellow) / 0.35);
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.assistant-intermediate--entering {
+  animation: intermediate-slide-up-in 0.24s ease-out;
+}
+
+.assistant-intermediate--exiting {
+  animation: intermediate-fade-up-out 0.22s ease-out forwards;
+  pointer-events: none;
+}
+
 .thinking-indicator {
-  max-width: 240px;
+  max-width: min(320px, 100%);
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
   background: hsl(var(--muted) / 0.5);
@@ -78,7 +112,7 @@
    ================================================================ */
 
 .tool-steps-indicator {
-  max-width: 280px;
+  max-width: min(360px, 100%);
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
   background: hsl(var(--muted) / 0.5);
@@ -213,4 +247,26 @@
 .tool-steps-indicator--exiting {
   animation: thinking-fade-out 0.4s ease-out forwards;
   pointer-events: none;
+}
+
+@keyframes intermediate-slide-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes intermediate-fade-up-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }

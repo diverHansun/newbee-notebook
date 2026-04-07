@@ -215,6 +215,7 @@ export function useChatSession(notebookId: string) {
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({});
   const thinkingTimeoutRef = useRef<number | null>(null);
   const confirmationTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingIntermediatePhaseRef = useRef(false);
 
   const {
     currentSessionId,
@@ -275,6 +276,82 @@ export function useChatSession(notebookId: string) {
     (sessionId: string, id: string, stage: string | null) => {
       mutateSessionMessages(sessionId, (items) =>
         items.map((item) => (item.id === id ? { ...item, thinkingStage: stage } : item))
+      );
+    },
+    [mutateSessionMessages]
+  );
+
+  const getSessionMessage = useCallback((sessionId: string, id: string) => {
+    return (sessionMessagesRef.current[sessionId] ?? []).find((item) => item.id === id) ?? null;
+  }, []);
+
+  const rotateIntermediateContentInSession = useCallback(
+    (sessionId: string, id: string) => {
+      mutateSessionMessages(sessionId, (items) =>
+        items.map((item) => {
+          if (item.id !== id) return item;
+
+          return {
+            ...item,
+            intermediateContent: undefined,
+            exitingIntermediateContent:
+              item.intermediateContent || item.exitingIntermediateContent || null,
+            intermediateGeneration: (item.intermediateGeneration ?? 0) + 1,
+          };
+        })
+      );
+    },
+    [mutateSessionMessages]
+  );
+
+  const appendIntermediateContentInSession = useCallback(
+    (sessionId: string, id: string, delta: string) => {
+      mutateSessionMessages(sessionId, (items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                intermediateContent: `${item.intermediateContent || ""}${delta}`,
+              }
+            : item
+        )
+      );
+    },
+    [mutateSessionMessages]
+  );
+
+  const beginFinalContentInSession = useCallback(
+    (sessionId: string, id: string, firstDelta: string) => {
+      mutateSessionMessages(sessionId, (items) =>
+        items.map((item) => {
+          if (item.id !== id) return item;
+
+          return {
+            ...item,
+            content: firstDelta,
+            thinkingStage: null,
+            intermediateContent: undefined,
+            exitingIntermediateContent:
+              item.intermediateContent || item.exitingIntermediateContent || null,
+          };
+        })
+      );
+    },
+    [mutateSessionMessages]
+  );
+
+  const clearIntermediateVisualStateInSession = useCallback(
+    (sessionId: string, id: string) => {
+      mutateSessionMessages(sessionId, (items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                intermediateContent: undefined,
+                exitingIntermediateContent: null,
+              }
+            : item
+        )
       );
     },
     [mutateSessionMessages]
@@ -360,6 +437,7 @@ export function useChatSession(notebookId: string) {
     activeAssistantIdRef.current = null;
     activeStreamSessionIdRef.current = null;
     currentSessionIdRef.current = null;
+    pendingIntermediatePhaseRef.current = false;
   }, [notebookId]);
 
   const findMessageByConfirmationRequest = useCallback((requestId: string) => {
@@ -643,6 +721,7 @@ export function useChatSession(notebookId: string) {
           status: "streaming",
           createdAt: new Date().toISOString(),
         });
+        pendingIntermediatePhaseRef.current = false;
         scheduleThinkingTimeout(sessionId, assistantLocalId);
         let streamFallbackStarted = false;
         const startChatStreamFallback = (localAssistantId: string) => {
@@ -659,11 +738,14 @@ export function useChatSession(notebookId: string) {
               );
 
               if (persistedReply) {
+                pendingIntermediatePhaseRef.current = false;
                 updateThinkingStageInSession(sessionId, localAssistantId, null);
                 updateMessageInSession(sessionId, localAssistantId, {
                   content: persistedReply.content,
                   status: "done",
                   messageId: persistedReply.message_id,
+                  intermediateContent: undefined,
+                  exitingIntermediateContent: null,
                 });
                 return;
               }
@@ -676,6 +758,7 @@ export function useChatSession(notebookId: string) {
                 source_document_ids: sourceDocumentIds ?? null,
               });
 
+              pendingIntermediatePhaseRef.current = false;
               updateThinkingStageInSession(sessionId, localAssistantId, null);
               updateMessageInSession(sessionId, localAssistantId, {
                 content: fallback.content,
@@ -683,15 +766,20 @@ export function useChatSession(notebookId: string) {
                 messageId: fallback.message_id,
                 sources: normalizeSources(fallback.sources),
                 sourcesType: "document_retrieval",
+                intermediateContent: undefined,
+                exitingIntermediateContent: null,
               });
             } catch (fallbackError) {
               const fallbackApiError = fallbackError as ApiError;
+              pendingIntermediatePhaseRef.current = false;
               updateThinkingStageInSession(sessionId, localAssistantId, null);
               updateMessageInSession(sessionId, localAssistantId, {
                 status: "error",
                 content: `[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
                   fallbackApiError.message || "Fallback error"
                 }`,
+                intermediateContent: undefined,
+                exitingIntermediateContent: null,
               });
             } finally {
               clearThinkingTimeout();
@@ -733,11 +821,41 @@ export function useChatSession(notebookId: string) {
                 }
                 return;
               }
+              if (event.type === "phase") {
+                if (event.stage === "reasoning") {
+                  pendingIntermediatePhaseRef.current = true;
+                }
+                return;
+              }
+              if (event.type === "intermediate_content") {
+                if (activeAssistantIdRef.current) {
+                  if (pendingIntermediatePhaseRef.current) {
+                    rotateIntermediateContentInSession(sessionId, activeAssistantIdRef.current);
+                    pendingIntermediatePhaseRef.current = false;
+                  }
+                  appendIntermediateContentInSession(
+                    sessionId,
+                    activeAssistantIdRef.current,
+                    event.delta,
+                  );
+                }
+                return;
+              }
               if (event.type === "content") {
                 clearThinkingTimeout();
                 if (activeAssistantIdRef.current) {
-                  appendMessageContentInSession(sessionId, activeAssistantIdRef.current, event.delta);
+                  const activeMessage = getSessionMessage(sessionId, activeAssistantIdRef.current);
+                  if (!activeMessage?.content) {
+                    beginFinalContentInSession(
+                      sessionId,
+                      activeAssistantIdRef.current,
+                      event.delta,
+                    );
+                  } else {
+                    appendMessageContentInSession(sessionId, activeAssistantIdRef.current, event.delta);
+                  }
                 }
+                pendingIntermediatePhaseRef.current = false;
                 return;
               }
               if (event.type === "thinking") {
@@ -788,8 +906,10 @@ export function useChatSession(notebookId: string) {
                 clearConfirmationForMessage(sessionId, activeAssistantIdRef.current);
                 if (activeAssistantIdRef.current) {
                   updateThinkingStageInSession(sessionId, activeAssistantIdRef.current, null);
+                  clearIntermediateVisualStateInSession(sessionId, activeAssistantIdRef.current);
                   updateMessageInSession(sessionId, activeAssistantIdRef.current, { status: "done" });
                 }
+                pendingIntermediatePhaseRef.current = false;
                 setStreaming(false, null);
                 activeAssistantIdRef.current = null;
                 activeStreamSessionIdRef.current = null;
@@ -821,8 +941,11 @@ export function useChatSession(notebookId: string) {
                   updateMessageInSession(sessionId, activeAssistantIdRef.current, {
                     status: "error",
                     content: `${message}\n\n[${event.error_code}] ${event.message}`,
+                    intermediateContent: undefined,
+                    exitingIntermediateContent: null,
                   });
                 }
+                pendingIntermediatePhaseRef.current = false;
                 setStreaming(false, null);
                 activeAssistantIdRef.current = null;
                 activeStreamSessionIdRef.current = null;
@@ -844,8 +967,11 @@ export function useChatSession(notebookId: string) {
                   updateMessageInSession(sessionId, assistantLocalId, {
                     status: "error",
                     content: `[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`,
+                    intermediateContent: undefined,
+                    exitingIntermediateContent: null,
                   });
                 }
+                pendingIntermediatePhaseRef.current = false;
                 setStreaming(false, null);
                 activeAssistantIdRef.current = null;
                 activeStreamSessionIdRef.current = null;
@@ -1109,8 +1235,11 @@ export function useChatSession(notebookId: string) {
       } else {
         updateMessageInSession(sessionId, assistantLocalId, {
           status: "cancelled",
+          intermediateContent: undefined,
+          exitingIntermediateContent: null,
         });
       }
+      pendingIntermediatePhaseRef.current = false;
       activeAssistantIdRef.current = null;
       activeStreamSessionIdRef.current = null;
     }

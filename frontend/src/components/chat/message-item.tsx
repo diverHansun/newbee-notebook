@@ -146,6 +146,16 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
+  const showFinalContent = !isUser && !!message.content;
+  const showIntermediateBlock =
+    !isUser &&
+    message.status === "streaming" &&
+    !message.content &&
+    !!message.intermediateContent;
+  const showExitingIntermediateBlock =
+    !isUser &&
+    message.status === "streaming" &&
+    !!message.exitingIntermediateContent;
   const hasToolSteps =
     !isUser &&
     message.status === "streaming" &&
@@ -156,27 +166,14 @@ export function MessageItem({
     !isUser && message.status === "streaming" && !message.content && !hasToolSteps;
 
   return (
-    <div style={{ display: "flex", gap: 12, flexDirection: isUser ? "row-reverse" : "row" }}>
-      {/* Avatar */}
+    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", width: "100%" }}>
       <div
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 14,
-          flexShrink: 0,
-          background: isUser ? "hsl(var(--primary))" : "hsl(var(--muted))",
-          color: isUser ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+          width: isUser ? "auto" : "100%",
+          maxWidth: isUser ? "85%" : "min(72ch, 100%)",
+          minWidth: 0,
         }}
       >
-        {isUser ? "U" : "AI"}
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, maxWidth: "85%", minWidth: 0 }}>
         {/* Mode badge + status */}
         <div
           className="row"
@@ -196,31 +193,56 @@ export function MessageItem({
           )}
         </div>
 
-        {/* Message bubble */}
-        {showThinkingIndicator ? (
-          <ThinkingIndicator stage={message.thinkingStage} t={t} />
-        ) : hasToolSteps ? (
-          <ToolStepsIndicator
-            steps={message.toolSteps!}
-            thinkingStage={message.thinkingStage}
-            t={t}
-          />
-        ) : (
+        {isUser ? (
           <div
-            className={`card${isUser ? "" : " message-bubble-assistant"}`}
+            className="card"
+            data-testid="user-message-bubble"
             style={{
-              padding: isUser ? "12px 16px" : "12px 16px 12px 14px",
-              background: isUser ? "hsl(var(--user-bubble-bg))" : "hsl(var(--card))",
-              color: isUser ? "hsl(var(--user-bubble-fg))" : "hsl(var(--card-foreground))",
+              padding: "12px 16px",
+              background: "hsl(var(--user-bubble-bg))",
+              color: "hsl(var(--user-bubble-fg))",
             }}
           >
-            {isUser ? (
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                {message.content}
-              </p>
-            ) : (
-              <MarkdownViewer content={message.content} />
-            )}
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {message.content}
+            </p>
+          </div>
+        ) : (
+          <div className="assistant-lane" data-testid="assistant-lane">
+            {showExitingIntermediateBlock ? (
+              <div
+                className="assistant-intermediate assistant-intermediate--exiting"
+                data-testid="assistant-intermediate-exiting"
+              >
+                <p className="assistant-intermediate-text">{message.exitingIntermediateContent}</p>
+              </div>
+            ) : null}
+
+            {showIntermediateBlock ? (
+              <div
+                key={message.intermediateGeneration ?? 0}
+                className="assistant-intermediate assistant-intermediate--entering"
+                data-testid="assistant-intermediate-current"
+              >
+                <p className="assistant-intermediate-text">{message.intermediateContent}</p>
+              </div>
+            ) : null}
+
+            {showFinalContent ? (
+              <div className="assistant-message-body" data-testid="assistant-message-body">
+                <MarkdownViewer content={message.content} />
+              </div>
+            ) : null}
+
+            {showThinkingIndicator ? (
+              <ThinkingIndicator stage={message.thinkingStage} t={t} />
+            ) : hasToolSteps ? (
+              <ToolStepsIndicator
+                steps={message.toolSteps!}
+                thinkingStage={message.thinkingStage}
+                t={t}
+              />
+            ) : null}
           </div>
         )}
 
