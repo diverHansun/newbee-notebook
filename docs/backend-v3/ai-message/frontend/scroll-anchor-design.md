@@ -42,8 +42,8 @@
 3. **短回复不回弹**
    即使 AI 回复很短，也不应该因为正文开始就把用户消息拉回到底部附近。
 
-4. **主动交互不误判**
-   当前版本优先保证锚定稳定，不再让普通 `scroll` 事件直接结束锚定，避免程序滚动和布局回流被误判成用户操作。
+4. **显式用户滚动可释放锚定**
+   仅在用户明确发生滚轮、触摸滚动、拖动滚动条等显式滚动意图时，才结束本轮锚定；程序滚动和布局回流不能误判成用户操作。
 
 5. **会话切换保持原行为**
    切换 session 时仍使用原来的 settle-to-bottom 逻辑。
@@ -221,17 +221,36 @@ container.scrollTo({
 
 ### 3.9 用户主动滚动时退出锚定
 
-当前实现里，`onScroll` 不再直接结束 `send-anchor`：
+当前实现里，释放 `send-anchor` 分成两步：
 
-- `scroll` 事件里混有程序滚动、浏览器补发事件和布局回流，直接拿它判断“用户主动打断”不可靠。
-- 因此当前版本优先保证 anchor 稳定，不在这里清理 `bottomPadding`。
-- 若后续需要支持“用户主动拖动就退出锚定”，建议单独通过 wheel / touch / pointer 等显式输入事件实现。
+- 先通过 `wheel / touchmove / pointerdown` 记录“显式用户滚动意图”。
+- 再在随后的 `scroll` 事件里真正结束锚定。
+
+这样可以避免：
+
+- 程序调用 `scrollTo`
+- 浏览器补发的 `scroll`
+- 布局回流带来的位置变化
+
+被误判成“用户主动查看历史消息”。
 
 ```tsx
 if (scrollModeRef.current === "send-anchor") {
+  if (userScrollIntentRef.current) {
+    userScrollIntentRef.current = false;
+    anchoredUserMessageIdRef.current = null;
+    setBottomPadding(0);
+    scrollModeRef.current = isNearBottom ? "stream-follow" : "free-browse";
+    setScrollMode(isNearBottom ? "stream-follow" : "free-browse");
+  }
   return;
 }
 ```
+
+额外规则：
+
+- 只要用户已经释放了当前锚定，本轮 AI 后续继续输出也不应再把视口拉回去。
+- 当下一次新的用户消息发送时，再重新进入新的 `send-anchor`。
 
 ### 3.10 near-bottom follow 的新边界
 
@@ -302,8 +321,9 @@ scrollModeRef.current = "session-settle";
 | 消息很少，列表原本不够高 | `bottomSpacer` 临时撑高，保证锚定成功 |
 | AI 回复很短 | 保持锚定，不回弹到底部 |
 | AI 回复很长 | 仍保持 anchor 稳定，避免内容增长过程把消息拉回底部 |
-| 用户主动滚动 | 当前版本不通过普通 `scroll` 直接退出；若需要更强交互控制，后续再补显式输入事件 |
-| 用户滚回底部附近 | 当前版本优先保持本轮 anchor 稳定，下一轮消息再重新计算 |
+| 用户主动滚动 | 通过显式输入意图释放当前 anchor，进入 `free-browse` 或 `stream-follow` |
+| 用户滚回底部附近 | 若本轮 anchor 已释放，可恢复 `stream-follow` |
+| 用户浏览历史时又发送新消息 | 重新进入新的 `send-anchor`，定位到最新用户消息 |
 | 会话切换 | 清理锚定状态，使用原有 settle-to-bottom |
 | 连续快速发送 | 每次发送覆盖上一次 anchor target，重新计算 spacer |
 
@@ -324,5 +344,5 @@ scrollModeRef.current = "session-settle";
 1. 用户发送消息后，用户消息停在消息区顶部自然留白处，不贴边。
 2. AI spinner / 工具状态出现在该用户消息正下方。
 3. AI 正文开始后，短回复不会把视口拉回到底部。
-4. 普通浏览器 `scroll` 事件不会把本轮 anchor 误清掉。
-5. 切换 session 或下一轮发送时，锚定状态会被正确重置。
+4. 用户主动滚动查看历史消息后，本轮 AI 继续输出不会再把视口拉回最新回复。
+5. 用户浏览历史时再次发送消息，会重新定位到最新用户消息，并保持自然顶部留白。

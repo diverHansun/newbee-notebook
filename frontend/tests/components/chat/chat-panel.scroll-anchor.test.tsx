@@ -1,4 +1,4 @@
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatPanel } from "@/components/chat/chat-panel";
@@ -371,5 +371,146 @@ describe("ChatPanel scroll anchor", () => {
       )
     ).toBe(false);
     expect(layout.scrollTop).toBe(404);
+  });
+
+  it("stops re-anchoring after explicit user scroll during streaming", async () => {
+    const anchoredMessages = [
+      buildMessage("user-1", "user", "Old question"),
+      buildMessage("assistant-1", "assistant", "Old answer"),
+      buildMessage("user-2", "user", "New question"),
+      buildMessage("assistant-2", "assistant", "", { status: "streaming" }),
+    ];
+    const contentMessages = [
+      buildMessage("user-1", "user", "Old question"),
+      buildMessage("assistant-1", "assistant", "Old answer"),
+      buildMessage("user-2", "user", "New question"),
+      buildMessage("assistant-2", "assistant", "Received", { status: "streaming" }),
+    ];
+
+    const { container, rerender } = renderWithLang(
+      <ChatPanel {...buildProps({ messages: anchoredMessages, isStreaming: true })} />
+    );
+
+    let layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 28 },
+      },
+      spacerOffsetTop: 520,
+    });
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    fireEvent.wheel(layout.list);
+    layout.list.scrollTop = 120;
+    fireEvent.scroll(layout.list);
+
+    layout.scrollToMock.mockClear();
+    scrollIntoViewEvents = [];
+
+    rerender(<ChatPanel {...buildProps({ messages: contentMessages, isStreaming: true })} />);
+    layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 44 },
+      },
+      spacerOffsetTop: 536,
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(64);
+    });
+
+    expect(layout.scrollToMock).not.toHaveBeenCalled();
+    expect(
+      scrollIntoViewEvents.some(
+        (event) => event.testId === "chat-end-sentinel" && event.block === "end"
+      )
+    ).toBe(false);
+    expect(layout.scrollTop).toBe(120);
+  });
+
+  it("re-anchors on the next user send after browsing history", async () => {
+    const anchoredMessages = [
+      buildMessage("user-1", "user", "Old question"),
+      buildMessage("assistant-1", "assistant", "Old answer"),
+      buildMessage("user-2", "user", "New question"),
+      buildMessage("assistant-2", "assistant", "", { status: "streaming" }),
+    ];
+    const nextTurnMessages = [
+      buildMessage("user-1", "user", "Old question"),
+      buildMessage("assistant-1", "assistant", "Old answer"),
+      buildMessage("user-2", "user", "New question"),
+      buildMessage("assistant-2", "assistant", "Received", { status: "done" }),
+      buildMessage("user-3", "user", "Follow-up question"),
+      buildMessage("assistant-3", "assistant", "", { status: "streaming" }),
+    ];
+
+    const { container, rerender } = renderWithLang(
+      <ChatPanel {...buildProps({ messages: anchoredMessages, isStreaming: true })} />
+    );
+
+    let layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 28 },
+      },
+      spacerOffsetTop: 520,
+    });
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    fireEvent.wheel(layout.list);
+    layout.list.scrollTop = 120;
+    fireEvent.scroll(layout.list);
+
+    layout.scrollToMock.mockClear();
+
+    rerender(<ChatPanel {...buildProps({ messages: nextTurnMessages, isStreaming: true })} />);
+    layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 44 },
+        "user-3": { top: 760, height: 52 },
+        "assistant-3": { top: 836, height: 28 },
+      },
+      spacerOffsetTop: 864,
+    });
+
+    rerender(<ChatPanel {...buildProps({ messages: [...nextTurnMessages], isStreaming: true })} />);
+    layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 44 },
+        "user-3": { top: 760, height: 52 },
+        "assistant-3": { top: 836, height: 28 },
+      },
+      spacerOffsetTop: 864,
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(64);
+    });
+
+    expect(layout.scrollToMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        top: 744,
+        behavior: "auto",
+      })
+    );
   });
 });

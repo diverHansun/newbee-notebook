@@ -64,6 +64,7 @@ export function ChatPanel({
   const anchoredUserMessageIdRef = useRef<string | null>(null);
   const suppressScrollEventRef = useRef(false);
   const scrollSuppressionTimeoutRef = useRef<number | null>(null);
+  const userScrollIntentRef = useRef(false);
   const sessionTitleMap = useMemo(
     () => buildSessionDisplayTitleMap(sessions, t(uiStrings.chat.defaultSessionTitle)),
     [sessions, t]
@@ -78,6 +79,7 @@ export function ChatPanel({
     setSourceDocIds(null);
     setBottomPadding(0);
     anchoredUserMessageIdRef.current = null;
+    userScrollIntentRef.current = false;
     pendingSessionScrollRef.current = currentSessionId;
     const nextScrollMode = currentSessionId ? "session-settle" : "stream-follow";
     scrollModeRef.current = nextScrollMode;
@@ -176,6 +178,7 @@ export function ChatPanel({
 
     if (userJustSent) {
       anchoredUserMessageIdRef.current = lastMsg.role === "user" ? lastMsg.id : (secondToLast?.id ?? null);
+      userScrollIntentRef.current = false;
       scrollModeRef.current = "send-anchor";
       setScrollMode("send-anchor");
       isNearBottomRef.current = false;
@@ -269,12 +272,29 @@ export function ChatPanel({
     }
 
     if (scrollModeRef.current === "send-anchor") {
+      if (userScrollIntentRef.current) {
+        userScrollIntentRef.current = false;
+        anchoredUserMessageIdRef.current = null;
+        setBottomPadding(0);
+        const nextScrollMode = isNearBottom ? "stream-follow" : "free-browse";
+        scrollModeRef.current = nextScrollMode;
+        setScrollMode(nextScrollMode);
+      }
       return;
     }
 
     const nextScrollMode = isNearBottom ? "stream-follow" : "free-browse";
     scrollModeRef.current = nextScrollMode;
     setScrollMode(nextScrollMode);
+  };
+
+  const handleUserScrollIntent = () => {
+    if (scrollModeRef.current !== "send-anchor") return;
+    userScrollIntentRef.current = true;
+  };
+
+  const clearUserScrollIntent = () => {
+    userScrollIntentRef.current = false;
   };
 
   return (
@@ -318,7 +338,16 @@ export function ChatPanel({
       </div>
 
       {/* Message list */}
-      <div ref={messageListRef} className="chat-message-list" onScroll={handleMessageListScroll}>
+      <div
+        ref={messageListRef}
+        className="chat-message-list"
+        onScroll={handleMessageListScroll}
+        onWheel={handleUserScrollIntent}
+        onTouchMove={handleUserScrollIntent}
+        onPointerDown={handleUserScrollIntent}
+        onPointerUp={clearUserScrollIntent}
+        onPointerCancel={clearUserScrollIntent}
+      >
         {messages.length === 0 ? (
           <div className="empty-state" style={{ flex: 1 }}>
             <span>{t(uiStrings.chat.emptyMessages)}</span>
