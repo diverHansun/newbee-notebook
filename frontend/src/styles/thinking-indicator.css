@@ -1,4 +1,4 @@
-﻿/* ================================================================
+/* ================================================================
    22. Chat Thinking Indicator
    ================================================================ */
 
@@ -27,8 +27,7 @@
 
 .assistant-intermediate-text {
   margin: 0;
-  padding-left: 14px;
-  border-left: 2px solid hsl(var(--bee-yellow) / 0.35);
+  font-style: italic;
   color: hsl(var(--muted-foreground));
   font-size: 14px;
   line-height: 1.65;
@@ -44,12 +43,14 @@
   pointer-events: none;
 }
 
+/* ================================================================
+   22a. Thinking Indicator — Orbiting Dot (no container)
+   ================================================================ */
+
 .thinking-indicator {
-  max-width: min(320px, 100%);
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  background: hsl(var(--muted) / 0.5);
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .thinking-indicator-header {
@@ -58,26 +59,27 @@
   gap: 8px;
 }
 
-.thinking-indicator-ring {
+/* Orbiting dots — 8 dots arranged in a circle, container rotates */
+.thinking-indicator-orbit {
   position: relative;
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  border-radius: 50%;
-  background: conic-gradient(
-    hsl(var(--bee-yellow)),
-    hsl(var(--bee-amber)),
-    hsl(var(--bee-yellow))
-  );
-  animation: thinking-spin 1s linear infinite;
+  animation: thinking-spin 1.2s linear infinite;
 }
 
-.thinking-indicator-ring::after {
-  content: "";
+.orbit-dot {
   position: absolute;
-  inset: 2px;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 2px;
   border-radius: 50%;
-  background: hsl(var(--card));
+  background: hsl(var(--bee-amber));
+  /* rotate to position on circle, then translate out by radius */
+  transform: rotate(calc(var(--i) * 45deg)) translateY(-6px);
+  /* trailing opacity: dot 0 is faintest, dot 7 is brightest */
+  opacity: calc(0.12 + var(--i) * 0.125);
 }
 
 .thinking-indicator-label {
@@ -90,47 +92,15 @@
   text-overflow: ellipsis;
 }
 
-.thinking-indicator-progress {
-  position: relative;
-  margin-top: 8px;
-  height: 2px;
-  width: 100%;
-  border-radius: 999px;
-  background: hsl(var(--border));
-  overflow: hidden;
-}
-
-.thinking-indicator-progress-bar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 40%;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(var(--bee-yellow)) 40%,
-    hsl(var(--bee-amber)) 60%,
-    transparent 100%
-  );
-  animation: thinking-shimmer 1.2s linear infinite;
-}
-
 /* ================================================================
-   22b. Tool Steps Indicator
+   22b. Tool Steps Indicator — single line (no container)
    ================================================================ */
 
 .tool-steps-indicator {
-  max-width: min(360px, 100%);
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  background: hsl(var(--muted) / 0.5);
-  padding: 10px 14px;
-}
-
-.tool-steps-list {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  animation: tool-step-fade-in 0.15s ease-in;
 }
 
 .tool-step {
@@ -157,7 +127,7 @@
   border-radius: 50%;
 }
 
-/* running: spinning ring */
+/* running: spinning ring (dynamic — full saturation) */
 .tool-step--running .tool-step-icon {
   background: conic-gradient(
     hsl(var(--bee-yellow)),
@@ -172,12 +142,12 @@
   position: absolute;
   inset: 2px;
   border-radius: 50%;
-  background: hsl(var(--muted) / 0.5);
+  background: hsl(var(--background));
 }
 
-/* done: static checkmark */
+/* done: static checkmark (static — reduced presence) */
 .tool-step--done .tool-step-icon {
-  background: hsl(var(--bee-amber) / 0.2);
+  background: hsl(var(--bee-amber) / 0.1);
 }
 
 .tool-step--done .tool-step-icon::after {
@@ -187,7 +157,7 @@
   left: 3px;
   width: 5px;
   height: 8px;
-  border: solid hsl(var(--bee-amber));
+  border: solid hsl(var(--bee-amber) / 0.5);
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(40deg);
 }
@@ -225,36 +195,19 @@
   color: hsl(0 70% 50% / 0.8);
 }
 
-/* bottom shimmer bar */
-.tool-steps-progress {
-  position: relative;
-  margin-top: 8px;
-  height: 2px;
-  width: 100%;
-  border-radius: 999px;
-  background: hsl(var(--border));
-  overflow: hidden;
-}
-
-.tool-steps-progress-bar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 40%;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(var(--bee-yellow)) 40%,
-    hsl(var(--bee-amber)) 60%,
-    transparent 100%
-  );
-  animation: thinking-shimmer 1.2s linear infinite;
-}
-
 /* exit animation (reserved for future use) */
 .tool-steps-indicator--exiting {
   animation: thinking-fade-out 0.4s ease-out forwards;
   pointer-events: none;
+}
+
+/* ================================================================
+   22c. Crossfade transitions
+   ================================================================ */
+
+@keyframes tool-step-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes intermediate-slide-up-in {

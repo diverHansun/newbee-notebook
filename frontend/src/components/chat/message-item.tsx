@@ -59,6 +59,8 @@ function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): str
   return status;
 }
 
+const ORBIT_DOTS = 8;
+
 function ThinkingIndicator({
   stage,
   t,
@@ -68,51 +70,43 @@ function ThinkingIndicator({
 }) {
   return (
     <div className="thinking-indicator" role="status" aria-live="polite">
-      <div className="thinking-indicator-header">
-        <span className="thinking-indicator-ring" aria-hidden="true" />
-        <span className="thinking-indicator-label">{thinkingStageLabel(t, stage)}</span>
-      </div>
-      <div className="thinking-indicator-progress" aria-hidden="true">
-        <span className="thinking-indicator-progress-bar" />
-      </div>
+      <span className="thinking-indicator-orbit" aria-hidden="true">
+        {Array.from({ length: ORBIT_DOTS }, (_, i) => (
+          <span
+            key={i}
+            className="orbit-dot"
+            style={{ "--i": i } as React.CSSProperties}
+          />
+        ))}
+      </span>
+      <span className="thinking-indicator-label">{thinkingStageLabel(t, stage)}</span>
     </div>
   );
 }
 
 function ToolStepsIndicator({
   steps,
-  thinkingStage,
   t,
 }: {
   steps: ToolStep[];
-  thinkingStage?: string | null;
   t: TranslateFn;
 }) {
-  const isSynthesizing = thinkingStage === "synthesizing";
+  const latestStep = steps[steps.length - 1];
+  if (!latestStep) return null;
 
   return (
-    <div className="tool-steps-indicator" role="status" aria-live="polite">
-      <div className="tool-steps-list">
-        {steps.map((step) => (
-          <div key={step.id} className={`tool-step tool-step--${step.status}`}>
-            <span className="tool-step-icon" aria-hidden="true" />
-            <span className="tool-step-label">
-              {toolDisplayLabel(step.toolName, t)}
-              {step.status === "running" ? "..." : ""}
-            </span>
-          </div>
-        ))}
-        {isSynthesizing ? (
-          <div className="tool-step tool-step--running">
-            <span className="tool-step-icon" aria-hidden="true" />
-            <span className="tool-step-label">
-              {t(uiStrings.thinking.generating)}
-            </span>
-          </div>
-        ) : null}
-      </div>
-      <div className="tool-steps-progress" aria-hidden="true">
-        <span className="tool-steps-progress-bar" />
+    <div
+      className="tool-steps-indicator"
+      role="status"
+      aria-live="polite"
+      key={latestStep.id}
+    >
+      <div className={`tool-step tool-step--${latestStep.status}`}>
+        <span className="tool-step-icon" aria-hidden="true" />
+        <span className="tool-step-label">
+          {toolDisplayLabel(latestStep.toolName, t)}
+          {latestStep.status === "running" ? "..." : ""}
+        </span>
       </div>
     </div>
   );
@@ -142,8 +136,14 @@ export function MessageItem({
     !message.content &&
     message.toolSteps &&
     message.toolSteps.length > 0;
+  const isSynthesizing =
+    !isUser &&
+    message.status === "streaming" &&
+    !message.content &&
+    message.thinkingStage === "synthesizing";
+  const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    !isUser && message.status === "streaming" && !message.content && !hasToolSteps;
+    !isUser && message.status === "streaming" && !message.content && !showToolSteps;
   const showStatusRow = Boolean(
     message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps
   );
@@ -220,10 +220,9 @@ export function MessageItem({
 
             {showThinkingIndicator ? (
               <ThinkingIndicator stage={message.thinkingStage} t={t} />
-            ) : hasToolSteps ? (
+            ) : showToolSteps ? (
               <ToolStepsIndicator
                 steps={message.toolSteps!}
-                thinkingStage={message.thinkingStage}
                 t={t}
               />
             ) : null}

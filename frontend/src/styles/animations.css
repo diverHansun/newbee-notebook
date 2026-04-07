@@ -12,11 +12,6 @@
   to { transform: rotate(360deg); }
 }
 
-@keyframes thinking-shimmer {
-  0% { transform: translateX(-140%); }
-  100% { transform: translateX(260%); }
-}
-
 @keyframes thinking-fade-out {
   to {
     opacity: 0;
