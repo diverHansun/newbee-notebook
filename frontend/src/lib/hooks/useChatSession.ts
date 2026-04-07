@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { chatOnce, confirmChatAction } from "@/lib/api/chat";
@@ -19,6 +19,7 @@ import { ALL_VIDEO_SUMMARIES_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
 import { useChatStream } from "@/lib/hooks/useChatStream";
+import { buildMarkdownVisibleMap, type MarkdownVisibleMap } from "@/lib/utils/markdown-typewriter";
 import { normalizeSources } from "@/lib/utils/sources";
 import { ChatMessage, ToolStep, useChatStore } from "@/stores/chat-store";
 
@@ -29,6 +30,22 @@ const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
 const CONFIRMATION_TIMEOUT_MS = 180_000;
 const LOCAL_MESSAGE_MATCH_WINDOW_MS = 120_000;
+const FINAL_TYPEWRITER_BASE_CPS = 60;
+const FINAL_TYPEWRITER_CATCHUP_CPS = 120;
+const FINAL_TYPEWRITER_CATCHUP_RAMP_MS = 280;
+
+type FinalTypewriterState = {
+  sessionId: string;
+  messageId: string;
+  rawContent: string;
+  visibleMap: MarkdownVisibleMap;
+  visibleChars: number;
+  displayedRawIndex: number;
+  fractionalCarry: number;
+  lastTickAt: number | null;
+  drainRequestedAt: number | null;
+  onDrainComplete: (() => void) | null;
+};
 
 function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
   if (mode !== "agent") return false;
@@ -209,6 +226,7 @@ export function useChatSession(notebookId: string) {
   const { t } = useLang();
   const queryClient = useQueryClient();
   const stream = useChatStream();
+  const [isFinalTypewriterActive, setIsFinalTypewriterActive] = useState(false);
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeStreamSessionIdRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
@@ -216,6 +234,8 @@ export function useChatSession(notebookId: string) {
   const thinkingTimeoutRef = useRef<number | null>(null);
   const confirmationTimersRef = useRef<Map<string, number>>(new Map());
   const pendingIntermediatePhaseRef = useRef(false);
+  const finalTypewriterStateRef = useRef<FinalTypewriterState | null>(null);
+  const finalTypewriterFrameRef = useRef<number | null>(null);
 
   const {
     currentSessionId,
@@ -281,10 +301,6 @@ export function useChatSession(notebookId: string) {
     [mutateSessionMessages]
   );
 
-  const getSessionMessage = useCallback((sessionId: string, id: string) => {
-    return (sessionMessagesRef.current[sessionId] ?? []).find((item) => item.id === id) ?? null;
-  }, []);
-
   const rotateIntermediateContentInSession = useCallback(
     (sessionId: string, id: string) => {
       mutateSessionMessages(sessionId, (items) =>
@@ -329,6 +345,7 @@ export function useChatSession(notebookId: string) {
           return {
             ...item,
             content: firstDelta,
+            finalContentStarted: true,
             thinkingStage: null,
             intermediateContent: undefined,
             exitingIntermediateContent:
@@ -350,19 +367,6 @@ export function useChatSession(notebookId: string) {
                 intermediateContent: undefined,
                 exitingIntermediateContent: null,
               }
-            : item
-        )
-      );
-    },
-    [mutateSessionMessages]
-  );
-
-  const appendMessageContentInSession = useCallback(
-    (sessionId: string, id: string, delta: string) => {
-      mutateSessionMessages(sessionId, (items) =>
-        items.map((item) =>
-          item.id === id
-            ? { ...item, content: `${item.content}${delta}`, thinkingStage: null }
             : item
         )
       );
@@ -399,6 +403,167 @@ export function useChatSession(notebookId: string) {
       );
     },
     [mutateSessionMessages]
+  );
+
+  const cancelFinalTypewriterFrame = useCallback(() => {
+    if (finalTypewriterFrameRef.current === null) return;
+    window.cancelAnimationFrame(finalTypewriterFrameRef.current);
+    finalTypewriterFrameRef.current = null;
+  }, []);
+
+  const clearFinalTypewriterState = useCallback(() => {
+    cancelFinalTypewriterFrame();
+    finalTypewriterStateRef.current = null;
+    setIsFinalTypewriterActive(false);
+  }, [cancelFinalTypewriterFrame]);
+
+  const runFinalTypewriterFrame = useCallback(
+    (now: number) => {
+      finalTypewriterFrameRef.current = null;
+      const state = finalTypewriterStateRef.current;
+      if (!state) return;
+
+      const lastTickAt = state.lastTickAt ?? now;
+      const elapsedMs = Math.max(0, now - lastTickAt);
+      state.lastTickAt = now;
+
+      let charsPerSecond = FINAL_TYPEWRITER_BASE_CPS;
+      if (state.drainRequestedAt !== null) {
+        const ramp = Math.min(1, (now - state.drainRequestedAt) / FINAL_TYPEWRITER_CATCHUP_RAMP_MS);
+        charsPerSecond =
+          FINAL_TYPEWRITER_BASE_CPS + (FINAL_TYPEWRITER_CATCHUP_CPS - FINAL_TYPEWRITER_BASE_CPS) * ramp;
+      }
+
+      state.fractionalCarry += (elapsedMs / 1000) * charsPerSecond;
+      const stepVisibleChars = Math.floor(state.fractionalCarry);
+      if (stepVisibleChars > 0) {
+        state.fractionalCarry -= stepVisibleChars;
+        state.visibleChars = Math.min(
+          state.visibleMap.totalVisibleChars,
+          state.visibleChars + stepVisibleChars
+        );
+      }
+
+      const nextRawIndex =
+        state.visibleMap.visibleToRawIndex[state.visibleChars] ?? state.rawContent.length;
+      if (nextRawIndex !== state.displayedRawIndex) {
+        state.displayedRawIndex = nextRawIndex;
+        updateMessageInSession(state.sessionId, state.messageId, {
+          content: state.rawContent.slice(0, nextRawIndex),
+          finalContentStarted: true,
+          thinkingStage: null,
+        });
+      }
+
+      const reachedTarget =
+        state.visibleChars >= state.visibleMap.totalVisibleChars &&
+        state.displayedRawIndex >= state.rawContent.length;
+      if (reachedTarget && state.onDrainComplete) {
+        const onDrainComplete = state.onDrainComplete;
+        clearFinalTypewriterState();
+        onDrainComplete();
+        return;
+      }
+
+      const shouldContinue =
+        state.visibleChars < state.visibleMap.totalVisibleChars ||
+        state.displayedRawIndex < state.rawContent.length ||
+        state.onDrainComplete !== null;
+      if (shouldContinue) {
+        finalTypewriterFrameRef.current = window.requestAnimationFrame(runFinalTypewriterFrame);
+      }
+    },
+    [clearFinalTypewriterState, updateMessageInSession]
+  );
+
+  const ensureFinalTypewriterRunning = useCallback(() => {
+    if (finalTypewriterFrameRef.current !== null) return;
+    finalTypewriterFrameRef.current = window.requestAnimationFrame(runFinalTypewriterFrame);
+  }, [runFinalTypewriterFrame]);
+
+  const enqueueFinalTypewriterDelta = useCallback(
+    (sessionId: string, messageId: string, delta: string) => {
+      if (!delta) return;
+      let state = finalTypewriterStateRef.current;
+      if (!state || state.sessionId !== sessionId || state.messageId !== messageId) {
+        beginFinalContentInSession(sessionId, messageId, "");
+        state = {
+          sessionId,
+          messageId,
+          rawContent: "",
+          visibleMap: buildMarkdownVisibleMap(""),
+          visibleChars: 0,
+          displayedRawIndex: 0,
+          fractionalCarry: 0,
+          lastTickAt: null,
+          drainRequestedAt: null,
+          onDrainComplete: null,
+        };
+        finalTypewriterStateRef.current = state;
+      }
+      setIsFinalTypewriterActive(true);
+
+      state.rawContent += delta;
+      state.visibleMap = buildMarkdownVisibleMap(state.rawContent);
+      state.visibleChars = Math.min(state.visibleChars, state.visibleMap.totalVisibleChars);
+
+      const immediateRawIndex =
+        state.visibleMap.visibleToRawIndex[state.visibleChars] ?? state.rawContent.length;
+      if (immediateRawIndex !== state.displayedRawIndex) {
+        state.displayedRawIndex = immediateRawIndex;
+        updateMessageInSession(sessionId, messageId, {
+          content: state.rawContent.slice(0, immediateRawIndex),
+          finalContentStarted: true,
+          thinkingStage: null,
+        });
+      }
+
+      ensureFinalTypewriterRunning();
+    },
+    [beginFinalContentInSession, ensureFinalTypewriterRunning, updateMessageInSession]
+  );
+
+  const isFinalTypewriterPending = useCallback((sessionId: string, messageId: string) => {
+    const state = finalTypewriterStateRef.current;
+    if (!state) return false;
+    if (state.sessionId !== sessionId || state.messageId !== messageId) return false;
+    return (
+      state.visibleChars < state.visibleMap.totalVisibleChars ||
+      state.displayedRawIndex < state.rawContent.length
+    );
+  }, []);
+
+  const requestFinalTypewriterDrain = useCallback(
+    (sessionId: string, messageId: string, onDrainComplete: () => void) => {
+      const state = finalTypewriterStateRef.current;
+      if (!state || state.sessionId !== sessionId || state.messageId !== messageId) {
+        onDrainComplete();
+        return;
+      }
+      if (
+        state.visibleChars >= state.visibleMap.totalVisibleChars &&
+        state.displayedRawIndex >= state.rawContent.length
+      ) {
+        clearFinalTypewriterState();
+        onDrainComplete();
+        return;
+      }
+      state.drainRequestedAt = window.performance.now();
+      state.onDrainComplete = onDrainComplete;
+      ensureFinalTypewriterRunning();
+    },
+    [clearFinalTypewriterState, ensureFinalTypewriterRunning]
+  );
+
+  const stopFinalTypewriterForMessage = useCallback(
+    (sessionId: string | null, messageId: string | null) => {
+      if (!sessionId || !messageId) return;
+      const state = finalTypewriterStateRef.current;
+      if (!state) return;
+      if (state.sessionId !== sessionId || state.messageId !== messageId) return;
+      clearFinalTypewriterState();
+    },
+    [clearFinalTypewriterState]
   );
 
   const clearThinkingTimeout = useCallback(() => {
@@ -438,7 +603,8 @@ export function useChatSession(notebookId: string) {
     activeStreamSessionIdRef.current = null;
     currentSessionIdRef.current = null;
     pendingIntermediatePhaseRef.current = false;
-  }, [notebookId]);
+    clearFinalTypewriterState();
+  }, [clearFinalTypewriterState, notebookId]);
 
   const findMessageByConfirmationRequest = useCallback((requestId: string) => {
     for (const [sessionId, items] of Object.entries(sessionMessagesRef.current)) {
@@ -585,8 +751,9 @@ export function useChatSession(notebookId: string) {
     return () => {
       clearThinkingTimeout();
       clearAllConfirmationTimers();
+      clearFinalTypewriterState();
     };
-  }, [clearAllConfirmationTimers, clearThinkingTimeout]);
+  }, [clearAllConfirmationTimers, clearFinalTypewriterState, clearThinkingTimeout]);
 
   const createSessionMutation = useMutation({
     mutationFn: (title?: string) =>
@@ -739,9 +906,11 @@ export function useChatSession(notebookId: string) {
 
               if (persistedReply) {
                 pendingIntermediatePhaseRef.current = false;
+                stopFinalTypewriterForMessage(sessionId, localAssistantId);
                 updateThinkingStageInSession(sessionId, localAssistantId, null);
                 updateMessageInSession(sessionId, localAssistantId, {
                   content: persistedReply.content,
+                  finalContentStarted: false,
                   status: "done",
                   messageId: persistedReply.message_id,
                   intermediateContent: undefined,
@@ -759,9 +928,11 @@ export function useChatSession(notebookId: string) {
               });
 
               pendingIntermediatePhaseRef.current = false;
+              stopFinalTypewriterForMessage(sessionId, localAssistantId);
               updateThinkingStageInSession(sessionId, localAssistantId, null);
               updateMessageInSession(sessionId, localAssistantId, {
                 content: fallback.content,
+                finalContentStarted: false,
                 status: "done",
                 messageId: fallback.message_id,
                 sources: normalizeSources(fallback.sources),
@@ -772,12 +943,14 @@ export function useChatSession(notebookId: string) {
             } catch (fallbackError) {
               const fallbackApiError = fallbackError as ApiError;
               pendingIntermediatePhaseRef.current = false;
+              stopFinalTypewriterForMessage(sessionId, localAssistantId);
               updateThinkingStageInSession(sessionId, localAssistantId, null);
               updateMessageInSession(sessionId, localAssistantId, {
                 status: "error",
                 content: `[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
                   fallbackApiError.message || "Fallback error"
                 }`,
+                finalContentStarted: false,
                 intermediateContent: undefined,
                 exitingIntermediateContent: null,
               });
@@ -844,16 +1017,7 @@ export function useChatSession(notebookId: string) {
               if (event.type === "content") {
                 clearThinkingTimeout();
                 if (activeAssistantIdRef.current) {
-                  const activeMessage = getSessionMessage(sessionId, activeAssistantIdRef.current);
-                  if (!activeMessage?.content) {
-                    beginFinalContentInSession(
-                      sessionId,
-                      activeAssistantIdRef.current,
-                      event.delta,
-                    );
-                  } else {
-                    appendMessageContentInSession(sessionId, activeAssistantIdRef.current, event.delta);
-                  }
+                  enqueueFinalTypewriterDelta(sessionId, activeAssistantIdRef.current, event.delta);
                 }
                 pendingIntermediatePhaseRef.current = false;
                 return;
@@ -903,27 +1067,43 @@ export function useChatSession(notebookId: string) {
               if (event.type === "done") {
                 streamReceivedDone = true;
                 clearThinkingTimeout();
-                clearConfirmationForMessage(sessionId, activeAssistantIdRef.current);
-                if (activeAssistantIdRef.current) {
-                  updateThinkingStageInSession(sessionId, activeAssistantIdRef.current, null);
-                  clearIntermediateVisualStateInSession(sessionId, activeAssistantIdRef.current);
-                  updateMessageInSession(sessionId, activeAssistantIdRef.current, { status: "done" });
+                const assistantLocalId = activeAssistantIdRef.current;
+                clearConfirmationForMessage(sessionId, assistantLocalId);
+
+                const finalizeDone = () => {
+                  if (assistantLocalId) {
+                    updateThinkingStageInSession(sessionId, assistantLocalId, null);
+                    clearIntermediateVisualStateInSession(sessionId, assistantLocalId);
+                    updateMessageInSession(sessionId, assistantLocalId, {
+                      status: "done",
+                      finalContentStarted: false,
+                    });
+                  } else {
+                    clearFinalTypewriterState();
+                  }
+                  pendingIntermediatePhaseRef.current = false;
+                  setStreaming(false, null);
+                  activeAssistantIdRef.current = null;
+                  activeStreamSessionIdRef.current = null;
+                  if (isDiagramRequest) {
+                    queryClient.invalidateQueries({
+                      queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
+                    });
+                  }
+                  if (isNoteRequest) {
+                    queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
+                  }
+                  if (isVideoRequest) {
+                    queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
+                  }
+                };
+
+                if (assistantLocalId && isFinalTypewriterPending(sessionId, assistantLocalId)) {
+                  requestFinalTypewriterDrain(sessionId, assistantLocalId, finalizeDone);
+                  return;
                 }
-                pendingIntermediatePhaseRef.current = false;
-                setStreaming(false, null);
-                activeAssistantIdRef.current = null;
-                activeStreamSessionIdRef.current = null;
-                if (isDiagramRequest) {
-                  queryClient.invalidateQueries({
-                    queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
-                  });
-                }
-                if (isNoteRequest) {
-                  queryClient.invalidateQueries({ queryKey: ["notes", notebookId] });
-                }
-                if (isVideoRequest) {
-                  queryClient.invalidateQueries({ queryKey: ALL_VIDEO_SUMMARIES_QUERY_KEY });
-                }
+
+                finalizeDone();
                 return;
               }
               if (event.type === "error") {
@@ -935,12 +1115,15 @@ export function useChatSession(notebookId: string) {
                 }
                 streamReceivedErrorEvent = true;
                 clearThinkingTimeout();
-                clearConfirmationForMessage(sessionId, activeAssistantIdRef.current);
-                if (activeAssistantIdRef.current) {
-                  updateThinkingStageInSession(sessionId, activeAssistantIdRef.current, null);
-                  updateMessageInSession(sessionId, activeAssistantIdRef.current, {
+                const assistantLocalId = activeAssistantIdRef.current;
+                clearConfirmationForMessage(sessionId, assistantLocalId);
+                if (assistantLocalId) {
+                  stopFinalTypewriterForMessage(sessionId, assistantLocalId);
+                  updateThinkingStageInSession(sessionId, assistantLocalId, null);
+                  updateMessageInSession(sessionId, assistantLocalId, {
                     status: "error",
                     content: `${message}\n\n[${event.error_code}] ${event.message}`,
+                    finalContentStarted: false,
                     intermediateContent: undefined,
                     exitingIntermediateContent: null,
                   });
@@ -954,7 +1137,6 @@ export function useChatSession(notebookId: string) {
             onError: (error) => {
               clearThinkingTimeout();
               if (streamReceivedDone || streamReceivedErrorEvent) {
-                setStreaming(false, null);
                 return;
               }
 
@@ -962,11 +1144,13 @@ export function useChatSession(notebookId: string) {
               const err = error as ApiError;
               if (!assistantLocalId || !shouldAttemptStreamFallback(error)) {
                 if (assistantLocalId) {
+                  stopFinalTypewriterForMessage(sessionId, assistantLocalId);
                   clearConfirmationForMessage(sessionId, assistantLocalId);
                   updateThinkingStageInSession(sessionId, assistantLocalId, null);
                   updateMessageInSession(sessionId, assistantLocalId, {
                     status: "error",
                     content: `[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`,
+                    finalContentStarted: false,
                     intermediateContent: undefined,
                     exitingIntermediateContent: null,
                   });
@@ -1161,14 +1345,19 @@ export function useChatSession(notebookId: string) {
       addMessageToSession,
       addToolStepInSession,
       appendExplainContent,
-      appendMessageContentInSession,
+      clearIntermediateVisualStateInSession,
       clearConfirmationForMessage,
+      clearFinalTypewriterState,
       clearThinkingTimeout,
       currentSessionId,
+      enqueueFinalTypewriterDelta,
       ensureSession,
+      isFinalTypewriterPending,
       notebookId,
       queryClient,
+      requestFinalTypewriterDrain,
       sessions,
+      stopFinalTypewriterForMessage,
       updateThinkingStageInSession,
       updateToolStepInSession,
       setExplainCard,
@@ -1227,6 +1416,7 @@ export function useChatSession(notebookId: string) {
     if (activeAssistantIdRef.current && activeStreamSessionIdRef.current) {
       const assistantLocalId = activeAssistantIdRef.current;
       const sessionId = activeStreamSessionIdRef.current;
+      stopFinalTypewriterForMessage(sessionId, assistantLocalId);
       clearConfirmationForMessage(sessionId, assistantLocalId);
       const activeAssistantMessage = (sessionMessagesRef.current[sessionId] ?? []).find((msg) => msg.id === assistantLocalId);
       updateThinkingStageInSession(sessionId, assistantLocalId, null);
@@ -1235,6 +1425,7 @@ export function useChatSession(notebookId: string) {
       } else {
         updateMessageInSession(sessionId, assistantLocalId, {
           status: "cancelled",
+          finalContentStarted: false,
           intermediateContent: undefined,
           exitingIntermediateContent: null,
         });
@@ -1254,6 +1445,7 @@ export function useChatSession(notebookId: string) {
     removeMessageFromSession,
     setExplainCard,
     setStreaming,
+    stopFinalTypewriterForMessage,
     stream,
     updateMessageInSession,
     updateThinkingStageInSession,
@@ -1290,7 +1482,7 @@ export function useChatSession(notebookId: string) {
     currentSessionId,
     messages,
     currentMode,
-    isStreaming: stream.isStreaming,
+    isStreaming: stream.isStreaming || isFinalTypewriterActive,
     explainCard,
     setMode,
     sendMessage,

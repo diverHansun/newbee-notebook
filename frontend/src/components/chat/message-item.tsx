@@ -120,32 +120,38 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
-  const showFinalContent = !isUser && !!message.content;
+  const hasFinalContentStarted = !isUser && Boolean(message.finalContentStarted || message.content);
+  const showFinalContent = !isUser && hasFinalContentStarted;
   const showIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !message.content &&
+    !hasFinalContentStarted &&
     !!message.intermediateContent;
   const showExitingIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
+    !hasFinalContentStarted &&
     !!message.exitingIntermediateContent;
   const hasToolSteps =
     !isUser &&
     message.status === "streaming" &&
-    !message.content &&
+    !hasFinalContentStarted &&
     message.toolSteps &&
     message.toolSteps.length > 0;
   const isSynthesizing =
     !isUser &&
     message.status === "streaming" &&
-    !message.content &&
+    !hasFinalContentStarted &&
     message.thinkingStage === "synthesizing";
   const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    !isUser && message.status === "streaming" && !message.content && !showToolSteps;
+    !isUser && message.status === "streaming" && !hasFinalContentStarted && !showToolSteps;
   const showStatusRow = Boolean(
-    message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps
+    message.status &&
+      message.status !== "done" &&
+      message.status !== "streaming" &&
+      !showThinkingIndicator &&
+      !hasToolSteps
   );
 
   return (

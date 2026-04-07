@@ -57,4 +57,36 @@ describe("MessageItem", () => {
     expect(onResolveConfirmation).toHaveBeenNthCalledWith(1, "req-1", true);
     expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", false);
   });
+
+  it("keeps intermediate block hidden once final content stream has started", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      finalContentStarted: true,
+      intermediateContent: "thinking...",
+      pendingConfirmation: undefined,
+      toolSteps: [],
+    };
+
+    const { container } = renderWithLang(
+      <MessageItem message={message} onOpenDocument={() => {}} />
+    );
+
+    expect(container.querySelector("[data-testid='assistant-intermediate-current']")).toBeNull();
+    expect(container.querySelector("[data-testid='assistant-message-body']")).not.toBeNull();
+  });
+
+  it("does not render streaming status text when assistant is generating final content", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "Partial reply",
+      pendingConfirmation: undefined,
+      toolSteps: [],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.queryByText("Generating...")).toBeNull();
+  });
 });

@@ -37,6 +37,7 @@ export type ChatMessage = {
   role: MessageRole;
   mode: MessageMode;
   content: string;
+  finalContentStarted?: boolean;
   intermediateContent?: string;
   exitingIntermediateContent?: string | null;
   intermediateGeneration?: number;
