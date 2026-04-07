@@ -27,6 +27,12 @@ class PhaseEvent:
 
 
 @dataclass(frozen=True)
+class IntermediateContentEvent:
+    delta: str
+    event: str = "intermediate_content"
+
+
+@dataclass(frozen=True)
 class ToolCallEvent:
     tool_name: str
     tool_call_id: str

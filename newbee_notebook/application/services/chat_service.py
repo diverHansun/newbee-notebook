@@ -32,6 +32,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    IntermediateContentEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -449,6 +450,9 @@ class ChatService:
                     continue
                 if isinstance(event, PhaseEvent):
                     yield {"type": "phase", "stage": event.stage}
+                    continue
+                if isinstance(event, IntermediateContentEvent):
+                    yield {"type": "intermediate_content", "delta": event.delta}
                     continue
                 if isinstance(event, ToolCallEvent):
                     yield {

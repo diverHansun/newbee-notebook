@@ -17,6 +17,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    IntermediateContentEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -33,6 +34,48 @@ class AgentResult:
     sources: list[SourceItem] = field(default_factory=list)
     tool_calls_made: list[str] = field(default_factory=list)
     iterations: int = 0
+
+
+@dataclass
+class _ToolCallAccumulator:
+    index: int
+    tool_call_id: str = ""
+    tool_type: str = "function"
+    function_name: str = ""
+    function_arguments: list[str] = field(default_factory=list)
+
+    def merge(self, delta: dict[str, Any]) -> None:
+        if not self.tool_call_id:
+            self.tool_call_id = str(delta.get("id") or "")
+        delta_type = str(delta.get("type") or "")
+        if delta_type:
+            self.tool_type = delta_type
+
+        function_payload = delta.get("function") or {}
+        name_fragment = str(function_payload.get("name") or "")
+        if name_fragment:
+            self.function_name += name_fragment
+
+        arguments_fragment = function_payload.get("arguments")
+        if arguments_fragment is not None:
+            self.function_arguments.append(str(arguments_fragment))
+
+    def to_tool_call(self) -> dict[str, Any]:
+        return {
+            "id": self.tool_call_id or f"stream-tool-call-{self.index + 1}",
+            "type": self.tool_type or "function",
+            "function": {
+                "name": self.function_name,
+                "arguments": "".join(self.function_arguments) or "{}",
+            },
+        }
+
+
+@dataclass
+class _StreamReasoningResult:
+    content: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    used_structured_tool_calls: bool = False
 
 
 class AgentLoop:
@@ -203,6 +246,38 @@ class AgentLoop:
             )
         return parsed_calls
 
+    @staticmethod
+    def _coerce_stream_tool_call_index(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    @classmethod
+    def _normalize_stream_tool_call_delta(cls, tool_call: Any) -> dict[str, Any]:
+        if isinstance(tool_call, dict):
+            function_payload = tool_call.get("function") or {}
+            return {
+                "index": cls._coerce_stream_tool_call_index(tool_call.get("index")),
+                "id": str(tool_call.get("id") or ""),
+                "type": str(tool_call.get("type") or "function"),
+                "function": {
+                    "name": str(function_payload.get("name") or ""),
+                    "arguments": function_payload.get("arguments"),
+                },
+            }
+
+        function_payload = getattr(tool_call, "function", None)
+        return {
+            "index": cls._coerce_stream_tool_call_index(getattr(tool_call, "index", 0)),
+            "id": str(getattr(tool_call, "id", "") or ""),
+            "type": str(getattr(tool_call, "type", "function") or "function"),
+            "function": {
+                "name": str(getattr(function_payload, "name", "") or ""),
+                "arguments": getattr(function_payload, "arguments", None),
+            },
+        }
+
 
     @classmethod
     def _extract_stream_delta(cls, chunk: Any) -> str:
@@ -214,6 +289,29 @@ class AgentLoop:
         if isinstance(delta, dict):
             return str(delta.get("content") or "")
         return str(getattr(delta, "content", "") or "")
+
+    @classmethod
+    def _extract_stream_tool_call_deltas(cls, chunk: Any) -> list[dict[str, Any]]:
+        choice = cls._extract_choice(chunk)
+        if isinstance(choice, dict):
+            delta = choice.get("delta") or {}
+            tool_calls = delta.get("tool_calls") or []
+            return [cls._normalize_stream_tool_call_delta(item) for item in tool_calls]
+
+        delta = getattr(choice, "delta", None)
+        if delta is None:
+            return []
+        if isinstance(delta, dict):
+            tool_calls = delta.get("tool_calls") or []
+        else:
+            tool_calls = getattr(delta, "tool_calls", []) or []
+        return [cls._normalize_stream_tool_call_delta(item) for item in tool_calls]
+
+    @staticmethod
+    def _build_stream_tool_calls(
+        accumulators: dict[int, _ToolCallAccumulator],
+    ) -> list[dict[str, Any]]:
+        return [accumulators[index].to_tool_call() for index in sorted(accumulators)]
 
     def _required_tool_choice(self) -> dict[str, Any] | None:
         required = self._mode_config.loop_policy.required_tool_name
@@ -252,8 +350,11 @@ class AgentLoop:
         raise last_error
 
     @staticmethod
-    def _assistant_tool_message(tool_calls: list[dict[str, Any]]) -> dict[str, Any]:
-        return {"role": "assistant", "content": None, "tool_calls": tool_calls}
+    def _assistant_tool_message(
+        tool_calls: list[dict[str, Any]],
+        content: str | None = None,
+    ) -> dict[str, Any]:
+        return {"role": "assistant", "content": content or None, "tool_calls": tool_calls}
 
     @staticmethod
     def _tool_result_message(tool_call_id: str, result: ToolCallResult) -> dict[str, Any]:
@@ -349,6 +450,73 @@ class AgentLoop:
         accepted_bands = self._mode_config.loop_policy.synthesis_quality_bands
         return bool(quality_band and quality_band in accepted_bands)
 
+    async def _stream_reasoning(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tool_specs: list[dict[str, Any]] | None,
+        tool_choice: dict[str, Any] | str | None,
+        result: _StreamReasoningResult,
+    ) -> AsyncGenerator[IntermediateContentEvent, None]:
+        last_error: Exception | None = None
+
+        for attempt in range(self._llm_retry_attempts):
+            accumulated_content: list[str] = []
+            content_buffer: list[str] = []
+            structured_tool_calls: dict[int, _ToolCallAccumulator] = {}
+            emitted_business_event = False
+
+            try:
+                stream = await self._resolve_stream(
+                    self._llm_client.chat_stream(
+                        messages=messages,
+                        tools=tool_specs,
+                        tool_choice=tool_choice,
+                        disable_thinking=True,
+                    )
+                )
+
+                async for chunk in stream:
+                    content_delta = self._extract_stream_delta(chunk)
+                    if content_delta:
+                        accumulated_content.append(content_delta)
+                        if structured_tool_calls:
+                            emitted_business_event = True
+                            yield IntermediateContentEvent(delta=content_delta)
+                        else:
+                            content_buffer.append(content_delta)
+
+                    tool_call_deltas = self._extract_stream_tool_call_deltas(chunk)
+                    if not tool_call_deltas:
+                        continue
+
+                    for tool_call_delta in tool_call_deltas:
+                        index = int(tool_call_delta.get("index", 0))
+                        accumulator = structured_tool_calls.setdefault(
+                            index,
+                            _ToolCallAccumulator(index=index),
+                        )
+                        accumulator.merge(tool_call_delta)
+
+                    if content_buffer:
+                        emitted_business_event = True
+                        yield IntermediateContentEvent(delta="".join(content_buffer))
+                        content_buffer.clear()
+
+                result.content = "".join(accumulated_content)
+                result.tool_calls = self._build_stream_tool_calls(structured_tool_calls)
+                result.used_structured_tool_calls = bool(result.tool_calls)
+                if not result.tool_calls:
+                    result.tool_calls = self._parse_textual_tool_calls(result.content)
+                return
+            except Exception as exc:  # pragma: no cover - retry branch verified by tests
+                if emitted_business_event or attempt == self._llm_retry_attempts - 1:
+                    raise
+                last_error = exc
+
+        assert last_error is not None
+        raise last_error
+
     async def stream(
         self,
         *,
@@ -358,6 +526,7 @@ class AgentLoop:
         StartEvent
         | WarningEvent
         | PhaseEvent
+        | IntermediateContentEvent
         | ConfirmationRequestEvent
         | ToolCallEvent
         | ToolResultEvent
@@ -378,6 +547,7 @@ class AgentLoop:
         first_turn_repair_attempts = 0
         force_first_tool_repair_attempts = 0
         force_synthesis = False
+        self._last_iterations = 0
         forced_tool_choice: dict[str, Any] | str | None = (
             "required" if self._force_first_tool_call and tool_specs else None
         )
@@ -398,16 +568,19 @@ class AgentLoop:
                     return
 
                 yield PhaseEvent(stage="reasoning")
-                response = await self._chat_with_retry(
+                reasoning_result = _StreamReasoningResult()
+                async for event in self._stream_reasoning(
                     messages=messages,
-                    tools=tool_specs or None,
+                    tool_specs=tool_specs or None,
                     tool_choice=forced_tool_choice or self._required_tool_choice(),
-                    disable_thinking=True,
-                )
+                    result=reasoning_result,
+                ):
+                    yield event
                 iterations += 1
+                self._last_iterations = iterations
 
-                tool_calls = self._extract_tool_calls(response)
-                assistant_content = self._extract_message_content(response).strip()
+                tool_calls = reasoning_result.tool_calls
+                assistant_content = reasoning_result.content.strip()
                 if not tool_calls:
                     if self._force_first_tool_call and not tool_calls_made:
                         if force_first_tool_repair_attempts >= self._mode_config.loop_policy.invalid_tool_repair_limit:
@@ -470,7 +643,15 @@ class AgentLoop:
                 repair_attempts = 0
                 force_first_tool_repair_attempts = 0
                 forced_tool_choice = None
-                messages.append(self._assistant_tool_message(tool_calls))
+                structured_assistant_content = (
+                    assistant_content if reasoning_result.used_structured_tool_calls else None
+                )
+                messages.append(
+                    self._assistant_tool_message(
+                        tool_calls,
+                        content=structured_assistant_content,
+                    )
+                )
                 yield PhaseEvent(stage="retrieving")
 
                 for tool_call in tool_calls:
@@ -729,7 +910,7 @@ class AgentLoop:
             elif isinstance(event, ErrorEvent):
                 raise RuntimeError(event.message)
 
-        # A plain open-loop answer may not call any tool but still uses one reasoning iteration.
+        iterations = max(iterations, int(getattr(self, "_last_iterations", 0)))
         if not iterations:
             iterations = max(1, len(getattr(self._llm_client, "chat_calls", [])))
 

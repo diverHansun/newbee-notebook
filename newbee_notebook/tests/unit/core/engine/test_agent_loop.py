@@ -16,24 +16,75 @@ def anyio_backend():
 
 
 class _FakeLLMClient:
-    def __init__(self, *, chat_responses=None, stream_chunks=None, chat_exceptions=None):
+    def __init__(
+        self,
+        *,
+        chat_responses=None,
+        reasoning_stream_batches=None,
+        stream_chunks=None,
+        chat_exceptions=None,
+    ):
         self.chat_responses = list(chat_responses or [])
+        self.reasoning_stream_batches = [list(batch) for batch in (reasoning_stream_batches or [])]
         self.stream_chunks = list(stream_chunks or [])
         self.chat_exceptions = list(chat_exceptions or [])
         self.chat_calls: list[dict] = []
         self.stream_calls: list[dict] = []
 
-    async def chat(self, **kwargs):
-        self.chat_calls.append(kwargs)
+    def _raise_chat_exception_if_needed(self) -> None:
         if self.chat_exceptions:
             exc = self.chat_exceptions.pop(0)
             if exc is not None:
                 raise exc
+
+    @staticmethod
+    def _response_to_stream_batch(response: dict) -> list[dict]:
+        choice = AgentLoop._extract_choice(response)
+        if isinstance(choice, dict):
+            message = choice.get("message") or {}
+        else:
+            message = getattr(choice, "message", {}) or {}
+
+        if isinstance(message, dict):
+            content = str(message.get("content") or "")
+            tool_calls = list(message.get("tool_calls") or [])
+        else:
+            content = str(getattr(message, "content", "") or "")
+            tool_calls = list(getattr(message, "tool_calls", []) or [])
+
+        delta: dict[str, object] = {}
+        if content:
+            delta["content"] = content
+        if tool_calls:
+            delta["tool_calls"] = [
+                {"index": index, **AgentLoop._normalize_tool_call(tool_call)}
+                for index, tool_call in enumerate(tool_calls)
+            ]
+        if not delta:
+            return []
+        return [{"choices": [{"delta": delta}]}]
+
+    def _next_stream_batch(self, **kwargs) -> list[dict]:
+        is_reasoning_call = kwargs.get("tools") is not None or kwargs.get("tool_choice") is not None
+        if is_reasoning_call and (self.reasoning_stream_batches or self.chat_responses):
+            self.chat_calls.append(kwargs)
+            self._raise_chat_exception_if_needed()
+            if self.reasoning_stream_batches:
+                return self.reasoning_stream_batches.pop(0)
+            return self._response_to_stream_batch(self.chat_responses.pop(0))
+
+        self.stream_calls.append(kwargs)
+        batch = list(self.stream_chunks)
+        self.stream_chunks = []
+        return batch
+
+    async def chat(self, **kwargs):
+        self.chat_calls.append(kwargs)
+        self._raise_chat_exception_if_needed()
         return self.chat_responses.pop(0)
 
     async def chat_stream(self, **kwargs):
-        self.stream_calls.append(kwargs)
-        for chunk in self.stream_chunks:
+        for chunk in self._next_stream_batch(**kwargs):
             yield chunk
 
 
@@ -54,8 +105,7 @@ class _AwaitableStream:
 
 class _RealShapedLLMClient(_FakeLLMClient):
     async def chat_stream(self, **kwargs):
-        self.stream_calls.append(kwargs)
-        return _AwaitableStream(self.stream_chunks)
+        return _AwaitableStream(self._next_stream_batch(**kwargs))
 
 
 def _tool_call(name: str, arguments: dict, tool_call_id: str = "call-1") -> dict:
@@ -85,6 +135,39 @@ def _chat_response(*, tool_calls=None, content=None, finish_reason=None) -> dict
 
 def _stream_chunk(delta: str) -> dict:
     return {"choices": [{"delta": {"content": delta}}]}
+
+
+def _stream_tool_call_delta(
+    index: int,
+    *,
+    tool_call_id: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+    tool_type: str | None = None,
+) -> dict:
+    delta = {"index": index}
+    if tool_call_id is not None:
+        delta["id"] = tool_call_id
+    if tool_type is not None:
+        delta["type"] = tool_type
+
+    function: dict[str, str] = {}
+    if name is not None:
+        function["name"] = name
+    if arguments is not None:
+        function["arguments"] = arguments
+    if function:
+        delta["function"] = function
+    return delta
+
+
+def _stream_tool_call_chunk(*tool_calls: dict, content: str | None = None) -> dict:
+    delta: dict[str, object] = {}
+    if content is not None:
+        delta["content"] = content
+    if tool_calls:
+        delta["tool_calls"] = list(tool_calls)
+    return {"choices": [{"delta": delta}]}
 
 
 def _object_tool_call(name: str, arguments: dict, tool_call_id: str = "call-1"):
@@ -559,6 +642,8 @@ async def test_agent_loop_parses_textual_tool_call_markup_from_content():
     assert result.tool_calls_made == ['knowledge_base']
     assert captured_payloads == [{'query': 'paper title', 'search_type': 'keyword', 'max_results': 5}]
     assert len(llm.stream_calls) == 0
+    assistant_tool_messages = [msg for msg in llm.chat_calls[1]["messages"] if msg.get("tool_calls")]
+    assert assistant_tool_messages[-1]["content"] is None
 
 
 @pytest.mark.anyio
@@ -823,3 +908,62 @@ async def test_agent_loop_normalizes_openai_tool_call_objects():
     result = await loop.run(message="explain", chat_history=[])
 
     assert result.response == "Normalized"
+
+
+@pytest.mark.anyio
+async def test_agent_loop_stream_emits_intermediate_content_and_preserves_structured_reasoning_content():
+    llm = _FakeLLMClient(
+        reasoning_stream_batches=[
+            [
+                _stream_chunk("让我先"),
+                _stream_chunk("查一下知识库"),
+                _stream_tool_call_chunk(
+                    _stream_tool_call_delta(
+                        0,
+                        tool_call_id="call-1",
+                        name="knowledge_base",
+                        arguments="",
+                    )
+                ),
+                _stream_tool_call_chunk(
+                    _stream_tool_call_delta(
+                        0,
+                        arguments='{"query":"AI"}',
+                    )
+                ),
+            ],
+            [_stream_chunk("这是最终答案")],
+        ],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Doc",
+                    text="evidence",
+                    score=0.82,
+                )
+            ],
+            quality_meta=_quality("medium"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    events = [event async for event in loop.stream(message="question", chat_history=[])]
+
+    event_types = [event.event for event in events]
+    assert event_types[:3] == ["start", "phase", "intermediate_content"]
+    assert "tool_call" in event_types
+    assert "tool_result" in event_types
+    assert event_types[-2:] == ["sources", "done"]
+
+    intermediate_events = [event for event in events if event.event == "intermediate_content"]
+    assert [event.delta for event in intermediate_events] == ["让我先查一下知识库"]
+
+    assistant_tool_messages = [msg for msg in llm.chat_calls[1]["messages"] if msg.get("tool_calls")]
+    assert assistant_tool_messages[-1]["content"] == "让我先查一下知识库"

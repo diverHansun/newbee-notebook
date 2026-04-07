@@ -226,6 +226,22 @@ def test_sse_adapter_emits_phase_and_thinking_compat_events():
     ]
 
 
+def test_sse_adapter_passthroughs_intermediate_content_events():
+    async def _stream():
+        yield {"type": "intermediate_content", "delta": "让我先查一下"}
+
+    async def _collect():
+        items = []
+        async for payload in chat_router.sse_adapter(_stream()):
+            items.append(payload)
+        return items
+
+    events = asyncio.run(_collect())
+    parsed = [json.loads(item.removeprefix("data: ").strip()) for item in events]
+
+    assert parsed == [{"type": "intermediate_content", "delta": "让我先查一下"}]
+
+
 def test_heartbeat_generator_emits_heartbeat_while_waiting_for_first_event():
     async def delayed_stream():
         await asyncio.sleep(0.12)
