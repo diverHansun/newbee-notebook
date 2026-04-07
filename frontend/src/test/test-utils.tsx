@@ -13,10 +13,15 @@ export function renderWithLang(
   ui: ReactElement,
   { lang = "en", ...options }: RenderWithLangOptions = {}
 ) {
-  return render(
-    <LanguageContext.Provider value={{ lang, setLang: () => {} }}>{ui}</LanguageContext.Provider>,
-    options
-  );
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <LanguageContext.Provider value={{ lang, setLang: () => {} }}>
+        {children}
+      </LanguageContext.Provider>
+    );
+  }
+
+  return render(ui, { wrapper: Wrapper, ...options });
 }
 
 export function createQueryClient(): QueryClient {

@@ -152,6 +152,7 @@ export function MessageItem({
     <div
       data-testid="message-row"
       data-role={isUser ? "user" : "assistant"}
+      data-message-id={message.id}
       style={{ display: "flex", justifyContent: isUser ? "flex-end" : "center", width: "100%", marginTop: roleTransition ? 20 : undefined }}
     >
       <div
