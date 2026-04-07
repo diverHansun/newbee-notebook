@@ -152,7 +152,7 @@ export function MessageItem({
     <div
       data-testid="message-row"
       data-role={isUser ? "user" : "assistant"}
-      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "center", width: "100%", marginTop: roleTransition ? 24 : undefined }}
+      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "center", width: "100%", marginTop: roleTransition ? 20 : undefined }}
     >
       <div
         style={{
@@ -187,7 +187,7 @@ export function MessageItem({
               color: "hsl(var(--user-bubble-fg))",
             }}
           >
-            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
               {message.content}
             </p>
           </div>
