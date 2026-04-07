@@ -405,6 +405,25 @@ describe("ChatPanel scroll anchor", () => {
       vi.runOnlyPendingTimers();
     });
 
+    rerender(<ChatPanel {...buildProps({ messages: [...anchoredMessages], isStreaming: true })} />);
+    layout = installChatLayout(container, {
+      rowMetrics: {
+        "user-1": { top: 40, height: 40 },
+        "assistant-1": { top: 100, height: 100 },
+        "user-2": { top: 420, height: 48 },
+        "assistant-2": { top: 492, height: 28 },
+      },
+      spacerOffsetTop: 520,
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(64);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(220);
+    });
+
     fireEvent.wheel(layout.list);
     layout.list.scrollTop = 120;
     fireEvent.scroll(layout.list);
@@ -434,6 +453,7 @@ describe("ChatPanel scroll anchor", () => {
       )
     ).toBe(false);
     expect(layout.scrollTop).toBe(120);
+    expect(layout.spacer.style.minHeight).not.toBe("0px");
   });
 
   it("re-anchors on the next user send after browsing history", async () => {

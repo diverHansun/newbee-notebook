@@ -177,6 +177,8 @@ export function ChatPanel({
       (lastMsg.role === "assistant" && secondToLast?.role === "user");
 
     if (userJustSent) {
+      // New turn starts: reset old spacer baseline before computing this turn's anchor.
+      setBottomPadding(0);
       anchoredUserMessageIdRef.current = lastMsg.role === "user" ? lastMsg.id : (secondToLast?.id ?? null);
       userScrollIntentRef.current = false;
       scrollModeRef.current = "send-anchor";
@@ -275,7 +277,11 @@ export function ChatPanel({
       if (userScrollIntentRef.current) {
         userScrollIntentRef.current = false;
         anchoredUserMessageIdRef.current = null;
-        setBottomPadding(0);
+        // Keep reserved space while this stream is still producing content,
+        // otherwise user message may "drop" when returning to the latest area.
+        if (!isStreaming) {
+          setBottomPadding(0);
+        }
         const nextScrollMode = isNearBottom ? "stream-follow" : "free-browse";
         scrollModeRef.current = nextScrollMode;
         setScrollMode(nextScrollMode);
