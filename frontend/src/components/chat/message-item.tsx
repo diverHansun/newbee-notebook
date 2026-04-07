@@ -9,33 +9,12 @@ import { ChatMessage, ToolStep } from "@/stores/chat-store";
 
 type MessageItemProps = {
   message: ChatMessage;
+  roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
   onResolveConfirmation?: (requestId: string, approved: boolean) => void;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
-
-function modeBadgeClass(mode: string): string {
-  const map: Record<string, string> = {
-    agent: "badge-chat",
-    chat: "badge-chat",
-    ask: "badge-ask",
-    explain: "badge-explain",
-    conclude: "badge-conclude",
-  };
-  return map[mode] || "badge-default";
-}
-
-function modeLabel(mode: string): string {
-  const map: Record<string, string> = {
-    agent: "Agent",
-    chat: "Agent",
-    ask: "Ask",
-    explain: "Explain",
-    conclude: "Conclude",
-  };
-  return map[mode] || mode;
-}
 
 function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
   if (stage === "retrieving") return t(uiStrings.thinking.retrieving);
@@ -141,6 +120,7 @@ function ToolStepsIndicator({
 
 export function MessageItem({
   message,
+  roleTransition,
   onOpenDocument: _onOpenDocument,
   onResolveConfirmation,
 }: MessageItemProps) {
@@ -164,41 +144,45 @@ export function MessageItem({
     message.toolSteps.length > 0;
   const showThinkingIndicator =
     !isUser && message.status === "streaming" && !message.content && !hasToolSteps;
+  const showStatusRow = Boolean(
+    message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps
+  );
 
   return (
-    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", width: "100%" }}>
+    <div
+      data-testid="message-row"
+      data-role={isUser ? "user" : "assistant"}
+      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "center", width: "100%", marginTop: roleTransition ? 24 : undefined }}
+    >
       <div
         style={{
           width: isUser ? "auto" : "100%",
-          maxWidth: isUser ? "85%" : "min(72ch, 100%)",
+          maxWidth: isUser ? "85%" : "min(88ch, 100%)",
           minWidth: 0,
         }}
       >
-        {/* Mode badge + status */}
-        <div
-          className="row"
-          style={{
-            marginBottom: 6,
-            justifyContent: isUser ? "flex-end" : "flex-start",
-            gap: 6,
-          }}
-        >
-          <span className={`badge ${modeBadgeClass(message.mode)}`}>
-            {modeLabel(message.mode)}
-          </span>
-          {message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps && (
+        {showStatusRow ? (
+          <div
+            className="row"
+            style={{
+              marginBottom: 6,
+              justifyContent: isUser ? "flex-end" : "center",
+              gap: 6,
+            }}
+          >
             <span className="muted" style={{ fontSize: 11 }}>
               {messageStatusLabel(t, message.status)}
             </span>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {isUser ? (
           <div
             className="card"
             data-testid="user-message-bubble"
             style={{
-              padding: "12px 16px",
+              padding: "8px 16px",
+              borderRadius: 16,
               background: "hsl(var(--user-bubble-bg))",
               color: "hsl(var(--user-bubble-fg))",
             }}

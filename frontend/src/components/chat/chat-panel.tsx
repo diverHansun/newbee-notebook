@@ -175,14 +175,19 @@ export function ChatPanel({
             <span>{t(uiStrings.chat.emptyMessages)}</span>
           </div>
         ) : (
-          messages.map((message) => (
-            <MessageItem
-              key={message.id}
-              message={message}
-              onOpenDocument={onOpenDocument}
-              onResolveConfirmation={onResolveConfirmation}
-            />
-          ))
+          messages.map((message, index) => {
+            const prev = messages[index - 1];
+            const roleTransition = prev !== undefined && prev.role !== message.role;
+            return (
+              <MessageItem
+                key={message.id}
+                message={message}
+                roleTransition={roleTransition}
+                onOpenDocument={onOpenDocument}
+                onResolveConfirmation={onResolveConfirmation}
+              />
+            );
+          })
         )}
         <div ref={messagesEndRef} style={{ height: 0 }} aria-hidden />
       </div>

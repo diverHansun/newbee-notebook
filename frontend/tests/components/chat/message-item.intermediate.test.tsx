@@ -35,11 +35,13 @@ describe("MessageItem intermediate assistant layout", () => {
       { lang: "en" }
     );
 
+    expect(screen.getByTestId("message-row")).toHaveStyle({ justifyContent: "center" });
     expect(screen.getByTestId("assistant-lane")).toBeInTheDocument();
     expect(screen.getByTestId("assistant-intermediate-current")).toHaveTextContent("Let me check first.");
     expect(container.querySelector(".tool-steps-indicator")).not.toBeNull();
     expect(screen.queryByText(/^AI$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^U$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Agent$/)).not.toBeInTheDocument();
   });
 
   it("renders exiting intermediate text above the final assistant body", () => {

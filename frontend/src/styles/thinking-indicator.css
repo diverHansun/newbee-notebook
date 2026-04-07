@@ -5,16 +5,24 @@
 .assistant-lane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: min(72ch, 100%);
+  gap: 8px;
+  width: 100%;
+  max-width: 88ch;
+  margin: 0 auto;
 }
 
 .assistant-message-body {
   min-width: 0;
+  width: 100%;
+}
+
+.assistant-message-body .markdown-content {
+  font-size: 16px;
 }
 
 .assistant-intermediate {
   min-width: 0;
+  width: 100%;
 }
 
 .assistant-intermediate-text {

@@ -243,6 +243,29 @@ describe("ModelConfigPanel", () => {
     expect(within(embeddingCard as HTMLElement).queryByText("API key")).not.toBeInTheDocument();
   });
 
+  it("hides embedding model details when local mode is selected", async () => {
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        embedding: {
+          mode: "local",
+          api_provider: "qwen",
+          model: "Qwen3-Embedding-0.6B",
+          api_model: "text-embedding-v4",
+          api_key_set: null,
+        },
+      })
+    );
+
+    renderPanel(<ModelConfigPanel />);
+
+    const embeddingHeading = await screen.findByText("Embedding Configuration");
+    const embeddingCard = embeddingHeading.closest(".control-panel-card");
+    expect(embeddingCard).not.toBeNull();
+    expect(within(embeddingCard as HTMLElement).queryByText("Model")).not.toBeInTheDocument();
+    expect(within(embeddingCard as HTMLElement).queryByText("text-embedding-v4")).not.toBeInTheDocument();
+    expect(within(embeddingCard as HTMLElement).queryByText("Qwen3-Embedding-0.6B")).not.toBeInTheDocument();
+  });
+
   it("preserves the qwen api model when switching from local mode back to api", async () => {
     const user = userEvent.setup();
     apiMocks.getModelsConfig.mockResolvedValue(

@@ -631,19 +631,14 @@ export function ModelConfigPanel() {
                 </datalist>
               </div>
             </>
-          ) : (
-            <div className="control-panel-readonly-row">
-              <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.embeddingModel)}</span>
-              <span>{localEmbeddingModels[0] || embeddingDraft.model}</span>
-            </div>
-          )}
+          ) : null}
 
           <div className="control-panel-readonly-row">
             <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.embeddingDim)}</span>
             <span>{embeddingDraft.dim}</span>
           </div>
 
-          {embeddingDraft.api_key_set !== null ? (
+          {(embeddingDraft.mode || "api") === "api" && embeddingDraft.api_key_set !== null ? (
             <div className="control-panel-readonly-row">
               <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.apiKeyStatus)}</span>
               <span className="control-panel-status">
