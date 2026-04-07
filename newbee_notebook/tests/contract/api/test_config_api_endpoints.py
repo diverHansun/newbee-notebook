@@ -49,16 +49,26 @@ def _build_client(monkeypatch):
 
     async def _fake_get_embedding_config_async(_session):
         provider = store.get("embedding.provider", "qwen3-embedding")
-        mode = store.get("embedding.mode", "api") if provider == "qwen3-embedding" else None
+        mode = store.get("embedding.mode", "api")
+        api_provider = store.get(
+            "embedding.api_provider",
+            "zhipu" if provider == "zhipu" else "qwen",
+        )
+        api_model = store.get(
+            "embedding.api_model",
+            "embedding-3" if api_provider == "zhipu" else "text-embedding-v4",
+        )
         model = (
-            store.get("embedding.api_model", "text-embedding-v4")
-            if provider == "qwen3-embedding"
-            else "embedding-3"
+            store.get("embedding.model", "Qwen3-Embedding-0.6B")
+            if mode == "local"
+            else api_model
         )
         return {
             "provider": provider,
             "mode": mode,
             "model": model,
+            "api_provider": api_provider,
+            "api_model": api_model,
             "dim": 1024,
             "source": "db" if "embedding.provider" in store else "default",
         }
@@ -145,6 +155,8 @@ def test_get_models_returns_effective_config(monkeypatch):
     assert payload["llm"]["provider"] == "qwen"
     assert payload["llm"]["api_key_set"] is True
     assert payload["embedding"]["provider"] == "qwen3-embedding"
+    assert payload["embedding"]["api_provider"] == "qwen"
+    assert payload["embedding"]["api_model"] == "text-embedding-v4"
     assert payload["embedding"]["api_key_set"] is True
     assert payload["mineru"]["mode"] == "cloud"
     assert payload["mineru"]["local_enabled"] is True
@@ -163,6 +175,7 @@ def test_get_models_returns_null_api_key_status_for_local_modes(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["embedding"]["mode"] == "local"
+    assert payload["embedding"]["api_provider"] == "qwen"
     assert payload["embedding"]["api_key_set"] is None
     assert payload["mineru"]["mode"] == "local"
     assert payload["mineru"]["api_key_set"] is None
@@ -208,6 +221,15 @@ def test_get_available_models_exposes_glm_5_preset(monkeypatch):
     assert response.status_code == 200
     presets = response.json()["llm"]["presets"]
     assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-5"}
+    assert response.json()["embedding"]["api_providers"] == ["qwen", "zhipu"]
+    assert {
+        preset["name"]
+        for preset in response.json()["embedding"]["api_models_by_provider"]["qwen"]
+    } == {"text-embedding-v4"}
+    assert {
+        preset["name"]
+        for preset in response.json()["embedding"]["api_models_by_provider"]["zhipu"]
+    } == {"embedding-3"}
     assert response.json()["mineru"]["modes"] == ["cloud", "local"]
     assert response.json()["asr"]["providers"] == ["zhipu", "qwen"]
     assert {preset["name"] for preset in response.json()["asr"]["presets"]} == {
@@ -253,6 +275,29 @@ def test_put_embedding_rejects_invalid_mode(monkeypatch):
     assert response.status_code == 400
 
 
+def test_put_embedding_switches_api_provider_and_uses_provider_default_model(monkeypatch):
+    client, store, _llm_reset, embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/embedding",
+        json={
+            "mode": "api",
+            "api_provider": "zhipu",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"] == "zhipu"
+    assert payload["api_provider"] == "zhipu"
+    assert payload["model"] == "embedding-3"
+    assert payload["api_model"] == "embedding-3"
+    assert store["embedding.provider"] == "zhipu"
+    assert store["embedding.api_provider"] == "zhipu"
+    assert store["embedding.api_model"] == "embedding-3"
+    embedding_reset.assert_called_once()
+
+
 def test_reset_embedding_clears_prefix_and_resets_singleton(monkeypatch):
     client, store, _llm_reset, embedding_reset = _build_client(monkeypatch)
 
@@ -264,6 +309,31 @@ def test_reset_embedding_clears_prefix_and_resets_singleton(monkeypatch):
     assert "embedding.provider" not in store
     assert "embedding.mode" not in store
     embedding_reset.assert_called_once()
+
+
+def test_reset_embedding_reapplies_effective_baseline_config(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    store["embedding.provider"] = "zhipu"
+    store["embedding.mode"] = "api"
+
+    apply_embedding_runtime_env = MagicMock()
+    monkeypatch.setattr(config_router, "apply_embedding_runtime_env", apply_embedding_runtime_env)
+
+    response = client.post("/api/v1/config/embedding/reset")
+
+    assert response.status_code == 200
+    apply_embedding_runtime_env.assert_called_once_with(
+        {
+            "provider": "qwen3-embedding",
+            "mode": "api",
+            "api_provider": "qwen",
+            "model": "text-embedding-v4",
+            "api_model": "text-embedding-v4",
+            "dim": 1024,
+            "source": "default",
+        }
+    )
 
 
 def test_put_asr_rejects_unknown_provider(monkeypatch):

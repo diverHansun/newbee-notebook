@@ -78,6 +78,152 @@ async def test_get_asr_config_async_uses_env_and_provider_default_model(monkeypa
 
 
 @pytest.mark.anyio
+async def test_get_embedding_config_async_defaults_to_api_mode(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: _FakeSettingsService({}),
+    )
+    monkeypatch.setattr(config_db, "_BOOTSTRAP_ENV", {}, raising=False)
+    monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
+    monkeypatch.delenv("QWEN3_EMBEDDING_MODE", raising=False)
+    monkeypatch.delenv("QWEN3_EMBEDDING_API_MODEL", raising=False)
+    monkeypatch.delenv("QWEN3_EMBEDDING_MODEL_PATH", raising=False)
+
+    payload = await config_db.get_embedding_config_async(object())
+
+    assert payload["provider"] == "qwen3-embedding"
+    assert payload["mode"] == "api"
+    assert payload["model"] == "text-embedding-v4"
+    assert payload["api_model"] == "text-embedding-v4"
+    assert payload["model_path"] is None
+
+
+@pytest.mark.anyio
+async def test_get_embedding_config_async_prefers_bootstrap_env_over_mutated_runtime_env(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: _FakeSettingsService({}),
+    )
+    monkeypatch.setattr(
+        config_db,
+        "_BOOTSTRAP_ENV",
+        {
+            "EMBEDDING_PROVIDER": "qwen3-embedding",
+            "QWEN3_EMBEDDING_MODE": "local",
+            "QWEN3_EMBEDDING_MODEL_PATH": "models/Qwen3-Embedding-0.6B",
+        },
+        raising=False,
+    )
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "qwen3-embedding")
+    monkeypatch.setenv("QWEN3_EMBEDDING_MODE", "api")
+    monkeypatch.setenv("QWEN3_EMBEDDING_API_MODEL", "text-embedding-v4")
+
+    payload = await config_db.get_embedding_config_async(object())
+
+    assert payload["provider"] == "qwen3-embedding"
+    assert payload["mode"] == "local"
+    assert payload["model"] == "Qwen3-Embedding-0.6B"
+    assert str(payload["model_path"]).endswith("models\\Qwen3-Embedding-0.6B")
+
+
+@pytest.mark.anyio
+async def test_get_embedding_config_async_repairs_stale_qwen_api_model(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    fake_settings = _FakeSettingsService(
+        {
+            "embedding.provider": "qwen3-embedding",
+            "embedding.mode": "api",
+            "embedding.api_model": "Qwen3-Embedding-0.6B",
+        }
+    )
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: fake_settings,
+    )
+    monkeypatch.setattr(config_db, "_BOOTSTRAP_ENV", {}, raising=False)
+
+    payload = await config_db.get_embedding_config_async(object())
+
+    assert payload["provider"] == "qwen3-embedding"
+    assert payload["mode"] == "api"
+    assert payload["api_provider"] == "qwen"
+    assert payload["model"] == "text-embedding-v4"
+    assert payload["api_model"] == "text-embedding-v4"
+    assert fake_settings.set_calls == [
+        ("embedding.api_provider", "qwen"),
+        ("embedding.api_model", "text-embedding-v4"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_get_embedding_config_async_repairs_legacy_provider_api_model(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    fake_settings = _FakeSettingsService(
+        {
+            "embedding.provider": "qwen3-embedding",
+            "embedding.mode": "api",
+            "embedding.api_model": "embedding-3",
+        }
+    )
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: fake_settings,
+    )
+    monkeypatch.setattr(config_db, "_BOOTSTRAP_ENV", {}, raising=False)
+
+    payload = await config_db.get_embedding_config_async(object())
+
+    assert payload["provider"] == "qwen3-embedding"
+    assert payload["mode"] == "api"
+    assert payload["api_provider"] == "qwen"
+    assert payload["model"] == "text-embedding-v4"
+    assert payload["api_model"] == "text-embedding-v4"
+    assert fake_settings.set_calls == [
+        ("embedding.api_provider", "qwen"),
+        ("embedding.api_model", "text-embedding-v4"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_get_embedding_config_async_repairs_mismatched_standard_model_with_explicit_api_provider(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    fake_settings = _FakeSettingsService(
+        {
+            "embedding.provider": "qwen3-embedding",
+            "embedding.mode": "api",
+            "embedding.api_provider": "qwen",
+            "embedding.api_model": "embedding-3",
+        }
+    )
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: fake_settings,
+    )
+    monkeypatch.setattr(config_db, "_BOOTSTRAP_ENV", {}, raising=False)
+
+    payload = await config_db.get_embedding_config_async(object())
+
+    assert payload["provider"] == "qwen3-embedding"
+    assert payload["mode"] == "api"
+    assert payload["api_provider"] == "qwen"
+    assert payload["model"] == "text-embedding-v4"
+    assert payload["api_model"] == "text-embedding-v4"
+    assert fake_settings.set_calls == [("embedding.api_model", "text-embedding-v4")]
+
+
+@pytest.mark.anyio
 async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monkeypatch):
     from newbee_notebook.core.common import config_db
 

@@ -61,7 +61,11 @@ from newbee_notebook.core.common.config import (
     get_embedding_provider,
     get_pgvector_config_for_provider,
 )
-from newbee_notebook.core.common.config_db import get_asr_config_async, resolve_asr_api_key
+from newbee_notebook.core.common.config_db import (
+    get_asr_config_async,
+    resolve_asr_api_key,
+    sync_embedding_runtime_env_from_db,
+)
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
@@ -419,8 +423,10 @@ async def get_runtime_session_manager_dep(
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    session=Depends(get_db_session),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
+    await sync_embedding_runtime_env_from_db(session)
     del mcp_manager
     return SessionManager(
         session_repo=session_repo,
@@ -433,7 +439,8 @@ async def get_runtime_session_manager_dep(
     )
 
 
-async def get_pg_index_dep():
+async def get_pg_index_dep(session=Depends(get_db_session)):
+    await sync_embedding_runtime_env_from_db(session)
     return await get_pg_index_singleton()
 
 
@@ -660,7 +667,6 @@ async def get_chat_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
-    pg_index=Depends(get_pg_index_dep),
     skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
 ) -> ChatService:
@@ -673,7 +679,7 @@ async def get_chat_service(
         ref_repo=ref_repo,
         message_repo=message_repo,
         session_manager=session_manager,
-        vector_index=pg_index,
+        vector_index_loader=get_pg_index_singleton,
         skill_registry=skill_registry,
         confirmation_gateway=confirmation_gateway,
     )

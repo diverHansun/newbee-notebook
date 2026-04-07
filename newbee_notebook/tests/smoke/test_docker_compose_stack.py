@@ -78,4 +78,7 @@ def test_gpu_override_switches_embedding_and_mineru_to_local_gpu() -> None:
 
     assert api_env["MINERU_MODE"] == "local"
     assert api_env["MINERU_LOCAL_ENABLED"] == "true"
+    assert api_env["QWEN3_EMBEDDING_MODE"] == "local"
+    assert api_env["QWEN3_EMBEDDING_MODEL_PATH"] == "models/Qwen3-Embedding-0.6B"
+    assert services["api"]["volumes"] == ["./models:/app/models:ro"]
     assert "mineru-api" in services

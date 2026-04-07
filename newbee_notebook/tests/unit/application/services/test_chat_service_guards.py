@@ -131,7 +131,14 @@ class _DummyConfirmationGateway:
         return self.resolve_result
 
 
-def _build_service(ref_repo=None, document_repo=None, session_manager=None, skill_registry=None, confirmation_gateway=None):
+def _build_service(
+    ref_repo=None,
+    document_repo=None,
+    session_manager=None,
+    vector_index_loader=None,
+    skill_registry=None,
+    confirmation_gateway=None,
+):
     return ChatService(
         session_repo=AsyncMock(),
         notebook_repo=AsyncMock(),
@@ -140,6 +147,7 @@ def _build_service(ref_repo=None, document_repo=None, session_manager=None, skil
         ref_repo=ref_repo or AsyncMock(),
         message_repo=AsyncMock(),
         session_manager=session_manager or _DummyRuntimeSessionManager(),
+        vector_index_loader=vector_index_loader,
         skill_registry=skill_registry,
         confirmation_gateway=confirmation_gateway,
     )
@@ -363,6 +371,51 @@ def test_apply_source_filter_logs_excluded_non_completed_doc_ids(caplog):
     assert "excluded 2 non-completed doc(s)" in caplog.text
     assert "doc-2" in caplog.text
     assert "doc-3" in caplog.text
+
+
+def test_get_context_chunks_skips_lazy_vector_load_without_chunk_id():
+    loader = AsyncMock()
+    service = _build_service(vector_index_loader=loader)
+
+    chunks = asyncio.run(
+        service._get_context_chunks(
+            {
+                "selected_text": "focus",
+                "document_id": "doc-1",
+            }
+        )
+    )
+
+    assert chunks == [
+        {
+            "document_id": "doc-1",
+            "chunk_id": "user_selection",
+            "text": "focus",
+            "title": "",
+            "score": 1.0,
+        }
+    ]
+    loader.assert_not_awaited()
+
+
+def test_get_context_chunks_returns_empty_when_lazy_vector_load_fails(caplog):
+    loader = AsyncMock(side_effect=FileNotFoundError("missing embedding model"))
+    service = _build_service(vector_index_loader=loader)
+
+    with caplog.at_level(logging.WARNING):
+        chunks = asyncio.run(
+            service._get_context_chunks(
+                {
+                    "selected_text": "focus",
+                    "document_id": "doc-1",
+                    "chunk_id": "chunk-1",
+                }
+            )
+        )
+
+    assert chunks == []
+    loader.assert_awaited_once()
+    assert "Skipping context chunk retrieval because vector index is unavailable" in caplog.text
 
 
 def test_build_blocking_warning_returns_payload_for_partial_scope():

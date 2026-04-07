@@ -36,6 +36,7 @@ type LLMDraft = {
 type EmbeddingDraft = {
   provider: string;
   mode: string | null;
+  api_provider: string;
   api_model: string;
   model: string;
   dim: number;
@@ -78,6 +79,21 @@ function getDefaultASRModel(provider: string, presets: Array<{ name: string; lab
   return matchedPreset?.name ?? fallback;
 }
 
+function inferEmbeddingApiProvider(provider: string | null | undefined): string {
+  return provider === "zhipu" ? "zhipu" : "qwen";
+}
+
+function getDefaultEmbeddingApiModel(
+  apiProvider: string,
+  presetsByProvider: Record<string, Array<{ name: string; label: string }>>
+): string {
+  const presets = presetsByProvider[apiProvider] ?? [];
+  if (presets.length > 0) {
+    return presets[0].name;
+  }
+  return apiProvider === "zhipu" ? "embedding-3" : "text-embedding-v4";
+}
+
 function toLLMDraft(config: LLMConfig): LLMDraft {
   return {
     provider: config.provider,
@@ -93,7 +109,8 @@ function toEmbeddingDraft(config: EmbeddingConfig): EmbeddingDraft {
   return {
     provider: config.provider,
     mode: config.mode,
-    api_model: config.model,
+    api_provider: config.api_provider ?? inferEmbeddingApiProvider(config.provider),
+    api_model: config.api_model ?? config.model,
     model: config.model,
     dim: config.dim,
     api_key_set: config.api_key_set,
@@ -235,9 +252,16 @@ export function ModelConfigPanel() {
     return providers.filter((provider) => provider === "qwen" || provider === "zhipu");
   }, [availableQuery.data]);
 
-  const embeddingProviders = useMemo(() => {
-    const providers = availableQuery.data?.embedding.providers ?? ["qwen3-embedding", "zhipu"];
-    return providers.filter((provider) => provider === "qwen3-embedding" || provider === "zhipu");
+  const embeddingApiProviders = useMemo(() => {
+    const providers = availableQuery.data?.embedding.api_providers ?? ["qwen", "zhipu"];
+    return providers.filter((provider) => provider === "qwen" || provider === "zhipu");
+  }, [availableQuery.data]);
+
+  const embeddingApiModelsByProvider = useMemo(() => {
+    return availableQuery.data?.embedding.api_models_by_provider ?? {
+      qwen: [{ name: "text-embedding-v4", label: "text-embedding-v4" }],
+      zhipu: [{ name: "embedding-3", label: "embedding-3" }],
+    };
   }, [availableQuery.data]);
 
   const asrProviders = useMemo(() => {
@@ -264,6 +288,7 @@ export function ModelConfigPanel() {
   }, [availableQuery.data]);
 
   const localEmbeddingModels = availableQuery.data?.embedding.local_models ?? [];
+  const currentEmbeddingApiModels = embeddingApiModelsByProvider[embeddingDraft?.api_provider ?? "qwen"] ?? [];
   const mineruModes =
     availableQuery.data?.mineru?.modes ?? (mineruDraft?.local_enabled ? ["cloud", "local"] : ["cloud"]);
 
@@ -314,8 +339,8 @@ export function ModelConfigPanel() {
 
   const commitEmbedding = (next: EmbeddingDraft) => {
     embeddingMutation.mutate({
-      provider: next.provider,
       mode: next.mode ?? undefined,
+      api_provider: next.api_provider,
       api_model: next.api_model,
     });
   };
@@ -523,33 +548,28 @@ export function ModelConfigPanel() {
 
         <div className="control-panel-card-body control-panel-stack">
           <div className="control-panel-field">
-            <div className="control-panel-field-label">{t(uiStrings.controlPanel.embeddingProvider)}</div>
+            <div className="control-panel-field-label">{t(uiStrings.controlPanel.embeddingMode)}</div>
             <SegmentedControl
-              value={embeddingDraft.provider}
-              options={embeddingProviders.map((provider) => ({ value: provider, label: provider }))}
-              onChange={(provider) => {
-                if (provider === embeddingDraft.provider) return;
+              value={embeddingDraft.mode || "api"}
+              options={[
+                { value: "local", label: t(uiStrings.controlPanel.embeddingModeLocal) },
+                { value: "api", label: t(uiStrings.controlPanel.embeddingModeApi) },
+              ]}
+              onChange={(mode) => {
+                if (mode === embeddingDraft.mode) return;
                 if (!window.confirm(t(uiStrings.controlPanel.embeddingSwitchConfirm))) return;
 
-                if (provider === "qwen3-embedding") {
-                  const next = {
-                    ...embeddingDraft,
-                    provider,
-                    mode: embeddingDraft.mode || "api",
-                    api_model: embeddingDraft.api_model || "text-embedding-v4",
-                    model: embeddingDraft.api_model || "text-embedding-v4",
-                  };
-                  setEmbeddingDraft(next);
-                  commitEmbedding(next);
-                  return;
-                }
-
+                const nextApiModel =
+                  mode === "local"
+                    ? embeddingDraft.api_model
+                    : embeddingDraft.api_model ||
+                      getDefaultEmbeddingApiModel(embeddingDraft.api_provider, embeddingApiModelsByProvider);
                 const next = {
                   ...embeddingDraft,
-                  provider,
-                  mode: null,
-                  api_model: "embedding-3",
-                  model: "embedding-3",
+                  provider: mode === "local" ? "qwen3-embedding" : (embeddingDraft.api_provider === "zhipu" ? "zhipu" : "qwen3-embedding"),
+                  mode,
+                  api_model: nextApiModel,
+                  model: mode === "local" ? localEmbeddingModels[0] || embeddingDraft.model : nextApiModel,
                 };
                 setEmbeddingDraft(next);
                 commitEmbedding(next);
@@ -557,27 +577,25 @@ export function ModelConfigPanel() {
             />
           </div>
 
-          {embeddingDraft.provider === "qwen3-embedding" ? (
+          {(embeddingDraft.mode || "api") === "api" ? (
             <>
               <div className="control-panel-field">
-                <div className="control-panel-field-label">{t(uiStrings.controlPanel.embeddingMode)}</div>
+                <div className="control-panel-field-label">{t(uiStrings.controlPanel.embeddingProvider)}</div>
                 <SegmentedControl
-                  value={embeddingDraft.mode || "api"}
-                  options={[
-                    { value: "local", label: t(uiStrings.controlPanel.embeddingModeLocal) },
-                    { value: "api", label: t(uiStrings.controlPanel.embeddingModeApi) },
-                  ]}
-                  onChange={(mode) => {
-                    if (mode === embeddingDraft.mode) return;
+                  value={embeddingDraft.api_provider}
+                  options={embeddingApiProviders.map((provider) => ({ value: provider, label: provider }))}
+                  onChange={(apiProvider) => {
+                    if (apiProvider === embeddingDraft.api_provider) return;
                     if (!window.confirm(t(uiStrings.controlPanel.embeddingSwitchConfirm))) return;
 
+                    const nextApiModel = getDefaultEmbeddingApiModel(apiProvider, embeddingApiModelsByProvider);
                     const next = {
                       ...embeddingDraft,
-                      mode,
-                      model:
-                        mode === "local"
-                          ? localEmbeddingModels[0] || embeddingDraft.model
-                          : embeddingDraft.api_model,
+                      provider: apiProvider === "zhipu" ? "zhipu" : "qwen3-embedding",
+                      mode: "api",
+                      api_provider: apiProvider,
+                      api_model: nextApiModel,
+                      model: nextApiModel,
                     };
                     setEmbeddingDraft(next);
                     commitEmbedding(next);
@@ -585,45 +603,38 @@ export function ModelConfigPanel() {
                 />
               </div>
 
-              {(embeddingDraft.mode || "api") === "api" ? (
-                <div className="control-panel-field">
-                  <label className="control-panel-field-label" htmlFor="embedding-api-model-input">
-                    {t(uiStrings.controlPanel.embeddingModel)}
-                  </label>
-                  <input
-                    id="embedding-api-model-input"
-                    className="input"
-                    list="embedding-api-models"
-                    value={embeddingDraft.api_model}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setEmbeddingDraft({
-                        ...embeddingDraft,
-                        api_model: value,
-                        model: value,
-                      });
-                    }}
-                    onBlur={() => {
-                      commitEmbedding(embeddingDraft);
-                    }}
-                  />
-                  <datalist id="embedding-api-models">
-                    {(availableQuery.data?.embedding.api_models ?? []).map((preset) => (
-                      <option key={preset.name} value={preset.name} label={preset.label} />
-                    ))}
-                  </datalist>
-                </div>
-              ) : (
-                <div className="control-panel-readonly-row">
-                  <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.embeddingModel)}</span>
-                  <span>{localEmbeddingModels[0] || embeddingDraft.model}</span>
-                </div>
-              )}
+              <div className="control-panel-field">
+                <label className="control-panel-field-label" htmlFor="embedding-api-model-input">
+                  {t(uiStrings.controlPanel.embeddingModel)}
+                </label>
+                <input
+                  id="embedding-api-model-input"
+                  className="input"
+                  list="embedding-api-models"
+                  value={embeddingDraft.api_model}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setEmbeddingDraft({
+                      ...embeddingDraft,
+                      api_model: value,
+                      model: value,
+                    });
+                  }}
+                  onBlur={() => {
+                    commitEmbedding(embeddingDraft);
+                  }}
+                />
+                <datalist id="embedding-api-models">
+                  {currentEmbeddingApiModels.map((preset) => (
+                    <option key={preset.name} value={preset.name} label={preset.label} />
+                  ))}
+                </datalist>
+              </div>
             </>
           ) : (
             <div className="control-panel-readonly-row">
               <span className="control-panel-readonly-label">{t(uiStrings.controlPanel.embeddingModel)}</span>
-              <span>{embeddingDraft.model}</span>
+              <span>{localEmbeddingModels[0] || embeddingDraft.model}</span>
             </div>
           )}
 

@@ -4,7 +4,7 @@ Newbee Notebook - Chat Service
 Application service for chat operations.
 """
 
-from typing import Optional, List, AsyncGenerator, Dict, Any
+from typing import Optional, List, AsyncGenerator, Dict, Any, Awaitable, Callable
 import asyncio
 import logging
 from dataclasses import dataclass, field
@@ -96,6 +96,7 @@ class ChatService:
         message_repo: MessageRepository,
         session_manager: SessionManager,
         vector_index: Any = None,
+        vector_index_loader: Callable[[], Awaitable[Any]] | None = None,
         skill_registry: SkillRegistry | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
     ):
@@ -107,6 +108,7 @@ class ChatService:
         self._message_repo = message_repo
         self._session_manager = session_manager
         self._vector_index = vector_index
+        self._vector_index_loader = vector_index_loader
         self._skill_registry = skill_registry
         self._confirmation_gateway = confirmation_gateway
 
@@ -127,6 +129,14 @@ class ChatService:
         if mode in {ModeType.EXPLAIN, ModeType.CONCLUDE}:
             return STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES
         return STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT
+
+    async def _get_vector_index(self):
+        if self._vector_index is not None:
+            return self._vector_index
+        if self._vector_index_loader is None:
+            return None
+        self._vector_index = await self._vector_index_loader()
+        return self._vector_index
 
     async def chat(
         self,
@@ -908,7 +918,19 @@ class ChatService:
                 }
             ]
 
-        if not context.get("chunk_id") or not self._vector_index:
+        if not context.get("chunk_id"):
+            return []
+
+        try:
+            vector_index = await self._get_vector_index()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Skipping context chunk retrieval because vector index is unavailable: %s",
+                exc,
+            )
+            return []
+
+        if not vector_index:
             return []
 
         doc_id = context.get("document_id")
@@ -944,7 +966,7 @@ class ChatService:
         if filters:
             metadata_filters = MetadataFilters(filters=filters)
 
-        retriever = self._vector_index.as_retriever(
+        retriever = vector_index.as_retriever(
             similarity_top_k=5,
             filters=metadata_filters,
         )
