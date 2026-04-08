@@ -317,12 +317,33 @@ export type Session = {
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageMode = "agent" | "chat" | "ask" | "explain" | "conclude";
 
+export type ChatImageSse = {
+  image_id: string;
+  storage_key: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+};
+
+export type ChatImage = {
+  imageId: string;
+  storageKey: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+};
+
 export type SessionMessage = {
   message_id: number;
   session_id: string;
   mode: MessageMode;
   role: MessageRole;
   content: string;
+  images?: ChatImageSse[];
   created_at: string;
 };
 
@@ -348,6 +369,8 @@ export type ChatResponse = {
   content: string;
   mode: MessageMode;
   sources: RawSource[];
+  images?: ChatImageSse[];
+  warnings?: Record<string, unknown>[];
 };
 
 export type ChatRequest = {
@@ -432,6 +455,13 @@ export type SseEventToolResult = {
   quality_meta: Record<string, unknown> | null;
 };
 
+export type SseEventImageGenerated = {
+  type: "image_generated";
+  images: ChatImageSse[];
+  tool_call_id: string;
+  tool_name: string;
+};
+
 export type SseEvent =
   | SseEventStart
   | SseEventPhase
@@ -444,7 +474,8 @@ export type SseEvent =
   | SseEventHeartbeat
   | SseEventConfirmation
   | SseEventToolCall
-  | SseEventToolResult;
+  | SseEventToolResult
+  | SseEventImageGenerated;
 
 export type ApiErrorPayload = {
   error_code?: string;

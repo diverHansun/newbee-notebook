@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { MessageMode, MessageRole } from "@/lib/api/types";
+import { ChatImage, MessageMode, MessageRole } from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
 export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
@@ -45,6 +45,7 @@ export type ChatMessage = {
   messageId?: number;
   sources?: NormalizedSource[];
   sourcesType?: "document_retrieval" | "tool_results" | "none";
+  images?: ChatImage[];
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
   pendingConfirmation?: PendingConfirmation;

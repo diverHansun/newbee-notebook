@@ -1,0 +1,114 @@
+.generated-image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: flex-start;
+}
+
+.generated-image-card {
+  margin: 0;
+  width: min(320px, 100%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--card));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.generated-image-card-visual {
+  position: relative;
+}
+
+.generated-image-card-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  background:
+    radial-gradient(circle at top left, rgba(255, 217, 153, 0.42), transparent 42%),
+    linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--card)) 100%);
+}
+
+.generated-image-card-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  background: transparent;
+}
+
+.generated-image-card-downloadIcon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: white;
+  text-decoration: none;
+  text-shadow: 0 2px 10px rgba(15, 23, 42, 0.7);
+}
+
+.generated-image-card-downloadIcon:hover {
+  opacity: 0.82;
+}
+
+.generated-image-card-downloadIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.generated-image-card-meta {
+  display: block;
+  padding: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.generated-image-card-prompt {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: copy;
+  font-size: 12px;
+  line-height: 1.5;
+  color: hsl(var(--foreground));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.generated-image-card-prompt:hover {
+  color: hsl(var(--foreground));
+}
+
+.generated-image-card-prompt.is-copied {
+  display: block;
+  color: hsl(var(--muted-foreground));
+}
+
+.generated-image-card-prompt:focus-visible,
+.generated-image-card-downloadIcon:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .generated-image-card {
+    width: min(280px, 100%);
+  }
+
+  .generated-image-card-downloadIcon {
+    top: 8px;
+    right: 8px;
+    padding: 5px;
+  }
+}

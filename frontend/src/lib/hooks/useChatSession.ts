@@ -7,6 +7,8 @@ import { ApiError } from "@/lib/api/client";
 import { chatOnce, confirmChatAction } from "@/lib/api/chat";
 import {
   ApiListResponse,
+  ChatImage,
+  ChatImageSse,
   ChatContext,
   MessageMode,
   Session,
@@ -62,6 +64,39 @@ function isVideoCommandMessage(message: string, mode: MessageMode): boolean {
   return message.trim().toLowerCase().startsWith("/video");
 }
 
+function mapChatImage(image: ChatImageSse): ChatImage {
+  return {
+    imageId: image.image_id,
+    storageKey: image.storage_key,
+    prompt: image.prompt,
+    provider: image.provider,
+    model: image.model,
+    width: typeof image.width === "number" ? image.width : null,
+    height: typeof image.height === "number" ? image.height : null,
+  };
+}
+
+function mapChatImages(images: ChatImageSse[] | null | undefined): ChatImage[] {
+  if (!images || images.length === 0) return [];
+  return images
+    .filter((item) => Boolean(item?.image_id))
+    .map((item) => mapChatImage(item));
+}
+
+function mergeChatImages(
+  existing: ChatImage[] | undefined,
+  incoming: ChatImage[] | undefined
+): ChatImage[] {
+  const merged = [...(existing || [])];
+  const seen = new Set(merged.map((item) => item.imageId));
+  for (const item of incoming || []) {
+    if (!item.imageId || seen.has(item.imageId)) continue;
+    seen.add(item.imageId);
+    merged.push(item);
+  }
+  return merged;
+}
+
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
     id: `msg-${msg.message_id}`,
@@ -69,6 +104,7 @@ function mapMessages(messages: SessionMessage[]): ChatMessage[] {
     role: msg.role,
     mode: msg.mode,
     content: msg.content,
+    images: mapChatImages(msg.images),
     status: "done",
     createdAt: msg.created_at,
   }));
@@ -904,17 +940,18 @@ export function useChatSession(notebookId: string) {
                 streamStartedAtMs
               );
 
-              if (persistedReply) {
-                pendingIntermediatePhaseRef.current = false;
-                stopFinalTypewriterForMessage(sessionId, localAssistantId);
-                updateThinkingStageInSession(sessionId, localAssistantId, null);
-                updateMessageInSession(sessionId, localAssistantId, {
-                  content: persistedReply.content,
-                  finalContentStarted: false,
-                  status: "done",
-                  messageId: persistedReply.message_id,
-                  intermediateContent: undefined,
-                  exitingIntermediateContent: null,
+                if (persistedReply) {
+                  pendingIntermediatePhaseRef.current = false;
+                  stopFinalTypewriterForMessage(sessionId, localAssistantId);
+                  updateThinkingStageInSession(sessionId, localAssistantId, null);
+                  updateMessageInSession(sessionId, localAssistantId, {
+                    content: persistedReply.content,
+                    images: mapChatImages(persistedReply.images),
+                    finalContentStarted: false,
+                    status: "done",
+                    messageId: persistedReply.message_id,
+                    intermediateContent: undefined,
+                    exitingIntermediateContent: null,
                 });
                 return;
               }
@@ -932,6 +969,7 @@ export function useChatSession(notebookId: string) {
               updateThinkingStageInSession(sessionId, localAssistantId, null);
               updateMessageInSession(sessionId, localAssistantId, {
                 content: fallback.content,
+                images: mapChatImages(fallback.images),
                 finalContentStarted: false,
                 status: "done",
                 messageId: fallback.message_id,
@@ -1045,6 +1083,22 @@ export function useChatSession(notebookId: string) {
                     activeAssistantIdRef.current,
                     event.tool_call_id,
                     event.success ? "done" : "error",
+                  );
+                }
+                return;
+              }
+              if (event.type === "image_generated") {
+                if (activeAssistantIdRef.current) {
+                  const incomingImages = mapChatImages(event.images);
+                  mutateSessionMessages(sessionId, (items) =>
+                    items.map((item) =>
+                      item.id === activeAssistantIdRef.current
+                        ? {
+                            ...item,
+                            images: mergeChatImages(item.images, incomingImages),
+                          }
+                        : item
+                    )
                   );
                 }
                 return;
@@ -1353,6 +1407,7 @@ export function useChatSession(notebookId: string) {
       enqueueFinalTypewriterDelta,
       ensureSession,
       isFinalTypewriterPending,
+      mutateSessionMessages,
       notebookId,
       queryClient,
       requestFinalTypewriterDrain,

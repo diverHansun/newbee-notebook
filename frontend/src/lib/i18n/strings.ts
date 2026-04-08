@@ -66,6 +66,10 @@ export const uiStrings = {
     docCount: { zh: "{selected}/{total} 文档", en: "{selected}/{total} docs" },
     removeDoc: { zh: "移除 {title}", en: "Remove {title}" },
     noSourcesChip: { zh: "不使用文档", en: "No documents" },
+    copyImagePrompt: { zh: "复制图片提示词", en: "Copy image prompt" },
+    promptCopied: { zh: "已复制", en: "Copied" },
+    downloadImage: { zh: "下载图片", en: "Download image" },
+    generatedImageFallbackAlt: { zh: "生成图片", en: "Generated image" },
   },
   messageStatus: {
     streaming: { zh: "生成中...", en: "Generating..." },

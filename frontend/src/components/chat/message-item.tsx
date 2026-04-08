@@ -1,6 +1,7 @@
 "use client";
 
 import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confirmation-card";
+import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
@@ -15,6 +16,8 @@ type MessageItemProps = {
 };
 
 type TranslateFn = (text: LocalizedString) => string;
+const REMOTE_MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\(https?:\/\/[^)\s]+\)/g;
+const REMOTE_HTML_IMAGE_PATTERN = /<img\b[^>]*src=['"]https?:\/\/[^'"]+['"][^>]*>/gi;
 
 function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
   if (stage === "retrieving") return t(uiStrings.thinking.retrieving);
@@ -57,6 +60,16 @@ function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): str
   if (status === "cancelled") return t(uiStrings.messageStatus.cancelled);
   if (status === "error") return t(uiStrings.messageStatus.error);
   return status;
+}
+
+function sanitizeAssistantContent(content: string, hasGeneratedImages: boolean): string {
+  if (!hasGeneratedImages) return content;
+  return content
+    .replace(REMOTE_MARKDOWN_IMAGE_PATTERN, "")
+    .replace(REMOTE_HTML_IMAGE_PATTERN, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 const ORBIT_DOTS = 8;
@@ -120,7 +133,11 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
-  const hasFinalContentStarted = !isUser && Boolean(message.finalContentStarted || message.content);
+  const sanitizedAssistantContent = !isUser
+    ? sanitizeAssistantContent(message.content, Boolean(message.images && message.images.length > 0))
+    : message.content;
+  const hasFinalContentStarted =
+    !isUser && Boolean(message.finalContentStarted || sanitizedAssistantContent);
   const showFinalContent = !isUser && hasFinalContentStarted;
   const showIntermediateBlock =
     !isUser &&
@@ -221,7 +238,7 @@ export function MessageItem({
 
             {showFinalContent ? (
               <div className="assistant-message-body" data-testid="assistant-message-body">
-                <MarkdownViewer content={message.content} />
+                <MarkdownViewer content={sanitizedAssistantContent} />
               </div>
             ) : null}
 
@@ -235,6 +252,12 @@ export function MessageItem({
             ) : null}
           </div>
         )}
+
+        {!isUser && message.images && message.images.length > 0 ? (
+          <div style={{ marginTop: 8 }}>
+            <ImageCardList images={message.images} />
+          </div>
+        ) : null}
 
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
