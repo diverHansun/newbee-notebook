@@ -27,9 +27,11 @@ export const uiStrings = {
     generating: { zh: "正在生成回答...", en: "Generating answer..." },
   },
   tools: {
+    generic: { zh: "调用工具", en: "Using tool" },
     knowledgeBase: { zh: "检索知识库", en: "Searching knowledge base" },
     webSearch: { zh: "搜索网络", en: "Searching the web" },
     webCrawl: { zh: "抓取网页", en: "Fetching web page" },
+    imageGenerate: { zh: "生成图片", en: "Generating image" },
     getTime: { zh: "获取时间", en: "Getting time" },
     listNotes: { zh: "查询笔记列表", en: "Listing notes" },
     readNote: { zh: "读取笔记", en: "Reading note" },

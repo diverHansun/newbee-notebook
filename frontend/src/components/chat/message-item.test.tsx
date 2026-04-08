@@ -89,4 +89,102 @@ describe("MessageItem", () => {
 
     expect(screen.queryByText("Generating...")).toBeNull();
   });
+
+  it("localizes image generation tool step label in Chinese", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingConfirmation: undefined,
+      toolSteps: [
+        {
+          id: "tool-1",
+          toolName: "image_generate",
+          status: "running",
+        },
+      ],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    expect(screen.getAllByText("生成图片...").length).toBeGreaterThan(0);
+  });
+
+  it("shows pending image glass card as soon as image tool starts running", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingConfirmation: undefined,
+      toolSteps: [
+        {
+          id: "tool-pending",
+          toolName: "image_generate",
+          status: "running",
+        },
+      ],
+      images: [],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    expect(screen.getByTestId("generated-image-card-pending")).toBeInTheDocument();
+  });
+
+  it("keeps spinner visible when streaming has whitespace-only content even if finalContentStarted is true", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: " \n",
+      finalContentStarted: true,
+      pendingConfirmation: undefined,
+      toolSteps: [],
+      thinkingStage: "retrieving",
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    expect(screen.getByText("正在检索知识库...")).toBeInTheDocument();
+  });
+
+  it("strips markdown image placeholders from assistant content when generated images are present", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content:
+        "已为您生成一张软萌小猫插画：\n\n![软萌小猫插画](generated_image_url)\n\n这只小猫有着圆润可爱的外形。",
+      status: "done",
+      pendingConfirmation: undefined,
+      toolSteps: [],
+      images: [
+        {
+          imageId: "img-cleanup-1",
+          storageKey: "generated-images/demo/img-cleanup-1.png",
+          prompt: "软萌小猫插画",
+          provider: "qwen",
+          model: "qwen-image-2.0-pro",
+          width: 1024,
+          height: 1024,
+        },
+      ],
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    expect(
+      screen.getByText((text) => {
+        return (
+          text.includes("已为您生成一张软萌小猫插画：") &&
+          text.includes("这只小猫有着圆润可爱的外形。")
+        );
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/generated_image_url/i)).toBeNull();
+  });
 });

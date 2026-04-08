@@ -66,9 +66,9 @@ logger = logging.getLogger(__name__)
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
 ASK_SOURCE_SCORE_THRESHOLD = 0.3
-REMOTE_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*]\(https?://[^)\s]+\)")
-REMOTE_HTML_IMAGE_PATTERN = re.compile(
-    r"<img\b[^>]*src=['\"]https?://[^'\"]+['\"][^>]*>",
+GENERATED_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*]\([^)]+\)")
+GENERATED_HTML_IMAGE_PATTERN = re.compile(
+    r"<img\b[^>]*>",
     flags=re.IGNORECASE,
 )
 EXCESS_BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
@@ -176,8 +176,8 @@ class ChatService:
         normalized = str(content or "")
         if not normalized.strip() or not images:
             return normalized
-        cleaned = REMOTE_MARKDOWN_IMAGE_PATTERN.sub("", normalized)
-        cleaned = REMOTE_HTML_IMAGE_PATTERN.sub("", cleaned)
+        cleaned = GENERATED_MARKDOWN_IMAGE_PATTERN.sub("", normalized)
+        cleaned = GENERATED_HTML_IMAGE_PATTERN.sub("", cleaned)
         cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
         cleaned = EXCESS_BLANK_LINES_PATTERN.sub("\n\n", cleaned).strip()
         return cleaned

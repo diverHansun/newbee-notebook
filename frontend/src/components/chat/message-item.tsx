@@ -16,8 +16,8 @@ type MessageItemProps = {
 };
 
 type TranslateFn = (text: LocalizedString) => string;
-const REMOTE_MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\(https?:\/\/[^)\s]+\)/g;
-const REMOTE_HTML_IMAGE_PATTERN = /<img\b[^>]*src=['"]https?:\/\/[^'"]+['"][^>]*>/gi;
+const GENERATED_MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\([^)]+\)/g;
+const GENERATED_HTML_IMAGE_PATTERN = /<img\b[^>]*>/gi;
 
 function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
   if (stage === "retrieving") return t(uiStrings.thinking.retrieving);
@@ -29,6 +29,7 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
 function toolDisplayLabel(toolName: string, t: TranslateFn): string {
   const known: Record<string, LocalizedString> = {
     knowledge_base: uiStrings.tools.knowledgeBase,
+    image_generate: uiStrings.tools.imageGenerate,
     tavily_search: uiStrings.tools.webSearch,
     tavily_crawl: uiStrings.tools.webCrawl,
     zhipu_web_search: uiStrings.tools.webSearch,
@@ -51,7 +52,7 @@ function toolDisplayLabel(toolName: string, t: TranslateFn): string {
     update_diagram_positions: uiStrings.tools.updateDiagramPositions,
   };
   if (known[toolName]) return t(known[toolName]);
-  return toolName.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return t(uiStrings.tools.generic);
 }
 
 function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
@@ -65,8 +66,8 @@ function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): str
 function sanitizeAssistantContent(content: string, hasGeneratedImages: boolean): string {
   if (!hasGeneratedImages) return content;
   return content
-    .replace(REMOTE_MARKDOWN_IMAGE_PATTERN, "")
-    .replace(REMOTE_HTML_IMAGE_PATTERN, "")
+    .replace(GENERATED_MARKDOWN_IMAGE_PATTERN, "")
+    .replace(GENERATED_HTML_IMAGE_PATTERN, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -136,33 +137,39 @@ export function MessageItem({
   const sanitizedAssistantContent = !isUser
     ? sanitizeAssistantContent(message.content, Boolean(message.images && message.images.length > 0))
     : message.content;
-  const hasFinalContentStarted =
-    !isUser && Boolean(message.finalContentStarted || sanitizedAssistantContent);
-  const showFinalContent = !isUser && hasFinalContentStarted;
+  const hasVisibleAssistantContent =
+    !isUser && sanitizedAssistantContent.trim().length > 0;
+  const hasFinalPhaseStarted =
+    !isUser && Boolean(message.finalContentStarted || hasVisibleAssistantContent);
+  const canShowProgressIndicators =
+    !isUser && message.status === "streaming" && !hasVisibleAssistantContent;
+  const showFinalContent = !isUser && hasFinalPhaseStarted;
   const showIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !hasFinalContentStarted &&
+    !hasFinalPhaseStarted &&
     !!message.intermediateContent;
   const showExitingIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !hasFinalContentStarted &&
+    !hasFinalPhaseStarted &&
     !!message.exitingIntermediateContent;
   const hasToolSteps =
-    !isUser &&
-    message.status === "streaming" &&
-    !hasFinalContentStarted &&
+    canShowProgressIndicators &&
     message.toolSteps &&
     message.toolSteps.length > 0;
   const isSynthesizing =
-    !isUser &&
-    message.status === "streaming" &&
-    !hasFinalContentStarted &&
+    canShowProgressIndicators &&
     message.thinkingStage === "synthesizing";
   const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    !isUser && message.status === "streaming" && !hasFinalContentStarted && !showToolSteps;
+    canShowProgressIndicators && !showToolSteps;
+  const hasRunningImageTool =
+    !isUser &&
+    message.status === "streaming" &&
+    Boolean(message.toolSteps?.some((step) => step.toolName === "image_generate" && step.status === "running"));
+  const pendingImageCardCount =
+    hasRunningImageTool && (!message.images || message.images.length === 0) ? 1 : 0;
   const showStatusRow = Boolean(
     message.status &&
       message.status !== "done" &&
@@ -253,9 +260,9 @@ export function MessageItem({
           </div>
         )}
 
-        {!isUser && message.images && message.images.length > 0 ? (
+        {!isUser && ((message.images && message.images.length > 0) || pendingImageCardCount > 0) ? (
           <div style={{ marginTop: 8 }}>
-            <ImageCardList images={message.images} />
+            <ImageCardList images={message.images ?? []} pendingCount={pendingImageCardCount} />
           </div>
         ) : null}
 

@@ -25,9 +25,73 @@
   align-items: center;
   justify-content: center;
   aspect-ratio: 1 / 1;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   background:
-    radial-gradient(circle at top left, rgba(255, 217, 153, 0.42), transparent 42%),
-    linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--card)) 100%);
+    radial-gradient(circle at 8% 10%, hsl(44 68% 78% / 0.26), transparent 44%),
+    radial-gradient(circle at 90% 18%, hsl(211 56% 82% / 0.24), transparent 42%),
+    linear-gradient(170deg, hsl(var(--muted) / 0.92) 0%, hsl(var(--card)) 100%);
+  border-bottom: 1px solid hsl(var(--border) / 0.65);
+  backdrop-filter: blur(9px) saturate(116%);
+  -webkit-backdrop-filter: blur(9px) saturate(116%);
+}
+
+.generated-image-card-link.is-loading {
+  cursor: progress;
+  pointer-events: none;
+}
+
+.generated-image-card-link.is-placeholder {
+  width: 100%;
+}
+
+.generated-image-card-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  background: linear-gradient(160deg, hsl(var(--card) / 0.28) 0%, hsl(var(--muted) / 0.34) 100%);
+}
+
+.generated-image-card-loading::before {
+  content: "";
+  position: absolute;
+  inset: -24%;
+  background: linear-gradient(
+    115deg,
+    transparent 8%,
+    hsl(187 58% 84% / 0.16) 28%,
+    hsl(43 88% 80% / 0.2) 48%,
+    hsl(214 72% 84% / 0.18) 66%,
+    transparent 88%
+  );
+  filter: blur(26px);
+  transform: translate3d(-16%, 0, 0);
+  animation: generated-image-flow 2.15s ease-in-out infinite;
+}
+
+.generated-image-card-loadingAura {
+  position: absolute;
+  width: 85%;
+  height: 85%;
+  left: -20%;
+  top: -12%;
+  border-radius: 999px;
+  filter: blur(30px);
+  background: radial-gradient(circle, hsl(40 95% 78% / 0.34) 0%, hsl(24 82% 74% / 0.16) 40%, transparent 72%);
+  animation: generated-image-aura 2.2s ease-in-out infinite alternate;
+}
+
+.generated-image-card-loadingAura--secondary {
+  width: 92%;
+  height: 92%;
+  left: 32%;
+  top: 18%;
+  background: radial-gradient(circle, hsl(202 74% 82% / 0.3) 0%, hsl(156 56% 76% / 0.16) 42%, transparent 76%);
+  animation-duration: 2.5s;
+  animation-delay: -1.1s;
 }
 
 .generated-image-card-media {
@@ -37,6 +101,18 @@
   object-fit: cover;
   object-position: center;
   background: transparent;
+  position: relative;
+  z-index: 2;
+  transition: opacity 0.28s ease;
+}
+
+.generated-image-card-media.is-pending,
+.generated-image-card-media.is-error {
+  opacity: 0;
+}
+
+.generated-image-card-media.is-ready {
+  opacity: 1;
 }
 
 .generated-image-card-downloadIcon {
@@ -95,6 +171,12 @@
   color: hsl(var(--muted-foreground));
 }
 
+.generated-image-card-prompt--pending {
+  display: block;
+  cursor: default;
+  color: hsl(var(--muted-foreground));
+}
+
 .generated-image-card-prompt:focus-visible,
 .generated-image-card-downloadIcon:focus-visible {
   outline: 2px solid hsl(var(--ring));
@@ -110,5 +192,38 @@
     top: 8px;
     right: 8px;
     padding: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .generated-image-card-loading::before,
+  .generated-image-card-loadingAura {
+    animation: none;
+  }
+}
+
+@keyframes generated-image-flow {
+  0% {
+    transform: translate3d(-24%, -4%, 0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate3d(16%, 4%, 0);
+    opacity: 0.72;
+  }
+  100% {
+    transform: translate3d(44%, -3%, 0);
+    opacity: 0.4;
+  }
+}
+
+@keyframes generated-image-aura {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.92);
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(11%, 8%, 0) scale(1.08);
+    opacity: 0.7;
   }
 }

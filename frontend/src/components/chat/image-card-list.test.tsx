@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ImageCardList } from "@/components/chat/image-card-list";
@@ -35,11 +35,46 @@ describe("ImageCardList", () => {
       { lang: "en" }
     );
 
+    fireEvent.load(screen.getByAltText("Generated image"));
     const downloadLink = screen.getByRole("link", { name: "Download image" });
     expect(downloadLink).toHaveAttribute("href", "/api/v1/generated-images/img-1/data?download=1");
     expect(screen.queryByText("View prompt")).toBeNull();
     expect(screen.queryByText("Copy prompt")).toBeNull();
     expect(screen.queryByText("Download")).toBeNull();
+  });
+
+  it("renders loading placeholder before image is ready, then shows download entry", () => {
+    const { container } = renderWithLang(
+      <ImageCardList
+        images={[
+          {
+            imageId: "img-loading",
+            storageKey: "generated-images/demo/img-loading.png",
+            prompt: longPrompt,
+            provider: "zhipu",
+            model: "glm-image",
+            width: 1280,
+            height: 1280,
+          },
+        ]}
+      />,
+      { lang: "zh" }
+    );
+
+    expect(container.querySelector(".generated-image-card-loading")).not.toBeNull();
+    expect(screen.queryByRole("link", { name: "下载图片" })).toBeNull();
+
+    fireEvent.load(screen.getByAltText("生成图片"));
+    expect(container.querySelector(".generated-image-card-loading")).toBeNull();
+    expect(screen.getByRole("link", { name: "下载图片" })).toBeInTheDocument();
+  });
+
+  it("renders pending glass placeholder when image list is empty but pending exists", () => {
+    renderWithLang(<ImageCardList images={[]} pendingCount={1} />, { lang: "zh" });
+
+    expect(screen.getByTestId("generated-image-card-pending")).toBeInTheDocument();
+    expect(screen.getByText("生成图片...")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "下载图片" })).toBeNull();
   });
 
   it("copies the full prompt when the preview text is clicked and then restores it", async () => {
@@ -102,6 +137,7 @@ describe("ImageCardList", () => {
       { lang: "zh" }
     );
 
+    fireEvent.load(screen.getByAltText("生成图片"));
     expect(screen.getByRole("link", { name: "下载图片" })).toBeInTheDocument();
   });
 });
