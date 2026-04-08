@@ -232,6 +232,29 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 ALTER TABLE IF EXISTS messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NOT NULL DEFAULT 'normal';
 
+-- Generated images metadata (binary content is stored in object storage)
+CREATE TABLE IF NOT EXISTS generated_images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    tool_call_id VARCHAR(128) NOT NULL DEFAULT '',
+    prompt TEXT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    model VARCHAR(128) NOT NULL,
+    size VARCHAR(32),
+    width INTEGER,
+    height INTEGER,
+    storage_key TEXT NOT NULL UNIQUE,
+    file_size INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_generated_images_session_id ON generated_images(session_id);
+CREATE INDEX IF NOT EXISTS idx_generated_images_notebook_id ON generated_images(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_generated_images_message_id ON generated_images(message_id);
+CREATE INDEX IF NOT EXISTS idx_generated_images_created_at ON generated_images(created_at);
+
 -- ============================================================================
 -- Multi-Provider Vector Store Tables
 -- ============================================================================
@@ -291,7 +314,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Newbee Notebook database initialized successfully';
     RAISE NOTICE 'Extensions enabled: vector, uuid-ossp, pgcrypto';
-    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries';
+    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries, generated_images';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
