@@ -10,10 +10,16 @@ import logging
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.entities.notebook import MAX_SESSIONS_PER_NOTEBOOK
 from newbee_notebook.domain.entities.message import Message
+from newbee_notebook.domain.entities.generated_image import GeneratedImage
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
 from newbee_notebook.domain.repositories.notebook_repository import NotebookRepository
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
+from newbee_notebook.domain.repositories.generated_image_repository import (
+    GeneratedImageRepository,
+)
 from newbee_notebook.domain.value_objects.mode_type import ModeType
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
+from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 
 logger = logging.getLogger(__name__)
@@ -54,10 +60,39 @@ class SessionService:
         session_repo: SessionRepository,
         notebook_repo: NotebookRepository,
         message_repo: MessageRepository,
+        generated_image_repo: GeneratedImageRepository | None = None,
+        storage: StorageBackend | None = None,
     ):
         self.session_repo = session_repo
         self.notebook_repo = notebook_repo
         self.message_repo = message_repo
+        self.generated_image_repo = generated_image_repo
+        self.storage = storage
+
+    def _resolve_storage(self) -> StorageBackend | None:
+        if self.storage is not None:
+            return self.storage
+        try:
+            self.storage = get_runtime_storage_backend()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Storage backend unavailable while cleaning generated images: %s",
+                exc,
+            )
+            return None
+        return self.storage
+
+    @staticmethod
+    def _to_message_image_dict(image: GeneratedImage) -> dict:
+        return {
+            "image_id": image.image_id,
+            "storage_key": image.storage_key,
+            "prompt": image.prompt,
+            "provider": image.provider,
+            "model": image.model,
+            "width": image.width,
+            "height": image.height,
+        }
     
     async def create(
         self,
@@ -186,6 +221,26 @@ class SessionService:
             modes=modes,
         )
         return messages, total
+
+    async def list_message_images(
+        self,
+        session_id: str,
+        message_ids: List[int],
+    ) -> dict[int, list[dict]]:
+        if not message_ids or self.generated_image_repo is None:
+            return {}
+        images = await self.generated_image_repo.list_by_message_ids(
+            session_id=session_id,
+            message_ids=message_ids,
+        )
+        grouped: dict[int, list[dict]] = {}
+        for image in images:
+            if image.message_id is None:
+                continue
+            grouped.setdefault(int(image.message_id), []).append(
+                self._to_message_image_dict(image)
+            )
+        return grouped
     
     async def get_latest(self, notebook_id: str) -> Optional[Session]:
         """
@@ -221,7 +276,30 @@ class SessionService:
         """
         session = await self.get_or_raise(session_id)
         notebook_id = session.notebook_id
-        
+
+        if self.generated_image_repo is not None:
+            storage = self._resolve_storage()
+            if storage is not None:
+                images = await self.generated_image_repo.list_by_session(session_id)
+                removed_files = 0
+                for image in images:
+                    if not image.storage_key:
+                        continue
+                    try:
+                        await storage.delete_file(image.storage_key)
+                        removed_files += 1
+                    except FileNotFoundError:
+                        logger.warning(
+                            "Generated image already missing during session cleanup: %s",
+                            image.storage_key,
+                        )
+                if removed_files > 0:
+                    logger.info(
+                        "Removed %d generated image file(s) for session %s",
+                        removed_files,
+                        session_id,
+                    )
+
         # Delete session (messages and references cascade)
         result = await self.session_repo.delete(session_id)
         

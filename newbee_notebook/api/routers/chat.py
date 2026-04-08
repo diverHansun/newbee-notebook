@@ -52,6 +52,7 @@ class ChatResponse(BaseModel):
     content: str
     mode: str
     sources: list = Field(default_factory=list)
+    images: list = Field(default_factory=list)
     warnings: list = Field(default_factory=list)
 
 
@@ -276,6 +277,7 @@ async def chat(
         content=result.content,
         mode=result.mode.value,
         sources=[s.__dict__ for s in result.sources],
+        images=getattr(result, "images", []),
         warnings=result.warnings,
     )
 

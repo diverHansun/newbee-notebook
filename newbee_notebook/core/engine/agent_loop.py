@@ -17,6 +17,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    ImageGeneratedEvent,
     IntermediateContentEvent,
     PhaseEvent,
     SourceEvent,
@@ -726,6 +727,12 @@ class AgentLoop:
                         content_preview=result.content[:200],
                         quality_meta=result.quality_meta,
                     )
+                    if result.images:
+                        yield ImageGeneratedEvent(
+                            images=list(result.images),
+                            tool_call_id=str(tool_call.get("id") or ""),
+                            tool_name=tool_name,
+                        )
                     self._relax_scope_if_needed(tool_name, result)
                     if (
                         self._required_tool_call_before_response
@@ -842,6 +849,12 @@ class AgentLoop:
                         content_preview=result.content[:200],
                         quality_meta=result.quality_meta,
                     )
+                    if result.images:
+                        yield ImageGeneratedEvent(
+                            images=list(result.images),
+                            tool_call_id=str(tool_call.get("id") or ""),
+                            tool_name=tool_name,
+                        )
                     self._relax_scope_if_needed(tool_name, result)
                     if (
                         self._required_tool_call_before_response

@@ -213,6 +213,22 @@ class NotebookService:
                 notebook_id,
             )
 
+        generated_images_prefix = f"generated-images/{notebook_id}/"
+        try:
+            removed_generated_images = await self.storage.delete_prefix(
+                generated_images_prefix
+            )
+            logger.info(
+                "Removed %d generated image object(s) from notebook %s",
+                removed_generated_images,
+                notebook_id,
+            )
+        except FileNotFoundError:
+            logger.warning(
+                "Generated image prefix already missing during notebook cleanup: %s",
+                generated_images_prefix,
+            )
+
         # Delete references
         ref_count = await self.ref_repo.delete_by_notebook(notebook_id)
         logger.info(f"Deleted {ref_count} references from notebook {notebook_id}")

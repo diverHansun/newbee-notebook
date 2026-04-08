@@ -21,6 +21,7 @@ from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     ErrorEvent,
+    ImageGeneratedEvent,
     SourceEvent,
     WarningEvent,
 )
@@ -34,7 +35,7 @@ from newbee_notebook.core.llm.zhipu import (
 )
 from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session.lock_manager import SessionLockManager
-from newbee_notebook.core.tools.contracts import SourceItem
+from newbee_notebook.core.tools.contracts import ImageResult, SourceItem
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
 from newbee_notebook.domain.repositories.session_repository import SessionRepository
@@ -120,6 +121,7 @@ def _load_mode_prompt(mode: ModeType, lang: str = "en") -> str:
 class SessionRunResult:
     content: str
     sources: list[SourceItem] = field(default_factory=list)
+    images: list[ImageResult] = field(default_factory=list)
     warnings: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -188,6 +190,10 @@ class SessionManager:
     @property
     def current_mode(self) -> ModeType:
         return self._current_mode
+
+    @property
+    def runtime_config(self) -> LLMRuntimeConfig | None:
+        return self._runtime_config
 
     def switch_mode(self, mode_type: ModeType) -> None:
         self._current_mode = normalize_runtime_mode(mode_type)
@@ -447,6 +453,7 @@ class SessionManager:
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
+        images: list[ImageResult] = []
         warnings: list[dict[str, Any]] = []
 
         async for event in self.chat_stream(
@@ -468,6 +475,8 @@ class SessionManager:
                 content_parts.append(event.delta)
             elif isinstance(event, SourceEvent):
                 sources = list(event.sources)
+            elif isinstance(event, ImageGeneratedEvent):
+                images.extend(list(event.images))
             elif isinstance(event, WarningEvent):
                 warnings.append({"code": event.code, "message": event.message})
             elif isinstance(event, ErrorEvent):
@@ -476,6 +485,7 @@ class SessionManager:
         return SessionRunResult(
             content="".join(content_parts),
             sources=sources,
+            images=images,
             warnings=warnings,
         )
 

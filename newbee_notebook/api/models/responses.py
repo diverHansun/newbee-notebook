@@ -77,21 +77,62 @@ class SessionListResponse(BaseModel):
     pagination: PaginationInfo
 
 
+class MessageImageResponse(BaseModel):
+    """Message-level generated image payload."""
+
+    image_id: str
+    storage_key: str
+    prompt: str
+    provider: str
+    model: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
 class MessageResponse(BaseModel):
     """Response model for a single message."""
+
     message_id: int
     session_id: str
     mode: str
     role: str
     message_type: str = "normal"
     content: str
+    images: List[MessageImageResponse] = Field(default_factory=list)
     created_at: datetime
 
 
 class MessageListResponse(BaseModel):
     """Response model for paginated session messages."""
+
     data: List[MessageResponse]
     pagination: PaginationInfo
+
+
+class GeneratedImageResponse(BaseModel):
+    """Response model for generated image metadata."""
+
+    image_id: str
+    session_id: str
+    notebook_id: str
+    message_id: Optional[int] = None
+    tool_call_id: str
+    prompt: str
+    provider: str
+    model: str
+    size: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    storage_key: str
+    file_size: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class GeneratedImageListResponse(BaseModel):
+    """Response model for generated image metadata list."""
+
+    data: List[GeneratedImageResponse]
 
 
 # =============================================================================

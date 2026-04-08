@@ -4,12 +4,15 @@ Newbee Notebook - Chat Service
 Application service for chat operations.
 """
 
+from datetime import datetime
 from typing import Optional, List, AsyncGenerator, Dict, Any, Awaitable, Callable
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from dataclasses import asdict
 
+from newbee_notebook.core.common.config_db import resolve_llm_api_key
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.value_objects.mode_type import (
     ModeType,
@@ -23,7 +26,11 @@ from newbee_notebook.domain.repositories.reference_repository import (
     NotebookDocumentRefRepository,
 )
 from newbee_notebook.domain.repositories.document_repository import DocumentRepository
+from newbee_notebook.domain.repositories.generated_image_repository import (
+    GeneratedImageRepository,
+)
 from newbee_notebook.domain.repositories.message_repository import MessageRepository
+from newbee_notebook.domain.entities.generated_image import GeneratedImage
 from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
@@ -32,6 +39,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    ImageGeneratedEvent,
     IntermediateContentEvent,
     PhaseEvent,
     SourceEvent,
@@ -42,15 +50,28 @@ from newbee_notebook.core.engine.stream_events import (
 )
 from newbee_notebook.core.skills import SkillContext, SkillRegistry
 from newbee_notebook.core.session import SessionManager
+from newbee_notebook.core.tools.contracts import ToolDefinition
+from newbee_notebook.core.tools.image_generation import (
+    ImageToolContext,
+    build_image_generation_tool,
+)
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
+from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 
 logger = logging.getLogger(__name__)
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
 ASK_SOURCE_SCORE_THRESHOLD = 0.3
+REMOTE_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*]\(https?://[^)\s]+\)")
+REMOTE_HTML_IMAGE_PATTERN = re.compile(
+    r"<img\b[^>]*src=['\"]https?://[^'\"]+['\"][^>]*>",
+    flags=re.IGNORECASE,
+)
+EXCESS_BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
 
 
 @dataclass
@@ -73,6 +94,7 @@ class ChatResult:
     content: str
     mode: ModeType
     sources: List[ChatSource]
+    images: List[dict] = field(default_factory=list)
     warnings: List[dict] = field(default_factory=list)
 
 
@@ -96,6 +118,8 @@ class ChatService:
         ref_repo: NotebookDocumentRefRepository,
         message_repo: MessageRepository,
         session_manager: SessionManager,
+        generated_image_repo: GeneratedImageRepository | None = None,
+        storage: StorageBackend | None = None,
         vector_index: Any = None,
         vector_index_loader: Callable[[], Awaitable[Any]] | None = None,
         skill_registry: SkillRegistry | None = None,
@@ -108,6 +132,8 @@ class ChatService:
         self._ref_repo = ref_repo
         self._message_repo = message_repo
         self._session_manager = session_manager
+        self._generated_image_repo = generated_image_repo
+        self._storage = storage
         self._vector_index = vector_index
         self._vector_index_loader = vector_index_loader
         self._skill_registry = skill_registry
@@ -122,6 +148,143 @@ class ChatService:
             else:
                 normalized.append(asdict(item))
         return normalized
+
+    @staticmethod
+    def _image_items_to_dicts(items: List[Any]) -> List[dict]:
+        normalized: List[dict] = []
+        for item in items or []:
+            if isinstance(item, dict):
+                normalized.append(item)
+            else:
+                normalized.append(asdict(item))
+        return normalized
+
+    @staticmethod
+    def _image_ids(items: List[Any]) -> List[str]:
+        image_ids: List[str] = []
+        for item in items or []:
+            if isinstance(item, dict):
+                image_id = str(item.get("image_id") or "").strip()
+            else:
+                image_id = str(getattr(item, "image_id", "") or "").strip()
+            if image_id:
+                image_ids.append(image_id)
+        return image_ids
+
+    @staticmethod
+    def _strip_generated_image_markup(content: str, images: List[Any] | None) -> str:
+        normalized = str(content or "")
+        if not normalized.strip() or not images:
+            return normalized
+        cleaned = REMOTE_MARKDOWN_IMAGE_PATTERN.sub("", normalized)
+        cleaned = REMOTE_HTML_IMAGE_PATTERN.sub("", cleaned)
+        cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+        cleaned = EXCESS_BLANK_LINES_PATTERN.sub("\n\n", cleaned).strip()
+        return cleaned
+
+    async def _persist_generated_image_record(self, **kwargs: Any) -> None:
+        if self._generated_image_repo is None:
+            return
+        image = GeneratedImage(
+            image_id=str(kwargs.get("image_id") or ""),
+            session_id=str(kwargs.get("session_id") or ""),
+            notebook_id=str(kwargs.get("notebook_id") or ""),
+            message_id=kwargs.get("message_id"),
+            tool_call_id=str(kwargs.get("tool_call_id") or ""),
+            prompt=str(kwargs.get("prompt") or ""),
+            provider=str(kwargs.get("provider") or ""),
+            model=str(kwargs.get("model") or ""),
+            size=str(kwargs.get("size") or "") or None,
+            width=kwargs.get("width"),
+            height=kwargs.get("height"),
+            storage_key=str(kwargs.get("storage_key") or ""),
+            file_size=int(kwargs.get("file_size") or 0),
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        await self._generated_image_repo.create(image)
+
+    async def _backfill_generated_images_message_id(
+        self,
+        *,
+        image_ids: List[str],
+        message_id: int,
+    ) -> None:
+        if self._generated_image_repo is None:
+            return
+        for image_id in image_ids:
+            await self._generated_image_repo.update_message_id(image_id, message_id)
+
+    def _resolve_storage_backend(self) -> StorageBackend | None:
+        if self._storage is not None:
+            return self._storage
+        try:
+            self._storage = get_runtime_storage_backend()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Skipping image_generate tool because storage backend is unavailable: %s",
+                exc,
+            )
+            return None
+        return self._storage
+
+    def _build_image_tool_for_runtime(
+        self,
+        *,
+        mode: ModeType,
+        session_id: str,
+        notebook_id: str,
+    ) -> ToolDefinition | None:
+        if mode not in {ModeType.AGENT, ModeType.ASK}:
+            return None
+        if self._generated_image_repo is None:
+            return None
+        storage = self._resolve_storage_backend()
+        if storage is None:
+            return None
+
+        runtime_config = getattr(self._session_manager, "runtime_config", None)
+        provider = str(getattr(runtime_config, "provider", "") or "").strip().lower()
+        if provider not in {"qwen", "zhipu"}:
+            return None
+        api_key = str(resolve_llm_api_key(provider) or "").strip()
+        if not api_key:
+            logger.warning(
+                "Skipping image_generate tool because API key for provider '%s' is not configured.",
+                provider,
+            )
+            return None
+
+        context = ImageToolContext(
+            session_id=session_id,
+            notebook_id=notebook_id,
+            provider=provider,
+            api_key=api_key,
+            storage=storage,
+            save_record=self._persist_generated_image_record,
+        )
+        return build_image_generation_tool(context)
+
+    def _merge_external_tools_with_image_tool(
+        self,
+        *,
+        mode: ModeType,
+        session_id: str,
+        notebook_id: str,
+        external_tools: list[Any] | None,
+    ) -> list[Any] | None:
+        merged = list(external_tools or [])
+        image_tool = self._build_image_tool_for_runtime(
+            mode=mode,
+            session_id=session_id,
+            notebook_id=notebook_id,
+        )
+        if image_tool and not any(
+            str(getattr(tool, "name", "") or "").strip() == image_tool.name
+            for tool in merged
+        ):
+            merged.append(image_tool)
+        return merged or None
 
     @staticmethod
     def _get_stream_chunk_timeout_seconds(mode: ModeType) -> int:
@@ -190,6 +353,12 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        external_tools = self._merge_external_tools_with_image_tool(
+            mode=runtime_mode_enum,
+            session_id=session_id,
+            notebook_id=session.notebook_id,
+            external_tools=external_tools,
+        )
 
         # Notebook scope documents
         (
@@ -244,8 +413,13 @@ class ChatService:
             confirmation_gateway=self._confirmation_gateway,
             lang=lang,
         )
-        response_content = runtime_result.content
+        response_content = self._strip_generated_image_markup(
+            runtime_result.content,
+            runtime_result.images,
+        )
         sources = self._source_items_to_dicts(runtime_result.sources)
+        images = self._image_items_to_dicts(runtime_result.images)
+        image_ids = list(dict.fromkeys(self._image_ids(runtime_result.images)))
         warnings.extend(runtime_result.warnings)
         message_id = session.message_count + 1
 
@@ -264,6 +438,23 @@ class ChatService:
         )
         await self._message_repo.create_batch([user_msg, assistant_msg])
         await self._session_repo.increment_message_count(session_id, 2)
+        assistant_message_id = (
+            int(assistant_msg.message_id)
+            if isinstance(assistant_msg.message_id, int)
+            else None
+        )
+        if image_ids and assistant_message_id is not None:
+            try:
+                await self._backfill_generated_images_message_id(
+                    image_ids=image_ids,
+                    message_id=assistant_message_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Failed to backfill generated image message_id for session %s: %s",
+                    session_id,
+                    exc,
+                )
 
         # Merge sources with user selection/context chunks for consistency
         sources = self._merge_sources_with_context(
@@ -309,6 +500,7 @@ class ChatService:
                 )
                 for s in sources
             ],
+            images=images,
             warnings=warnings,
         )
 
@@ -371,6 +563,12 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        external_tools = self._merge_external_tools_with_image_tool(
+            mode=runtime_mode_enum,
+            session_id=session_id,
+            notebook_id=session.notebook_id,
+            external_tools=external_tools,
+        )
         (
             allowed_doc_ids,
             docs_by_status,
@@ -410,6 +608,7 @@ class ChatService:
 
         full_response = ""
         sources: List[dict] = []
+        generated_image_ids: list[str] = []
         context_chunks = await self._get_context_chunks(context) if context else []
         stream_ready_to_finish = False
         stream = None
@@ -474,6 +673,16 @@ class ChatService:
                         else None,
                     }
                     continue
+                if isinstance(event, ImageGeneratedEvent):
+                    normalized_images = self._image_items_to_dicts(event.images)
+                    generated_image_ids.extend(self._image_ids(event.images))
+                    yield {
+                        "type": "image_generated",
+                        "images": normalized_images,
+                        "tool_call_id": event.tool_call_id,
+                        "tool_name": event.tool_name,
+                    }
+                    continue
                 if isinstance(event, ConfirmationRequestEvent):
                     yield {
                         "type": "confirmation_request",
@@ -529,14 +738,36 @@ class ChatService:
                 role=MessageRole.USER,
                 content=message,
             )
+            sanitized_full_response = self._strip_generated_image_markup(
+                full_response,
+                generated_image_ids,
+            )
             assistant_msg = Message(
                 session_id=session_id,
                 mode=runtime_mode_enum,
                 role=MessageRole.ASSISTANT,
-                content=full_response,
+                content=sanitized_full_response,
             )
             await self._message_repo.create_batch([user_msg, assistant_msg])
             await self._session_repo.increment_message_count(session_id, 2)
+            assistant_message_id = (
+                int(assistant_msg.message_id)
+                if isinstance(assistant_msg.message_id, int)
+                else None
+            )
+            unique_generated_image_ids = list(dict.fromkeys(generated_image_ids))
+            if unique_generated_image_ids and assistant_message_id is not None:
+                try:
+                    await self._backfill_generated_images_message_id(
+                        image_ids=unique_generated_image_ids,
+                        message_id=assistant_message_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to backfill generated image message_id in stream for session %s: %s",
+                        session_id,
+                        exc,
+                    )
 
             # Persist references
             if sources:
