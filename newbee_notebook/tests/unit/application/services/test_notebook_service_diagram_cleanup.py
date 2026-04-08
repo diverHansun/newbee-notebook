@@ -32,6 +32,7 @@ def test_delete_notebook_removes_diagram_content_before_notebook_delete():
     )
 
     storage = AsyncMock()
+    storage.delete_prefix = AsyncMock(return_value=1)
 
     service = NotebookService(
         notebook_repo=notebook_repo,
@@ -49,6 +50,7 @@ def test_delete_notebook_removes_diagram_content_before_notebook_delete():
     asyncio.run(_run())
     diagram_repo.list_by_notebook.assert_awaited_once_with("nb-1")
     storage.delete_file.assert_awaited_once_with("diagrams/nb-1/diag-1.json")
+    storage.delete_prefix.assert_awaited_once_with("generated-images/nb-1/")
     ref_repo.delete_by_notebook.assert_awaited_once_with("nb-1")
     document_repo.delete_by_notebook.assert_awaited_once_with("nb-1")
     notebook_repo.delete.assert_awaited_once_with("nb-1")
@@ -75,6 +77,7 @@ def test_delete_notebook_ignores_missing_diagram_content():
 
     storage = AsyncMock()
     storage.delete_file = AsyncMock(side_effect=FileNotFoundError("missing"))
+    storage.delete_prefix = AsyncMock(return_value=0)
 
     service = NotebookService(
         notebook_repo=notebook_repo,
@@ -90,4 +93,5 @@ def test_delete_notebook_ignores_missing_diagram_content():
         assert deleted is True
 
     asyncio.run(_run())
+    storage.delete_prefix.assert_awaited_once_with("generated-images/nb-1/")
     notebook_repo.delete.assert_awaited_once_with("nb-1")

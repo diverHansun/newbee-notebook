@@ -1,4 +1,5 @@
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 import pytest
 
@@ -55,3 +56,78 @@ async def test_create_raises_limit_error_when_notebook_already_has_50_sessions()
     assert exc_info.value.max_count == 50
     session_repo.create.assert_not_called()
     notebook_repo.increment_session_count.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_delete_session_removes_generated_image_objects_before_db_delete():
+    session_repo = AsyncMock()
+    notebook_repo = AsyncMock()
+    message_repo = AsyncMock()
+    generated_image_repo = AsyncMock()
+    storage = AsyncMock()
+
+    service = SessionService(
+        session_repo=session_repo,
+        notebook_repo=notebook_repo,
+        message_repo=message_repo,
+        generated_image_repo=generated_image_repo,
+        storage=storage,
+    )
+
+    service.get_or_raise = AsyncMock(
+        return_value=Session(
+            session_id="session-1",
+            notebook_id="nb-1",
+            title="session",
+        )
+    )
+    generated_image_repo.list_by_session.return_value = [
+        SimpleNamespace(storage_key="generated-images/nb-1/session-1/img-1.png"),
+        SimpleNamespace(storage_key="generated-images/nb-1/session-1/img-2.png"),
+    ]
+    session_repo.delete.return_value = True
+
+    deleted = await service.delete("session-1")
+
+    assert deleted is True
+    generated_image_repo.list_by_session.assert_awaited_once_with("session-1")
+    storage.delete_file.assert_any_await("generated-images/nb-1/session-1/img-1.png")
+    storage.delete_file.assert_any_await("generated-images/nb-1/session-1/img-2.png")
+    session_repo.delete.assert_awaited_once_with("session-1")
+    notebook_repo.increment_session_count.assert_awaited_once_with("nb-1", -1)
+
+
+@pytest.mark.anyio
+async def test_delete_session_ignores_missing_generated_image_objects():
+    session_repo = AsyncMock()
+    notebook_repo = AsyncMock()
+    message_repo = AsyncMock()
+    generated_image_repo = AsyncMock()
+    storage = AsyncMock()
+    storage.delete_file = AsyncMock(side_effect=FileNotFoundError("missing"))
+
+    service = SessionService(
+        session_repo=session_repo,
+        notebook_repo=notebook_repo,
+        message_repo=message_repo,
+        generated_image_repo=generated_image_repo,
+        storage=storage,
+    )
+
+    service.get_or_raise = AsyncMock(
+        return_value=Session(
+            session_id="session-1",
+            notebook_id="nb-1",
+            title="session",
+        )
+    )
+    generated_image_repo.list_by_session.return_value = [
+        SimpleNamespace(storage_key="generated-images/nb-1/session-1/img-1.png"),
+    ]
+    session_repo.delete.return_value = True
+
+    deleted = await service.delete("session-1")
+
+    assert deleted is True
+    storage.delete_file.assert_awaited_once_with("generated-images/nb-1/session-1/img-1.png")
+    session_repo.delete.assert_awaited_once_with("session-1")

@@ -7,7 +7,13 @@ import pytest
 
 from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
-from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition, ToolQualityMeta
+from newbee_notebook.core.tools.contracts import (
+    ImageResult,
+    SourceItem,
+    ToolCallResult,
+    ToolDefinition,
+    ToolQualityMeta,
+)
 
 
 @pytest.fixture
@@ -967,3 +973,40 @@ async def test_agent_loop_stream_emits_intermediate_content_and_preserves_struct
 
     assistant_tool_messages = [msg for msg in llm.chat_calls[1]["messages"] if msg.get("tool_calls")]
     assert assistant_tool_messages[-1]["content"] == "让我先查一下知识库"
+
+
+@pytest.mark.anyio
+async def test_agent_loop_stream_emits_image_generated_event_when_tool_returns_images():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("image_generate", {"prompt": "draw a cat"})]),
+            _chat_response(content="图片已生成"),
+        ],
+        stream_chunks=[_stream_chunk("已完成")],
+    )
+    tool = _tool(
+        "image_generate",
+        ToolCallResult(
+            content="图片已生成",
+            images=[
+                ImageResult(
+                    image_id="img-1",
+                    storage_key="generated-images/nb/sess/img-1.png",
+                    prompt="draw a cat",
+                    provider="qwen",
+                    model="qwen-image-2.0-pro",
+                    width=1024,
+                    height=1024,
+                )
+            ],
+        ),
+    )
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    events = [event async for event in loop.stream(message="生成一张猫图", chat_history=[])]
+
+    image_events = [event for event in events if event.event == "image_generated"]
+    assert len(image_events) == 1
+    assert image_events[0].tool_name == "image_generate"
+    assert image_events[0].images[0].image_id == "img-1"

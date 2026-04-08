@@ -7,10 +7,21 @@ from unittest.mock import AsyncMock
 import pytest
 
 from newbee_notebook.application.services.chat_service import ChatService
-from newbee_notebook.core.engine.stream_events import ContentEvent, DoneEvent, PhaseEvent, SourceEvent
+from newbee_notebook.core.engine.stream_events import (
+    ContentEvent,
+    DoneEvent,
+    ImageGeneratedEvent,
+    PhaseEvent,
+    SourceEvent,
+)
 from newbee_notebook.core.skills import SkillContext, SkillManifest
 from newbee_notebook.core.session import SessionRunResult
-from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
+from newbee_notebook.core.tools.contracts import (
+    ImageResult,
+    SourceItem,
+    ToolCallResult,
+    ToolDefinition,
+)
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.mode_type import MessageRole, ModeType
 from newbee_notebook.exceptions import DocumentProcessingError
@@ -138,6 +149,8 @@ def _build_service(
     vector_index_loader=None,
     skill_registry=None,
     confirmation_gateway=None,
+    generated_image_repo=None,
+    storage=None,
 ):
     return ChatService(
         session_repo=AsyncMock(),
@@ -147,6 +160,8 @@ def _build_service(
         ref_repo=ref_repo or AsyncMock(),
         message_repo=AsyncMock(),
         session_manager=session_manager or _DummyRuntimeSessionManager(),
+        generated_image_repo=generated_image_repo,
+        storage=storage,
         vector_index_loader=vector_index_loader,
         skill_registry=skill_registry,
         confirmation_gateway=confirmation_gateway,
@@ -932,3 +947,339 @@ def test_confirm_action_resolves_pending_confirmation_for_existing_session():
 
     assert resolved is True
     assert confirmation_gateway.calls == [("req-1", True)]
+
+
+def test_chat_stream_emits_image_generated_and_backfills_message_id():
+    class _DummyImageRuntimeSessionManager:
+        async def start_session(self, session_id: str):
+            return None
+
+        async def chat_stream(self, **kwargs):
+            del kwargs
+            yield PhaseEvent(stage="reasoning")
+            yield ImageGeneratedEvent(
+                images=[
+                    ImageResult(
+                        image_id="img-1",
+                        storage_key="generated-images/nb-1/session-1/img-1.png",
+                        prompt="draw a bee",
+                        provider="qwen",
+                        model="qwen-image-2.0-pro",
+                        width=1024,
+                        height=1024,
+                    )
+                ],
+                tool_call_id="call-1",
+                tool_name="image_generate",
+            )
+            yield ContentEvent(delta="done")
+            yield DoneEvent()
+
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 101
+        messages[1].message_id = 102
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    generated_image_repo = AsyncMock()
+    generated_image_repo.update_message_id = AsyncMock(return_value=True)
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummyImageRuntimeSessionManager(),
+        generated_image_repo=generated_image_repo,
+        storage=AsyncMock(),
+    )
+
+    async def _collect():
+        events = []
+        async for event in service.chat_stream(
+            session_id="session-1",
+            message="draw a bee",
+            mode="agent",
+        ):
+            events.append(event)
+            if event["type"] == "done":
+                break
+        return events
+
+    events = asyncio.run(_collect())
+
+    image_events = [event for event in events if event.get("type") == "image_generated"]
+    assert len(image_events) == 1
+    assert image_events[0]["images"][0]["image_id"] == "img-1"
+    generated_image_repo.update_message_id.assert_awaited_once_with("img-1", 102)
+
+
+def test_chat_non_stream_backfills_generated_image_message_id():
+    class _DummyImageResultSessionManager:
+        async def start_session(self, session_id: str):
+            return None
+
+        async def chat(self, **kwargs):
+            del kwargs
+            return SessionRunResult(
+                content="done",
+                sources=[],
+                images=[
+                    ImageResult(
+                        image_id="img-2",
+                        storage_key="generated-images/nb-1/session-1/img-2.png",
+                        prompt="draw two bees",
+                        provider="zhipu",
+                        model="glm-image",
+                        width=1280,
+                        height=1280,
+                    )
+                ],
+            )
+
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 201
+        messages[1].message_id = 202
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    generated_image_repo = AsyncMock()
+    generated_image_repo.update_message_id = AsyncMock(return_value=True)
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummyImageResultSessionManager(),
+        generated_image_repo=generated_image_repo,
+        storage=AsyncMock(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="draw", mode="agent"))
+
+    assert result.images[0]["image_id"] == "img-2"
+    generated_image_repo.update_message_id.assert_awaited_once_with("img-2", 202)
+
+
+def test_chat_non_stream_strips_generated_markdown_images_from_assistant_content():
+    class _DummySanitizingSessionManager:
+        async def start_session(self, session_id: str):
+            return None
+
+        async def chat(self, **kwargs):
+            del kwargs
+            return SessionRunResult(
+                content=(
+                    "Here is your image:\n\n"
+                    "![bee](https://sfile.chatglm.cn/images-ppt/demo-bee.jpg)\n\n"
+                    "Warm bee summary."
+                ),
+                sources=[],
+                images=[
+                    ImageResult(
+                        image_id="img-3",
+                        storage_key="generated-images/nb-1/session-1/img-3.png",
+                        prompt="draw a warm bee",
+                        provider="zhipu",
+                        model="glm-image",
+                        width=1280,
+                        height=1280,
+                    )
+                ],
+            )
+
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 301
+        messages[1].message_id = 302
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    generated_image_repo = AsyncMock()
+    generated_image_repo.update_message_id = AsyncMock(return_value=True)
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummySanitizingSessionManager(),
+        generated_image_repo=generated_image_repo,
+        storage=AsyncMock(),
+    )
+
+    result = asyncio.run(service.chat(session_id="session-1", message="draw", mode="agent"))
+
+    assistant_message = message_repo.create_batch.await_args.args[0][1]
+    assert "![bee]" not in result.content
+    assert "https://sfile.chatglm.cn/" not in result.content
+    assert result.content == "Here is your image:\n\nWarm bee summary."
+    assert assistant_message.content == "Here is your image:\n\nWarm bee summary."
+
+
+def test_chat_stream_persists_sanitized_assistant_content_when_tool_images_present():
+    class _DummyStreamingSanitizingSessionManager:
+        async def start_session(self, session_id: str):
+            return None
+
+        async def chat_stream(self, **kwargs):
+            del kwargs
+            yield ImageGeneratedEvent(
+                images=[
+                    ImageResult(
+                        image_id="img-4",
+                        storage_key="generated-images/nb-1/session-1/img-4.png",
+                        prompt="draw a bright bee",
+                        provider="qwen",
+                        model="qwen-image-2.0-pro",
+                        width=1024,
+                        height=1024,
+                    )
+                ],
+                tool_call_id="call-2",
+                tool_name="image_generate",
+            )
+            yield ContentEvent(
+                delta=(
+                    "Preview:\n\n"
+                    "![bee preview](https://sfile.chatglm.cn/images-ppt/demo-preview.jpg)\n\n"
+                    "Bright bee summary."
+                )
+            )
+            yield DoneEvent()
+
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 401
+        messages[1].message_id = 402
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    generated_image_repo = AsyncMock()
+    generated_image_repo.update_message_id = AsyncMock(return_value=True)
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=_DummyStreamingSanitizingSessionManager(),
+        generated_image_repo=generated_image_repo,
+        storage=AsyncMock(),
+    )
+
+    async def _collect():
+        events = []
+        async for event in service.chat_stream(
+            session_id="session-1",
+            message="draw",
+            mode="agent",
+        ):
+            events.append(event)
+            if event["type"] == "done":
+                break
+        return events
+
+    asyncio.run(_collect())
+
+    assistant_message = message_repo.create_batch.await_args.args[0][1]
+    assert "![bee preview]" not in assistant_message.content
+    assert "https://sfile.chatglm.cn/" not in assistant_message.content
+    assert assistant_message.content == "Preview:\n\nBright bee summary."
+
+
+def test_merge_external_tools_adds_image_tool_for_ask_mode(monkeypatch):
+    async def _noop(_: dict) -> ToolCallResult:
+        return ToolCallResult(content="ok")
+
+    existing_tool = ToolDefinition(
+        name="mcp.search",
+        description="search",
+        parameters={"type": "object", "properties": {}},
+        execute=_noop,
+    )
+    image_tool = ToolDefinition(
+        name="image_generate",
+        description="image",
+        parameters={"type": "object", "properties": {}},
+        execute=_noop,
+    )
+
+    service = _build_service(
+        session_manager=_DummyRuntimeSessionManager(),
+        generated_image_repo=AsyncMock(),
+        storage=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        service,
+        "_build_image_tool_for_runtime",
+        lambda **kwargs: image_tool,
+    )
+
+    merged = service._merge_external_tools_with_image_tool(
+        mode=ModeType.ASK,
+        session_id="session-1",
+        notebook_id="nb-1",
+        external_tools=[existing_tool],
+    )
+
+    assert [tool.name for tool in merged] == ["mcp.search", "image_generate"]

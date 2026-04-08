@@ -44,6 +44,22 @@ class _FakeSessionService:
             2,
         )
 
+    async def list_message_images(self, session_id: str, message_ids: list[int]):
+        del session_id, message_ids
+        return {
+            11: [
+                {
+                    "image_id": "img-1",
+                    "storage_key": "generated-images/nb-1/session-1/img-1.png",
+                    "prompt": "draw a bee",
+                    "provider": "qwen",
+                    "model": "qwen-image-2.0-pro",
+                    "width": 1024,
+                    "height": 1024,
+                }
+            ]
+        }
+
     async def get_or_raise(self, session_id: str):
         return SimpleNamespace(session_id=session_id)
 
@@ -61,6 +77,7 @@ def test_list_session_messages_includes_message_type_and_summary_rows():
     assert body["pagination"]["total"] == 2
     assert body["data"][0]["message_type"] == "summary"
     assert body["data"][0]["content"] == "Compacted summary"
+    assert body["data"][0]["images"][0]["image_id"] == "img-1"
     assert body["data"][1]["message_type"] == "normal"
 
 
