@@ -16,7 +16,12 @@ import {
 } from "@/lib/hooks/use-toc";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
-import { computeChunkOffsets, findChunkIndexByOffset } from "@/lib/reader/chunk-marks";
+import {
+  MARK_ANCHOR_TEXT_MAX_LENGTH,
+  computeChunkOffsets,
+  findChunkIndexByOffset,
+  resolveMarkCharOffset,
+} from "@/lib/reader/chunk-marks";
 import {
   getInitialVisibleChunkCount,
   splitMarkdownIntoChunks,
@@ -32,13 +37,18 @@ type DocumentReaderProps = {
   onConclude: (payload: { documentId: string; selectedText: string }) => void;
 };
 
+type MarkFeedback = {
+  kind: "success" | "warning" | "error";
+  message: string;
+};
+
 export function DocumentReader({
   documentId,
   onBack,
   onExplain,
   onConclude,
 }: DocumentReaderProps) {
-  const { t, ti } = useLang();
+  const { t, ti, lang } = useLang();
   const queryClient = useQueryClient();
   const viewerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -53,7 +63,7 @@ export function DocumentReader({
   const setStudioActiveMarkId = useStudioStore((state) => state.setActiveMarkId);
   const [isCompactReader, setIsCompactReader] = useState(false);
   const [visibleChunkCount, setVisibleChunkCount] = useState(1);
-  const [markFeedback, setMarkFeedback] = useState<string | null>(null);
+  const [markFeedback, setMarkFeedback] = useState<MarkFeedback | null>(null);
   const activeHighlightCleanupRef = useRef<(() => void) | null>(null);
   const activeMarkIdRef = useRef<string | null>(null);
 
@@ -95,6 +105,13 @@ export function DocumentReader({
   const chunkOffsets = useMemo(
     () => computeChunkOffsets(markdownContent, markdownChunks),
     [markdownChunks, markdownContent]
+  );
+  const markAnchorTextMaxLengthLabel = useMemo(
+    () =>
+      new Intl.NumberFormat(lang === "en" ? "en-US" : "zh-CN").format(
+        MARK_ANCHOR_TEXT_MAX_LENGTH
+      ),
+    [lang]
   );
   const totalChunkCount = markdownChunks.length;
   const initialVisibleChunkCount = useMemo(
@@ -175,6 +192,18 @@ export function DocumentReader({
 
   const handleMark = useCallback(
     async ({ documentId: selectedDocumentId, selectedText }: { documentId: string; selectedText: string }) => {
+      const anchorText = selectedText.trim();
+      if (!anchorText) return;
+      if (anchorText.length > MARK_ANCHOR_TEXT_MAX_LENGTH) {
+        setMarkFeedback({
+          kind: "warning",
+          message: ti(uiStrings.reader.bookmarkSelectionTooLong, {
+            max: markAnchorTextMaxLengthLabel,
+          }),
+        });
+        return;
+      }
+
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) return;
 
@@ -188,14 +217,25 @@ export function DocumentReader({
       const chunk = chunkOffsets[chunkIndex];
       if (!chunk) return;
 
-      const positionInChunk = chunk.content.indexOf(selectedText);
-      const charOffset = chunk.startChar + Math.max(0, positionInChunk);
+      const charOffset = resolveMarkCharOffset({
+        chunk,
+        selectedText: anchorText,
+        range,
+        chunkElement,
+      });
+      if (charOffset == null) {
+        setMarkFeedback({
+          kind: "warning",
+          message: t(uiStrings.reader.bookmarkPositionUnavailable),
+        });
+        return;
+      }
 
       try {
         const mark = await createMarkMutation.mutateAsync({
-          anchorText: selectedText,
+          anchorText,
           charOffset,
-          contextText: selectedText,
+          contextText: anchorText,
         });
         // Wait for query cache to contain the new mark before activating,
         // so the scroll-to-mark effect can find it immediately.
@@ -203,12 +243,37 @@ export function DocumentReader({
         await queryClient.invalidateQueries({ queryKey: ["marks", "notebook"] });
         setReaderActiveMarkId(mark.mark_id);
         setStudioActiveMarkId(mark.mark_id);
-        setMarkFeedback(t(uiStrings.reader.bookmarkCreated));
-      } catch {
-        setMarkFeedback(t(uiStrings.reader.bookmarkCreateFailed));
+        setMarkFeedback({
+          kind: "success",
+          message: t(uiStrings.reader.bookmarkCreated),
+        });
+      } catch (error) {
+        setMarkFeedback(
+          error instanceof ApiError && error.errorCode === "E_MARK_ANCHOR_TOO_LONG"
+            ? {
+                kind: "warning",
+                message: ti(uiStrings.reader.bookmarkSelectionTooLong, {
+                  max: markAnchorTextMaxLengthLabel,
+                }),
+              }
+            : {
+                kind: "error",
+                message: t(uiStrings.reader.bookmarkCreateFailed),
+              }
+        );
       }
     },
-    [chunkOffsets, createMarkMutation, documentId, queryClient, setReaderActiveMarkId, setStudioActiveMarkId, t]
+    [
+      chunkOffsets,
+      createMarkMutation,
+      documentId,
+      markAnchorTextMaxLengthLabel,
+      queryClient,
+      setReaderActiveMarkId,
+      setStudioActiveMarkId,
+      t,
+      ti,
+    ]
   );
 
   useEffect(() => {
@@ -405,11 +470,6 @@ export function DocumentReader({
 
     return (
       <div style={{ padding: "8px 24px 24px" }}>
-        {markFeedback ? (
-          <div className="badge badge-default" style={{ marginBottom: 12 }}>
-            {markFeedback}
-          </div>
-        ) : null}
         <MarkdownViewer
           content={markdownContent}
           documentId={documentId}
@@ -455,7 +515,7 @@ export function DocumentReader({
       </div>
 
       {/* Content */}
-      <div ref={readerBodyRef} className="reader-body-layout" style={{ flex: 1 }}>
+      <div ref={readerBodyRef} className="reader-body-layout" style={{ flex: 1, position: "relative" }}>
         {shouldShowToc ? (
           <TocSidebar
             items={tocItems}
@@ -470,6 +530,15 @@ export function DocumentReader({
         <div ref={scrollContainerRef} className="reader-content-scroll">
           {renderBody()}
         </div>
+        {markFeedback ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`reader-toast reader-toast-${markFeedback.kind}`}
+          >
+            {markFeedback.message}
+          </div>
+        ) : null}
       </div>
 
       <SelectionMenu onExplain={onExplain} onConclude={onConclude} onMark={handleMark} />

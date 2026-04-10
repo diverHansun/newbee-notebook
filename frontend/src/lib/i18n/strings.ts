@@ -151,6 +151,14 @@ export const uiStrings = {
     },
     bookmarkCreated: { zh: "书签已创建", en: "Bookmark created" },
     bookmarkCreateFailed: { zh: "书签创建失败", en: "Failed to create bookmark" },
+    bookmarkSelectionTooLong: {
+      zh: "选中文本过长，请控制在 {max} 字以内后再添加书签。",
+      en: "Selected text is too long. Please select {max} characters or fewer.",
+    },
+    bookmarkPositionUnavailable: {
+      zh: "无法定位这段选中文本，请重新选择后再添加书签。",
+      en: "Could not locate the selected text. Please select it again.",
+    },
     moreContentLoading: { zh: "正在加载更多内容...", en: "Loading more content..." },
   },
   layout: {

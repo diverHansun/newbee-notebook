@@ -19,6 +19,70 @@
   background: hsl(var(--bee-yellow-light));
 }
 
+.reader-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 60;
+  max-width: min(520px, calc(100% - 32px));
+  transform: translateX(-50%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: hsl(var(--card) / 0.96);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.14),
+    0 4px 10px rgba(15, 23, 42, 0.08);
+  color: hsl(var(--foreground));
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.reader-toast-success {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.reader-toast-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.reader-toast-error {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.dark .reader-toast {
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.32),
+    0 5px 14px rgba(0, 0, 0, 0.24);
+}
+
+.dark .reader-toast-success {
+  border-color: hsl(142 72% 42% / 0.42);
+  background: hsl(142 72% 18% / 0.96);
+  color: hsl(142 76% 82%);
+}
+
+.dark .reader-toast-warning {
+  border-color: hsl(var(--bee-yellow) / 0.42);
+  background: hsl(var(--bee-yellow) / 0.16);
+  color: hsl(44 92% 78%);
+}
+
+.dark .reader-toast-error {
+  border-color: hsl(0 72% 51% / 0.42);
+  background: hsl(0 72% 20% / 0.96);
+  color: hsl(0 92% 82%);
+}
+
 /* ================================================================
    19. Resizable panel handle
    ================================================================ */

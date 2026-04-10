@@ -3,6 +3,7 @@ Newbee Notebook - FastAPI Application Entry Point
 """
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -11,6 +12,7 @@ from newbee_notebook.exceptions import NewbeeNotebookException
 from newbee_notebook.api.middleware.error_handler import (
     newbee_notebook_exception_handler,
     generic_exception_handler,
+    request_validation_exception_handler,
 )
 from newbee_notebook.core.common.config_db import (
     is_model_switch_enabled,
@@ -90,6 +92,7 @@ def create_app() -> FastAPI:
 
     # Register global exception handlers.
     app.add_exception_handler(NewbeeNotebookException, newbee_notebook_exception_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
     # Include routers
