@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any, Awaitable, Callable, Literal, Optional
 
@@ -17,7 +18,12 @@ from newbee_notebook.domain.repositories.reference_repository import (
 from newbee_notebook.domain.repositories.video_summary_repository import (
     VideoSummaryRepository,
 )
-from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+from newbee_notebook.infrastructure.bilibili.exceptions import (
+    AuthenticationError,
+    InvalidBvidError,
+    NotFoundError,
+    RateLimitError,
+)
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 from newbee_notebook.infrastructure.storage.object_keys import build_video_transcript_key
@@ -46,6 +52,24 @@ class VideoTranscriptUnavailableError(RuntimeError):
 
 class VideoConcurrentProcessingLimitError(RuntimeError):
     """Raised when too many video summaries are already processing."""
+
+
+_EXPECTED_USER_ERRORS = (
+    AuthenticationError,
+    NotFoundError,
+    RateLimitError,
+    InvalidBvidError,
+    VideoTranscriptUnavailableError,
+    VideoSummarizingInProgressError,
+    VideoConcurrentProcessingLimitError,
+    InvalidYouTubeInputError,
+    InvalidYouTubeVideoIdError,
+    YouTubeVideoUnavailableError,
+    YouTubeNetworkError,
+)
+
+_STALE_PROCESSING_GRACE = timedelta(seconds=120)
+_STALE_PROCESSING_TIMESTAMP_DRIFT = timedelta(seconds=2)
 
 
 class VideoService:
@@ -134,6 +158,15 @@ class VideoService:
         )
 
         try:
+            has_credentials = True
+            has_credentials_fn = getattr(self._bili_client, "has_credentials", None)
+            if callable(has_credentials_fn):
+                has_credentials = has_credentials_fn()
+                if inspect.isawaitable(has_credentials):
+                    has_credentials = await has_credentials
+            if not has_credentials:
+                raise AuthenticationError("Bilibili session required. Please log in first.")
+
             info = await self._bili_client.get_video_info(bvid)
             self._apply_info(summary, info, fallback_source_url=url_or_id)
             summary = await self._video_repo.update(summary)
@@ -452,17 +485,29 @@ class VideoService:
         source_url: str,
         notebook_id: str | None,
     ) -> tuple[VideoSummary, bool]:
+        recovered_stale_processing = False
         async with self._concurrency_controller.admission():
             existing = await self._video_repo.get_by_platform_and_video_id(platform, video_id)
             if existing is not None:
                 if existing.status == "completed":
                     return existing, True
                 if existing.status == "processing":
-                    raise VideoSummarizingInProgressError(
-                        f"Video summary is already processing: {video_id}"
-                    )
+                    if self._is_stale_processing_summary(existing):
+                        recovered_stale_processing = True
+                        logger.warning(
+                            "Recover stale processing summary for %s/%s (summary_id=%s)",
+                            platform,
+                            video_id,
+                            existing.summary_id,
+                        )
+                    else:
+                        raise VideoSummarizingInProgressError(
+                            f"Video summary is already processing: {video_id}"
+                        )
 
             processing_count = await self._video_repo.count_by_status("processing")
+            if recovered_stale_processing and processing_count > 0:
+                processing_count -= 1
             if processing_count >= self._concurrency_controller.max_processing_videos:
                 raise VideoConcurrentProcessingLimitError(
                     "At most 5 videos can be processed at the same time. Please try again later."
@@ -497,6 +542,39 @@ class VideoService:
             await self._video_repo.commit()
             return summary, False
 
+    @staticmethod
+    def _is_stale_processing_summary(summary: VideoSummary) -> bool:
+        if summary.status != "processing":
+            return False
+        if summary.summary_content.strip():
+            return False
+        if summary.transcript_path:
+            return False
+        if summary.error_message:
+            return False
+
+        created_at = summary.created_at
+        updated_at = summary.updated_at
+        if not isinstance(created_at, datetime) or not isinstance(updated_at, datetime):
+            return False
+
+        # Stale rows from pre-fix auth failures usually never pass info enrichment.
+        metadata_not_enriched = (
+            summary.title == summary.video_id
+            and summary.duration_seconds <= 0
+            and not summary.uploader_name
+            and not summary.cover_url
+            and summary.stats is None
+        )
+        if not metadata_not_enriched:
+            return False
+
+        now = datetime.now(updated_at.tzinfo) if updated_at.tzinfo else datetime.now()
+        if now - updated_at < _STALE_PROCESSING_GRACE:
+            return False
+
+        return abs(updated_at - created_at) <= _STALE_PROCESSING_TIMESTAMP_DRIFT
+
     async def _persist_transcript(self, platform: str, video_id: str, transcript_text: str) -> str:
         return await self._storage.save_file(
             object_key=build_video_transcript_key(f"{platform}-{video_id}"),
@@ -512,7 +590,10 @@ class VideoService:
         progress_callback: ProgressCallback | None,
     ) -> None:
         safe_error = self.build_stream_error_payload(exc)
-        logger.exception("Video summarize failed for %s", video_id)
+        if isinstance(exc, _EXPECTED_USER_ERRORS):
+            logger.warning("Video summarize expected failure for %s: %s", video_id, exc)
+        else:
+            logger.exception("Video summarize failed for %s", video_id)
         summary.status = "failed"
         summary.error_message = safe_error["message"]
         summary.touch()

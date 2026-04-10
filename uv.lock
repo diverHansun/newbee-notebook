@@ -2310,6 +2310,7 @@ dependencies = [
     { name = "celery" },
     { name = "docx2txt" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "llama-index-core" },
     { name = "llama-index-embeddings-openai" },
     { name = "llama-index-llms-openai" },
@@ -2341,6 +2342,7 @@ dependencies = [
     { name = "transformers" },
     { name = "uvicorn" },
     { name = "xlrd" },
+    { name = "yt-dlp" },
 ]
 
 [package.metadata]
@@ -2351,6 +2353,7 @@ requires-dist = [
     { name = "celery", specifier = ">=5.6.2" },
     { name = "docx2txt", specifier = "==0.9" },
     { name = "fastapi", specifier = ">=0.128.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "llama-index-core", specifier = "==0.14.15" },
     { name = "llama-index-embeddings-openai", specifier = "==0.5.1" },
     { name = "llama-index-llms-openai", specifier = ">=0.5.6" },
@@ -2382,6 +2385,7 @@ requires-dist = [
     { name = "transformers", specifier = "==4.57.1" },
     { name = "uvicorn", specifier = ">=0.40.0" },
     { name = "xlrd", specifier = ">=2.0.0" },
+    { name = "yt-dlp", specifier = ">=2026.3.17" },
 ]
 
 [[package]]
@@ -4829,4 +4833,13 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b0/32/f60d87a99c05a53604c58f20f670c7ea6262b55e0bbeb836ffe4550b248b/youtube_transcript_api-1.0.3.tar.gz", hash = "sha256:902baf90e7840a42e1e148335e09fe5575dbff64c81414957aea7038e8a4db46", size = 2153252, upload-time = "2025-03-25T18:14:21.119Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/44/40c03bb0f8bddfb9d2beff2ed31641f52d96c287ba881d20e0c074784ac2/youtube_transcript_api-1.0.3-py3-none-any.whl", hash = "sha256:d1874e57de65cf14c9d7d09b2b37c814d6287fa0e770d4922c4cd32a5b3f6c47", size = 2169911, upload-time = "2025-03-25T18:14:19.416Z" },
+]
+
+[[package]]
+name = "yt-dlp"
+version = "2026.3.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/34/7c6b4e3f89cb6416d2cd7ab6dab141a1df97ab0fb22d15816db2c92148c9/yt_dlp-2026.3.17.tar.gz", hash = "sha256:ba7aa31d533f1ffccfe70e421596d7ca8ff0bf1398dc6bb658b7d9dec057d2c9", size = 3119221, upload-time = "2026-03-17T23:43:00.244Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/13/5093bcb954878e50f7217fd2ab94282b53934022e4e4a03265582da83bf5/yt_dlp-2026.3.17-py3-none-any.whl", hash = "sha256:32992db94303a8a5d211a183f2174834fe7f8c29d83ed2e7a324eae97a8f26d8", size = 3315134, upload-time = "2026-03-17T23:42:57.863Z" },
 ]

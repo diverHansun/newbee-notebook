@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -101,6 +102,148 @@ def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline
         asr_pipeline=asr_pipeline,
         concurrency_controller=concurrency_controller,
     )
+
+
+@pytest.mark.anyio
+async def test_summarize_fails_fast_when_bilibili_credentials_missing(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    bili_client.has_credentials.return_value = False
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    with pytest.raises(AuthenticationError):
+        await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    bili_client.get_video_info.assert_not_awaited()
+    bili_client.get_video_subtitle.assert_not_awaited()
+    assert events[0][0] == "start"
+    assert events[-1][0] == "error"
+    failed_summary = video_repo.update.await_args_list[-1].args[0]
+    assert failed_summary.status == "failed"
+    assert failed_summary.error_message == "Bilibili session expired or not logged in. Please login and try again."
+
+
+@pytest.mark.anyio
+async def test_auth_failure_does_not_leave_summary_stuck_in_processing_and_retry_can_continue(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    state: dict[str, VideoSummary | None] = {"summary": None}
+
+    async def get_by_platform_and_video_id(_platform: str, _video_id: str):
+        return state["summary"]
+
+    async def create_summary(summary: VideoSummary):
+        state["summary"] = summary
+        return summary
+
+    async def update_summary(summary: VideoSummary):
+        state["summary"] = summary
+        return summary
+
+    async def count_by_status(status: str):
+        if status != "processing":
+            return 0
+        current = state["summary"]
+        return 1 if current is not None and current.status == "processing" else 0
+
+    video_repo.get_by_platform_and_video_id.side_effect = get_by_platform_and_video_id
+    video_repo.create.side_effect = create_summary
+    video_repo.update.side_effect = update_summary
+    video_repo.count_by_status.side_effect = count_by_status
+    bili_client.has_credentials.side_effect = [False, True]
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    first_events: list[tuple[str, dict]] = []
+
+    async def first_progress(event: str, payload: dict) -> None:
+        first_events.append((event, payload))
+
+    with pytest.raises(AuthenticationError):
+        await service.summarize("BV1xx411c7mD", notebook_id="nb-1", progress_callback=first_progress)
+
+    assert state["summary"] is not None
+    assert state["summary"].status == "failed"
+    assert first_events[-1][0] == "error"
+
+    second_events: list[tuple[str, dict]] = []
+
+    async def second_progress(event: str, payload: dict) -> None:
+        second_events.append((event, payload))
+
+    summary = await service.summarize("BV1xx411c7mD", notebook_id="nb-1", progress_callback=second_progress)
+
+    assert summary.status == "completed"
+    assert second_events[0][0] == "start"
+    assert second_events[-1][0] == "done"
+
+
+@pytest.mark.anyio
+async def test_handle_failure_logs_expected_user_error_as_warning(service, video_repo, monkeypatch):
+    import newbee_notebook.application.services.video_service as video_service_module
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    video_repo.update.side_effect = lambda summary: summary
+    summary = VideoSummary(
+        summary_id="summary-log",
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="Log target",
+        status="processing",
+    )
+
+    warning_mock = Mock()
+    exception_mock = Mock()
+    monkeypatch.setattr(video_service_module.logger, "warning", warning_mock)
+    monkeypatch.setattr(video_service_module.logger, "exception", exception_mock)
+
+    await service._handle_failure(
+        summary,
+        "BV1xx411c7mD",
+        AuthenticationError("missing sessdata"),
+        None,
+    )
+
+    warning_mock.assert_called_once()
+    exception_mock.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -333,6 +476,32 @@ async def test_summarize_rejects_existing_processing_summary(service, video_repo
 
     with pytest.raises(VideoSummarizingInProgressError):
         await service.summarize("BV1xx411c7mD")
+
+
+@pytest.mark.anyio
+async def test_summarize_recovers_stale_processing_summary(service, video_repo):
+    stale_time = datetime.now() - timedelta(minutes=5)
+    video_repo.get_by_platform_and_video_id.return_value = VideoSummary(
+        summary_id="summary-stale",
+        created_at=stale_time,
+        updated_at=stale_time + timedelta(seconds=1),
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="BV1xx411c7mD",
+        status="processing",
+    )
+    video_repo.count_by_status.return_value = 1
+    video_repo.update.side_effect = lambda summary: summary
+    events: list[str] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append(event)
+
+    summary = await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    assert summary.status == "completed"
+    assert events[0] == "start"
+    assert events[-1] == "done"
 
 
 @pytest.mark.anyio

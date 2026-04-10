@@ -86,6 +86,13 @@ class BilibiliClient:
     def extract_bvid(self, url_or_bvid: str) -> str:
         return extract_bvid(url_or_bvid)
 
+    def has_credentials(self) -> bool:
+        """Return True when a non-empty sessdata credential is configured."""
+        return bool(
+            self._credential is not None
+            and getattr(self._credential, "sessdata", None)
+        )
+
     async def get_video_info(self, url_or_bvid: str) -> dict[str, Any]:
         bvid = self.extract_bvid(url_or_bvid)
         raw = await self._call_api(

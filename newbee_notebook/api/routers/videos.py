@@ -26,6 +26,10 @@ from newbee_notebook.application.services.video_service import (
     VideoService,
     VideoSummaryNotFoundError,
 )
+from newbee_notebook.infrastructure.bilibili.exceptions import (
+    AuthenticationError as BiliAuthError,
+    BiliError,
+)
 
 
 router = APIRouter()
@@ -143,7 +147,12 @@ async def get_video_info(
     value = url_or_id or url_or_bvid
     if not value:
         raise HTTPException(status_code=422, detail="url_or_id is required")
-    return VideoInfoResponse(**(await service.fetch_video_info(value)))
+    try:
+        return VideoInfoResponse(**(await service.fetch_video_info(value)))
+    except BiliAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except BiliError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/videos/search", response_model=VideoSearchResponse)

@@ -27,6 +27,30 @@ def test_extract_bvid_rejects_invalid_value():
         extract_bvid("https://example.com/video/not-bvid")
 
 
+def test_has_credentials_returns_false_when_credential_missing():
+    from newbee_notebook.infrastructure.bilibili.client import BilibiliClient
+
+    client = BilibiliClient(credential=None)
+
+    assert client.has_credentials() is False
+
+
+def test_has_credentials_returns_false_when_sessdata_empty():
+    from newbee_notebook.infrastructure.bilibili.client import BilibiliClient
+
+    client = BilibiliClient(credential=SimpleNamespace(sessdata=""))
+
+    assert client.has_credentials() is False
+
+
+def test_has_credentials_returns_true_when_sessdata_present():
+    from newbee_notebook.infrastructure.bilibili.client import BilibiliClient
+
+    client = BilibiliClient(credential=SimpleNamespace(sessdata="sess-token"))
+
+    assert client.has_credentials() is True
+
+
 @pytest.mark.anyio
 async def test_get_video_info_normalizes_sdk_payload():
     from newbee_notebook.infrastructure.bilibili.client import BilibiliClient

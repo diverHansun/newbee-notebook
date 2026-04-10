@@ -13,10 +13,10 @@ from newbee_notebook.application.services.video_service import (
     VideoSummaryNotFoundError,
 )
 from newbee_notebook.domain.entities.video_summary import VideoSummary
-from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError, BiliError
 
 
-def _build_client(service: AsyncMock) -> TestClient:
+def _build_client(service: AsyncMock, *, raise_server_exceptions: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(videos_router.router, prefix="/api/v1")
 
@@ -24,7 +24,7 @@ def _build_client(service: AsyncMock) -> TestClient:
         return service
 
     app.dependency_overrides[get_video_service] = _override
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
 
 def _make_summary(summary_id: str = "summary-1") -> VideoSummary:
@@ -211,3 +211,27 @@ def test_video_info_proxy_returns_payload():
     assert response.status_code == 200
     assert response.json()["video_id"] == "BV1xx411c7mD"
     service.fetch_video_info.assert_awaited_once_with("BV1xx411c7mD")
+
+
+def test_video_info_returns_401_for_bilibili_auth_error():
+    service = AsyncMock()
+    service.fetch_video_info = AsyncMock(
+        side_effect=AuthenticationError("get_video_info: Credential sessdata missing")
+    )
+
+    client = _build_client(service, raise_server_exceptions=False)
+    response = client.get("/api/v1/videos/info", params={"url_or_bvid": "BV1xx411c7mD"})
+
+    assert response.status_code == 401
+    assert "sessdata" in response.json()["detail"]
+
+
+def test_video_info_returns_502_for_other_bilibili_errors():
+    service = AsyncMock()
+    service.fetch_video_info = AsyncMock(side_effect=BiliError("upstream temporary unavailable"))
+
+    client = _build_client(service, raise_server_exceptions=False)
+    response = client.get("/api/v1/videos/info", params={"url_or_bvid": "BV1xx411c7mD"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "upstream temporary unavailable"
