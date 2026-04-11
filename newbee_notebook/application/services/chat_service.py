@@ -52,6 +52,7 @@ from newbee_notebook.core.skills import SkillContext, SkillRegistry
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools.contracts import ToolDefinition
 from newbee_notebook.core.tools.image_generation import (
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ImageToolContext,
     build_image_generation_tool,
 )
@@ -64,6 +65,7 @@ from newbee_notebook.infrastructure.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
 STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT = 60
+STREAM_CHUNK_TIMEOUT_SECONDS_TOOL_MODES = int(DEFAULT_REQUEST_TIMEOUT_SECONDS * 2 + 30)
 STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES = 180
 ASK_SOURCE_SCORE_THRESHOLD = 0.3
 GENERATED_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*]\([^)]+\)")
@@ -292,6 +294,8 @@ class ChatService:
         # before the first token arrives on some providers (e.g. qwen).
         if mode in {ModeType.EXPLAIN, ModeType.CONCLUDE}:
             return STREAM_CHUNK_TIMEOUT_SECONDS_COMPLEX_MODES
+        if mode in {ModeType.AGENT, ModeType.CHAT}:
+            return STREAM_CHUNK_TIMEOUT_SECONDS_TOOL_MODES
         return STREAM_CHUNK_TIMEOUT_SECONDS_DEFAULT
 
     async def _get_vector_index(self):

@@ -365,6 +365,19 @@ class AgentLoop:
             content = result.content
         return {"role": "tool", "tool_call_id": tool_call_id, "content": content}
 
+    @staticmethod
+    def _tool_result_preview(result: ToolCallResult) -> str:
+        if result.error:
+            return f"Error: {result.error}"[:200]
+        return result.content[:200]
+
+    @staticmethod
+    async def _execute_tool_safely(tool: ToolDefinition, arguments: dict[str, Any]) -> ToolCallResult:
+        try:
+            return await tool.execute(arguments)
+        except Exception as exc:  # noqa: BLE001
+            return ToolCallResult(content="", error=f"tool execution failed: {exc}")
+
     def _repair_message(self) -> dict[str, str]:
         required = self._mode_config.loop_policy.required_tool_name or "the required tool"
         return {
@@ -716,7 +729,7 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         tool_input=effective_arguments,
                     )
-                    result = await tool.execute(effective_arguments)
+                    result = await self._execute_tool_safely(tool, effective_arguments)
                     tool_calls_made.append(tool_name)
                     collected_sources.extend(result.sources)
                     messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
@@ -724,7 +737,7 @@ class AgentLoop:
                         tool_name=tool_name,
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
-                        content_preview=result.content[:200],
+                        content_preview=self._tool_result_preview(result),
                         quality_meta=result.quality_meta,
                     )
                     if result.images:
@@ -838,7 +851,7 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         tool_input=effective_arguments,
                     )
-                    result = await tool.execute(effective_arguments)
+                    result = await self._execute_tool_safely(tool, effective_arguments)
                     tool_calls_made.append(tool_name)
                     collected_sources.extend(result.sources)
                     messages.append(self._tool_result_message(str(tool_call.get("id") or ""), result))
@@ -846,7 +859,7 @@ class AgentLoop:
                         tool_name=tool_name,
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
-                        content_preview=result.content[:200],
+                        content_preview=self._tool_result_preview(result),
                         quality_meta=result.quality_meta,
                     )
                     if result.images:

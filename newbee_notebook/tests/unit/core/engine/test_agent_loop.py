@@ -220,6 +220,18 @@ def _recording_tool(name: str, results: list[ToolCallResult], captured_payloads:
     )
 
 
+def _raising_tool(name: str, exc: Exception) -> ToolDefinition:
+    async def _execute(_: dict) -> ToolCallResult:
+        raise exc
+
+    return ToolDefinition(
+        name=name,
+        description=f"{name} tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=_execute,
+    )
+
+
 @pytest.mark.anyio
 async def test_agent_loop_open_loop_falls_back_to_synthesis_stream_when_final_reasoning_content_is_empty():
     llm = _FakeLLMClient(
@@ -1010,3 +1022,66 @@ async def test_agent_loop_stream_emits_image_generated_event_when_tool_returns_i
     assert len(image_events) == 1
     assert image_events[0].tool_name == "image_generate"
     assert image_events[0].images[0].image_id == "img-1"
+
+
+@pytest.mark.anyio
+async def test_agent_loop_turns_tool_exception_into_failed_tool_result_event():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "x"})]),
+            _chat_response(content="I can continue after the tool error."),
+        ],
+        stream_chunks=[],
+    )
+    tool = _raising_tool("knowledge_base", RuntimeError("boom"))
+    config = ModeConfigFactory.build(mode="agent", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    events = [event async for event in loop.stream(message="question", chat_history=[])]
+
+    tool_results = [event for event in events if event.event == "tool_result"]
+    assert len(tool_results) == 1
+    assert tool_results[0].success is False
+    assert "tool execution failed: boom" in tool_results[0].content_preview
+    assert [event.event for event in events][-2:] == ["content", "done"]
+
+
+@pytest.mark.anyio
+async def test_agent_loop_turns_synthesis_tool_exception_into_failed_tool_result_event():
+    llm = _FakeLLMClient(
+        chat_responses=[
+            _chat_response(tool_calls=[_tool_call("knowledge_base", {"query": "teaching plan"})]),
+            _chat_response(content=""),
+            _chat_response(content="Recovered after synthesis tool error."),
+        ],
+        stream_chunks=[
+            _stream_chunk(
+                '<tool_call>create_diagram'
+                '<arg_key>title</arg_key><arg_value>Teaching Plan</arg_value>'
+                '</tool_call>'
+            )
+        ],
+    )
+    knowledge_tool = _tool(
+        "knowledge_base",
+        ToolCallResult(content="teaching plan evidence", quality_meta=_quality("medium")),
+    )
+    create_tool = _raising_tool("create_diagram", RuntimeError("diagram failed"))
+    config = ModeConfigFactory.build(mode="agent", tools=[knowledge_tool, create_tool])
+    loop = AgentLoop(
+        llm_client=llm,
+        tools=[knowledge_tool, create_tool],
+        mode_config=config,
+    )
+
+    events = [event async for event in loop.stream(message="create a diagram", chat_history=[])]
+
+    failed_results = [
+        event
+        for event in events
+        if event.event == "tool_result" and event.tool_name == "create_diagram"
+    ]
+    assert len(failed_results) == 1
+    assert failed_results[0].success is False
+    assert "tool execution failed: diagram failed" in failed_results[0].content_preview
+    assert any(event.event == "content" and "Recovered" in event.delta for event in events)

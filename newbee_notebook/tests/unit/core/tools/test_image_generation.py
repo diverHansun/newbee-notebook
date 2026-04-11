@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+import requests
 
 from newbee_notebook.core.tools.image_generation import (
     DEFAULT_QWEN_IMAGE_API_URL,
@@ -240,3 +241,104 @@ async def test_image_generate_tool_uses_provider_default_dimensions_when_omitted
     assert save_record.await_args.kwargs["size"] == "1280x1280"
     assert save_record.await_args.kwargs["width"] == 1280
     assert save_record.await_args.kwargs["height"] == 1280
+
+
+@pytest.mark.anyio
+async def test_image_generate_tool_retries_retryable_api_failure(monkeypatch):
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation.generate_uuid",
+        lambda: "img-retry",
+    )
+    monkeypatch.setattr("newbee_notebook.core.tools.image_generation.IMAGE_RETRY_DELAY_SECONDS", 0)
+
+    attempts = {"qwen": 0}
+
+    async def _flaky_qwen_generate_image(**kwargs):
+        attempts["qwen"] += 1
+        if attempts["qwen"] == 1:
+            raise requests.exceptions.ConnectionError("temporary image API break")
+        return ImageAPIResult(
+            image_urls=["https://example.com/retry.png"],
+            model="qwen-image-2.0-pro",
+            width=1024,
+            height=1024,
+        )
+
+    async def _fake_download_image_bytes(url: str):
+        assert url == "https://example.com/retry.png"
+        return b"retry-png-binary"
+
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation.qwen_generate_image",
+        _flaky_qwen_generate_image,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation._download_image_bytes",
+        _fake_download_image_bytes,
+    )
+
+    storage = AsyncMock()
+    storage.save_file = AsyncMock(return_value="generated-images/nb-1/s-1/img-retry.png")
+    save_record = AsyncMock(return_value=None)
+
+    tool = build_image_generation_tool(
+        ImageToolContext(
+            session_id="s-1",
+            notebook_id="nb-1",
+            provider="qwen",
+            api_key="sk-test",
+            storage=storage,
+            save_record=save_record,
+        )
+    )
+
+    result = await tool.execute({"prompt": "a resilient bee"})
+
+    assert result.error is None
+    assert attempts["qwen"] == 2
+    assert len(result.images) == 1
+    storage.save_file.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_image_generate_tool_reports_save_failure_separately(monkeypatch):
+    async def _fake_qwen_generate_image(**kwargs):
+        return ImageAPIResult(
+            image_urls=["https://example.com/save-fails.png"],
+            model="qwen-image-2.0-pro",
+            width=1024,
+            height=1024,
+        )
+
+    async def _failing_download_image_bytes(url: str):
+        raise RuntimeError("download failed")
+
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation.qwen_generate_image",
+        _fake_qwen_generate_image,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation._download_image_bytes",
+        _failing_download_image_bytes,
+    )
+
+    storage = AsyncMock()
+    save_record = AsyncMock(return_value=None)
+
+    tool = build_image_generation_tool(
+        ImageToolContext(
+            session_id="s-1",
+            notebook_id="nb-1",
+            provider="qwen",
+            api_key="sk-test",
+            storage=storage,
+            save_record=save_record,
+        )
+    )
+
+    result = await tool.execute({"prompt": "a bee that cannot be saved"})
+
+    assert result.content == ""
+    assert result.error == "image save failed: download failed"
+    storage.save_file.assert_not_called()
+    save_record.assert_not_called()

@@ -27,6 +27,8 @@ DEFAULT_ZHIPU_IMAGE_SIZE = "1280x1280"
 DEFAULT_QWEN_IMAGE_SIZE = "1024*1024"
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 90.0
+IMAGE_MAX_RETRIES = 1
+IMAGE_RETRY_DELAY_SECONDS = 0.5
 
 ImageRecordSaver = Callable[..., Awaitable[object | None]]
 
@@ -49,6 +51,19 @@ class ImageToolContext:
     save_record: ImageRecordSaver
     zhipu_model: str = DEFAULT_ZHIPU_IMAGE_MODEL
     qwen_model: str = DEFAULT_QWEN_IMAGE_MODEL
+
+
+class ImageHTTPStatusError(RuntimeError):
+    def __init__(self, status_code: int, text: str):
+        super().__init__(f"request failed: HTTP {status_code} - {text}")
+        self.status_code = status_code
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout, TimeoutError)):
+        return True
+    status_code = getattr(exc, "status_code", None)
+    return isinstance(status_code, int) and 500 <= status_code < 600
 
 
 def _parse_size_parts(value: str) -> tuple[int, int] | None:
@@ -144,7 +159,7 @@ def _resolve_qwen_url() -> str:
 def _post_json(url: str, *, headers: dict[str, str], payload: dict, timeout: float) -> dict:
     response = requests.post(url, json=payload, headers=headers, timeout=timeout)
     if not response.ok:
-        raise RuntimeError(f"request failed: HTTP {response.status_code} - {response.text}")
+        raise ImageHTTPStatusError(response.status_code, response.text)
     return response.json()
 
 
@@ -295,6 +310,35 @@ def _format_storage_key(notebook_id: str, session_id: str, image_id: str) -> str
     return f"generated-images/{notebook_id}/{session_id}/{image_id}.png"
 
 
+async def _generate_image_with_retry(
+    *,
+    provider: str,
+    context: ImageToolContext,
+    prompt: str,
+    normalized_size: str,
+) -> ImageAPIResult:
+    for attempt in range(IMAGE_MAX_RETRIES + 1):
+        try:
+            if provider == "zhipu":
+                return await zhipu_generate_image(
+                    api_key=context.api_key,
+                    prompt=prompt,
+                    model=context.zhipu_model,
+                    size=normalized_size,
+                )
+            return await qwen_generate_image(
+                api_key=context.api_key,
+                prompt=prompt,
+                model=context.qwen_model,
+                size=normalized_size,
+            )
+        except Exception as exc:
+            if not _is_retryable_exception(exc) or attempt >= IMAGE_MAX_RETRIES:
+                raise
+            await asyncio.sleep(IMAGE_RETRY_DELAY_SECONDS)
+    raise RuntimeError("unreachable image retry state")
+
+
 async def _save_images(
     *,
     context: ImageToolContext,
@@ -367,20 +411,16 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
         tool_call_id = str(payload.get("tool_call_id") or "").strip()
 
         try:
-            if provider == "zhipu":
-                api_result = await zhipu_generate_image(
-                    api_key=context.api_key,
-                    prompt=prompt,
-                    model=context.zhipu_model,
-                    size=normalized_size,
-                )
-            else:
-                api_result = await qwen_generate_image(
-                    api_key=context.api_key,
-                    prompt=prompt,
-                    model=context.qwen_model,
-                    size=normalized_size,
-                )
+            api_result = await _generate_image_with_retry(
+                provider=provider,
+                context=context,
+                prompt=prompt,
+                normalized_size=normalized_size,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return ToolCallResult(content="", error=f"image generation failed: {exc}")
+
+        try:
             images = await _save_images(
                 context=context,
                 prompt=prompt,
@@ -391,7 +431,7 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
                 result=api_result,
             )
         except Exception as exc:  # noqa: BLE001
-            return ToolCallResult(content="", error=f"image generation failed: {exc}")
+            return ToolCallResult(content="", error=f"image save failed: {exc}")
 
         return ToolCallResult(
             content=f"Generated {len(images)} image(s) for prompt: {_safe_preview(prompt)}",

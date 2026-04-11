@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import requests
 import pytest
 
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
@@ -83,11 +84,11 @@ def test_zhipu_runtime_tools_expose_openai_compatible_parameter_schema():
 async def test_runtime_web_tools_wrap_results_into_tool_call_result(monkeypatch):
     monkeypatch.setattr(
         "newbee_notebook.core.tools.tavily_tools.tavily_search",
-        lambda query, max_results=5, search_depth="advanced", topic="general", time_range=None: "1. Result\\n   URL: https://example.com\\n   snippet",
+        lambda query, max_results=5, search_depth="advanced", topic="general", time_range=None, timeout=None: "1. Result\\n   URL: https://example.com\\n   snippet",
     )
     monkeypatch.setattr(
         "newbee_notebook.core.tools.zhipu_tools.zhipu_web_search",
-        lambda search_query, search_recency_filter=None: "1. Zhipu Result\\n   URL: https://zhipu.example\\n   Source: web\\n   snippet",
+        lambda search_query, search_recency_filter=None, timeout=None: "1. Zhipu Result\\n   URL: https://zhipu.example\\n   Source: web\\n   snippet",
     )
 
     tavily_tool = build_tavily_search_runtime_tool()
@@ -102,3 +103,116 @@ async def test_runtime_web_tools_wrap_results_into_tool_call_result(monkeypatch)
     assert zhipu_result.error is None
     assert zhipu_result.content.startswith("1. Zhipu Result")
     assert zhipu_result.metadata["provider"] == "zhipu"
+
+
+@pytest.mark.anyio
+async def test_tavily_search_falls_back_to_zhipu_after_retryable_failure(monkeypatch):
+    attempts = {"tavily": 0}
+
+    def _failing_tavily_search(**kwargs):
+        attempts["tavily"] += 1
+        raise requests.exceptions.ConnectionError("temporary network break")
+
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.tavily_tools.tavily_search",
+        _failing_tavily_search,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.zhipu_tools.zhipu_web_search",
+        lambda search_query, search_recency_filter=None, timeout=None: "1. Zhipu fallback\\n   URL: https://zhipu.example\\n   snippet",
+    )
+    monkeypatch.setattr("newbee_notebook.core.tools.tavily_tools.RETRY_DELAY_SECONDS", 0)
+
+    result = await build_tavily_search_runtime_tool().execute({"query": "latest docs"})
+
+    assert result.error is None
+    assert result.content.startswith("1. Zhipu fallback")
+    assert attempts["tavily"] == 2
+    assert result.metadata["provider"] == "zhipu"
+    assert result.metadata["requested_provider"] == "tavily"
+    assert result.metadata["fallback_used"] is True
+
+
+@pytest.mark.anyio
+async def test_zhipu_search_falls_back_to_tavily_after_retryable_failure(monkeypatch):
+    attempts = {"zhipu": 0}
+
+    def _failing_zhipu_search(**kwargs):
+        attempts["zhipu"] += 1
+        raise requests.exceptions.Timeout("zhipu timed out")
+
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.zhipu_tools.zhipu_web_search",
+        _failing_zhipu_search,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.tavily_tools.tavily_search",
+        lambda query, max_results=5, search_depth="advanced", topic="general", time_range=None, timeout=None: "1. Tavily fallback\\n   URL: https://tavily.example\\n   snippet",
+    )
+    monkeypatch.setattr("newbee_notebook.core.tools.zhipu_tools.RETRY_DELAY_SECONDS", 0)
+
+    result = await build_zhipu_web_search_runtime_tool().execute({"search_query": "latest docs"})
+
+    assert result.error is None
+    assert result.content.startswith("1. Tavily fallback")
+    assert attempts["zhipu"] == 2
+    assert result.metadata["provider"] == "tavily"
+    assert result.metadata["requested_provider"] == "zhipu"
+    assert result.metadata["fallback_used"] is True
+
+
+@pytest.mark.anyio
+async def test_zhipu_search_does_not_fallback_on_rate_limit(monkeypatch):
+    called = {"tavily": False}
+
+    class _RateLimitResponse:
+        ok = False
+        status_code = 429
+        text = "quota exceeded"
+
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu")
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.zhipu_tools.requests.post",
+        lambda *args, **kwargs: _RateLimitResponse(),
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.tavily_tools.tavily_search",
+        lambda **kwargs: called.__setitem__("tavily", True) or "fallback",
+    )
+
+    result = await build_zhipu_web_search_runtime_tool().execute({"search_query": "latest docs"})
+
+    assert result.content == ""
+    assert result.error
+    assert "HTTP 429" in result.error
+    assert called["tavily"] is False
+
+
+@pytest.mark.anyio
+async def test_tavily_crawl_falls_back_to_zhipu_crawl_on_server_error(monkeypatch):
+    attempts = {"tavily": 0}
+
+    def _failing_tavily_crawl(**kwargs):
+        attempts["tavily"] += 1
+        response = requests.Response()
+        response.status_code = 503
+        raise requests.HTTPError("service unavailable", response=response)
+
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.tavily_tools.tavily_crawl",
+        _failing_tavily_crawl,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.zhipu_tools.zhipu_web_crawl",
+        lambda url, return_format=None, timeout=None: "Title: fallback page\\ncontent",
+    )
+    monkeypatch.setattr("newbee_notebook.core.tools.tavily_tools.RETRY_DELAY_SECONDS", 0)
+
+    result = await build_tavily_crawl_runtime_tool().execute({"url": "https://example.com"})
+
+    assert result.error is None
+    assert result.content.startswith("Title: fallback page")
+    assert attempts["tavily"] == 2
+    assert result.metadata["provider"] == "zhipu"
+    assert result.metadata["requested_provider"] == "tavily"
+    assert result.metadata["fallback_used"] is True
