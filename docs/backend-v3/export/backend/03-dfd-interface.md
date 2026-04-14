@@ -42,14 +42,14 @@ ExportService (services/export_service.py)
   ├─ 8. 根据 types 分支执行：
   │     │
   │     ├─ "documents" in types:
-  │     │   ├─ NotebookDocumentService.list_documents(notebook_id)
+  │     │   ├─ NotebookDocumentService.list_documents(notebook_id, limit, offset) 分页拉取
   │     │   └─ 对每个 doc:
   │     │       ├─ DocumentService.get_document_content(doc_id)
   │     │       ├─ 写入 ZIP: documents/{safe_title}_{doc_id}.md
   │     │       └─ 追加到 manifest.documents（含 document_id, title, content_type, page_count, chunk_count, file）
   │     │
   │     ├─ "notes" in types:
-  │     │   ├─ NoteService.list_notes_by_notebook(notebook_id)
+  │     │   ├─ NoteService.list_by_notebook(notebook_id)
   │     │   └─ 对每个 note:
   │     │       ├─ 写入 ZIP: notes/{safe_title}_{note_id}.md
   │     │       └─ 追加到 manifest.notes（含 note_id, title, file, document_ids, mark_ids）
@@ -63,7 +63,7 @@ ExportService (services/export_service.py)
   │     ├─ "diagrams" in types:
   │     │   ├─ DiagramService.list_diagrams(notebook_id)
   │     │   └─ 对每个 diagram:
-  │     │       ├─ DiagramService.get_diagram_content(diagram_id)
+  │     │       ├─ DiagramService.get_diagram_content(diagram_id, notebook_id)
   │     │       ├─ 写入 ZIP: diagrams/{safe_title}_{diagram_id}.{ext}
   │     │       └─ 追加到 manifest.diagrams（含 diagram_id, title, diagram_type, format, file, document_ids）
   │     │

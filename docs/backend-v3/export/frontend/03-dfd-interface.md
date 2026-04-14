@@ -49,11 +49,11 @@ activeNote 对象（studio-panel.tsx 内部状态，已加载）
 ```
 用户在 notebook-export-panel 中操作
   │
-  ├─ 选择 Notebook（selectedNotebookId）
+  ├─ 搜索并多选 Notebook（selectedNotebookIds）
   ├─ 勾选内容类型（contentTypes）
   │
   ▼
-前端发起请求:
+前端按所选 Notebook 逐个发起请求:
   GET /api/notebooks/{notebookId}/export?types=documents,notes,marks,diagrams,video_summaries
   Accept: application/zip
   │
@@ -72,7 +72,7 @@ activeNote 对象（studio-panel.tsx 内部状态，已加载）
 调用 saveAs(blob, filename)
   │
   ▼
-浏览器触发 ZIP 文件下载
+浏览器触发该 Notebook 的 ZIP 下载（多选时重复此流程）
 ```
 
 ## 3. 接口约定
@@ -123,10 +123,13 @@ export async function exportNotebook(
   if (types && types.length > 0) {
     params.set("types", types.join(","));
   }
-  const url = `${API_BASE}/notebooks/${notebookId}/export?${params}`;
+  const query = params.toString();
+  const url = query
+    ? `/api/v1/notebooks/${notebookId}/export?${query}`
+    : `/api/v1/notebooks/${notebookId}/export`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new ApiError(response.status, await response.text());
+    throw new ApiError(response.status, "E_EXPORT_FAILED", await response.text());
   }
   return response.blob();
 }
@@ -153,7 +156,7 @@ function sanitize(name: string): string {
 | video.exportMarkdown | 导出 Markdown | Export Markdown |
 | studio.exportNoteMarkdown | 导出笔记 | Export Note |
 | dataPanel.notebookExport | Notebook 归档导出 | Notebook Archive Export |
-| dataPanel.notebookExportDesc | 选择一个 Notebook，将其内容打包下载 | Select a notebook to export as archive |
+| dataPanel.notebookExportDesc | 搜索并选择一个或多个 Notebook，将其内容打包下载 | Search and select one or more notebooks to export as archive |
 | dataPanel.selectNotebook | 选择 Notebook | Select Notebook |
 | dataPanel.contentTypes | 包含内容 | Include Content |
 | dataPanel.exportArchive | 导出归档 (.zip) | Export Archive (.zip) |

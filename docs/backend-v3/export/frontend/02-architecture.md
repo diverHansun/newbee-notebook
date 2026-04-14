@@ -83,7 +83,8 @@ SVG 内容（复用已有）：
 
 | 状态 | 类型 | 说明 |
 |------|------|------|
-| selectedNotebookId | `string \| null` | 当前选中的 Notebook |
+| selectedNotebookIds | `Set<string>` | 当前选中的 Notebook（可多选） |
+| notebookKeyword | `string` | Notebook 搜索关键字 |
 | contentTypes | `Set<ContentType>` | 用户勾选的导出内容类型 |
 | exporting | `boolean` | 是否正在导出 |
 | error | `string \| null` | 导出错误信息 |
@@ -99,11 +100,12 @@ type ContentType = "documents" | "notes" | "marks" | "diagrams" | "video_summari
 ```
 ┌──────────────────────────────────────┐
 │  Notebook 归档导出                     │
-│  选择一个 Notebook，将其内容打包下载      │
+│  搜索并选择一个或多个 Notebook，逐个打包下载 │
 │                                      │
 │  ┌──────────────────────────────┐    │
-│  │  Notebook 下拉选择            ▼│    │
+│  │  搜索 Notebook               │    │
 │  └──────────────────────────────┘    │
+│  [x] Notebook A  [ ] Notebook B ...    │
 │                                      │
 │  包含内容：                            │
 │  [x] 解析后的文档 (Markdown)            │
@@ -113,7 +115,7 @@ type ContentType = "documents" | "notes" | "marks" | "diagrams" | "video_summari
 │  [x] 视频总结                          │
 │                                      │
 │  ┌──────────────────────────────┐    │
-│  │      导出归档 (.zip)           │    │
+│  │  导出所选 Notebook 归档 (.zip)   │    │
 │  └──────────────────────────────┘    │
 │                                      │
 │  (导出中显示 loading spinner)          │
@@ -122,9 +124,10 @@ type ContentType = "documents" | "notes" | "marks" | "diagrams" | "video_summari
 
 ### 3.3 数据获取
 
-- Notebook 列表：复用已有的 `useNotebooks()` hook
+- Notebook 列表：复用 `listNotebooks` API + `useQuery`（若后续新增 `useNotebooks` hook 可再收敛）
 - 导出操作：调用新的后端 API `GET /notebooks/{id}/export?types=documents,notes,...`，响应为 ZIP 文件的二进制流
 - 使用 `fetch` + `response.blob()` 获取 ZIP，再通过 `saveAs` 触发下载
+- 多选导出：对 `selectedNotebookIds` 逐个调用导出 API 并依次触发下载
 
 ### 3.4 与 notes-export-panel.tsx 的关系
 

@@ -63,8 +63,7 @@ newbee_notebook/
 newbee_notebook/
   api/
     routers/__init__.py      -- 注册 export router
-  configs/
-    di.py (或等效文件)        -- 注册 ExportService 的依赖
+    dependencies.py          -- 注册 ExportService 的依赖
 ```
 
 ### 3.3 不修改的文件
