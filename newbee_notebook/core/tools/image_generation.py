@@ -11,7 +11,11 @@ from typing import Awaitable, Callable
 
 import requests
 
-from newbee_notebook.core.tools.contracts import ImageResult, ToolCallResult, ToolDefinition
+from newbee_notebook.core.tools.contracts import (
+    ImageResult,
+    ToolCallResult,
+    ToolDefinition,
+)
 from newbee_notebook.domain.entities.base import generate_uuid
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
@@ -19,12 +23,13 @@ DEFAULT_ZHIPU_IMAGE_MODEL = "glm-image"
 DEFAULT_QWEN_IMAGE_MODEL = "qwen-image-2.0-pro"
 
 DEFAULT_ZHIPU_IMAGE_API_URL = "https://open.bigmodel.cn/api/paas/v4/images/generations"
-DEFAULT_QWEN_IMAGE_API_URL = (
-    "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-)
+DEFAULT_QWEN_IMAGE_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 
 DEFAULT_ZHIPU_IMAGE_SIZE = "1280x1280"
 DEFAULT_QWEN_IMAGE_SIZE = "1024*1024"
+
+DEFAULT_ZHIPU_WATERMARK_ENABLED = True
+DEFAULT_QWEN_WATERMARK_ENABLED = False
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 90.0
 IMAGE_MAX_RETRIES = 1
@@ -51,6 +56,8 @@ class ImageToolContext:
     save_record: ImageRecordSaver
     zhipu_model: str = DEFAULT_ZHIPU_IMAGE_MODEL
     qwen_model: str = DEFAULT_QWEN_IMAGE_MODEL
+    zhipu_watermark_enabled: bool | None = None
+    qwen_watermark_enabled: bool | None = None
 
 
 class ImageHTTPStatusError(RuntimeError):
@@ -60,7 +67,14 @@ class ImageHTTPStatusError(RuntimeError):
 
 
 def _is_retryable_exception(exc: Exception) -> bool:
-    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout, TimeoutError)):
+    if isinstance(
+        exc,
+        (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            TimeoutError,
+        ),
+    ):
         return True
     status_code = getattr(exc, "status_code", None)
     return isinstance(status_code, int) and 500 <= status_code < 600
@@ -156,7 +170,34 @@ def _resolve_qwen_url() -> str:
     return normalized
 
 
-def _post_json(url: str, *, headers: dict[str, str], payload: dict, timeout: float) -> dict:
+def _parse_env_bool(value: str | None) -> bool | None:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _resolve_watermark_enabled(*, provider: str, override: bool | None) -> bool:
+    if override is not None:
+        return bool(override)
+    if provider == "zhipu":
+        env_value = _parse_env_bool(os.getenv("ZHIPU_IMAGE_WATERMARK_ENABLED"))
+        if env_value is not None:
+            return env_value
+        return DEFAULT_ZHIPU_WATERMARK_ENABLED
+    env_value = _parse_env_bool(os.getenv("QWEN_IMAGE_WATERMARK_ENABLED"))
+    if env_value is not None:
+        return env_value
+    return DEFAULT_QWEN_WATERMARK_ENABLED
+
+
+def _post_json(
+    url: str, *, headers: dict[str, str], payload: dict, timeout: float
+) -> dict:
     response = requests.post(url, json=payload, headers=headers, timeout=timeout)
     if not response.ok:
         raise ImageHTTPStatusError(response.status_code, response.text)
@@ -170,7 +211,9 @@ def _download_image(url: str, timeout: float) -> bytes:
     return response.content
 
 
-def _extract_zhipu_result(payload: dict, *, requested_size: tuple[int | None, int | None]) -> ImageAPIResult:
+def _extract_zhipu_result(
+    payload: dict, *, requested_size: tuple[int | None, int | None]
+) -> ImageAPIResult:
     data = payload.get("data") or []
     urls = [
         str(item.get("url") or "").strip()
@@ -220,12 +263,14 @@ async def zhipu_generate_image(
     prompt: str,
     model: str = DEFAULT_ZHIPU_IMAGE_MODEL,
     size: str | None = None,
+    watermark_enabled: bool = DEFAULT_ZHIPU_WATERMARK_ENABLED,
 ) -> ImageAPIResult:
     normalized_size, req_width, req_height = _normalize_size(size, provider="zhipu")
     payload = {
         "model": model,
         "prompt": prompt,
         "size": normalized_size,
+        "watermark_enabled": bool(watermark_enabled),
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -250,6 +295,7 @@ async def qwen_generate_image(
     prompt: str,
     model: str = DEFAULT_QWEN_IMAGE_MODEL,
     size: str | None = None,
+    watermark_enabled: bool = DEFAULT_QWEN_WATERMARK_ENABLED,
 ) -> ImageAPIResult:
     normalized_size, _, _ = _normalize_size(size, provider="qwen")
     payload = {
@@ -267,7 +313,7 @@ async def qwen_generate_image(
         "parameters": {
             "n": 1,
             "size": normalized_size,
-            "watermark": False,
+            "watermark": bool(watermark_enabled),
         },
     }
     headers = {
@@ -316,6 +362,7 @@ async def _generate_image_with_retry(
     context: ImageToolContext,
     prompt: str,
     normalized_size: str,
+    watermark_enabled: bool,
 ) -> ImageAPIResult:
     for attempt in range(IMAGE_MAX_RETRIES + 1):
         try:
@@ -325,12 +372,14 @@ async def _generate_image_with_retry(
                     prompt=prompt,
                     model=context.zhipu_model,
                     size=normalized_size,
+                    watermark_enabled=watermark_enabled,
                 )
             return await qwen_generate_image(
                 api_key=context.api_key,
                 prompt=prompt,
                 model=context.qwen_model,
                 size=normalized_size,
+                watermark_enabled=watermark_enabled,
             )
         except Exception as exc:
             if not _is_retryable_exception(exc) or attempt >= IMAGE_MAX_RETRIES:
@@ -355,7 +404,9 @@ async def _save_images(
     for image_url in result.image_urls:
         image_bytes = await _download_image_bytes(image_url)
         image_id = generate_uuid()
-        storage_key = _format_storage_key(context.notebook_id, context.session_id, image_id)
+        storage_key = _format_storage_key(
+            context.notebook_id, context.session_id, image_id
+        )
         await context.storage.save_file(
             object_key=storage_key,
             data=BytesIO(image_bytes),
@@ -394,7 +445,9 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
     """Build runtime image generation tool according to the active provider."""
 
     provider = _resolve_provider(context.provider)
-    default_size, default_width, default_height = _normalize_size(None, provider=provider)
+    default_size, default_width, default_height = _normalize_size(
+        None, provider=provider
+    )
 
     async def _execute(payload: dict) -> ToolCallResult:
         prompt = str(payload.get("prompt") or "").strip()
@@ -402,13 +455,23 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
             return ToolCallResult(content="", error="prompt is required")
 
         requested_size_raw = str(payload.get("size") or "").strip() or None
-        normalized_size, requested_width, requested_height = _normalize_requested_dimensions(
-            provider=provider,
-            size=requested_size_raw,
-            width=payload.get("width"),
-            height=payload.get("height"),
+        normalized_size, requested_width, requested_height = (
+            _normalize_requested_dimensions(
+                provider=provider,
+                size=requested_size_raw,
+                width=payload.get("width"),
+                height=payload.get("height"),
+            )
         )
         tool_call_id = str(payload.get("tool_call_id") or "").strip()
+        watermark_enabled = _resolve_watermark_enabled(
+            provider=provider,
+            override=(
+                context.zhipu_watermark_enabled
+                if provider == "zhipu"
+                else context.qwen_watermark_enabled
+            ),
+        )
 
         try:
             api_result = await _generate_image_with_retry(
@@ -416,6 +479,7 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
                 context=context,
                 prompt=prompt,
                 normalized_size=normalized_size,
+                watermark_enabled=watermark_enabled,
             )
         except Exception as exc:  # noqa: BLE001
             return ToolCallResult(content="", error=f"image generation failed: {exc}")
@@ -440,6 +504,7 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
                 "provider": provider,
                 "model": api_result.model,
                 "image_count": len(images),
+                "watermark_enabled": watermark_enabled,
             },
         )
 

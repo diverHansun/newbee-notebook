@@ -10,6 +10,7 @@ from newbee_notebook.core.tools.image_generation import (
     ImageAPIResult,
     ImageToolContext,
     _resolve_qwen_url,
+    _resolve_watermark_enabled,
     build_image_generation_tool,
 )
 
@@ -34,8 +35,29 @@ def test_qwen_image_url_accepts_api_v1_base_and_normalizes(monkeypatch):
     )
 
 
+def test_resolve_watermark_enabled_uses_env_and_defaults(monkeypatch):
+    monkeypatch.delenv("QWEN_IMAGE_WATERMARK_ENABLED", raising=False)
+    monkeypatch.delenv("ZHIPU_IMAGE_WATERMARK_ENABLED", raising=False)
+    assert _resolve_watermark_enabled(provider="qwen", override=None) is False
+    assert _resolve_watermark_enabled(provider="zhipu", override=None) is True
+
+    monkeypatch.setenv("QWEN_IMAGE_WATERMARK_ENABLED", "true")
+    monkeypatch.setenv("ZHIPU_IMAGE_WATERMARK_ENABLED", "false")
+    assert _resolve_watermark_enabled(provider="qwen", override=None) is True
+    assert _resolve_watermark_enabled(provider="zhipu", override=None) is False
+
+
+def test_resolve_watermark_enabled_override_takes_priority(monkeypatch):
+    monkeypatch.setenv("QWEN_IMAGE_WATERMARK_ENABLED", "true")
+    monkeypatch.setenv("ZHIPU_IMAGE_WATERMARK_ENABLED", "false")
+    assert _resolve_watermark_enabled(provider="qwen", override=False) is False
+    assert _resolve_watermark_enabled(provider="zhipu", override=True) is True
+
+
 @pytest.mark.anyio
-async def test_image_generate_tool_persists_image_and_returns_structured_result(monkeypatch):
+async def test_image_generate_tool_persists_image_and_returns_structured_result(
+    monkeypatch,
+):
     monkeypatch.setattr(
         "newbee_notebook.core.tools.image_generation.generate_uuid",
         lambda: "img-1",
@@ -182,6 +204,7 @@ async def test_image_generate_tool_accepts_width_and_height_and_persists_normali
     assert save_record.await_args.kwargs["size"] == "768*512"
     assert save_record.await_args.kwargs["width"] == 768
     assert save_record.await_args.kwargs["height"] == 512
+    assert captured["watermark_enabled"] is False
 
 
 @pytest.mark.anyio
@@ -241,6 +264,7 @@ async def test_image_generate_tool_uses_provider_default_dimensions_when_omitted
     assert save_record.await_args.kwargs["size"] == "1280x1280"
     assert save_record.await_args.kwargs["width"] == 1280
     assert save_record.await_args.kwargs["height"] == 1280
+    assert captured["watermark_enabled"] is True
 
 
 @pytest.mark.anyio
@@ -249,7 +273,9 @@ async def test_image_generate_tool_retries_retryable_api_failure(monkeypatch):
         "newbee_notebook.core.tools.image_generation.generate_uuid",
         lambda: "img-retry",
     )
-    monkeypatch.setattr("newbee_notebook.core.tools.image_generation.IMAGE_RETRY_DELAY_SECONDS", 0)
+    monkeypatch.setattr(
+        "newbee_notebook.core.tools.image_generation.IMAGE_RETRY_DELAY_SECONDS", 0
+    )
 
     attempts = {"qwen": 0}
 
@@ -278,7 +304,9 @@ async def test_image_generate_tool_retries_retryable_api_failure(monkeypatch):
     )
 
     storage = AsyncMock()
-    storage.save_file = AsyncMock(return_value="generated-images/nb-1/s-1/img-retry.png")
+    storage.save_file = AsyncMock(
+        return_value="generated-images/nb-1/s-1/img-retry.png"
+    )
     save_record = AsyncMock(return_value=None)
 
     tool = build_image_generation_tool(
