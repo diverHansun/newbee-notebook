@@ -40,7 +40,7 @@ describe("POST /api/v1/videos/summarize", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          url_or_bvid: "BV1",
+          url_or_id: "BV1",
           notebook_id: "notebook-1",
         }),
       })
@@ -55,7 +55,7 @@ describe("POST /api/v1/videos/summarize", () => {
           "content-type": "application/json",
         }),
         body: JSON.stringify({
-          url_or_bvid: "BV1",
+          url_or_id: "BV1",
           notebook_id: "notebook-1",
         }),
         cache: "no-store",

@@ -328,6 +328,7 @@
   scrollbar-color: hsl(var(--border)) transparent;
 }
 
+
 .chat-message-list::-webkit-scrollbar {
   width: 10px;
 }

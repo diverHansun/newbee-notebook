@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class SummarizeRequest(BaseModel):
-    url_or_bvid: str = Field(..., min_length=1)
+    url_or_id: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("url_or_id", "url_or_bvid"),
+    )
     notebook_id: str | None = None
+    lang: Literal["zh", "en"] = "zh"
 
 
 class AssociateNotebookRequest(BaseModel):
@@ -33,6 +39,7 @@ class VideoSummaryResponse(BaseModel):
     uploader_id: str
     summary_content: str
     status: str
+    metadata_ready: bool = True
     error_message: str | None = None
     document_ids: list[str] = Field(default_factory=list)
     stats: dict | None = None
@@ -52,6 +59,7 @@ class VideoSummaryListItemResponse(BaseModel):
     duration_seconds: int
     uploader_name: str
     status: str
+    metadata_ready: bool = True
     created_at: datetime
     updated_at: datetime
 

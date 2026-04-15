@@ -15,11 +15,12 @@ export const dynamic = "force-dynamic";
 // Allow up to 5 minutes for large file uploads
 export const maxDuration = 300;
 
-const BACKEND_URL =
-  (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
+function getBackendUrl(): string {
+  return (process.env.INTERNAL_API_URL || "http://127.0.0.1:8000").trim();
+}
 
 export async function POST(request: NextRequest) {
-  const targetUrl = `${BACKEND_URL}/api/v1/documents/library/upload`;
+  const targetUrl = `${getBackendUrl()}/api/v1/documents/library/upload`;
 
   try {
     const contentType = request.headers.get("content-type") || "";

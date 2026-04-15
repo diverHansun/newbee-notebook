@@ -78,7 +78,7 @@ async def test_create_diagram_accepts_flowchart_type(service, diagram_repo, stor
         notebook_id="nb-1",
         title="Login flow",
         diagram_type="flowchart",
-        content="flowchart TD\nStart[Start] --> End[End]",
+        content="flowchart TD\nStart[Start] --> Finish[Finish]",
     )
 
     assert diagram.diagram_type == "flowchart"

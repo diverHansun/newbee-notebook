@@ -1,0 +1,281 @@
+/* ================================================================
+   Studio Video
+   ================================================================ */
+
+.video-panel-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.video-toolbar {
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    linear-gradient(
+      140deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--secondary) / 0.65) 100%
+    );
+}
+
+.video-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-filter-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-filter-label {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.video-input-card {
+  padding: 16px 18px;
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid hsl(340 65% 84%);
+  background: hsl(350 100% 98%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 30px -28px rgba(190, 24, 93, 0.28);
+}
+
+.video-input-card .chip {
+  border-color: hsl(338 42% 86%);
+  background: hsl(0 0% 100% / 0.92);
+  color: hsl(var(--foreground));
+}
+
+.video-input-card .btn {
+  border-color: hsl(338 40% 84%);
+  background: hsl(0 0% 100% / 0.94);
+}
+
+.video-input-card .btn:hover {
+  background: hsl(344 100% 97%);
+  border-color: hsl(338 48% 78%);
+}
+
+.video-input-card .input {
+  border-color: hsl(338 30% 85%);
+  background: hsl(0 0% 100%);
+}
+
+.video-input-card .input:focus {
+  border-color: hsl(338 56% 76%);
+  box-shadow: 0 0 0 3px hsl(338 72% 84% / 0.28);
+}
+
+.video-input-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.video-input-description {
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 580px;
+}
+
+.video-platform-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.video-input-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.video-error-text {
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.video-info-card {
+  border: 1px solid hsl(338 32% 86%);
+  border-radius: calc(var(--radius) + 1px);
+  padding: 10px;
+  background: hsl(0 0% 100% / 0.75);
+}
+
+.video-info-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.video-meta-row {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.video-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid hsl(338 28% 87%);
+  border-radius: calc(var(--radius) + 1px);
+  background: hsl(0 0% 100% / 0.7);
+}
+
+.video-background-hint {
+  padding: 10px 12px;
+  border: 1px dashed hsl(338 32% 80%);
+  border-radius: calc(var(--radius) + 1px);
+  background: hsl(0 0% 100% / 0.55);
+}
+
+.video-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.video-progress-done {
+  color: #16a34a;
+  font-weight: 600;
+  width: 14px;
+  text-align: center;
+}
+
+.video-progress-pending {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: thinking-spin 0.8s linear infinite;
+}
+
+.video-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.video-summary-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--card));
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.video-summary-item:hover {
+  transform: translateY(-1px);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.6);
+}
+
+.video-summary-title {
+  line-height: 1.4;
+}
+
+.video-summary-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-status-chip[data-status="completed"] {
+  border-color: hsl(142 70% 40% / 0.38);
+  background: hsl(142 70% 40% / 0.12);
+  color: hsl(142 70% 32%);
+}
+
+.video-status-chip[data-status="processing"] {
+  border-color: hsl(36 92% 44% / 0.38);
+  background: hsl(36 92% 44% / 0.12);
+  color: hsl(31 92% 34%);
+}
+
+.video-status-chip[data-status="failed"] {
+  border-color: hsl(0 84% 54% / 0.4);
+  background: hsl(0 84% 54% / 0.12);
+  color: hsl(0 76% 42%);
+}
+
+.video-summary-subline {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.video-detail-card {
+  padding: 12px;
+}
+
+.video-detail-markdown {
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dark .video-input-card {
+  border-color: hsl(338 24% 34%);
+  background: hsl(220 24% 17%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.dark .video-input-card .chip,
+.dark .video-input-card .btn,
+.dark .video-info-card,
+.dark .video-progress-list,
+.dark .video-background-hint {
+  border-color: hsl(338 18% 30%);
+  background: hsl(220 18% 20% / 0.88);
+}
+
+.dark .video-input-card .input {
+  border-color: hsl(338 18% 30%);
+  background: hsl(220 18% 18%);
+}
+
+.dark .video-input-card .input:focus {
+  border-color: hsl(338 40% 58%);
+  box-shadow: 0 0 0 3px hsl(338 40% 48% / 0.18);
+}
+
+@media (max-width: 768px) {
+  .video-input-form {
+    flex-direction: column;
+  }
+
+  .video-input-form > .input,
+  .video-input-form > .btn {
+    width: 100%;
+  }
+}

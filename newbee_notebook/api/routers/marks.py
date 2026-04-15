@@ -3,6 +3,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi.responses import JSONResponse
 
 from newbee_notebook.api.dependencies import get_mark_service
 from newbee_notebook.api.models.mark_models import (
@@ -51,7 +52,14 @@ async def create_mark(
     except MarkDocumentNotFoundError:
         raise HTTPException(status_code=404, detail="Document not found")
     except MarkDocumentNotReadyError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error_code": "E_MARK_DOCUMENT_NOT_READY",
+                "message": "Document is not ready for bookmarks.",
+                "details": {"document_id": document_id, "reason": str(exc)},
+            },
+        )
 
 
 @router.get("/documents/{document_id}/marks", response_model=MarkListResponse)

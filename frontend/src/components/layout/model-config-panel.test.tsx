@@ -57,7 +57,9 @@ function buildModelsConfig(overrides?: {
   embedding?: Partial<{
     provider: string;
     mode: string | null;
+    api_provider: string | null;
     model: string;
+    api_model: string | null;
     dim: number;
     source: string;
     api_key_set: boolean | null;
@@ -89,7 +91,9 @@ function buildModelsConfig(overrides?: {
     embedding: {
       provider: "qwen3-embedding",
       mode: "api",
+      api_provider: "qwen",
       model: "text-embedding-v4",
+      api_model: "text-embedding-v4",
       dim: 1024,
       source: "db",
       api_key_set: true,
@@ -123,9 +127,12 @@ function buildAvailableModels() {
       custom_input: true,
     },
     embedding: {
-      providers: ["qwen3-embedding", "zhipu"],
+      api_providers: ["qwen", "zhipu"],
       modes: ["api", "local"],
-      api_models: [{ name: "text-embedding-v4", label: "text-embedding-v4" }],
+      api_models_by_provider: {
+        qwen: [{ name: "text-embedding-v4", label: "text-embedding-v4" }],
+        zhipu: [{ name: "embedding-3", label: "embedding-3" }],
+      },
       local_models: ["gte-Qwen2-7B-instruct-Q4_K_M.gguf"],
     },
     mineru: {
@@ -220,6 +227,9 @@ describe("ModelConfigPanel", () => {
       buildModelsConfig({
         embedding: {
           mode: "local",
+          api_provider: "qwen",
+          model: "Qwen3-Embedding-0.6B",
+          api_model: "text-embedding-v4",
           api_key_set: null,
         },
       })
@@ -231,6 +241,129 @@ describe("ModelConfigPanel", () => {
     const embeddingCard = embeddingHeading.closest(".control-panel-card");
     expect(embeddingCard).not.toBeNull();
     expect(within(embeddingCard as HTMLElement).queryByText("API key")).not.toBeInTheDocument();
+  });
+
+  it("hides embedding model details when local mode is selected", async () => {
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        embedding: {
+          mode: "local",
+          api_provider: "qwen",
+          model: "Qwen3-Embedding-0.6B",
+          api_model: "text-embedding-v4",
+          api_key_set: null,
+        },
+      })
+    );
+
+    renderPanel(<ModelConfigPanel />);
+
+    const embeddingHeading = await screen.findByText("Embedding Configuration");
+    const embeddingCard = embeddingHeading.closest(".control-panel-card");
+    expect(embeddingCard).not.toBeNull();
+    expect(within(embeddingCard as HTMLElement).queryByText("Model")).not.toBeInTheDocument();
+    expect(within(embeddingCard as HTMLElement).queryByText("text-embedding-v4")).not.toBeInTheDocument();
+    expect(within(embeddingCard as HTMLElement).queryByText("Qwen3-Embedding-0.6B")).not.toBeInTheDocument();
+  });
+
+  it("preserves the qwen api model when switching from local mode back to api", async () => {
+    const user = userEvent.setup();
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        embedding: {
+          mode: "local",
+          api_provider: "qwen",
+          model: "Qwen3-Embedding-0.6B",
+          api_model: "text-embedding-v4",
+          api_key_set: null,
+        },
+      })
+    );
+    apiMocks.updateEmbeddingConfig.mockResolvedValue({
+      provider: "qwen3-embedding",
+      mode: "api",
+      api_provider: "qwen",
+      model: "text-embedding-v4",
+      api_model: "text-embedding-v4",
+      dim: 1024,
+      source: "db",
+      api_key_set: true,
+    });
+
+    renderPanel(<ModelConfigPanel />);
+
+    const embeddingHeading = await screen.findByText("Embedding Configuration");
+    const embeddingCard = embeddingHeading.closest(".control-panel-card");
+    expect(embeddingCard).not.toBeNull();
+
+    await user.click(within(embeddingCard as HTMLElement).getByRole("radio", { name: "API" }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateEmbeddingConfig).toHaveBeenCalledWith(
+        {
+          mode: "api",
+          api_provider: "qwen",
+          api_model: "text-embedding-v4",
+        },
+        expect.anything()
+      );
+    });
+  });
+
+  it("shows api provider only when embedding mode is api", async () => {
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        embedding: {
+          mode: "local",
+          api_provider: "qwen",
+          model: "Qwen3-Embedding-0.6B",
+          api_model: "text-embedding-v4",
+          api_key_set: null,
+        },
+      })
+    );
+
+    renderPanel(<ModelConfigPanel />);
+
+    const embeddingHeading = await screen.findByText("Embedding Configuration");
+    const embeddingCard = embeddingHeading.closest(".control-panel-card");
+    expect(embeddingCard).not.toBeNull();
+
+    expect(within(embeddingCard as HTMLElement).queryByRole("radio", { name: "qwen" })).not.toBeInTheDocument();
+    expect(within(embeddingCard as HTMLElement).queryByRole("radio", { name: "zhipu" })).not.toBeInTheDocument();
+  });
+
+  it("switches embedding api provider and resets the api model to the provider default", async () => {
+    const user = userEvent.setup();
+    apiMocks.updateEmbeddingConfig.mockResolvedValue({
+      provider: "zhipu",
+      mode: "api",
+      api_provider: "zhipu",
+      model: "embedding-3",
+      api_model: "embedding-3",
+      dim: 1024,
+      source: "db",
+      api_key_set: true,
+    });
+
+    renderPanel(<ModelConfigPanel />);
+
+    const embeddingHeading = await screen.findByText("Embedding Configuration");
+    const embeddingCard = embeddingHeading.closest(".control-panel-card");
+    expect(embeddingCard).not.toBeNull();
+
+    await user.click(within(embeddingCard as HTMLElement).getByRole("radio", { name: "zhipu" }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateEmbeddingConfig).toHaveBeenCalledWith(
+        {
+          mode: "api",
+          api_provider: "zhipu",
+          api_model: "embedding-3",
+        },
+        expect.anything()
+      );
+    });
   });
 
   it("hides mineru api key status when current mode does not require key", async () => {

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from contextlib import suppress
 from typing import AsyncGenerator, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from fastapi.responses import StreamingResponse
@@ -26,13 +28,31 @@ from newbee_notebook.application.services.video_service import (
     VideoService,
     VideoSummaryNotFoundError,
 )
+from newbee_notebook.infrastructure.bilibili.exceptions import (
+    AuthenticationError as BiliAuthError,
+    BiliError,
+)
 
 
 router = APIRouter()
 
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
 
 def _format_sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _sanitize_export_filename(raw_title: str, fallback: str = "video-summary") -> str:
+    title = _INVALID_FILENAME_CHARS.sub("_", str(raw_title or "").strip())
+    title = re.sub(r"\s+", " ", title).strip().strip(".")
+    return title or fallback
+
+
+def _build_attachment_content_disposition(filename: str) -> str:
+    ascii_filename = filename.encode("ascii", "ignore").decode("ascii").strip() or "video-summary.md"
+    utf8_filename = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}"
 
 
 def _to_summary_response(summary) -> VideoSummaryResponse:
@@ -49,6 +69,7 @@ def _to_summary_response(summary) -> VideoSummaryResponse:
         uploader_id=summary.uploader_id,
         summary_content=summary.summary_content,
         status=summary.status,
+        metadata_ready=VideoService.is_summary_metadata_ready(summary),
         error_message=summary.error_message,
         document_ids=list(summary.document_ids),
         stats=summary.stats,
@@ -70,6 +91,7 @@ def _to_summary_list_item(summary) -> VideoSummaryListItemResponse:
         duration_seconds=summary.duration_seconds,
         uploader_name=summary.uploader_name,
         status=summary.status,
+        metadata_ready=VideoService.is_summary_metadata_ready(summary),
         created_at=summary.created_at,
         updated_at=summary.updated_at,
     )
@@ -91,8 +113,9 @@ async def _summarize_stream(
     async def _run() -> None:
         try:
             await service.summarize(
-                request.url_or_bvid,
+                request.url_or_id,
                 notebook_id=request.notebook_id,
+                lang=request.lang,
                 progress_callback=_progress_callback,
             )
         except Exception as exc:  # noqa: BLE001
@@ -133,10 +156,19 @@ async def summarize_video(
 
 @router.get("/videos/info", response_model=VideoInfoResponse)
 async def get_video_info(
-    url_or_bvid: str = Query(..., min_length=1),
+    url_or_id: Optional[str] = Query(None, min_length=1),
+    url_or_bvid: Optional[str] = Query(None, min_length=1),
     service: VideoService = Depends(get_video_service),
 ):
-    return VideoInfoResponse(**(await service.fetch_video_info(url_or_bvid)))
+    value = url_or_id or url_or_bvid
+    if not value:
+        raise HTTPException(status_code=422, detail="url_or_id is required")
+    try:
+        return VideoInfoResponse(**(await service.fetch_video_info(value)))
+    except BiliAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except BiliError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/videos/search", response_model=VideoSearchResponse)
@@ -180,6 +212,28 @@ async def list_videos(
     return VideoSummaryListResponse(
         summaries=[_to_summary_list_item(summary) for summary in summaries],
         total=len(summaries),
+    )
+
+
+@router.get("/videos/{summary_id}/export")
+async def export_video_summary_markdown(
+    summary_id: str = Path(..., min_length=1),
+    service: VideoService = Depends(get_video_service),
+):
+    try:
+        summary = await service.get(summary_id)
+    except VideoSummaryNotFoundError:
+        raise HTTPException(status_code=404, detail="Video summary not found")
+
+    filename_base = _sanitize_export_filename(summary.title, fallback=summary.video_id or "video-summary")
+    filename = f"{filename_base}.md"
+    headers = {
+        "Content-Disposition": _build_attachment_content_disposition(filename),
+    }
+    return Response(
+        content=summary.summary_content or "",
+        media_type="text/markdown; charset=utf-8",
+        headers=headers,
     )
 
 

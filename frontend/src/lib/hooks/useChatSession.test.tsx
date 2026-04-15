@@ -234,4 +234,56 @@ describe("useChatSession", () => {
 
     resolveStream?.();
   });
+
+  it("uses typewriter progression for final content and completes after drain", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 321 });
+        callbacks?.onEvent?.({ type: "content", delta: "**Hi**" });
+        callbacks?.onEvent?.({ type: "done" });
+      }
+    );
+
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    vi.useFakeTimers();
+    const requestAnimationFrameMock = ((callback: FrameRequestCallback) => {
+      return window.setTimeout(() => callback(window.performance.now()), 16);
+    }) as typeof requestAnimationFrame;
+    const cancelAnimationFrameMock = ((handle: number) => {
+      window.clearTimeout(handle);
+    }) as typeof cancelAnimationFrame;
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrameMock);
+    vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrameMock);
+
+    await act(async () => {
+      await result.current.sendMessage("Say hi", "agent");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(40);
+    });
+
+    const assistantStreaming = result.current.messages.find((item) => item.role === "assistant");
+    expect(assistantStreaming?.status).toBe("streaming");
+    expect(assistantStreaming?.content).not.toBe("**Hi**");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    const assistantDone = result.current.messages.find((item) => item.role === "assistant");
+    expect(assistantDone?.content).toBe("**Hi**");
+    expect(assistantDone?.status).toBe("done");
+    expect(assistantDone?.finalContentStarted).toBe(false);
+
+    vi.useRealTimers();
+  });
 });

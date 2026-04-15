@@ -175,7 +175,7 @@ MINERU_API_KEY=your_key_here
 
 ```bash
 MINERU_MODE=local
-MINERU_LOCAL_API_URL=http://mineru-api:8000
+MINERU_LOCAL_API_URL=http://localhost:8001
 MINERU_BACKEND=hybrid-auto-engine
 MINERU_LANG_LIST=ch,en
 MINERU_LOCAL_TIMEOUT=0
@@ -185,7 +185,7 @@ MINERU_LOCAL_TIMEOUT=0
 
 ```bash
 MINERU_MODE=local
-MINERU_LOCAL_API_URL=http://mineru-api:8000
+MINERU_LOCAL_API_URL=http://localhost:8001
 MINERU_BACKEND=pipeline
 MINERU_LANG_LIST=ch,en
 MINERU_LOCAL_TIMEOUT=0
@@ -206,21 +206,20 @@ MINERU_LOCAL_TIMEOUT=0
 
 ### 存储后端
 
-通过 Docker Compose 启动时，默认使用 **MinIO 对象存储**（`docker-compose.yml` 已内置 MinIO 服务）。本地开发不通过 Docker 运行 API 时，才使用本地文件系统。
+通过 Docker Compose 启动时，默认使用 **MinIO 对象存储**（`docker-compose.yml` 已内置 MinIO 服务）。开发者在宿主机本地运行 FastAPI / `pnpm dev` 时，也建议继续使用同一个 MinIO，这样链路与 Docker 运行时保持一致。
 
 ```bash
-# Docker 部署默认：MinIO（无需额外配置，Compose 已内置）
+# 运行时默认：MinIO（Docker 和本地 FastAPI 调试都使用这一套）
 STORAGE_BACKEND=minio
+MINIO_ENDPOINT=localhost:9000
+MINIO_PUBLIC_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
-
-# 本地开发（不使用 Docker 运行 API）：本地文件系统
-STORAGE_BACKEND=local
-DOCUMENTS_DIR=data/documents
 ```
 
 补充说明：
-- `MINIO_ENDPOINT` 是 API / worker 访问 MinIO 的内部地址。
+- `.env` 中的 `MINIO_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT` 应保持为宿主机可访问地址（通常是 `localhost:9000`）。
+- `docker-compose.yml` 会为容器内的 API / worker 自动覆盖 `MINIO_ENDPOINT=minio:9000`，因此仍然兼容全 Docker 启动。
 - `MINIO_PUBLIC_ENDPOINT` 是浏览器访问预签名 URL 的外部地址。在 Docker Desktop 本地开发下，通常保持 `localhost:9000` 即可。
 
 ### 文件处理策略
@@ -230,7 +229,7 @@ DOCUMENTS_DIR=data/documents
 | PDF | MinerU（cloud / local）→ PyPDF fallback |
 | CSV / Word / TXT / MD / HTML 等 | MarkItDown → Markdown |
 
-默认 Docker 部署下，处理后的文件存储在 MinIO 的 `documents` bucket 中；只有 `STORAGE_BACKEND=local` 时才会写入 `data/documents/{document_id}/`。
+默认 Docker 部署和宿主机 FastAPI 调试都会把处理后的文件存储在 MinIO 的 `documents` bucket 中；只有离线脚本 / 测试显式切到 `STORAGE_BACKEND=local` 时，才会写入 `data/documents/{document_id}/`。
 
 ---
 
@@ -350,6 +349,28 @@ QWEN3_EMBEDDING_DEVICE=cuda
 
 > 这一节适用于**不通过 Docker 运行后端 API**的场景。如果你用 `docker compose up -d` 启动了全部服务，API 已经在运行了，可以跳过。
 
+推荐把它当作开发者调试链路使用，而不是面向普通用户的默认启动方式。
+
+### 先启动 Docker 基础设施
+
+默认硬件 / 云端 MinerU：
+
+```bash
+docker compose up -d postgres redis elasticsearch minio celery-worker
+```
+
+NVIDIA GPU 本地增强模式（保留本地 `mineru-api` 容器）：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d postgres redis elasticsearch minio celery-worker mineru-api
+```
+
+补充说明：
+- 这两条命令都不会启动 Docker 版 `api` / `frontend`，避免和本机 `FastAPI --reload` / `pnpm dev` 端口冲突。
+- 共享一套 `.env` 时，宿主机 FastAPI 默认读取 `localhost` 地址；Docker 中的 API / worker 由 compose 自动覆盖为容器内地址。
+- 如果你要在宿主机调试本地 MinerU 模式，请把 `.env` 中的 `MINERU_LOCAL_API_URL` 设为 `http://localhost:8001`；Docker 内 worker 仍会通过 compose 覆盖访问 `http://mineru-api:8000`。
+- `celery-worker` 使用源码挂载，但 Celery 进程不会热重载 Python 模块；如果你修改了 `document_tasks.py`、`document_processing/` 或其它 worker 侧代码，请执行 `docker restart newbee-notebook-celery-worker` 再重试任务。
+
 ```bash
 # 确保虚拟环境已激活
 python main.py --reload --port 8000
@@ -369,6 +390,15 @@ python main.py --reload --port 8000
 | Swagger API 文档 | http://localhost:8000/docs |
 | ReDoc 文档 | http://localhost:8000/redoc |
 | 健康检查 | http://localhost:8000/api/v1/health |
+
+如需同时本机调试前端：
+
+```bash
+cd frontend
+pnpm dev
+```
+
+前端默认会把 `/api/v1/*` 代理到 `http://localhost:8000`。如果你改过地址，请在 `frontend/.env.local` 中同步调整 `INTERNAL_API_URL`。
 
 ---
 
@@ -433,7 +463,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-### 数据清理（仅 `STORAGE_BACKEND=local` 时）
+### 数据清理（仅离线 / 测试显式使用 `STORAGE_BACKEND=local` 时）
 
 ```bash
 # 清理孤儿目录（推荐）

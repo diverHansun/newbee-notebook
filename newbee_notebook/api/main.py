@@ -3,6 +3,7 @@ Newbee Notebook - FastAPI Application Entry Point
 """
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -11,6 +12,7 @@ from newbee_notebook.exceptions import NewbeeNotebookException
 from newbee_notebook.api.middleware.error_handler import (
     newbee_notebook_exception_handler,
     generic_exception_handler,
+    request_validation_exception_handler,
 )
 from newbee_notebook.core.common.config_db import (
     is_model_switch_enabled,
@@ -32,8 +34,10 @@ from newbee_notebook.api.routers import (
     documents,
     admin,
     diagrams,
+    generated_images,
     videos,
     bilibili_auth,
+    export,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,6 +93,7 @@ def create_app() -> FastAPI:
 
     # Register global exception handlers.
     app.add_exception_handler(NewbeeNotebookException, newbee_notebook_exception_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
     # Include routers
@@ -103,7 +108,9 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
     app.include_router(diagrams.router, prefix="/api/v1", tags=["Diagrams"])
+    app.include_router(generated_images.router, prefix="/api/v1", tags=["Generated Images"])
     app.include_router(videos.router, prefix="/api/v1", tags=["Videos"])
+    app.include_router(export.router, prefix="/api/v1", tags=["Export"])
     app.include_router(bilibili_auth.router, prefix="/api/v1", tags=["Bilibili Auth"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
 

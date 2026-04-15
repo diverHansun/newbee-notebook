@@ -4,10 +4,9 @@ embeddings:
   # Provider selection: 'qwen3-embedding' | 'zhipu'
   # Can be overridden by EMBEDDING_PROVIDER
   provider: qwen3-embedding
-
   # Qwen3 text embedding (default).
   qwen3-embedding:
-    mode: local                         # local | api
+    mode: api                           # local | api
     # Environment overrides:
     # - QWEN3_EMBEDDING_MODE
     # - QWEN3_EMBEDDING_MODEL_PATH

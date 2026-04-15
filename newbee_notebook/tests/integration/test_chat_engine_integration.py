@@ -13,6 +13,7 @@ from newbee_notebook.api.dependencies import get_chat_service, get_session_servi
 from newbee_notebook.api.routers.chat import router as chat_router
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.session_service import SessionService
+from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.skills import SkillContext, SkillManifest
@@ -76,11 +77,26 @@ class _InMemoryMessageRepo:
             created.append(await self.create(message))
         return created
 
-    async def list_by_session(self, session_id: str, limit: int = 50, offset: int = 0, modes=None):
+    async def list_by_session(
+        self,
+        session_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        modes=None,
+        descending: bool = False,
+    ):
         allowed = None if modes is None else {mode.value if hasattr(mode, "value") else str(mode) for mode in modes}
         rows = [item for item in self.messages if item.session_id == session_id]
         if allowed is not None:
             rows = [item for item in rows if (item.mode.value if hasattr(item.mode, "value") else str(item.mode)) in allowed]
+        rows = sorted(
+            rows,
+            key=lambda item: (
+                item.created_at,
+                item.message_id if item.message_id is not None else 0,
+            ),
+            reverse=descending,
+        )
         return rows[offset: offset + limit]
 
     async def list_after_boundary(self, session_id: str, boundary_message_id: int | None, track_modes=None):
@@ -130,19 +146,60 @@ class _InMemoryDocumentRepo:
 
 
 class _FakeLLMClient:
-    def __init__(self, *, chat_responses, stream_chunks):
+    def __init__(self, *, chat_responses, reasoning_stream_batches=None, stream_chunks=None):
         self.chat_responses = list(chat_responses)
-        self.stream_chunks = list(stream_chunks)
+        self.reasoning_stream_batches = [list(batch) for batch in (reasoning_stream_batches or [])]
+        self.stream_chunks = list(stream_chunks or [])
         self.chat_calls: list[dict] = []
         self.stream_calls: list[dict] = []
+
+    @staticmethod
+    def _response_to_stream_batch(response: dict) -> list[dict]:
+        choice = AgentLoop._extract_choice(response)
+        if isinstance(choice, dict):
+            message = choice.get("message") or {}
+        else:
+            message = getattr(choice, "message", {}) or {}
+
+        if isinstance(message, dict):
+            content = str(message.get("content") or "")
+            tool_calls = list(message.get("tool_calls") or [])
+        else:
+            content = str(getattr(message, "content", "") or "")
+            tool_calls = list(getattr(message, "tool_calls", []) or [])
+
+        delta: dict[str, object] = {}
+        if content:
+            delta["content"] = content
+        if tool_calls:
+            delta["tool_calls"] = [
+                {"index": index, **AgentLoop._normalize_tool_call(tool_call)}
+                for index, tool_call in enumerate(tool_calls)
+            ]
+        if not delta:
+            return []
+        return [{"choices": [{"delta": delta}]}]
+
+    def _next_stream_batch(self, **kwargs) -> list[dict]:
+        copied_kwargs = copy.deepcopy(kwargs)
+        is_reasoning_call = kwargs.get("tools") is not None or kwargs.get("tool_choice") is not None
+        if is_reasoning_call and (self.reasoning_stream_batches or self.chat_responses):
+            self.chat_calls.append(copied_kwargs)
+            if self.reasoning_stream_batches:
+                return self.reasoning_stream_batches.pop(0)
+            return self._response_to_stream_batch(self.chat_responses.pop(0))
+
+        self.stream_calls.append(copied_kwargs)
+        batch = list(self.stream_chunks)
+        self.stream_chunks = []
+        return batch
 
     async def chat(self, **kwargs):
         self.chat_calls.append(copy.deepcopy(kwargs))
         return self.chat_responses.pop(0)
 
     async def chat_stream(self, **kwargs):
-        self.stream_calls.append(copy.deepcopy(kwargs))
-        for chunk in self.stream_chunks:
+        for chunk in self._next_stream_batch(**kwargs):
             yield chunk
 
 
@@ -216,6 +273,39 @@ def _chat_response(*, tool_calls=None, content=None, finish_reason=None) -> dict
 
 def _stream_chunk(delta: str) -> dict:
     return {"choices": [{"delta": {"content": delta}}]}
+
+
+def _stream_tool_call_delta(
+    index: int,
+    *,
+    tool_call_id: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+    tool_type: str | None = None,
+) -> dict:
+    delta = {"index": index}
+    if tool_call_id is not None:
+        delta["id"] = tool_call_id
+    if tool_type is not None:
+        delta["type"] = tool_type
+
+    function: dict[str, str] = {}
+    if name is not None:
+        function["name"] = name
+    if arguments is not None:
+        function["arguments"] = arguments
+    if function:
+        delta["function"] = function
+    return delta
+
+
+def _stream_tool_call_chunk(*tool_calls: dict, content: str | None = None) -> dict:
+    delta: dict[str, object] = {}
+    if content is not None:
+        delta["content"] = content
+    if tool_calls:
+        delta["tool_calls"] = list(tool_calls)
+    return {"choices": [{"delta": delta}]}
 
 
 def _build_client(
@@ -424,6 +514,68 @@ def test_stream_explain_route_uses_document_scope_and_emits_runtime_events():
     assert keyword_search.payloads[0]["search_type"] == "keyword"
     assert keyword_search.payloads[0]["max_results"] == 4
     assert "Selected text:\nSelected sentence" in llm_client.chat_calls[0]["messages"][-1]["content"]
+
+
+@pytest.mark.integration
+def test_stream_route_emits_intermediate_content_before_tool_call():
+    client, _, hybrid_search, _, _, _ = _build_client(
+        llm_client=_FakeLLMClient(
+            chat_responses=[],
+            reasoning_stream_batches=[
+                [
+                    _stream_chunk("让我先"),
+                    _stream_chunk("查一下文档"),
+                    _stream_tool_call_chunk(
+                        _stream_tool_call_delta(
+                            0,
+                            tool_call_id="call-1",
+                            name="knowledge_base",
+                            arguments="",
+                        )
+                    ),
+                    _stream_tool_call_chunk(
+                        _stream_tool_call_delta(
+                            0,
+                            arguments='{"query":"What is doc 1?"}',
+                        )
+                    ),
+                ],
+                [_stream_chunk("Grounded answer")],
+            ],
+            stream_chunks=[],
+        ),
+        hybrid_results=[
+            [
+                {
+                    "document_id": "doc-1",
+                    "chunk_id": "chunk-1",
+                    "title": "Doc 1",
+                    "text": "Doc 1 says hello.",
+                    "score": 0.82,
+                    "source_type": "retrieval",
+                }
+            ]
+        ],
+    )
+
+    with client.stream(
+        "POST",
+        "/api/v1/chat/notebooks/nb-1/chat/stream",
+        json={"message": "What is doc 1?", "mode": "ask"},
+    ) as response:
+        events = _collect_sse_events(response)
+
+    assert response.status_code == 200
+    event_types = [event["type"] for event in events]
+    assert "intermediate_content" in event_types
+    assert event_types.index("intermediate_content") < event_types.index("tool_call")
+
+    intermediate_event = next(event for event in events if event["type"] == "intermediate_content")
+    assert intermediate_event["delta"] == "让我先查一下文档"
+
+    final_chunks = [event["delta"] for event in events if event["type"] == "content"]
+    assert "".join(final_chunks) == "Grounded answer"
+    assert hybrid_search.payloads[0]["query"] == "What is doc 1?"
 
 
 @pytest.mark.integration

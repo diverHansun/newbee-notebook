@@ -99,6 +99,11 @@ class NotebookModel(Base):
         back_populates="notebook",
         cascade="save-update, merge",
     )
+    generated_images = relationship(
+        "GeneratedImageModel",
+        back_populates="notebook",
+        cascade="all, delete-orphan",
+    )
 
 
 class DocumentModel(Base):
@@ -191,6 +196,11 @@ class SessionModel(Base):
         back_populates="session",
         cascade="all, delete-orphan"
     )
+    generated_images = relationship(
+        "GeneratedImageModel",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
 
 class NotebookDocumentRefModel(Base):
@@ -270,6 +280,64 @@ class MessageModel(Base):
     message_type: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    generated_images = relationship(
+        "GeneratedImageModel",
+        back_populates="message",
+        cascade="save-update, merge",
+    )
+
+
+class GeneratedImageModel(Base):
+    """Generated image metadata table."""
+
+    __tablename__ = "generated_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    notebook_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notebooks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    message_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    size: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    notebook = relationship("NotebookModel", back_populates="generated_images")
+    session = relationship("SessionModel", back_populates="generated_images")
+    message = relationship("MessageModel", back_populates="generated_images")
+
+    __table_args__ = (
+        Index("idx_generated_images_session_id", "session_id"),
+        Index("idx_generated_images_notebook_id", "notebook_id"),
+        Index("idx_generated_images_message_id", "message_id"),
+        Index("idx_generated_images_created_at", "created_at"),
+    )
 
 
 

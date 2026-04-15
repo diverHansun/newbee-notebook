@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from newbee_notebook.core.tools.contracts import SourceItem, ToolQualityMeta
+from newbee_notebook.core.tools.contracts import ImageResult, SourceItem, ToolQualityMeta
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,12 @@ class PhaseEvent:
 
 
 @dataclass(frozen=True)
+class IntermediateContentEvent:
+    delta: str
+    event: str = "intermediate_content"
+
+
+@dataclass(frozen=True)
 class ToolCallEvent:
     tool_name: str
     tool_call_id: str
@@ -42,6 +48,14 @@ class ToolResultEvent:
     content_preview: str
     quality_meta: ToolQualityMeta | None = None
     event: str = "tool_result"
+
+
+@dataclass(frozen=True)
+class ImageGeneratedEvent:
+    images: list[ImageResult] = field(default_factory=list)
+    tool_call_id: str = ""
+    tool_name: str = ""
+    event: str = "image_generated"
 
 
 @dataclass(frozen=True)

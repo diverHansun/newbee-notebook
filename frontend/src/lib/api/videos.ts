@@ -14,6 +14,11 @@ type StreamOptions = {
   onEvent: (event: VideoStreamEvent) => void;
 };
 
+type ExportVideoSummaryResult = {
+  blob: Blob;
+  filename: string | null;
+};
+
 async function throwIfNotOk(response: Response): Promise<void> {
   if (response.ok) return;
 
@@ -37,10 +42,41 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+function parseDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const asciiMatch = contentDisposition.match(/filename\s*=\s*"?([^\";]+)"?/i);
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1].trim();
+  }
+
+  return null;
+}
+
 function mapVideoStreamEvent(
   eventName: string,
   payload: Record<string, unknown>
-): VideoStreamEvent {
+): VideoStreamEvent | null {
+  if (eventName === "info") {
+    return {
+      type: "info",
+      video_id: String(payload.video_id ?? ""),
+      title: String(payload.title ?? ""),
+      duration_seconds: Number(payload.duration_seconds ?? payload.duration ?? 0),
+      uploader_name: payload.uploader_name ? String(payload.uploader_name) : undefined,
+      cover_url: payload.cover_url ? String(payload.cover_url) : undefined,
+    };
+  }
+
   if (eventName === "done") {
     return {
       type: "done",
@@ -68,10 +104,15 @@ function mapVideoStreamEvent(
     return {
       type: eventName,
       video_id: String(payload.video_id ?? ""),
+      source: payload.source ? String(payload.source) : undefined,
+      char_count: typeof payload.char_count === "number" ? payload.char_count : undefined,
+      step: payload.step ? String(payload.step) : undefined,
+      message: payload.message ? String(payload.message) : undefined,
+      lang: payload.lang === "en" ? "en" : payload.lang === "zh" ? "zh" : undefined,
     };
   }
 
-  throw new ApiError(500, "E_VIDEO_STREAM_EVENT", `Unsupported video stream event: ${eventName}`);
+  return null;
 }
 
 export function listAllVideoSummaries() {
@@ -109,9 +150,18 @@ export function disassociateVideoSummary(summaryId: string) {
   });
 }
 
-export function getVideoInfo(urlOrBvid: string) {
-  const search = new URLSearchParams({ url_or_bvid: urlOrBvid });
+export function getVideoInfo(urlOrId: string) {
+  const search = new URLSearchParams({ url_or_id: urlOrId });
   return fetchJson<VideoInfo>(`/videos/info?${search.toString()}`);
+}
+
+export async function exportVideoSummaryMarkdown(summaryId: string): Promise<ExportVideoSummaryResult> {
+  const response = await fetch(`/api/v1/videos/${summaryId}/export`);
+  await throwIfNotOk(response);
+  return {
+    blob: await response.blob(),
+    filename: parseDownloadFilename(response.headers.get("content-disposition")),
+  };
 }
 
 export async function summarizeVideoStream(

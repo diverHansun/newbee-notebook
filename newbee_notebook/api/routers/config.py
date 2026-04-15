@@ -51,7 +51,9 @@ class LLMConfigResponse(BaseModel):
 class EmbeddingConfigResponse(BaseModel):
     provider: str
     mode: str | None = None
+    api_provider: str | None = None
     model: str
+    api_model: str | None = None
     dim: int
     source: str
     api_key_set: bool | None = None
@@ -90,9 +92,9 @@ class LLMAvailable(BaseModel):
 
 
 class EmbeddingAvailable(BaseModel):
-    providers: list[str]
     modes: list[str]
-    api_models: list[PresetModel]
+    api_providers: list[str]
+    api_models_by_provider: dict[str, list[PresetModel]]
     local_models: list[str]
 
 
@@ -121,8 +123,9 @@ class UpdateLLMRequest(BaseModel):
 
 
 class UpdateEmbeddingRequest(BaseModel):
-    provider: str
+    provider: str | None = None
     mode: str | None = None
+    api_provider: str | None = None
     api_model: str | None = None
 
 
@@ -154,6 +157,23 @@ def _scan_local_embedding_models() -> list[str]:
     return sorted(candidates)
 
 
+def _normalize_embedding_api_provider(value: str | None) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"qwen", "qwen3-embedding"}:
+        return "qwen"
+    if normalized == "zhipu":
+        return "zhipu"
+    return None
+
+
+def _embedding_api_provider_to_runtime_provider(api_provider: str) -> str:
+    return "qwen3-embedding" if api_provider == "qwen" else "zhipu"
+
+
+def _default_embedding_api_model(api_provider: str) -> str:
+    return "embedding-3" if api_provider == "zhipu" else "text-embedding-v4"
+
+
 @router.get("/models", response_model=ModelsConfigResponse)
 async def get_models_config(session=Depends(get_db_session)):
     llm = await get_llm_config_async(session)
@@ -178,7 +198,9 @@ async def get_models_config(session=Depends(get_db_session)):
         embedding=EmbeddingConfigResponse(
             provider=embedding["provider"],
             mode=embedding.get("mode"),
+            api_provider=embedding.get("api_provider"),
             model=embedding["model"],
+            api_model=embedding.get("api_model"),
             dim=embedding["dim"],
             source=embedding["source"],
             api_key_set=embedding_api_key_set,
@@ -217,16 +239,16 @@ async def get_available_models(session=Depends(get_db_session)):
             custom_input=True,
         ),
         embedding=EmbeddingAvailable(
-            providers=[
-                provider
-                for provider in get_registered_embedding_providers()
-                if provider in {"qwen3-embedding", "zhipu"}
-            ],
             modes=["local", "api"],
-            api_models=[
-                PresetModel(name="text-embedding-v4", label="Text Embedding v4 (Qwen)"),
-                PresetModel(name="embedding-3", label="Embedding-3 (Zhipu)"),
-            ],
+            api_providers=["qwen", "zhipu"],
+            api_models_by_provider={
+                "qwen": [
+                    PresetModel(name="text-embedding-v4", label="Text Embedding v4 (Qwen)")
+                ],
+                "zhipu": [
+                    PresetModel(name="embedding-3", label="Embedding-3 (Zhipu)")
+                ],
+            },
             local_models=_scan_local_embedding_models(),
         ),
         mineru=MinerUAvailable(
@@ -299,54 +321,63 @@ async def update_llm_config(req: UpdateLLMRequest, session=Depends(get_db_sessio
 async def update_embedding_config(
     req: UpdateEmbeddingRequest, session=Depends(get_db_session)
 ):
-    providers = set(get_registered_embedding_providers())
-    if req.provider not in providers:
+    current = await get_embedding_config_async(session)
+    raw_api_provider = req.api_provider if req.api_provider is not None else req.provider
+    api_provider = _normalize_embedding_api_provider(raw_api_provider)
+    if raw_api_provider is not None and api_provider is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown Embedding provider: {req.provider}",
+            detail=f"Unknown Embedding provider: {raw_api_provider}",
+        )
+    api_provider = api_provider or _normalize_embedding_api_provider(current.get("api_provider")) or "qwen"
+
+    mode = (req.mode or current.get("mode") or "api").strip().lower()
+    if mode not in {"local", "api"}:
+        raise HTTPException(status_code=400, detail="mode must be 'local' or 'api'")
+
+    local_models = _scan_local_embedding_models()
+    if mode == "local" and not local_models:
+        raise HTTPException(
+            status_code=400,
+            detail="No local embedding model found in models/ directory",
         )
 
-    current = await get_embedding_config_async(session)
-
-    if req.provider == "qwen3-embedding":
-        mode = (req.mode or current.get("mode") or "api").strip().lower()
-        if mode not in {"local", "api"}:
-            raise HTTPException(status_code=400, detail="mode must be 'local' or 'api'")
-        if mode == "local" and not _scan_local_embedding_models():
-            raise HTTPException(
-                status_code=400,
-                detail="No local embedding model found in models/ directory",
-            )
-        model = req.api_model or current.get("api_model") or "text-embedding-v4"
-        next_cfg = {
-            "provider": req.provider,
-            "mode": mode,
-            "model": model
-            if mode == "api"
-            else current.get("model") or "Qwen3-Embedding-0.6B",
-            "api_model": model,
-            "dim": int(current.get("dim") or 1024),
-            "source": "db",
-        }
+    current_api_provider = _normalize_embedding_api_provider(current.get("api_provider")) or "qwen"
+    if req.api_model is not None:
+        api_model = req.api_model.strip()
+        if not api_model:
+            raise HTTPException(status_code=400, detail="api_model must not be empty")
+    elif api_provider == current_api_provider:
+        api_model = str(current.get("api_model") or _default_embedding_api_model(api_provider)).strip()
     else:
-        model = req.api_model or current.get("model") or "embedding-3"
-        next_cfg = {
-            "provider": req.provider,
-            "mode": None,
-            "model": model,
-            "api_model": model,
-            "dim": int(current.get("dim") or 1024),
-            "source": "db",
-        }
+        api_model = _default_embedding_api_model(api_provider)
+
+    next_cfg = {
+        "provider": "qwen3-embedding" if mode == "local" else _embedding_api_provider_to_runtime_provider(api_provider),
+        "mode": mode,
+        "api_provider": api_provider,
+        "model": api_model,
+        "api_model": api_model,
+        "dim": int(current.get("dim") or 1024),
+        "source": "db",
+    }
+    if mode == "local":
+        local_model_name = local_models[0]
+        next_cfg["model"] = local_model_name
+        next_cfg["model_path"] = f"models/{local_model_name}"
 
     settings = AppSettingsService(session)
     setting_values = {
         "embedding.provider": next_cfg["provider"],
+        "embedding.mode": str(next_cfg["mode"]),
+        "embedding.api_provider": str(next_cfg["api_provider"]),
         "embedding.api_model": str(next_cfg["api_model"]),
     }
-    if next_cfg.get("mode"):
-        setting_values["embedding.mode"] = str(next_cfg["mode"])
+    if next_cfg.get("model_path"):
+        setting_values["embedding.model_path"] = str(next_cfg["model_path"])
     await settings.set_many(setting_values)
+    if not next_cfg.get("model_path"):
+        await settings.delete("embedding.model_path")
 
     apply_embedding_runtime_env(next_cfg)
     reset_embedding_singleton()
@@ -359,7 +390,9 @@ async def update_embedding_config(
     return EmbeddingConfigResponse(
         provider=next_cfg["provider"],
         mode=next_cfg.get("mode"),
+        api_provider=next_cfg.get("api_provider"),
         model=next_cfg["model"],
+        api_model=next_cfg.get("api_model"),
         dim=next_cfg["dim"],
         source=next_cfg["source"],
         api_key_set=embedding_api_key_set,
@@ -456,13 +489,13 @@ async def reset_embedding_config(session=Depends(get_db_session)):
     settings = AppSettingsService(session)
     await settings.delete_prefix("embedding.")
 
-    default_cfg = {**SYSTEM_DEFAULTS["embedding"], "source": "default"}
+    default_cfg = await get_embedding_config_async(session)
     apply_embedding_runtime_env(default_cfg)
     reset_embedding_singleton()
 
     return ResetResponse(
         message="Embedding configuration reset to system defaults",
-        defaults=SYSTEM_DEFAULTS["embedding"],
+        defaults=default_cfg,
     )
 
 

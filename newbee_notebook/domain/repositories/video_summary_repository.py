@@ -36,6 +36,10 @@ class VideoSummaryRepository(ABC):
         """List summaries associated with one notebook."""
 
     @abstractmethod
+    async def count_by_status(self, status: str) -> int:
+        """Count summaries with one status."""
+
+    @abstractmethod
     async def create(self, summary: VideoSummary) -> VideoSummary:
         """Create a summary."""
 

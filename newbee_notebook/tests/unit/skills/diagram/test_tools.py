@@ -194,6 +194,8 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
     assert "Mermaid" in manifest.system_prompt_addition
     assert "If notebook documents are unavailable" in manifest.system_prompt_addition
     assert "Do not output raw <tool_call>" in manifest.system_prompt_addition
+    assert "mindmap JSON schema" in manifest.system_prompt_addition
+    assert "React Flow syntax" not in manifest.system_prompt_addition
     assert [tool.name for tool in manifest.tools] == [
         "list_diagrams",
         "read_diagram",

@@ -69,7 +69,7 @@ export async function parseSseStream(
 
 type NamedSseParserOptions<TEvent> = {
   onEvent: (event: TEvent) => void;
-  mapEvent: (eventName: string, payload: Record<string, unknown>) => TEvent;
+  mapEvent: (eventName: string, payload: Record<string, unknown>) => TEvent | null;
   signal?: AbortSignal;
 };
 
@@ -99,19 +99,23 @@ export async function parseNamedSseStream<TEvent>(
         const eventName = extractEventName(chunk);
         if (!payload || !eventName) continue;
 
-        options.onEvent(options.mapEvent(eventName, JSON.parse(payload) as Record<string, unknown>));
+        const mapped = options.mapEvent(eventName, JSON.parse(payload) as Record<string, unknown>);
+        if (mapped !== null) {
+          options.onEvent(mapped);
+        }
       }
     }
 
     const trailingPayload = extractEventPayload(buffer);
     const trailingEventName = extractEventName(buffer);
     if (trailingPayload && trailingEventName) {
-      options.onEvent(
-        options.mapEvent(
-          trailingEventName,
-          JSON.parse(trailingPayload) as Record<string, unknown>
-        )
+      const mapped = options.mapEvent(
+        trailingEventName,
+        JSON.parse(trailingPayload) as Record<string, unknown>
       );
+      if (mapped !== null) {
+        options.onEvent(mapped);
+      }
     }
   } finally {
     reader.releaseLock();

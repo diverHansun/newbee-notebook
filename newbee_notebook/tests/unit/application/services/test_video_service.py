@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from io import BytesIO
+import asyncio
+from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from newbee_notebook.application.services.video_concurrency import (
+    VideoConcurrencyController,
+)
 from newbee_notebook.domain.entities.video_summary import VideoSummary
 
 
@@ -27,6 +31,7 @@ def anyio_backend():
 @pytest.fixture
 def video_repo():
     repo = AsyncMock()
+    repo.count_by_status.return_value = 0
     repo.commit = AsyncMock()
     return repo
 
@@ -76,7 +81,16 @@ def asr_pipeline():
 
 
 @pytest.fixture
-def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline):
+def concurrency_controller():
+    return VideoConcurrencyController(
+        max_processing_videos=5,
+        max_llm_concurrency=2,
+        max_asr_concurrency=2,
+    )
+
+
+@pytest.fixture
+def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline, concurrency_controller):
     from newbee_notebook.application.services.video_service import VideoService
 
     return VideoService(
@@ -86,7 +100,150 @@ def service(video_repo, bili_client, llm_client, storage, ref_repo, asr_pipeline
         storage=storage,
         ref_repo=ref_repo,
         asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
     )
+
+
+@pytest.mark.anyio
+async def test_summarize_fails_fast_when_bilibili_credentials_missing(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    bili_client.has_credentials.return_value = False
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    with pytest.raises(AuthenticationError):
+        await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    bili_client.get_video_info.assert_not_awaited()
+    bili_client.get_video_subtitle.assert_not_awaited()
+    assert events[0][0] == "start"
+    assert events[-1][0] == "error"
+    failed_summary = video_repo.update.await_args_list[-1].args[0]
+    assert failed_summary.status == "failed"
+    assert failed_summary.error_message == "Bilibili session expired or not logged in. Please login and try again."
+
+
+@pytest.mark.anyio
+async def test_auth_failure_does_not_leave_summary_stuck_in_processing_and_retry_can_continue(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    state: dict[str, VideoSummary | None] = {"summary": None}
+
+    async def get_by_platform_and_video_id(_platform: str, _video_id: str):
+        return state["summary"]
+
+    async def create_summary(summary: VideoSummary):
+        state["summary"] = summary
+        return summary
+
+    async def update_summary(summary: VideoSummary):
+        state["summary"] = summary
+        return summary
+
+    async def count_by_status(status: str):
+        if status != "processing":
+            return 0
+        current = state["summary"]
+        return 1 if current is not None and current.status == "processing" else 0
+
+    video_repo.get_by_platform_and_video_id.side_effect = get_by_platform_and_video_id
+    video_repo.create.side_effect = create_summary
+    video_repo.update.side_effect = update_summary
+    video_repo.count_by_status.side_effect = count_by_status
+    bili_client.has_credentials.side_effect = [False, True]
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    first_events: list[tuple[str, dict]] = []
+
+    async def first_progress(event: str, payload: dict) -> None:
+        first_events.append((event, payload))
+
+    with pytest.raises(AuthenticationError):
+        await service.summarize("BV1xx411c7mD", notebook_id="nb-1", progress_callback=first_progress)
+
+    assert state["summary"] is not None
+    assert state["summary"].status == "failed"
+    assert first_events[-1][0] == "error"
+
+    second_events: list[tuple[str, dict]] = []
+
+    async def second_progress(event: str, payload: dict) -> None:
+        second_events.append((event, payload))
+
+    summary = await service.summarize("BV1xx411c7mD", notebook_id="nb-1", progress_callback=second_progress)
+
+    assert summary.status == "completed"
+    assert second_events[0][0] == "start"
+    assert second_events[-1][0] == "done"
+
+
+@pytest.mark.anyio
+async def test_handle_failure_logs_expected_user_error_as_warning(service, video_repo, monkeypatch):
+    import newbee_notebook.application.services.video_service as video_service_module
+    from newbee_notebook.infrastructure.bilibili.exceptions import AuthenticationError
+
+    video_repo.update.side_effect = lambda summary: summary
+    summary = VideoSummary(
+        summary_id="summary-log",
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="Log target",
+        status="processing",
+    )
+
+    warning_mock = Mock()
+    exception_mock = Mock()
+    monkeypatch.setattr(video_service_module.logger, "warning", warning_mock)
+    monkeypatch.setattr(video_service_module.logger, "exception", exception_mock)
+
+    await service._handle_failure(
+        summary,
+        "BV1xx411c7mD",
+        AuthenticationError("missing sessdata"),
+        None,
+    )
+
+    warning_mock.assert_called_once()
+    exception_mock.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -249,7 +406,7 @@ async def test_summarize_uses_asr_fallback_when_subtitle_missing(
     assert summary.status == "completed"
     assert summary.transcript_source == "asr"
     asr_pipeline.transcribe.assert_awaited_once()
-    assert [event for event, _payload in events] == ["start", "asr", "summarize", "done"]
+    assert [event for event, _payload in events] == ["start", "info", "asr", "summarize", "done"]
 
 
 @pytest.mark.anyio
@@ -319,6 +476,48 @@ async def test_summarize_rejects_existing_processing_summary(service, video_repo
 
     with pytest.raises(VideoSummarizingInProgressError):
         await service.summarize("BV1xx411c7mD")
+
+
+@pytest.mark.anyio
+async def test_summarize_recovers_stale_processing_summary(service, video_repo):
+    stale_time = datetime.now() - timedelta(minutes=5)
+    video_repo.get_by_platform_and_video_id.return_value = VideoSummary(
+        summary_id="summary-stale",
+        created_at=stale_time,
+        updated_at=stale_time + timedelta(seconds=1),
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="BV1xx411c7mD",
+        status="processing",
+    )
+    video_repo.count_by_status.return_value = 1
+    video_repo.update.side_effect = lambda summary: summary
+    events: list[str] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append(event)
+
+    summary = await service.summarize("BV1xx411c7mD", progress_callback=progress)
+
+    assert summary.status == "completed"
+    assert events[0] == "start"
+    assert events[-1] == "done"
+
+
+@pytest.mark.anyio
+async def test_summarize_rejects_when_processing_capacity_is_full(service, video_repo):
+    from newbee_notebook.application.services.video_service import (
+        VideoConcurrentProcessingLimitError,
+    )
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.count_by_status.return_value = 5
+
+    with pytest.raises(VideoConcurrentProcessingLimitError):
+        await service.summarize("BV1xx411c7mD")
+
+    video_repo.create.assert_not_awaited()
+    video_repo.commit.assert_not_awaited()
 
 
 @pytest.mark.anyio
@@ -424,3 +623,293 @@ async def test_video_query_helpers_delegate_to_bilibili_client(service, bili_cli
     bili_client.get_hot_videos.assert_awaited_once_with(page=3)
     bili_client.get_rank_videos.assert_awaited_once_with(day=7)
     bili_client.get_related_videos.assert_awaited_once_with("BV1xx411c7mD")
+
+
+@pytest.mark.anyio
+async def test_fetch_video_info_supports_youtube(video_repo, bili_client, llm_client, storage, ref_repo):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(
+            return_value={
+                "video_id": "dQw4w9WgXcQ",
+                "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "title": "YouTube title",
+                "cover_url": "https://example.com/yt-cover.jpg",
+                "duration_seconds": 215,
+                "uploader_name": "YT Channel",
+                "uploader_id": "channel-1",
+                "stats": {"view_count": 99},
+            }
+        ),
+    )
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    info = await service.fetch_video_info("https://youtu.be/dQw4w9WgXcQ")
+
+    assert info["video_id"] == "dQw4w9WgXcQ"
+    youtube_client.get_video_info.assert_awaited_once_with("dQw4w9WgXcQ")
+    bili_client.get_video_info.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_llm_calls_wait_in_shared_two_slot_queue(
+    video_repo,
+    bili_client,
+    storage,
+    ref_repo,
+    concurrency_controller,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    active = 0
+    peak = 0
+
+    async def chat(*, messages):
+        nonlocal active, peak
+        assert messages
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return _llm_response("## Summary")
+
+    llm_client = AsyncMock()
+    llm_client.chat.side_effect = chat
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+        concurrency_controller=concurrency_controller,
+    )
+
+    await asyncio.gather(
+        service._generate_summary_content(info={"title": "v1"}, transcript_text="one", lang="zh"),
+        service._generate_summary_content(info={"title": "v2"}, transcript_text="two", lang="zh"),
+        service._generate_summary_content(info={"title": "v3"}, transcript_text="three", lang="zh"),
+    )
+
+    assert peak == 2
+    assert llm_client.chat.await_count == 3
+
+
+@pytest.mark.anyio
+async def test_asr_calls_wait_in_shared_two_slot_queue(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    concurrency_controller,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    active = 0
+    peak = 0
+
+    async def transcribe(payload):
+        nonlocal active, peak
+        assert payload["video_id"]
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return "asr transcript"
+
+    asr_pipeline = AsyncMock()
+    asr_pipeline.transcribe.side_effect = transcribe
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
+    )
+
+    await asyncio.gather(
+        service._transcribe_with_asr("youtube", "vid-1", {"source_url": "https://example.com/1"}),
+        service._transcribe_with_asr("youtube", "vid-2", {"source_url": "https://example.com/2"}),
+        service._transcribe_with_asr("youtube", "vid-3", {"source_url": "https://example.com/3"}),
+    )
+
+    assert peak == 2
+    assert asr_pipeline.transcribe.await_count == 3
+
+
+@pytest.mark.anyio
+async def test_summarize_supports_youtube_with_transcript_chain(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    storage.save_file.return_value = "videos/transcripts/youtube-dQw4w9WgXcQ.txt"
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(
+            return_value={
+                "video_id": "dQw4w9WgXcQ",
+                "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "title": "YouTube title",
+                "cover_url": "https://example.com/yt-cover.jpg",
+                "duration_seconds": 215,
+                "uploader_name": "YT Channel",
+                "uploader_id": "channel-1",
+                "stats": {"view_count": 99},
+            }
+        ),
+        get_transcript=AsyncMock(return_value=("youtube transcript", "subtitle")),
+    )
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    summary = await service.summarize(
+        "https://youtu.be/dQw4w9WgXcQ",
+        notebook_id="nb-1",
+        lang="en",
+        progress_callback=progress,
+    )
+
+    assert summary.platform == "youtube"
+    assert summary.video_id == "dQw4w9WgXcQ"
+    assert summary.transcript_source == "subtitle"
+    assert [event for event, _payload in events] == ["start", "info", "subtitle", "summarize", "done"]
+
+
+@pytest.mark.anyio
+async def test_summarize_youtube_continues_with_minimal_metadata_and_asr_fallback(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+    asr_pipeline,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+    from newbee_notebook.infrastructure.youtube.exceptions import YouTubeNetworkError
+
+    video_repo.get_by_platform_and_video_id.return_value = None
+    video_repo.create.side_effect = lambda summary: summary
+    video_repo.update.side_effect = lambda summary: summary
+    storage.save_file.return_value = "videos/transcripts/youtube-dQw4w9WgXcQ.txt"
+
+    youtube_client = SimpleNamespace(
+        is_youtube_input=lambda value: "youtu" in value,
+        extract_video_id=lambda _value: "dQw4w9WgXcQ",
+        get_video_info=AsyncMock(side_effect=YouTubeNetworkError("metadata unavailable")),
+        get_transcript=AsyncMock(return_value=(None, "asr")),
+    )
+    events: list[tuple[str, dict]] = []
+
+    async def progress(event: str, payload: dict) -> None:
+        events.append((event, payload))
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        youtube_client=youtube_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=asr_pipeline,
+    )
+
+    summary = await service.summarize(
+        "https://youtu.be/dQw4w9WgXcQ",
+        notebook_id="nb-1",
+        lang="zh",
+        progress_callback=progress,
+    )
+
+    assert summary.status == "completed"
+    assert summary.title == "dQw4w9WgXcQ"
+    assert summary.duration_seconds == 0
+    assert summary.uploader_name == ""
+    assert summary.transcript_source == "asr"
+    assert service.is_summary_metadata_ready(summary) is False
+    assert [event for event, _payload in events] == ["start", "asr", "subtitle", "summarize", "done"]
+
+
+@pytest.mark.anyio
+async def test_video_lists_hide_processing_youtube_items(
+    video_repo,
+    bili_client,
+    llm_client,
+    storage,
+    ref_repo,
+):
+    from newbee_notebook.application.services.video_service import VideoService
+
+    processing_youtube = VideoSummary(
+        summary_id="yt-processing",
+        platform="youtube",
+        video_id="dQw4w9WgXcQ",
+        title="dQw4w9WgXcQ",
+        status="processing",
+    )
+    completed_youtube = VideoSummary(
+        summary_id="yt-completed",
+        platform="youtube",
+        video_id="dQw4w9WgXcQ",
+        title="dQw4w9WgXcQ",
+        status="completed",
+    )
+    processing_bilibili = VideoSummary(
+        summary_id="bili-processing",
+        platform="bilibili",
+        video_id="BV1xx411c7mD",
+        title="Video title",
+        status="processing",
+    )
+    video_repo.list_all.return_value = [processing_youtube, completed_youtube, processing_bilibili]
+    video_repo.list_by_notebook.return_value = [processing_youtube, completed_youtube, processing_bilibili]
+
+    service = VideoService(
+        video_repo=video_repo,
+        bili_client=bili_client,
+        llm_client=llm_client,
+        storage=storage,
+        ref_repo=ref_repo,
+        asr_pipeline=None,
+    )
+
+    all_summaries = await service.list_all()
+    notebook_summaries = await service.list_by_notebook("nb-1")
+
+    assert [summary.summary_id for summary in all_summaries] == ["yt-completed"]
+    assert [summary.summary_id for summary in notebook_summaries] == ["yt-completed"]

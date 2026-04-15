@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { MCPConfigPanel } from "@/components/layout/mcp-config-panel";
 import { ModelConfigPanel } from "@/components/layout/model-config-panel";
-import { NotesExportPanel } from "@/components/layout/notes-export-panel";
+import { NotebookExportPanel } from "@/components/layout/notebook-export-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getHealthStatus, getSystemInfo } from "@/lib/api/system";
 import { useLang } from "@/lib/hooks/useLang";
@@ -228,7 +228,7 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
 
           {activeTab === "mcp" && <MCPConfigPanel />}
 
-          {activeTab === "data" && <NotesExportPanel />}
+          {activeTab === "data" && <NotebookExportPanel />}
 
           {activeTab === "about" && (
             <div className="control-panel-stack">

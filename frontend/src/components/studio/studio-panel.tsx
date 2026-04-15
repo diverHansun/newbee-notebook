@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { saveAs } from "file-saver";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listDocumentsInNotebook } from "@/lib/api/documents";
@@ -9,6 +10,7 @@ import {
   addNoteDocument,
   createNote,
   deleteNote,
+  exportNoteMarkdown,
   getNote,
   listNotes,
   removeNoteDocument,
@@ -41,6 +43,10 @@ function formatTimestamp(value: string, locale: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[<>:"/\\|?*]/g, "_").trim() || "note";
 }
 
 function truncate(value: string, maxLength = 60): string {
@@ -100,6 +106,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [pendingDeleteNote, setPendingDeleteNote] = useState<Note | null>(null);
   const [pendingDeleteDiagramId, setPendingDeleteDiagramId] = useState<string | null>(null);
+  const [exportingNoteMarkdown, setExportingNoteMarkdown] = useState(false);
   const [selectedDocumentIdToAdd, setSelectedDocumentIdToAdd] = useState("");
   const [copiedMarkId, setCopiedMarkId] = useState<string | null>(null);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
@@ -110,12 +117,16 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
 
   const documentsQuery = useQuery({
     queryKey: ["notebook-documents", notebookId],
-    queryFn: () => listDocumentsInNotebook(notebookId, { limit: 100, offset: 0 }),
+    queryFn: () => listDocumentsInNotebook(notebookId, { fetchAll: true }),
   });
 
   const notesQuery = useQuery({
     queryKey: ["notes", notebookId, noteDocFilter ?? "all"],
-    queryFn: () => listNotes(notebookId, noteDocFilter ? { document_id: noteDocFilter } : undefined),
+    queryFn: () =>
+      listNotes(notebookId, {
+        document_id: noteDocFilter ?? undefined,
+        fetchAll: true,
+      }),
   });
 
   const marksQuery = useQuery({
@@ -681,28 +692,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           <button className="btn btn-ghost btn-sm" type="button" onClick={backToDiagramList}>
             {t(uiStrings.studio.backToList)}
           </button>
-          <button
-            className="btn btn-danger-ghost btn-sm"
-            type="button"
-            onClick={() => setPendingDeleteDiagramId(activeDiagram.diagram_id)}
-          >
-            {t(uiStrings.common.delete)}
-          </button>
-        </div>
-        <div className="card" style={{ padding: 12 }}>
-          <div className="stack-sm">
-            <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
-              <strong>{activeDiagram.title}</strong>
-              {renderCopyIdButton(activeDiagram.diagram_id, diagramIdLabels, "diagram")}
-            </div>
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
-            </div>
-          </div>
-        </div>
-        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          <div className="row-between" style={{ marginBottom: 8, flexShrink: 0 }}>
-            <strong>{t(uiStrings.studio.diagramView)}</strong>
+          <div className="row" style={{ gap: 8 }}>
             <button
               className="btn btn-ghost btn-sm"
               type="button"
@@ -730,7 +720,28 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </button>
+            <button
+              className="btn btn-danger-ghost btn-sm"
+              type="button"
+              onClick={() => setPendingDeleteDiagramId(activeDiagram.diagram_id)}
+            >
+              {t(uiStrings.common.delete)}
+            </button>
           </div>
+        </div>
+        <div className="card" style={{ padding: 12 }}>
+          <div className="stack-sm">
+            <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+              <strong>{activeDiagram.title}</strong>
+              {renderCopyIdButton(activeDiagram.diagram_id, diagramIdLabels, "diagram")}
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <strong style={{ marginBottom: 8, flexShrink: 0 }}>{t(uiStrings.studio.diagramView)}</strong>
           {activeDiagramContentQuery.isLoading ? (
             <span className="muted">{t(uiStrings.common.loading)}</span>
           ) : activeDiagramContentQuery.isError ? (
@@ -754,6 +765,17 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
       );
     }
 
+    const handleExportNoteMarkdown = async () => {
+      setExportingNoteMarkdown(true);
+      try {
+        const { blob, filename } = await exportNoteMarkdown(activeNote.note_id);
+        const fallbackFilename = `${sanitizeFilename(activeNote.title)}_${activeNote.note_id}.md`;
+        saveAs(blob, filename || fallbackFilename);
+      } finally {
+        setExportingNoteMarkdown(false);
+      }
+    };
+
     return (
       <div className="stack-md" style={{ height: "100%", padding: 0 }}>
         <div className="row-between" style={{ gap: 8 }}>
@@ -765,6 +787,32 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
             {t(uiStrings.studio.backToList)}
           </button>
           <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={exportingNoteMarkdown}
+              aria-label={t(uiStrings.notes.exportMarkdown)}
+              title={t(uiStrings.notes.exportMarkdown)}
+              style={{ padding: "4px 6px" }}
+              onClick={() => {
+                void handleExportNoteMarkdown();
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
             {renderCopyIdButton(activeNote.note_id, noteIdLabels, "note")}
             <button
               className="btn btn-danger-ghost btn-sm"

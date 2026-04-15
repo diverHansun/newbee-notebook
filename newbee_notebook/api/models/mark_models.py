@@ -5,11 +5,13 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+MARK_ANCHOR_TEXT_MAX_LENGTH = 1000
+
 
 class CreateMarkRequest(BaseModel):
     """Request body for creating a mark."""
 
-    anchor_text: str = Field(..., min_length=1, max_length=500)
+    anchor_text: str = Field(..., min_length=1, max_length=MARK_ANCHOR_TEXT_MAX_LENGTH)
     char_offset: int = Field(..., ge=0)
     context_text: Optional[str] = None
 

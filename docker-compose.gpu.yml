@@ -37,9 +37,13 @@ services:
 
   # API override: expose MinerU local mode as switchable in settings.
   api:
+    volumes:
+      - ./models:/app/models:ro
     environment:
       MINERU_MODE: local
       MINERU_LOCAL_ENABLED: "true"
+      QWEN3_EMBEDDING_MODE: local
+      QWEN3_EMBEDDING_MODEL_PATH: models/Qwen3-Embedding-0.6B
 
   # GPU MinerU PDF -> Markdown service.
   # Use together with the base compose file:

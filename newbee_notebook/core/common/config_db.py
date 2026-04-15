@@ -26,6 +26,27 @@ _BILIBILI_CREDENTIAL_FIELDS = (
     "dedeuserid",
     "ac_time_value",
 )
+_BOOTSTRAP_ENV = {
+    key: os.getenv(key)
+    for key in (
+        "EMBEDDING_PROVIDER",
+        "EMBEDDING_MODEL",
+        "EMBEDDING_DIMENSION",
+        "QWEN3_EMBEDDING_MODE",
+        "QWEN3_EMBEDDING_API_MODEL",
+        "QWEN3_EMBEDDING_MODEL_PATH",
+        "QWEN3_EMBEDDING_DIM",
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "LLM_TEMPERATURE",
+        "LLM_MAX_TOKENS",
+        "LLM_TOP_P",
+        "MINERU_MODE",
+        "MINERU_LOCAL_ENABLED",
+        "ASR_PROVIDER",
+        "ASR_MODEL",
+    )
+}
 
 
 def _get_app_settings_service(session: AsyncSession):
@@ -103,6 +124,7 @@ def _read_embedding_yaml_defaults() -> dict[str, Any]:
     emb_root = get_embeddings_config().get("embeddings", {}) if get_embeddings_config() else {}
     provider = str(emb_root.get("provider", "qwen3-embedding") or "qwen3-embedding").strip().lower()
     provider_cfg = emb_root.get(provider, {}) if isinstance(emb_root, dict) else {}
+    api_provider = _embedding_runtime_provider_to_api_provider(provider) or "qwen"
 
     if provider == "qwen3-embedding":
         mode = str(provider_cfg.get("mode", "api") or "api").strip().lower()
@@ -115,6 +137,7 @@ def _read_embedding_yaml_defaults() -> dict[str, Any]:
         return {
             "provider": provider,
             "mode": mode,
+            "api_provider": api_provider,
             "api_model": api_model,
             "model": model_name,
             "dim": _as_int(provider_cfg.get("dim", 1024), 1024),
@@ -122,11 +145,82 @@ def _read_embedding_yaml_defaults() -> dict[str, Any]:
 
     return {
         "provider": provider,
-        "mode": None,
+        "mode": "api",
+        "api_provider": api_provider,
         "api_model": str(provider_cfg.get("model", "embedding-3")),
         "model": str(provider_cfg.get("model", "embedding-3")),
         "dim": _as_int(provider_cfg.get("dim", 1024), 1024),
     }
+
+
+def _get_bootstrap_env(name: str) -> str | None:
+    return _BOOTSTRAP_ENV.get(name)
+
+
+def _looks_like_local_qwen_embedding_reference(value: Any) -> bool:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower().replace("\\", "/")
+    if "/" in lowered:
+        return True
+    return lowered.startswith("qwen3-embedding-")
+
+
+def _looks_like_legacy_non_qwen_embedding_model(value: Any) -> bool:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return False
+    return normalized.startswith("embedding-")
+
+
+def _normalize_embedding_api_provider(value: Any, default: str = "qwen") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"qwen", "qwen3-embedding"}:
+        return "qwen"
+    if normalized == "zhipu":
+        return "zhipu"
+    return default
+
+
+def _embedding_api_provider_to_runtime_provider(api_provider: Any) -> str:
+    normalized = _normalize_embedding_api_provider(api_provider)
+    return "qwen3-embedding" if normalized == "qwen" else "zhipu"
+
+
+def _embedding_runtime_provider_to_api_provider(provider: Any) -> str | None:
+    normalized = str(provider or "").strip().lower()
+    if normalized == "qwen3-embedding":
+        return "qwen"
+    if normalized == "zhipu":
+        return "zhipu"
+    return None
+
+
+def _default_embedding_api_model(api_provider: Any) -> str:
+    normalized = _normalize_embedding_api_provider(api_provider)
+    return "embedding-3" if normalized == "zhipu" else "text-embedding-v4"
+
+
+def _should_repair_legacy_embedding_api_model(
+    *,
+    api_provider: str,
+    api_model: Any,
+    has_explicit_api_provider: bool,
+) -> bool:
+    normalized_model = str(api_model or "").strip().lower()
+    if _looks_like_local_qwen_embedding_reference(api_model):
+        return True
+    if api_provider == "qwen" and normalized_model == "embedding-3":
+        return True
+    if api_provider == "zhipu" and normalized_model == "text-embedding-v4":
+        return True
+    if has_explicit_api_provider:
+        return False
+
+    if not normalized_model:
+        return True
+    return False
 
 
 _ASR_DEFAULTS: dict[str, Any] = {
@@ -290,61 +384,124 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
             exc,
         )
 
-    provider = (
+    raw_runtime_provider = (
         db_values.get("embedding.provider")
-        or os.getenv("EMBEDDING_PROVIDER")
+        or _get_bootstrap_env("EMBEDDING_PROVIDER")
         or emb_root.get("provider")
         or defaults["provider"]
     )
-    provider = str(provider).strip().lower() or str(defaults["provider"])
+    raw_runtime_provider = str(raw_runtime_provider).strip().lower() or str(defaults["provider"])
 
+    mode = (
+        db_values.get("embedding.mode")
+        or _get_bootstrap_env("QWEN3_EMBEDDING_MODE")
+        or emb_root.get("qwen3-embedding", {}).get("mode")
+        or defaults.get("mode")
+        or "api"
+    )
+    mode = str(mode).strip().lower()
+    if mode not in {"local", "api"}:
+        mode = "api"
+
+    has_explicit_api_provider = "embedding.api_provider" in db_values
+    api_provider = _normalize_embedding_api_provider(
+        db_values.get("embedding.api_provider")
+        or _embedding_runtime_provider_to_api_provider(raw_runtime_provider)
+        or defaults.get("api_provider")
+        or "qwen"
+    )
+
+    provider = (
+        "qwen3-embedding"
+        if mode == "local"
+        else _embedding_api_provider_to_runtime_provider(api_provider)
+    )
     provider_cfg = emb_root.get(provider, {}) if isinstance(emb_root, dict) else {}
 
-    if provider == "qwen3-embedding":
-        mode = (
-            db_values.get("embedding.mode")
-            or os.getenv("QWEN3_EMBEDDING_MODE")
-            or provider_cfg.get("mode")
-            or defaults.get("mode")
-            or "api"
+    api_model = (
+        db_values.get("embedding.api_model")
+        or (
+            _get_bootstrap_env("QWEN3_EMBEDDING_API_MODEL")
+            if provider == "qwen3-embedding"
+            else _get_bootstrap_env("EMBEDDING_MODEL")
         )
-        mode = str(mode).strip().lower()
-        api_model = (
-            db_values.get("embedding.api_model")
-            or os.getenv("QWEN3_EMBEDDING_API_MODEL")
-            or provider_cfg.get("api_model")
-            or defaults.get("api_model")
-            or "text-embedding-v4"
-        )
-        if source == "default":
-            if any(key in db_values for key in ("embedding.mode", "embedding.api_model", "embedding.model_path")):
-                source = "db"
-            elif os.getenv("QWEN3_EMBEDDING_MODE") or os.getenv("QWEN3_EMBEDDING_API_MODEL"):
-                source = "env"
-            elif "mode" in provider_cfg or "api_model" in provider_cfg:
-                source = "yaml"
+        or provider_cfg.get("api_model")
+        or provider_cfg.get("model")
+        or defaults.get("api_model")
+        or _default_embedding_api_model(api_provider)
+    )
 
-        if mode == "local":
-            model_path = (
-                db_values.get("embedding.model_path")
-                or os.getenv("QWEN3_EMBEDDING_MODEL_PATH")
-                or provider_cfg.get("model_path")
-                or "models/Qwen3-Embedding-0.6B"
+    repairs: dict[str, str] = {}
+    if not has_explicit_api_provider and source == "db":
+        repairs["embedding.api_provider"] = api_provider
+
+    if mode == "api" and _should_repair_legacy_embedding_api_model(
+        api_provider=api_provider,
+        api_model=api_model,
+        has_explicit_api_provider=has_explicit_api_provider,
+    ):
+        fallback_api_model = str(
+            provider_cfg.get("api_model")
+            or provider_cfg.get("model")
+            or _default_embedding_api_model(api_provider)
+        )
+        logger.warning(
+            "Detected stale %s embedding api_model=%r; using %r instead.",
+            api_provider,
+            api_model,
+            fallback_api_model,
+        )
+        api_model = fallback_api_model
+        repairs["embedding.api_model"] = fallback_api_model
+
+    if repairs:
+        settings = _get_app_settings_service(session)
+        for key, value in repairs.items():
+            try:
+                await settings.set(key, value)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to persist repaired %s=%r: %s", key, value, exc)
+
+    if source == "default":
+        if any(
+            key in db_values
+            for key in (
+                "embedding.mode",
+                "embedding.api_provider",
+                "embedding.api_model",
+                "embedding.model_path",
             )
-            resolved_model_path = resolve_project_relative_path(str(model_path))
-            model_name = Path(str(resolved_model_path)).name or str(resolved_model_path)
-        else:
-            model_name = str(api_model)
-            resolved_model_path = None
+        ):
+            source = "db"
+        elif (
+            _get_bootstrap_env("QWEN3_EMBEDDING_MODE")
+            or _get_bootstrap_env("QWEN3_EMBEDDING_API_MODEL")
+            or _get_bootstrap_env("EMBEDDING_MODEL")
+        ):
+            source = "env"
+        elif "mode" in provider_cfg or "api_model" in provider_cfg or "model" in provider_cfg:
+            source = "yaml"
 
+    if mode == "local":
+        qwen_provider_cfg = emb_root.get("qwen3-embedding", {}) if isinstance(emb_root, dict) else {}
+        model_path = (
+            db_values.get("embedding.model_path")
+            or _get_bootstrap_env("QWEN3_EMBEDDING_MODEL_PATH")
+            or qwen_provider_cfg.get("model_path")
+            or "models/Qwen3-Embedding-0.6B"
+        )
+        resolved_model_path = resolve_project_relative_path(str(model_path))
+        model_name = Path(str(resolved_model_path)).name or str(resolved_model_path)
         dim = _as_int(
-            os.getenv("QWEN3_EMBEDDING_DIM") or provider_cfg.get("dim") or defaults.get("dim", 1024),
+            _get_bootstrap_env("QWEN3_EMBEDDING_DIM")
+            or qwen_provider_cfg.get("dim")
+            or defaults.get("dim", 1024),
             1024,
         )
-
         return {
-            "provider": provider,
+            "provider": "qwen3-embedding",
             "mode": mode,
+            "api_provider": api_provider,
             "model": model_name,
             "api_model": str(api_model),
             "model_path": resolved_model_path,
@@ -352,30 +509,24 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
             "source": source,
         }
 
-    model_name = (
-        db_values.get("embedding.api_model")
-        or os.getenv("EMBEDDING_MODEL")
-        or provider_cfg.get("model")
-        or defaults.get("model")
-        or "embedding-3"
-    )
     dim = _as_int(
-        os.getenv("EMBEDDING_DIMENSION") or provider_cfg.get("dim") or defaults.get("dim", 1024),
+        (
+            _get_bootstrap_env("QWEN3_EMBEDDING_DIM")
+            if provider == "qwen3-embedding"
+            else _get_bootstrap_env("EMBEDDING_DIMENSION")
+        )
+        or provider_cfg.get("dim")
+        or defaults.get("dim", 1024),
         1024,
     )
-    if source == "default":
-        if "embedding.api_model" in db_values:
-            source = "db"
-        elif os.getenv("EMBEDDING_MODEL"):
-            source = "env"
-        elif "model" in provider_cfg:
-            source = "yaml"
-
+    model_name = str(api_model).strip() or _default_embedding_api_model(api_provider)
     return {
         "provider": provider,
-        "mode": None,
-        "model": str(model_name),
-        "api_model": str(model_name),
+        "mode": "api",
+        "api_provider": api_provider,
+        "model": model_name,
+        "api_model": model_name,
+        "model_path": None,
         "dim": dim,
         "source": source,
     }
@@ -510,6 +661,8 @@ def apply_embedding_runtime_env(config: dict[str, Any]) -> None:
     os.environ["EMBEDDING_PROVIDER"] = provider
 
     if provider == "qwen3-embedding":
+        os.environ.pop("EMBEDDING_MODEL", None)
+        os.environ.pop("EMBEDDING_DIMENSION", None)
         mode = str(config.get("mode") or "api")
         os.environ["QWEN3_EMBEDDING_MODE"] = mode
         if config.get("api_model"):
@@ -517,7 +670,12 @@ def apply_embedding_runtime_env(config: dict[str, Any]) -> None:
         if mode == "local":
             model_path = config.get("model_path") or "models/Qwen3-Embedding-0.6B"
             os.environ["QWEN3_EMBEDDING_MODEL_PATH"] = resolve_project_relative_path(str(model_path))
+        else:
+            os.environ.pop("QWEN3_EMBEDDING_MODEL_PATH", None)
     else:
+        os.environ.pop("QWEN3_EMBEDDING_MODE", None)
+        os.environ.pop("QWEN3_EMBEDDING_API_MODEL", None)
+        os.environ.pop("QWEN3_EMBEDDING_MODEL_PATH", None)
         os.environ["EMBEDDING_MODEL"] = str(config.get("model") or "embedding-3")
 
 

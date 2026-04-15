@@ -29,6 +29,6 @@ class ToolRegistry:
             if inspect.isawaitable(supplied):
                 supplied = await supplied
             tools.extend(list(supplied))
-        if str(mode).strip().lower() == "agent" and external_tools:
+        if str(mode).strip().lower() in {"agent", "ask"} and external_tools:
             tools.extend(list(external_tools))
         return tools

@@ -23,6 +23,10 @@ from newbee_notebook.core.tools.time import (
     build_current_time_tool,
     get_current_datetime,
 )
+from newbee_notebook.core.tools.image_generation import (
+    ImageToolContext,
+    build_image_generation_tool,
+)
 
 __all__ = [
     "SourceItem",
@@ -40,6 +44,8 @@ __all__ = [
     "zhipu_web_crawl",
     "build_current_time_tool",
     "get_current_datetime",
+    "ImageToolContext",
+    "build_image_generation_tool",
 ]
 
 

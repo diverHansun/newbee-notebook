@@ -57,11 +57,17 @@ class MessageRepositoryImpl(MessageRepository):
         limit: int = 100,
         offset: int = 0,
         modes: Optional[List[ModeType]] = None,
+        descending: bool = False,
     ) -> List[Message]:
+        order_columns = (
+            (MessageModel.created_at.desc(), MessageModel.id.desc())
+            if descending
+            else (MessageModel.created_at.asc(), MessageModel.id.asc())
+        )
         query = (
             select(MessageModel)
             .where(MessageModel.session_id == uuid.UUID(session_id))
-            .order_by(MessageModel.created_at.asc())
+            .order_by(*order_columns)
             .limit(limit)
             .offset(offset)
         )

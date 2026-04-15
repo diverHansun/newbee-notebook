@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from newbee_notebook.domain.entities.video_summary import VideoSummary
@@ -90,6 +90,12 @@ class VideoSummaryRepositoryImpl(VideoSummaryRepository):
             query = query.where(VideoSummaryModel.status == status)
         result = await self._session.execute(query)
         return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def count_by_status(self, status: str) -> int:
+        result = await self._session.execute(
+            select(func.count()).select_from(VideoSummaryModel).where(VideoSummaryModel.status == status)
+        )
+        return int(result.scalar_one() or 0)
 
     async def create(self, summary: VideoSummary) -> VideoSummary:
         model = VideoSummaryModel(

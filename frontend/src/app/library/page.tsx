@@ -9,13 +9,23 @@ import { uploadDocumentsToLibrary } from "@/lib/api/documents";
 import { deleteLibraryDocument, listLibraryDocuments } from "@/lib/api/library";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
-import { DocumentStatus } from "@/lib/api/types";
+import { DocumentStatus, UploadFailure } from "@/lib/api/types";
 
 type StatusFilter = "all" | DocumentStatus;
 type PendingDeleteAction =
   | { kind: "soft"; documentId: string; title: string }
   | { kind: "hard"; documentId: string; title: string }
   | { kind: "batch"; documentIds: string[]; count: number };
+
+const DOCUMENT_UPLOAD_ACCEPT =
+  ".pdf,.txt,.md,.markdown,.csv,.xls,.xlsx,.doc,.docx,.pptx,.epub";
+
+type UploadFeedback =
+  | {
+      kind: "error";
+      failed: UploadFailure[];
+    }
+  | null;
 
 function statusBadgeClass(status: string): string {
   const map: Record<string, string> = {
@@ -68,6 +78,7 @@ export default function LibraryPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("all");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingDeleteAction, setPendingDeleteAction] = useState<PendingDeleteAction | null>(null);
 
@@ -83,16 +94,16 @@ export default function LibraryPage() {
     queryKey: ["library-documents", status],
     queryFn: () =>
       listLibraryDocuments({
-        limit: 100,
-        offset: 0,
+        fetchAll: true,
         status: status === "all" ? undefined : status,
       }),
   });
 
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => uploadDocumentsToLibrary(files),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setPickedFiles([]);
+      setUploadFeedback(result.failed.length > 0 ? { kind: "error", failed: result.failed } : null);
       queryClient.invalidateQueries({ queryKey: ["library-documents"] });
     },
   });
@@ -189,18 +200,25 @@ export default function LibraryPage() {
       <main className="page-main stack-md">
         {/* Title + Upload */}
         <div className="row-between">
-          <h1 className="text-xl font-semibold tracking-tight" style={{ margin: 0 }}>
-            {t(uiStrings.libraryPage.title)}
-          </h1>
+          <div className="stack-xs">
+            <h1 className="text-xl font-semibold tracking-tight" style={{ margin: 0 }}>
+              {t(uiStrings.libraryPage.title)}
+            </h1>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {t(uiStrings.libraryPage.supportedFormatsHint)}
+            </span>
+          </div>
           <label className="btn btn-primary" style={{ cursor: "pointer" }}>
             {t(uiStrings.libraryPage.uploadDocuments)}
             <input
               type="file"
               multiple
+              accept={DOCUMENT_UPLOAD_ACCEPT}
               style={{ display: "none" }}
               onChange={(e) => {
                 const files = Array.from(e.target.files || []);
                 if (files.length > 0) {
+                  setUploadFeedback(null);
                   uploadMutation.mutate(files);
                 }
                 e.target.value = "";
@@ -213,6 +231,30 @@ export default function LibraryPage() {
         {uploadMutation.isPending && (
           <div className="badge badge-processing" style={{ alignSelf: "flex-start" }}>
             {t(uiStrings.common.uploadInProgress)}
+          </div>
+        )}
+
+        {uploadFeedback?.kind === "error" && (
+          <div
+            className="panel"
+            role="alert"
+            style={{
+              padding: 14,
+              borderColor: "rgba(220, 38, 38, 0.18)",
+              background: "rgba(254, 242, 242, 0.88)",
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#b91c1c" }}>
+              {t(uiStrings.libraryPage.uploadFailedTitle)}
+            </div>
+            <div className="stack-xs" style={{ marginTop: 8 }}>
+              {uploadFeedback.failed.map((item) => (
+                <div key={`${item.filename}-${item.reason}`} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  <strong>{item.filename}</strong>
+                  <span className="muted">: {item.reason}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -258,6 +258,14 @@ async def list_session_messages(
             limit=limit,
             offset=offset,
         )
+        message_ids = [msg.message_id for msg in messages if isinstance(msg.message_id, int)]
+        images_by_message_id = {}
+        list_message_images = getattr(service, "list_message_images", None)
+        if callable(list_message_images):
+            images_by_message_id = await list_message_images(
+                session_id=session_id,
+                message_ids=message_ids,
+            )
         return MessageListResponse(
             data=[
                 MessageResponse(
@@ -271,6 +279,7 @@ async def list_session_messages(
                         else str(getattr(msg, "message_type", "normal"))
                     ),
                     content=msg.content,
+                    images=images_by_message_id.get(int(msg.message_id or 0), []),
                     created_at=msg.created_at,
                 )
                 for msg in messages

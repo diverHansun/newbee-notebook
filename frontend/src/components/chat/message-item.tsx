@@ -1,6 +1,7 @@
 "use client";
 
 import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confirmation-card";
+import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { useLang } from "@/lib/hooks/useLang";
@@ -9,33 +10,14 @@ import { ChatMessage, ToolStep } from "@/stores/chat-store";
 
 type MessageItemProps = {
   message: ChatMessage;
+  roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
   onResolveConfirmation?: (requestId: string, approved: boolean) => void;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
-
-function modeBadgeClass(mode: string): string {
-  const map: Record<string, string> = {
-    agent: "badge-chat",
-    chat: "badge-chat",
-    ask: "badge-ask",
-    explain: "badge-explain",
-    conclude: "badge-conclude",
-  };
-  return map[mode] || "badge-default";
-}
-
-function modeLabel(mode: string): string {
-  const map: Record<string, string> = {
-    agent: "Agent",
-    chat: "Agent",
-    ask: "Ask",
-    explain: "Explain",
-    conclude: "Conclude",
-  };
-  return map[mode] || mode;
-}
+const GENERATED_MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*]\([^)]+\)/g;
+const GENERATED_HTML_IMAGE_PATTERN = /<img\b[^>]*>/gi;
 
 function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
   if (stage === "retrieving") return t(uiStrings.thinking.retrieving);
@@ -47,6 +29,7 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
 function toolDisplayLabel(toolName: string, t: TranslateFn): string {
   const known: Record<string, LocalizedString> = {
     knowledge_base: uiStrings.tools.knowledgeBase,
+    image_generate: uiStrings.tools.imageGenerate,
     tavily_search: uiStrings.tools.webSearch,
     tavily_crawl: uiStrings.tools.webCrawl,
     zhipu_web_search: uiStrings.tools.webSearch,
@@ -69,7 +52,7 @@ function toolDisplayLabel(toolName: string, t: TranslateFn): string {
     update_diagram_positions: uiStrings.tools.updateDiagramPositions,
   };
   if (known[toolName]) return t(known[toolName]);
-  return toolName.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return t(uiStrings.tools.generic);
 }
 
 function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
@@ -80,6 +63,18 @@ function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): str
   return status;
 }
 
+function sanitizeAssistantContent(content: string, hasGeneratedImages: boolean): string {
+  if (!hasGeneratedImages) return content;
+  return content
+    .replace(GENERATED_MARKDOWN_IMAGE_PATTERN, "")
+    .replace(GENERATED_HTML_IMAGE_PATTERN, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const ORBIT_DOTS = 8;
+
 function ThinkingIndicator({
   stage,
   t,
@@ -89,51 +84,43 @@ function ThinkingIndicator({
 }) {
   return (
     <div className="thinking-indicator" role="status" aria-live="polite">
-      <div className="thinking-indicator-header">
-        <span className="thinking-indicator-ring" aria-hidden="true" />
-        <span className="thinking-indicator-label">{thinkingStageLabel(t, stage)}</span>
-      </div>
-      <div className="thinking-indicator-progress" aria-hidden="true">
-        <span className="thinking-indicator-progress-bar" />
-      </div>
+      <span className="thinking-indicator-orbit" aria-hidden="true">
+        {Array.from({ length: ORBIT_DOTS }, (_, i) => (
+          <span
+            key={i}
+            className="orbit-dot"
+            style={{ "--i": i } as React.CSSProperties}
+          />
+        ))}
+      </span>
+      <span className="thinking-indicator-label">{thinkingStageLabel(t, stage)}</span>
     </div>
   );
 }
 
 function ToolStepsIndicator({
   steps,
-  thinkingStage,
   t,
 }: {
   steps: ToolStep[];
-  thinkingStage?: string | null;
   t: TranslateFn;
 }) {
-  const isSynthesizing = thinkingStage === "synthesizing";
+  const latestStep = steps[steps.length - 1];
+  if (!latestStep) return null;
 
   return (
-    <div className="tool-steps-indicator" role="status" aria-live="polite">
-      <div className="tool-steps-list">
-        {steps.map((step) => (
-          <div key={step.id} className={`tool-step tool-step--${step.status}`}>
-            <span className="tool-step-icon" aria-hidden="true" />
-            <span className="tool-step-label">
-              {toolDisplayLabel(step.toolName, t)}
-              {step.status === "running" ? "..." : ""}
-            </span>
-          </div>
-        ))}
-        {isSynthesizing ? (
-          <div className="tool-step tool-step--running">
-            <span className="tool-step-icon" aria-hidden="true" />
-            <span className="tool-step-label">
-              {t(uiStrings.thinking.generating)}
-            </span>
-          </div>
-        ) : null}
-      </div>
-      <div className="tool-steps-progress" aria-hidden="true">
-        <span className="tool-steps-progress-bar" />
+    <div
+      className="tool-steps-indicator"
+      role="status"
+      aria-live="polite"
+      key={latestStep.id}
+    >
+      <div className={`tool-step tool-step--${latestStep.status}`}>
+        <span className="tool-step-icon" aria-hidden="true" />
+        <span className="tool-step-label">
+          {toolDisplayLabel(latestStep.toolName, t)}
+          {latestStep.status === "running" ? "..." : ""}
+        </span>
       </div>
     </div>
   );
@@ -141,88 +128,143 @@ function ToolStepsIndicator({
 
 export function MessageItem({
   message,
+  roleTransition,
   onOpenDocument: _onOpenDocument,
   onResolveConfirmation,
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
-  const hasToolSteps =
+  const sanitizedAssistantContent = !isUser
+    ? sanitizeAssistantContent(message.content, Boolean(message.images && message.images.length > 0))
+    : message.content;
+  const hasVisibleAssistantContent =
+    !isUser && sanitizedAssistantContent.trim().length > 0;
+  const hasFinalPhaseStarted =
+    !isUser && Boolean(message.finalContentStarted || hasVisibleAssistantContent);
+  const canShowProgressIndicators =
+    !isUser && message.status === "streaming" && !hasVisibleAssistantContent;
+  const showFinalContent = !isUser && hasFinalPhaseStarted;
+  const showIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !message.content &&
+    !hasFinalPhaseStarted &&
+    !!message.intermediateContent;
+  const showExitingIntermediateBlock =
+    !isUser &&
+    message.status === "streaming" &&
+    !hasFinalPhaseStarted &&
+    !!message.exitingIntermediateContent;
+  const hasToolSteps =
+    canShowProgressIndicators &&
     message.toolSteps &&
     message.toolSteps.length > 0;
+  const isSynthesizing =
+    canShowProgressIndicators &&
+    message.thinkingStage === "synthesizing";
+  const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    !isUser && message.status === "streaming" && !message.content && !hasToolSteps;
+    canShowProgressIndicators && !showToolSteps;
+  const hasRunningImageTool =
+    !isUser &&
+    message.status === "streaming" &&
+    Boolean(message.toolSteps?.some((step) => step.toolName === "image_generate" && step.status === "running"));
+  const pendingImageCardCount =
+    hasRunningImageTool && (!message.images || message.images.length === 0) ? 1 : 0;
+  const showStatusRow = Boolean(
+    message.status &&
+      message.status !== "done" &&
+      message.status !== "streaming" &&
+      !showThinkingIndicator &&
+      !hasToolSteps
+  );
 
   return (
-    <div style={{ display: "flex", gap: 12, flexDirection: isUser ? "row-reverse" : "row" }}>
-      {/* Avatar */}
+    <div
+      data-testid="message-row"
+      data-role={isUser ? "user" : "assistant"}
+      data-message-id={message.id}
+      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "center", width: "100%", marginTop: roleTransition ? 20 : undefined }}
+    >
       <div
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 14,
-          flexShrink: 0,
-          background: isUser ? "hsl(var(--primary))" : "hsl(var(--muted))",
-          color: isUser ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+          width: isUser ? "auto" : "100%",
+          maxWidth: isUser ? "85%" : "min(88ch, 100%)",
+          minWidth: 0,
         }}
       >
-        {isUser ? "U" : "AI"}
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, maxWidth: "85%", minWidth: 0 }}>
-        {/* Mode badge + status */}
-        <div
-          className="row"
-          style={{
-            marginBottom: 6,
-            justifyContent: isUser ? "flex-end" : "flex-start",
-            gap: 6,
-          }}
-        >
-          <span className={`badge ${modeBadgeClass(message.mode)}`}>
-            {modeLabel(message.mode)}
-          </span>
-          {message.status && message.status !== "done" && !showThinkingIndicator && !hasToolSteps && (
+        {showStatusRow ? (
+          <div
+            className="row"
+            style={{
+              marginBottom: 6,
+              justifyContent: isUser ? "flex-end" : "center",
+              gap: 6,
+            }}
+          >
             <span className="muted" style={{ fontSize: 11 }}>
               {messageStatusLabel(t, message.status)}
             </span>
-          )}
-        </div>
+          </div>
+        ) : null}
 
-        {/* Message bubble */}
-        {showThinkingIndicator ? (
-          <ThinkingIndicator stage={message.thinkingStage} t={t} />
-        ) : hasToolSteps ? (
-          <ToolStepsIndicator
-            steps={message.toolSteps!}
-            thinkingStage={message.thinkingStage}
-            t={t}
-          />
-        ) : (
+        {isUser ? (
           <div
-            className={`card${isUser ? "" : " message-bubble-assistant"}`}
+            className="card"
+            data-testid="user-message-bubble"
             style={{
-              padding: isUser ? "12px 16px" : "12px 16px 12px 14px",
-              background: isUser ? "hsl(var(--user-bubble-bg))" : "hsl(var(--card))",
-              color: isUser ? "hsl(var(--user-bubble-fg))" : "hsl(var(--card-foreground))",
+              padding: "8px 16px",
+              borderRadius: 16,
+              background: "hsl(var(--user-bubble-bg))",
+              color: "hsl(var(--user-bubble-fg))",
             }}
           >
-            {isUser ? (
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                {message.content}
-              </p>
-            ) : (
-              <MarkdownViewer content={message.content} />
-            )}
+            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {message.content}
+            </p>
+          </div>
+        ) : (
+          <div className="assistant-lane" data-testid="assistant-lane">
+            {showExitingIntermediateBlock ? (
+              <div
+                className="assistant-intermediate assistant-intermediate--exiting"
+                data-testid="assistant-intermediate-exiting"
+              >
+                <p className="assistant-intermediate-text">{message.exitingIntermediateContent}</p>
+              </div>
+            ) : null}
+
+            {showIntermediateBlock ? (
+              <div
+                key={message.intermediateGeneration ?? 0}
+                className="assistant-intermediate assistant-intermediate--entering"
+                data-testid="assistant-intermediate-current"
+              >
+                <p className="assistant-intermediate-text">{message.intermediateContent}</p>
+              </div>
+            ) : null}
+
+            {showFinalContent ? (
+              <div className="assistant-message-body" data-testid="assistant-message-body">
+                <MarkdownViewer content={sanitizedAssistantContent} />
+              </div>
+            ) : null}
+
+            {showThinkingIndicator ? (
+              <ThinkingIndicator stage={message.thinkingStage} t={t} />
+            ) : showToolSteps ? (
+              <ToolStepsIndicator
+                steps={message.toolSteps!}
+                t={t}
+              />
+            ) : null}
           </div>
         )}
+
+        {!isUser && ((message.images && message.images.length > 0) || pendingImageCardCount > 0) ? (
+          <div style={{ marginTop: 8 }}>
+            <ImageCardList images={message.images ?? []} pendingCount={pendingImageCardCount} />
+          </div>
+        ) : null}
 
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (

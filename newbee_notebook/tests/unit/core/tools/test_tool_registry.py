@@ -60,6 +60,18 @@ async def test_tool_registry_merges_external_agent_tools_without_changing_contra
 
 
 @pytest.mark.anyio
+async def test_tool_registry_merges_external_ask_tools_without_changing_contract(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    registry = ToolRegistry(builtin_provider=BuiltinToolProvider())
+
+    tools = await registry.get_tools("ask", external_tools=[_external_tool("image_generate")])
+
+    assert [tool.name for tool in tools] == ["knowledge_base", "time", "image_generate"]
+    assert all(isinstance(tool, ToolDefinition) for tool in tools)
+
+
+@pytest.mark.anyio
 async def test_tool_registry_reads_cached_mcp_tools_for_agent_only(monkeypatch):
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     monkeypatch.delenv("ZHIPU_API_KEY", raising=False)

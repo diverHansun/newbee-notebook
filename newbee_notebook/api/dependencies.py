@@ -23,6 +23,9 @@ from newbee_notebook.infrastructure.persistence.repositories.message_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.mark_repo_impl import MarkRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.note_repo_impl import NoteRepositoryImpl
 from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl import DiagramRepositoryImpl
+from newbee_notebook.infrastructure.persistence.repositories.generated_image_repo_impl import (
+    GeneratedImageRepositoryImpl,
+)
 from newbee_notebook.infrastructure.persistence.repositories.video_summary_repo_impl import (
     VideoSummaryRepositoryImpl,
 )
@@ -32,10 +35,15 @@ from newbee_notebook.application.services.session_service import SessionService
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
+from newbee_notebook.application.services.generated_image_service import GeneratedImageService
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
+from newbee_notebook.application.services.export_service import ExportService
+from newbee_notebook.application.services.video_concurrency import (
+    VideoConcurrencyController,
+)
 from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
@@ -58,7 +66,11 @@ from newbee_notebook.core.common.config import (
     get_embedding_provider,
     get_pgvector_config_for_provider,
 )
-from newbee_notebook.core.common.config_db import get_asr_config_async, resolve_asr_api_key
+from newbee_notebook.core.common.config_db import (
+    get_asr_config_async,
+    resolve_asr_api_key,
+    sync_embedding_runtime_env_from_db,
+)
 from newbee_notebook.infrastructure.pgvector import PGVectorConfig
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
@@ -66,6 +78,7 @@ from newbee_notebook.infrastructure.storage.base import StorageBackend
 from newbee_notebook.infrastructure.asr import QwenTranscriber, ZhipuTranscriber
 from newbee_notebook.infrastructure.bilibili import AsrPipeline, BilibiliAuthManager, BilibiliClient
 from newbee_notebook.infrastructure.bilibili.audio_processor import AudioProcessor
+from newbee_notebook.infrastructure.youtube import YouTubeClient
 from newbee_notebook.skills.note import NoteSkillProvider
 from newbee_notebook.skills.diagram import DiagramSkillProvider
 from newbee_notebook.skills.video import VideoSkillProvider
@@ -143,6 +156,13 @@ async def get_video_repo(session=Depends(get_db_session)) -> VideoSummaryReposit
     return VideoSummaryRepositoryImpl(session)
 
 
+async def get_generated_image_repo(
+    session=Depends(get_db_session),
+) -> GeneratedImageRepositoryImpl:
+    """Get GeneratedImageRepository instance."""
+    return GeneratedImageRepositoryImpl(session)
+
+
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
     """Get AppSettingsService instance."""
     return AppSettingsService(session)
@@ -195,12 +215,25 @@ async def get_session_service(
     session_repo: SessionRepositoryImpl = Depends(get_session_repo),
     notebook_repo: NotebookRepositoryImpl = Depends(get_notebook_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    generated_image_repo: GeneratedImageRepositoryImpl = Depends(get_generated_image_repo),
 ) -> SessionService:
     """Get SessionService instance."""
     return SessionService(
         session_repo=session_repo,
         notebook_repo=notebook_repo,
         message_repo=message_repo,
+        generated_image_repo=generated_image_repo,
+        storage=get_storage(),
+    )
+
+
+async def get_generated_image_service(
+    generated_image_repo: GeneratedImageRepositoryImpl = Depends(get_generated_image_repo),
+) -> GeneratedImageService:
+    """Get GeneratedImageService instance."""
+    return GeneratedImageService(
+        generated_image_repo=generated_image_repo,
+        storage=get_storage(),
     )
 
 
@@ -218,6 +251,7 @@ _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
 _runtime_confirmation_gateway = None
+_video_concurrency_controller = None
 
 
 def get_llm_singleton():
@@ -232,6 +266,13 @@ def get_llm_client_factory_singleton() -> LLMClientFactory:
     if _llm_client_factory is None:
         _llm_client_factory = LLMClientFactory()
     return _llm_client_factory
+
+
+def get_video_concurrency_controller_singleton() -> VideoConcurrencyController:
+    global _video_concurrency_controller
+    if _video_concurrency_controller is None:
+        _video_concurrency_controller = VideoConcurrencyController()
+    return _video_concurrency_controller
 
 
 def get_embedding_singleton():
@@ -407,8 +448,10 @@ async def get_runtime_session_manager_dep(
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    session=Depends(get_db_session),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
+    await sync_embedding_runtime_env_from_db(session)
     del mcp_manager
     return SessionManager(
         session_repo=session_repo,
@@ -421,7 +464,8 @@ async def get_runtime_session_manager_dep(
     )
 
 
-async def get_pg_index_dep():
+async def get_pg_index_dep(session=Depends(get_db_session)):
+    await sync_embedding_runtime_env_from_db(session)
     return await get_pg_index_singleton()
 
 
@@ -503,8 +547,24 @@ async def get_bilibili_client_dep(
     return BilibiliClient(credential=await auth_manager.get_credential())
 
 
-def _build_asr_audio_fetcher(bili_client: BilibiliClient):
+async def get_youtube_client_dep() -> YouTubeClient:
+    return YouTubeClient()
+
+
+def _build_asr_audio_fetcher(
+    bili_client: BilibiliClient,
+    youtube_client: YouTubeClient,
+):
     async def _fetch_audio(source: dict[str, str]) -> str:
+        direct_audio_path = str(source.get("audio_path") or "").strip()
+        if direct_audio_path:
+            return direct_audio_path
+
+        platform = str(source.get("platform") or "bilibili").strip().lower()
+        video_id = str(source.get("video_id") or "")
+        if platform == "youtube":
+            return await youtube_client.download_audio(video_id)
+
         bvid = str(source.get("video_id") or "")
         workspace = tempfile.mkdtemp(prefix="video-asr-")
         audio_url = await bili_client.get_audio_url(bvid)
@@ -546,6 +606,7 @@ def _resolve_qwen_base_url() -> str:
 
 async def get_asr_pipeline_dep(
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    youtube_client: YouTubeClient = Depends(get_youtube_client_dep),
     session=Depends(get_db_session),
 ) -> AsrPipeline | None:
     asr_config = await get_asr_config_async(session)
@@ -555,13 +616,13 @@ async def get_asr_pipeline_dep(
         return None
     if provider == "zhipu":
         return AsrPipeline(
-            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            audio_fetcher=_build_asr_audio_fetcher(bili_client, youtube_client),
             segmenter=_build_asr_segmenter(25),
             transcriber=ZhipuTranscriber(api_key=api_key, model=asr_config["model"]),
         )
     if provider == "qwen":
         return AsrPipeline(
-            audio_fetcher=_build_asr_audio_fetcher(bili_client),
+            audio_fetcher=_build_asr_audio_fetcher(bili_client, youtube_client),
             segmenter=_build_asr_segmenter(180),
             transcriber=QwenTranscriber(
                 api_key=api_key,
@@ -572,20 +633,48 @@ async def get_asr_pipeline_dep(
     return None
 
 
+def get_video_concurrency_controller_dep() -> VideoConcurrencyController:
+    return get_video_concurrency_controller_singleton()
+
+
 async def get_video_service(
     video_repo: VideoSummaryRepositoryImpl = Depends(get_video_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     llm_client=Depends(get_llm_client_dep),
     bili_client: BilibiliClient = Depends(get_bilibili_client_dep),
+    youtube_client: YouTubeClient = Depends(get_youtube_client_dep),
     asr_pipeline: AsrPipeline | None = Depends(get_asr_pipeline_dep),
+    concurrency_controller: VideoConcurrencyController = Depends(get_video_concurrency_controller_dep),
 ) -> VideoService:
     return VideoService(
         video_repo=video_repo,
         bili_client=bili_client,
+        youtube_client=youtube_client,
         llm_client=llm_client,
         storage=get_storage(),
         ref_repo=ref_repo,
         asr_pipeline=asr_pipeline,
+        concurrency_controller=concurrency_controller,
+    )
+
+
+async def get_export_service(
+    notebook_service: NotebookService = Depends(get_notebook_service),
+    notebook_document_service: NotebookDocumentService = Depends(get_notebook_document_service),
+    document_service: DocumentService = Depends(get_document_service),
+    note_service: NoteService = Depends(get_note_service),
+    mark_service: MarkService = Depends(get_mark_service),
+    diagram_service: DiagramService = Depends(get_diagram_service),
+    video_service: VideoService = Depends(get_video_service),
+) -> ExportService:
+    return ExportService(
+        notebook_service=notebook_service,
+        notebook_document_service=notebook_document_service,
+        document_service=document_service,
+        note_service=note_service,
+        mark_service=mark_service,
+        diagram_service=diagram_service,
+        video_service=video_service,
     )
 
 
@@ -622,8 +711,8 @@ async def get_chat_service(
     document_repo: DocumentRepositoryImpl = Depends(get_document_repo),
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
+    generated_image_repo: GeneratedImageRepositoryImpl = Depends(get_generated_image_repo),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
-    pg_index=Depends(get_pg_index_dep),
     skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
 ) -> ChatService:
@@ -636,7 +725,9 @@ async def get_chat_service(
         ref_repo=ref_repo,
         message_repo=message_repo,
         session_manager=session_manager,
-        vector_index=pg_index,
+        generated_image_repo=generated_image_repo,
+        storage=get_storage(),
+        vector_index_loader=get_pg_index_singleton,
         skill_registry=skill_registry,
         confirmation_gateway=confirmation_gateway,
     )

@@ -24,14 +24,16 @@ export const dynamic = "force-dynamic";
 // Allow long-running LLM streams.
 export const maxDuration = 300;
 
-const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
+function getBackendUrl(): string {
+  return (process.env.INTERNAL_API_URL || "http://127.0.0.1:8000").trim();
+}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ notebookId: string }> },
 ) {
   const { notebookId } = await params;
-  const targetUrl = `${BACKEND_URL}/api/v1/chat/notebooks/${notebookId}/chat/stream`;
+  const targetUrl = `${getBackendUrl()}/api/v1/chat/notebooks/${notebookId}/chat/stream`;
 
   console.log("[SSE proxy] route entered, notebookId=%s", notebookId);
 

@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
     middlewareClientMaxBodySize: 500 * 1024 * 1024, // 500 MB
   } as NextConfig["experimental"],
   async rewrites() {
-    const apiHost = (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
+    const apiHost = (process.env.INTERNAL_API_URL || "http://127.0.0.1:8000").trim();
     return {
       // Keep the catch-all backend proxy as a fallback so local app/api route
       // handlers (for streaming and long /chat requests) win first.

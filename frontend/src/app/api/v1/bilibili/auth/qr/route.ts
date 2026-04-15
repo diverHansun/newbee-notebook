@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 function getBackendUrl(): string {
-  return (process.env.INTERNAL_API_URL || "http://localhost:8000").trim();
+  return (process.env.INTERNAL_API_URL || "http://127.0.0.1:8000").trim();
 }
 
 export async function GET(request: Request) {

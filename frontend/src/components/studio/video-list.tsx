@@ -18,30 +18,53 @@ type VideoListProps = {
 
 export function VideoList({ notebookId, onOpenSummary, onBack }: VideoListProps) {
   const { t } = useLang();
-  const { videoFilterMode, setVideoFilterMode } = useStudioStore();
+  const {
+    videoFilterMode,
+    videoPlatformFilter,
+    setVideoFilterMode,
+    setVideoPlatformFilter,
+  } = useStudioStore();
   const allVideosQuery = useAllVideoSummaries();
   const notebookVideosQuery = useVideoSummaries(notebookId);
 
   const activeQuery = videoFilterMode === "all" ? allVideosQuery : notebookVideosQuery;
   const summaries = useMemo(
-    () => activeQuery.data?.summaries ?? [],
-    [activeQuery.data?.summaries]
+    () =>
+      (activeQuery.data?.summaries ?? []).filter((summary) =>
+        videoPlatformFilter === "all" ? true : summary.platform === videoPlatformFilter
+      ),
+    [activeQuery.data?.summaries, videoPlatformFilter]
   );
 
   return (
-    <div className="stack-md" style={{ height: "100%", padding: 0 }}>
-      <div className="row-between" style={{ gap: 8, alignItems: "center" }}>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={onBack}>
-          {t(uiStrings.studio.backToStudio)}
-        </button>
-        <SegmentedControl
-          value={videoFilterMode}
-          options={[
-            { value: "all", label: t(uiStrings.studio.allFilter) },
-            { value: "notebook", label: t(uiStrings.studio.thisNotebook) },
-          ]}
-          onChange={(value) => setVideoFilterMode(value as "all" | "notebook")}
-        />
+    <div className="video-panel-shell" style={{ padding: 0 }}>
+      <div className="video-toolbar">
+        <div className="video-toolbar-row">
+          <button className="btn btn-ghost btn-sm" type="button" onClick={onBack}>
+            {t(uiStrings.studio.backToStudio)}
+          </button>
+          <SegmentedControl
+            value={videoFilterMode}
+            options={[
+              { value: "all", label: t(uiStrings.studio.allFilter) },
+              { value: "notebook", label: t(uiStrings.studio.thisNotebook) },
+            ]}
+            onChange={(value) => setVideoFilterMode(value as "all" | "notebook")}
+          />
+        </div>
+
+        <div className="video-filter-row">
+          <span className="video-filter-label">{t(uiStrings.video.platformFilterLabel)}</span>
+          <SegmentedControl
+            value={videoPlatformFilter}
+            options={[
+              { value: "all", label: t(uiStrings.video.platformAll) },
+              { value: "bilibili", label: t(uiStrings.video.platformBilibili) },
+              { value: "youtube", label: t(uiStrings.video.platformYouTube) },
+            ]}
+            onChange={(value) => setVideoPlatformFilter(value as "all" | "bilibili" | "youtube")}
+          />
+        </div>
       </div>
 
       <VideoInputArea notebookId={notebookId} />
@@ -59,7 +82,7 @@ export function VideoList({ notebookId, onOpenSummary, onBack }: VideoListProps)
           <span>{t(uiStrings.video.emptyState)}</span>
         </div>
       ) : (
-        <div className="stack-sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <div className="stack-sm video-list-scroll">
           {summaries.map((summary) => (
             <VideoListItem
               key={summary.summary_id}

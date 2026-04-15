@@ -27,9 +27,21 @@ class ToolQualityMeta:
 
 
 @dataclass(frozen=True)
+class ImageResult:
+    image_id: str
+    storage_key: str
+    prompt: str
+    provider: str
+    model: str
+    width: int | None = None
+    height: int | None = None
+
+
+@dataclass(frozen=True)
 class ToolCallResult:
     content: str
     sources: list[SourceItem] = field(default_factory=list)
+    images: list[ImageResult] = field(default_factory=list)
     quality_meta: ToolQualityMeta | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     error: str | None = None

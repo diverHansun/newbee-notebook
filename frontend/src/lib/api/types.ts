@@ -165,6 +165,7 @@ export type NoteListItem = {
 export type NoteListResponse = {
   notes: NoteListItem[];
   total: number;
+  pagination: PaginationInfo;
 };
 
 export type NoteCreateInput = {
@@ -215,6 +216,7 @@ export type VideoSummaryListItem = {
   duration_seconds: number;
   uploader_name: string;
   status: VideoSummaryStatus;
+  metadata_ready?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -248,14 +250,28 @@ export type VideoInfo = {
 };
 
 export type VideoSummarizeRequest = {
-  url_or_bvid: string;
+  url_or_id: string;
   notebook_id?: string | null;
+  lang?: "zh" | "en";
 };
 
 export type VideoStreamEvent =
   | {
       type: "start" | "subtitle" | "asr" | "summarize";
       video_id: string;
+      source?: string;
+      char_count?: number;
+      step?: string;
+      message?: string;
+      lang?: "zh" | "en";
+    }
+  | {
+      type: "info";
+      video_id: string;
+      title: string;
+      duration_seconds: number;
+      uploader_name?: string;
+      cover_url?: string | null;
     }
   | {
       type: "done";
@@ -301,12 +317,33 @@ export type Session = {
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageMode = "agent" | "chat" | "ask" | "explain" | "conclude";
 
+export type ChatImageSse = {
+  image_id: string;
+  storage_key: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+};
+
+export type ChatImage = {
+  imageId: string;
+  storageKey: string;
+  prompt: string;
+  provider: string;
+  model: string;
+  width: number | null;
+  height: number | null;
+};
+
 export type SessionMessage = {
   message_id: number;
   session_id: string;
   mode: MessageMode;
   role: MessageRole;
   content: string;
+  images?: ChatImageSse[];
   created_at: string;
 };
 
@@ -332,6 +369,8 @@ export type ChatResponse = {
   content: string;
   mode: MessageMode;
   sources: RawSource[];
+  images?: ChatImageSse[];
+  warnings?: Record<string, unknown>[];
 };
 
 export type ChatRequest = {
@@ -351,6 +390,16 @@ export type SseEventStart = {
 
 export type SseEventContent = {
   type: "content";
+  delta: string;
+};
+
+export type SseEventPhase = {
+  type: "phase";
+  stage?: string | null;
+};
+
+export type SseEventIntermediateContent = {
+  type: "intermediate_content";
   delta: string;
 };
 
@@ -406,9 +455,18 @@ export type SseEventToolResult = {
   quality_meta: Record<string, unknown> | null;
 };
 
+export type SseEventImageGenerated = {
+  type: "image_generated";
+  images: ChatImageSse[];
+  tool_call_id: string;
+  tool_name: string;
+};
+
 export type SseEvent =
   | SseEventStart
+  | SseEventPhase
   | SseEventContent
+  | SseEventIntermediateContent
   | SseEventThinking
   | SseEventSources
   | SseEventDone
@@ -416,7 +474,8 @@ export type SseEvent =
   | SseEventHeartbeat
   | SseEventConfirmation
   | SseEventToolCall
-  | SseEventToolResult;
+  | SseEventToolResult
+  | SseEventImageGenerated;
 
 export type ApiErrorPayload = {
   error_code?: string;

@@ -5,6 +5,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    ImageGeneratedEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -12,7 +13,7 @@ from newbee_notebook.core.engine.stream_events import (
     ToolResultEvent,
     WarningEvent,
 )
-from newbee_notebook.core.tools.contracts import SourceItem, ToolQualityMeta
+from newbee_notebook.core.tools.contracts import ImageResult, SourceItem, ToolQualityMeta
 
 
 def test_stream_event_types_and_payloads_are_stable():
@@ -48,6 +49,21 @@ def test_stream_event_types_and_payloads_are_stable():
         args_summary={"note_id": "n1"},
         description="Agent requested to run delete_note",
     )
+    image_generated = ImageGeneratedEvent(
+        images=[
+            ImageResult(
+                image_id="img-1",
+                storage_key="generated-images/nb/sess/img-1.png",
+                prompt="draw a cat",
+                provider="qwen",
+                model="qwen-image-2.0-pro",
+                width=1024,
+                height=1024,
+            )
+        ],
+        tool_call_id="call-2",
+        tool_name="image_generate",
+    )
 
     assert start.event == "start"
     assert warning.event == "warning"
@@ -55,10 +71,13 @@ def test_stream_event_types_and_payloads_are_stable():
     assert tool_call.event == "tool_call"
     assert tool_result.event == "tool_result"
     assert confirmation.event == "confirmation_request"
+    assert image_generated.event == "image_generated"
     assert sources.event == "sources"
     assert content.event == "content"
     assert done.event == "done"
     assert error.event == "error"
     assert phase.stage == "retrieving"
     assert confirmation.request_id == "req-1"
+    assert image_generated.tool_name == "image_generate"
+    assert image_generated.images[0].image_id == "img-1"
     assert tool_result.quality_meta.quality_band == "high"

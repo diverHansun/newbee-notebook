@@ -79,6 +79,24 @@ class NoteService:
 
         return notes
 
+    async def list_all_paginated(
+        self,
+        document_id: Optional[str] = None,
+        sort_by: str = "updated_at",
+        order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Note], int]:
+        notes = await self.note_repo.list_all_paginated(
+            document_id=document_id,
+            sort_by=sort_by,
+            order=order,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self.note_repo.count_all(document_id=document_id)
+        return notes, total
+
     async def list_by_notebook(
         self,
         notebook_id: str,
@@ -90,6 +108,25 @@ class NoteService:
             notebook_id,
             document_id=document_id,
         )
+
+    async def list_by_notebook_paginated(
+        self,
+        notebook_id: str,
+        document_id: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Note], int]:
+        notes = await self.note_repo.list_by_notebook_paginated(
+            notebook_id,
+            document_id=document_id,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self.note_repo.count_by_notebook(
+            notebook_id,
+            document_id=document_id,
+        )
+        return notes, total
 
     async def update(
         self,

@@ -13,7 +13,9 @@ export interface LLMConfig {
 export interface EmbeddingConfig {
   provider: string;
   mode: string | null;
+  api_provider?: string | null;
   model: string;
+  api_model?: string | null;
   dim: number;
   source: string;
   api_key_set: boolean | null;
@@ -52,9 +54,9 @@ export interface AvailableModels {
     custom_input: boolean;
   };
   embedding: {
-    providers: string[];
     modes: string[];
-    api_models: PresetModel[];
+    api_providers: string[];
+    api_models_by_provider: Record<string, PresetModel[]>;
     local_models: string[];
   };
   mineru: {
@@ -75,8 +77,9 @@ export interface UpdateLLMPayload {
 }
 
 export interface UpdateEmbeddingPayload {
-  provider: string;
   mode?: string;
+  provider?: string;
+  api_provider?: string;
   api_model?: string;
 }
 

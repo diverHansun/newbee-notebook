@@ -8,6 +8,7 @@ from typing import Optional, Tuple, List
 import logging
 
 from newbee_notebook.domain.entities.notebook import Notebook, MAX_SESSIONS_PER_NOTEBOOK
+from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.entities.reference import NotebookDocumentRef
 from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.repositories.diagram_repository import DiagramRepository
@@ -83,8 +84,17 @@ class NotebookService:
             description=description,
         )
         result = await self.notebook_repo.create(notebook)
-        logger.info(f"Created notebook: {result.notebook_id}")
-        return result
+
+        await self.session_repo.create(Session(notebook_id=result.notebook_id))
+        await self.notebook_repo.increment_session_count(result.notebook_id)
+
+        refreshed = await self.notebook_repo.get(result.notebook_id)
+        if refreshed is None:
+            result.session_count += 1
+            refreshed = result
+
+        logger.info(f"Created notebook with default session: {refreshed.notebook_id}")
+        return refreshed
     
     async def get(self, notebook_id: str) -> Optional[Notebook]:
         """
@@ -201,6 +211,22 @@ class NotebookService:
                 "Removed %d diagram content file(s) from notebook %s",
                 removed_files,
                 notebook_id,
+            )
+
+        generated_images_prefix = f"generated-images/{notebook_id}/"
+        try:
+            removed_generated_images = await self.storage.delete_prefix(
+                generated_images_prefix
+            )
+            logger.info(
+                "Removed %d generated image object(s) from notebook %s",
+                removed_generated_images,
+                notebook_id,
+            )
+        except FileNotFoundError:
+            logger.warning(
+                "Generated image prefix already missing during notebook cleanup: %s",
+                generated_images_prefix,
             )
 
         # Delete references

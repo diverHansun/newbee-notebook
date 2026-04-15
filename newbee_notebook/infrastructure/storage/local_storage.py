@@ -117,6 +117,8 @@ SUPPORTED_EXTENSIONS = {
     "xlsx",
     "doc",
     "docx",
+    "pptx",
+    "epub",
 }
 
 
@@ -159,12 +161,18 @@ def save_upload_file(
 def _guess_upload_content_type(upload: UploadFile, ext: str, filename: str) -> str:
     if upload.content_type:
         return upload.content_type
+    # Prefer stable extension-specific MIME types for formats where
+    # platform mime registries often return inconsistent values.
+    if ext == "md" or ext == "markdown":
+        return "text/markdown"
+    if ext == "pptx":
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    if ext == "epub":
+        return "application/epub+zip"
     guessed, _ = mimetypes.guess_type(filename)
     if guessed:
         return guessed
     # Keep a minimal safe fallback when extension-based MIME guess misses.
-    if ext == "md" or ext == "markdown":
-        return "text/markdown"
     return "application/octet-stream"
 
 
