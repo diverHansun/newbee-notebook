@@ -40,7 +40,7 @@ ZIP 包内包含 manifest.json 清单文件，记录 Notebook 元信息、各内
 
 负责：
 
-- 路由注册：GET /api/notebooks/{notebook_id}/export
+- 路由注册：GET /api/v1/notebooks/{notebook_id}/export
 - 参数校验：types 为合法枚举值的逗号分隔列表
 - 校验 Notebook 是否存在（404）
 - 调用 ExportService 获取 ZIP 内容

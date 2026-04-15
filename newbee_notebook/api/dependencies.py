@@ -40,6 +40,7 @@ from newbee_notebook.application.services.app_settings_service import AppSetting
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
+from newbee_notebook.application.services.export_service import ExportService
 from newbee_notebook.application.services.video_concurrency import (
     VideoConcurrencyController,
 )
@@ -654,6 +655,26 @@ async def get_video_service(
         ref_repo=ref_repo,
         asr_pipeline=asr_pipeline,
         concurrency_controller=concurrency_controller,
+    )
+
+
+async def get_export_service(
+    notebook_service: NotebookService = Depends(get_notebook_service),
+    notebook_document_service: NotebookDocumentService = Depends(get_notebook_document_service),
+    document_service: DocumentService = Depends(get_document_service),
+    note_service: NoteService = Depends(get_note_service),
+    mark_service: MarkService = Depends(get_mark_service),
+    diagram_service: DiagramService = Depends(get_diagram_service),
+    video_service: VideoService = Depends(get_video_service),
+) -> ExportService:
+    return ExportService(
+        notebook_service=notebook_service,
+        notebook_document_service=notebook_document_service,
+        document_service=document_service,
+        note_service=note_service,
+        mark_service=mark_service,
+        diagram_service=diagram_service,
+        video_service=video_service,
     )
 
 

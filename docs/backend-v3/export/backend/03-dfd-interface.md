@@ -23,7 +23,7 @@
 ```
 前端
   │
-  │  GET /api/notebooks/{notebook_id}/export?types=documents,notes
+│  GET /api/v1/notebooks/{notebook_id}/export?types=documents,notes
   ▼
 API 层 (routers/export.py)
   │
@@ -102,7 +102,7 @@ API 层
 ### 3.1 导出端点
 
 ```
-GET /api/notebooks/{notebook_id}/export
+GET /api/v1/notebooks/{notebook_id}/export
 ```
 
 路径参数：
