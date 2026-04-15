@@ -54,7 +54,7 @@ activeNote 对象（studio-panel.tsx 内部状态，已加载）
   │
   ▼
 前端按所选 Notebook 逐个发起请求:
-  GET /api/notebooks/{notebookId}/export?types=documents,notes,marks,diagrams,video_summaries
+GET /api/v1/notebooks/{notebookId}/export?types=documents,notes,marks,diagrams,video_summaries
   Accept: application/zip
   │
   ▼
@@ -82,7 +82,7 @@ activeNote 对象（studio-panel.tsx 内部状态，已加载）
 请求：
 
 ```
-GET /api/notebooks/{notebook_id}/export
+GET /api/v1/notebooks/{notebook_id}/export
 ```
 
 查询参数：
@@ -176,7 +176,7 @@ function sanitize(name: string): string {
 **校验阶段：**
 
 ```
-POST /api/notebooks/import/validate
+POST /api/v1/notebooks/import/validate
 Content-Type: multipart/form-data
 Body: file=<ZIP 文件>
 ```
@@ -186,7 +186,7 @@ Body: file=<ZIP 文件>
 **确认阶段：**
 
 ```
-POST /api/notebooks/import/confirm
+POST /api/v1/notebooks/import/confirm
 Content-Type: application/json
 Body: { "import_id": "<校验阶段返回的临时 ID>" }
 ```

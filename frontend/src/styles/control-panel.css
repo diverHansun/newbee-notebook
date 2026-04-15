@@ -338,6 +338,19 @@
   font-size: 12px;
 }
 
+.control-panel-success {
+  border: 1px solid rgb(34 197 94 / 0.45);
+  background: rgb(34 197 94 / 0.12);
+  color: #166534;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.dark .control-panel-success {
+  color: #86efac;
+}
+
 .control-panel-inline-btn {
   align-self: flex-start;
 }
