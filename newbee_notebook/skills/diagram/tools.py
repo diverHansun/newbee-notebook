@@ -170,7 +170,7 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
         name="create_diagram",
         description=(
             "Create a diagram with explicit diagram type and full content payload. "
-            "Use strict JSON for mindmap and raw Mermaid syntax for flowchart or sequence."
+            "Use mindmap JSON schema for mindmap and raw Mermaid syntax for flowchart or sequence."
         ),
         parameters={
             "type": "object",
@@ -180,7 +180,7 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
                 "content": {
                     "type": "string",
                     "description": (
-                        "Full diagram content. For mindmap use strict JSON with top-level nodes and edges. "
+                        "Full diagram content. For mindmap use mindmap JSON schema with top-level nodes and edges. "
                         "For flowchart or sequence use raw Mermaid syntax."
                     ),
                 },
