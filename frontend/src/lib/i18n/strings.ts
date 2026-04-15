@@ -434,6 +434,7 @@ export const uiStrings = {
       },
       associatedTag: { zh: "当前 Notebook", en: "This Notebook" },
       unknownUploader: { zh: "未知作者", en: "Unknown uploader" },
+      exportMarkdown: { zh: "导出 Markdown", en: "Export Markdown" },
       videoId: { zh: "视频 ID: {id}", en: "Video ID: {id}" },
       updatedAt: { zh: "更新于 {date}", en: "Updated {date}" },
       statusCompleted: { zh: "已完成", en: "Completed" },

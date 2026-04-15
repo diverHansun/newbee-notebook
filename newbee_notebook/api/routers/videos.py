@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from contextlib import suppress
 from typing import AsyncGenerator, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from fastapi.responses import StreamingResponse
@@ -34,9 +36,23 @@ from newbee_notebook.infrastructure.bilibili.exceptions import (
 
 router = APIRouter()
 
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
 
 def _format_sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _sanitize_export_filename(raw_title: str, fallback: str = "video-summary") -> str:
+    title = _INVALID_FILENAME_CHARS.sub("_", str(raw_title or "").strip())
+    title = re.sub(r"\s+", " ", title).strip().strip(".")
+    return title or fallback
+
+
+def _build_attachment_content_disposition(filename: str) -> str:
+    ascii_filename = filename.encode("ascii", "ignore").decode("ascii").strip() or "video-summary.md"
+    utf8_filename = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}"
 
 
 def _to_summary_response(summary) -> VideoSummaryResponse:
@@ -196,6 +212,28 @@ async def list_videos(
     return VideoSummaryListResponse(
         summaries=[_to_summary_list_item(summary) for summary in summaries],
         total=len(summaries),
+    )
+
+
+@router.get("/videos/{summary_id}/export")
+async def export_video_summary_markdown(
+    summary_id: str = Path(..., min_length=1),
+    service: VideoService = Depends(get_video_service),
+):
+    try:
+        summary = await service.get(summary_id)
+    except VideoSummaryNotFoundError:
+        raise HTTPException(status_code=404, detail="Video summary not found")
+
+    filename_base = _sanitize_export_filename(summary.title, fallback=summary.video_id or "video-summary")
+    filename = f"{filename_base}.md"
+    headers = {
+        "Content-Disposition": _build_attachment_content_disposition(filename),
+    }
+    return Response(
+        content=summary.summary_content or "",
+        media_type="text/markdown; charset=utf-8",
+        headers=headers,
     )
 
 

@@ -140,6 +140,24 @@ def test_get_video_returns_404_when_missing():
     assert response.json()["detail"] == "Video summary not found"
 
 
+def test_export_video_markdown_returns_attachment():
+    service = AsyncMock()
+    service.get = AsyncMock(
+        return_value=_make_summary(summary_id="summary-export-1")
+    )
+
+    client = _build_client(service)
+    response = client.get("/api/v1/videos/summary-export-1/export")
+
+    assert response.status_code == 200
+    assert response.text == "## Summary"
+    assert response.headers["content-type"].startswith("text/markdown")
+    content_disposition = response.headers.get("content-disposition", "")
+    assert "attachment;" in content_disposition
+    assert "filename*" in content_disposition
+    service.get.assert_awaited_once_with("summary-export-1")
+
+
 def test_summarize_stream_returns_capacity_error_payload():
     service = AsyncMock()
     service.summarize = AsyncMock(

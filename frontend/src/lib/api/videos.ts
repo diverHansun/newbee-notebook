@@ -14,6 +14,11 @@ type StreamOptions = {
   onEvent: (event: VideoStreamEvent) => void;
 };
 
+type ExportVideoSummaryResult = {
+  blob: Blob;
+  filename: string | null;
+};
+
 async function throwIfNotOk(response: Response): Promise<void> {
   if (response.ok) return;
 
@@ -35,6 +40,26 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function parseDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const asciiMatch = contentDisposition.match(/filename\s*=\s*"?([^\";]+)"?/i);
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1].trim();
+  }
+
+  return null;
 }
 
 function mapVideoStreamEvent(
@@ -128,6 +153,15 @@ export function disassociateVideoSummary(summaryId: string) {
 export function getVideoInfo(urlOrId: string) {
   const search = new URLSearchParams({ url_or_id: urlOrId });
   return fetchJson<VideoInfo>(`/videos/info?${search.toString()}`);
+}
+
+export async function exportVideoSummaryMarkdown(summaryId: string): Promise<ExportVideoSummaryResult> {
+  const response = await fetch(`/api/v1/videos/${summaryId}/export`);
+  await throwIfNotOk(response);
+  return {
+    blob: await response.blob(),
+    filename: parseDownloadFilename(response.headers.get("content-disposition")),
+  };
 }
 
 export async function summarizeVideoStream(
