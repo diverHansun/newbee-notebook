@@ -55,7 +55,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 </div>
 
 <div align="center">
-  <img src="assets/screenshots/bilibili-summary.png" alt="Bilibili Video Summarization" width="480">
+  <img src="assets/screenshots/video-summary.png" alt="Bilibili Video Summarization" width="480">
   <p><em>Bilibili Video Summarization — Video transcription and structured summaries</em></p>
 </div>
 
@@ -69,7 +69,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 **High-Accuracy Document Parsing & Retrieval** — High-fidelity PDF parsing powered by [MinerU](https://github.com/opendatalab/MinerU), accurately restoring tables, formulas, and multi-column layouts to Markdown, handling files hundreds of pages long with ease. Hybrid vector and full-text retrieval (pgvector + Elasticsearch) work together, with citation tracing precise to the original paragraph — find exactly what you're looking for.
 
-**Agent Notes, Diagrams & Video** — Type `/note` to let the Agent organize your notes, and `/diagram` to automatically generate mind maps and knowledge graphs. Supports Bilibili video transcription and intelligent summarization, quickly extracting key information from video content. Agents aren't a gimmick — they're a genuine tool for extracting structured knowledge from your documents.
+**Agent Notes, Diagrams & Video** — Type `/note` to let the Agent organize your notes, and `/diagram` to automatically generate mind maps and knowledge graphs. Supports Bilibili and YouTube video transcription and intelligent summarization, quickly extracting key information from video content. Chat supports image generation, with AI-created images displayed inline in the conversation. Notes and video summaries can be exported to Markdown in one click. Agents aren't a gimmick — they're a genuine tool for extracting structured knowledge from your documents.
 
 **Configurable MCP Toolchain** — Through MCP (Model Context Protocol) and the Skills system, you can freely extend the Agent's capability boundaries. Need to connect external tools and services? Configure it yourself.
 
@@ -88,7 +88,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 | Interactive Reading (Conclude / Explain) | Limited | - | ✓ Select to Trigger |
 | Bookmark System | - | - | ✓ |
 | Agent Notes / Diagrams | - | Transformations | /note · /diagram |
-| Video Summarization | YouTube | - | Bilibili |
+| Video Summarization | YouTube | - | Bilibili + YouTube |
 | Retrieval Method | Black Box | Vector Search | Hybrid Search + Citation Tracing |
 | Large File Support | Limited | Limited | MinerU chunking, hundreds of pages |
 | LLM Choice | Gemini only | Multi-model | Configurable (Zhipu / Qwen, etc.) |
@@ -198,8 +198,8 @@ If you're using an NVIDIA GPU, avoid changing `torch==x.y.z` directly; instead s
 ## Roadmap
 
 - [ ] Skill mechanism extensions
-- [ ] Document processing support for .epub files
-- [ ] YouTube video summarization
+- [ ] Add ECharts chart support
+- [ ] New features for the Studio module
 
 Have an idea? Feel free to share it via [Issues](https://github.com/diverHansun/newbee-notebook/issues).
 

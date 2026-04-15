@@ -60,14 +60,16 @@ vi.mock("@/lib/hooks/use-diagrams", () => ({
   useDiagrams: mocks.useDiagrams,
 }));
 
-vi.mock("@/components/studio/diagram-viewer", () => ({
-  DiagramViewer: forwardRef((props, ref) => {
+vi.mock("@/components/studio/diagram-viewer", () => {
+  const MockDiagramViewer = forwardRef((_props, ref) => {
     useImperativeHandle(ref, () => ({
       exportImage: mocks.diagramExportImage,
     }));
     return <div data-testid="diagram-viewer" />;
-  }),
-}));
+  });
+  MockDiagramViewer.displayName = "DiagramViewer";
+  return { DiagramViewer: MockDiagramViewer };
+});
 
 vi.mock("@/components/ui/confirm-dialog", () => ({
   ConfirmDialog: () => null,

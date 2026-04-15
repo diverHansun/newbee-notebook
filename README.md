@@ -55,7 +55,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 </div>
 
 <div align="center">
-  <img src="assets/screenshots/bilibili-summary.png" alt="Bilibili 视频总结" width="480">
+  <img src="assets/screenshots/video-summary.png" alt="Bilibili 视频总结" width="480">
   <p><em>Bilibili 视频总结 — 视频转录与结构化摘要</em></p>
 </div>
 
@@ -69,7 +69,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 **高精度文档解析与检索** — 基于 [MinerU](https://github.com/opendatalab/MinerU) 的高保真 PDF 解析，表格、公式、多栏排版都能准确还原为 Markdown，数百页的大文件也能从容处理。向量与全文混合检索（pgvector + Elasticsearch）双管齐下，引用溯源精确到原文段落，找到的就是你要的。
 
-**Agent 笔记、图表与视频** — 输入 `/note` 让 Agent 帮你整理笔记，`/diagram` 自动生成思维导图和知识图谱。支持 Bilibili 视频转录与智能总结，从视频内容中快速提炼关键信息。Agent 不是噱头，是真正帮你从文档里提炼结构化知识的工具。
+**Agent 笔记、图表与视频** — 输入 `/note` 让 Agent 帮你整理笔记，`/diagram` 自动生成思维导图和知识图谱。支持 Bilibili / YouTube 视频转录与智能总结，从视频内容中快速提炼关键信息。Chat 支持图像生成，AI 绘图结果直接内联展示在对话中。笔记与视频摘要支持一键导出为 Markdown，整理好的内容随时带走。Agent 不是噱头，是真正帮你从文档里提炼结构化知识的工具。
 
 **可配置的 MCP 工具链** — 通过 MCP（Model Context Protocol）和 Skills 系统，你可以自由扩展 Agent 的能力边界。需要接入什么外部工具和服务，自己动手配就行。
 
@@ -88,7 +88,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 | 交互式阅读（Conclude / Explain） | 有限 | - | ✓ 选中即触发 |
 | 书签系统 | - | - | ✓ |
 | Agent 笔记 / 图表 | - | Transformations | /note · /diagram |
-| 视频总结 | YouTube | - | Bilibili |
+| 视频总结 | YouTube | - | Bilibili + YouTube |
 | 检索方式 | 黑盒 | 向量检索 | 混合检索 + 引用溯源 |
 | 大文件支持 | 有限 | 有限 | MinerU 分块，支持数百页 |
 | LLM 选择 | 仅 Gemini | 多模型 | 可配置（智谱 / 通义等） |
@@ -198,8 +198,8 @@ docker compose up -d
 ## 近期计划
 
 - [ ] skill机制扩展
-- [ ] 文档处理支持.epub文件
-- [ ] Youtube视频总结
+- [ ] 新增echarts图表功能
+- [ ] studio模块新增功能
 
 有想法？欢迎通过 [Issues](https://github.com/diverHansun/newbee-notebook/issues) 告诉我。
 
