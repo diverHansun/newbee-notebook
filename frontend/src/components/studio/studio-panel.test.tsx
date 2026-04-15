@@ -1,5 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageContext } from "@/lib/i18n/language-context";
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   deleteMark: vi.fn(),
   createNote: vi.fn(),
   deleteNote: vi.fn(),
+  exportNoteMarkdown: vi.fn(),
   getNote: vi.fn(),
   listNotes: vi.fn(),
   updateNote: vi.fn(),
@@ -22,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   useDiagramContent: vi.fn(),
   useDeleteDiagram: vi.fn(),
   clipboardWriteText: vi.fn(),
+  saveAs: vi.fn(),
 }));
 
 vi.mock("@/lib/api/documents", () => ({
@@ -37,10 +40,15 @@ vi.mock("@/lib/api/notes", () => ({
   addNoteDocument: mocks.addNoteDocument,
   createNote: mocks.createNote,
   deleteNote: mocks.deleteNote,
+  exportNoteMarkdown: mocks.exportNoteMarkdown,
   getNote: mocks.getNote,
   listNotes: mocks.listNotes,
   removeNoteDocument: mocks.removeNoteDocument,
   updateNote: mocks.updateNote,
+}));
+
+vi.mock("file-saver", () => ({
+  saveAs: (...args: unknown[]) => mocks.saveAs(...args),
 }));
 
 vi.mock("@/lib/hooks/use-diagrams", () => ({
@@ -139,6 +147,8 @@ describe("StudioPanel diagrams", () => {
     mocks.useDiagramContent.mockReturnValue({ data: "", isLoading: false, isError: false });
     mocks.useDeleteDiagram.mockReturnValue({ isPending: false, mutateAsync: vi.fn() });
     mocks.clipboardWriteText.mockReset();
+    mocks.exportNoteMarkdown.mockReset();
+    mocks.saveAs.mockReset();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -161,5 +171,39 @@ describe("StudioPanel diagrams", () => {
     fireEvent.click(copyIdButton);
 
     expect(mocks.clipboardWriteText).toHaveBeenCalledWith("diag-flow-001");
+  });
+
+  it("downloads note markdown via backend export endpoint in note detail", async () => {
+    useStudioStore.setState({
+      studioView: "note-detail",
+      activeNoteId: "note-1",
+      activeDiagramId: null,
+      activeVideoId: null,
+      activeMarkId: null,
+    });
+    mocks.getNote.mockResolvedValue({
+      note_id: "note-1",
+      notebook_id: "notebook-1",
+      title: "My Note",
+      content: "# Note Body",
+      document_ids: [],
+      mark_ids: [],
+      created_at: "2026-04-15T00:00:00Z",
+      updated_at: "2026-04-15T00:00:00Z",
+    });
+    mocks.exportNoteMarkdown.mockResolvedValue({
+      blob: new Blob(["# Note Body"], { type: "text/markdown;charset=utf-8" }),
+      filename: "My Note_note-1.md",
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: /export markdown/i }));
+
+    await waitFor(() => {
+      expect(mocks.exportNoteMarkdown).toHaveBeenCalledWith("note-1");
+    });
+    expect(mocks.saveAs).toHaveBeenCalledTimes(1);
   });
 });

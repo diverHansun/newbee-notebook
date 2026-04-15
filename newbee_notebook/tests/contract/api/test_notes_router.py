@@ -146,6 +146,38 @@ def test_get_note_returns_detail():
     assert response.json()["mark_ids"] == ["mark-1"]
 
 
+def test_export_note_markdown_returns_attachment():
+    service = AsyncMock()
+    service.get_or_raise = AsyncMock(
+        return_value=Note(
+            note_id="note-1",
+            notebook_id="nb-1",
+            title="读书笔记",
+            content="# Heading\n\nBody",
+            document_ids=["doc-1"],
+            mark_ids=["mark-1"],
+            created_at=datetime(2026, 4, 15, 9, 0, 0),
+            updated_at=datetime(2026, 4, 15, 10, 0, 0),
+        )
+    )
+
+    client = _build_client(service)
+    response = client.get("/api/v1/notes/note-1/export")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    content_disposition = response.headers.get("content-disposition", "")
+    assert "attachment;" in content_disposition
+    assert "filename*=" in content_disposition
+
+    text = response.text
+    assert text.startswith("---\n")
+    assert "note_id: note-1" in text
+    assert "document_ids:" in text
+    assert "mark_ids:" in text
+    assert "\n---\n\n# Heading" in text
+
+
 def test_patch_note_returns_updated_note():
     service = AsyncMock()
     service.update = AsyncMock(

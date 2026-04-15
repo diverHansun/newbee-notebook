@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listAllNotes, listNotes } from "@/lib/api/notes";
+import { ApiError } from "@/lib/api/client";
+import { exportNoteMarkdown, listAllNotes, listNotes } from "@/lib/api/notes";
 
 const fetchMock = vi.fn();
 
@@ -10,6 +11,17 @@ function createJsonResponse(body: unknown, status = 200) {
     headers: {
       "Content-Type": "application/json",
     },
+  });
+}
+
+function createTextResponse(
+  body: string,
+  status = 200,
+  headers: Record<string, string> = {}
+) {
+  return new Response(body, {
+    status,
+    headers,
   });
 }
 
@@ -60,5 +72,36 @@ describe("notes api client", () => {
       "/api/v1/notebooks/nb-1/notes?limit=100&offset=0",
       expect.any(Object)
     );
+  });
+
+  it("exports note markdown and parses filename from content-disposition", async () => {
+    fetchMock.mockResolvedValue(
+      createTextResponse("# note", 200, {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Content-Disposition": `attachment; filename="note.md"; filename*=UTF-8''%E8%AF%BB%E4%B9%A6_note-1.md`,
+      })
+    );
+
+    const result = await exportNoteMarkdown("note-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/notes/note-1/export");
+    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.filename).toBe("读书_note-1.md");
+  });
+
+  it("throws ApiError when note markdown export fails", async () => {
+    fetchMock.mockResolvedValue(
+      createJsonResponse(
+        {
+          error: {
+            code: "E_NOT_FOUND",
+            message: "Note not found",
+          },
+        },
+        404
+      )
+    );
+
+    await expect(exportNoteMarkdown("missing-note")).rejects.toBeInstanceOf(ApiError);
   });
 });

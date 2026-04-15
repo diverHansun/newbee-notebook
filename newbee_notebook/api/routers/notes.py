@@ -1,7 +1,12 @@
 """Notes API router."""
 
-from typing import Optional
+from __future__ import annotations
 
+import re
+from typing import Optional
+from urllib.parse import quote
+
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from newbee_notebook.api.dependencies import get_note_service
@@ -18,6 +23,39 @@ from newbee_notebook.application.services.note_service import NoteNotFoundError,
 
 
 router = APIRouter()
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _sanitize_export_filename(raw_title: str, fallback: str = "note") -> str:
+    title = _INVALID_FILENAME_CHARS.sub("_", str(raw_title or "").strip())
+    title = re.sub(r"\s+", " ", title).strip().strip(".")
+    return title or fallback
+
+
+def _build_attachment_content_disposition(filename: str) -> str:
+    ascii_filename = filename.encode("ascii", "ignore").decode("ascii").strip() or "note.md"
+    utf8_filename = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_filename}"
+
+
+def _build_note_export_markdown(note) -> str:
+    frontmatter = {
+        "note_id": note.note_id,
+        "notebook_id": note.notebook_id,
+        "title": note.title or "",
+        "document_ids": list(note.document_ids),
+        "mark_ids": list(note.mark_ids),
+        "created_at": note.created_at.isoformat() if note.created_at else None,
+        "updated_at": note.updated_at.isoformat() if note.updated_at else None,
+    }
+    frontmatter_text = yaml.safe_dump(
+        frontmatter,
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=False,
+    ).strip()
+    body = note.content or ""
+    return f"---\n{frontmatter_text}\n---\n\n{body}"
 
 
 def _to_note_response(note) -> NoteResponse:
@@ -127,6 +165,28 @@ async def get_note(
         return _to_note_response(await service.get_or_raise(note_id))
     except NoteNotFoundError:
         raise HTTPException(status_code=404, detail="Note not found")
+
+
+@router.get("/notes/{note_id}/export")
+async def export_note_markdown(
+    note_id: str = Path(..., description="Note ID"),
+    service: NoteService = Depends(get_note_service),
+):
+    try:
+        note = await service.get_or_raise(note_id)
+    except NoteNotFoundError:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    filename_base = _sanitize_export_filename(note.title, fallback="note")
+    filename = f"{filename_base}_{note.note_id}.md"
+    headers = {
+        "Content-Disposition": _build_attachment_content_disposition(filename),
+    }
+    return Response(
+        content=_build_note_export_markdown(note),
+        media_type="text/markdown; charset=utf-8",
+        headers=headers,
+    )
 
 
 @router.patch("/notes/{note_id}", response_model=NoteResponse)

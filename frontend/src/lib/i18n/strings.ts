@@ -498,6 +498,7 @@ export const uiStrings = {
     createNote: { zh: "新建笔记", en: "New Note" },
     editNote: { zh: "编辑笔记", en: "Edit note" },
     deleteNote: { zh: "删除笔记", en: "Delete note" },
+    exportMarkdown: { zh: "导出 Markdown", en: "Export Markdown" },
     deleteNoteConfirm: {
       zh: "确定要删除这条笔记吗？关联的文档标签会一并移除。",
       en: "Delete this note? Linked document tags will be removed as well.",

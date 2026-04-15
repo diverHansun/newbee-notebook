@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, buildError } from "@/lib/api/client";
 import { MAX_API_PAGE_LIMIT } from "@/lib/api/pagination";
 import {
   Note,
@@ -6,6 +6,31 @@ import {
   NoteListResponse,
   NoteUpdateInput,
 } from "@/lib/api/types";
+
+export type ExportNoteResult = {
+  blob: Blob;
+  filename: string | null;
+};
+
+function parseDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const asciiMatch = contentDisposition.match(/filename\s*=\s*"?([^\";]+)"?/i);
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1].trim();
+  }
+
+  return null;
+}
 
 async function fetchAllNotesPages(
   fetchPage: (params: { limit: number; offset: number }) => Promise<NoteListResponse>,
@@ -103,6 +128,24 @@ export function listNotes(
 
 export function getNote(noteId: string) {
   return apiFetch<Note>(`/notes/${noteId}`);
+}
+
+export async function exportNoteMarkdown(noteId: string): Promise<ExportNoteResult> {
+  const response = await fetch(`/api/v1/notes/${noteId}/export`);
+  if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    throw buildError(response.status, payload);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: parseDownloadFilename(response.headers.get("content-disposition")),
+  };
 }
 
 export function createNote(input: NoteCreateInput) {
