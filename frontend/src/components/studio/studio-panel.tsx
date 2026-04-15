@@ -692,28 +692,7 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
           <button className="btn btn-ghost btn-sm" type="button" onClick={backToDiagramList}>
             {t(uiStrings.studio.backToList)}
           </button>
-          <button
-            className="btn btn-danger-ghost btn-sm"
-            type="button"
-            onClick={() => setPendingDeleteDiagramId(activeDiagram.diagram_id)}
-          >
-            {t(uiStrings.common.delete)}
-          </button>
-        </div>
-        <div className="card" style={{ padding: 12 }}>
-          <div className="stack-sm">
-            <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
-              <strong>{activeDiagram.title}</strong>
-              {renderCopyIdButton(activeDiagram.diagram_id, diagramIdLabels, "diagram")}
-            </div>
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
-            </div>
-          </div>
-        </div>
-        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          <div className="row-between" style={{ marginBottom: 8, flexShrink: 0 }}>
-            <strong>{t(uiStrings.studio.diagramView)}</strong>
+          <div className="row" style={{ gap: 8 }}>
             <button
               className="btn btn-ghost btn-sm"
               type="button"
@@ -741,7 +720,28 @@ export function StudioPanel({ notebookId, onOpenDocument }: StudioPanelProps) {
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </button>
+            <button
+              className="btn btn-danger-ghost btn-sm"
+              type="button"
+              onClick={() => setPendingDeleteDiagramId(activeDiagram.diagram_id)}
+            >
+              {t(uiStrings.common.delete)}
+            </button>
           </div>
+        </div>
+        <div className="card" style={{ padding: 12 }}>
+          <div className="stack-sm">
+            <div className="row-between" style={{ gap: 8, alignItems: "flex-start" }}>
+              <strong>{activeDiagram.title}</strong>
+              {renderCopyIdButton(activeDiagram.diagram_id, diagramIdLabels, "diagram")}
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span className="chip">{getDiagramTypeLabel(t, activeDiagram.diagram_type)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 12, flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <strong style={{ marginBottom: 8, flexShrink: 0 }}>{t(uiStrings.studio.diagramView)}</strong>
           {activeDiagramContentQuery.isLoading ? (
             <span className="muted">{t(uiStrings.common.loading)}</span>
           ) : activeDiagramContentQuery.isError ? (

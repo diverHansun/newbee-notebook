@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageContext } from "@/lib/i18n/language-context";
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   useDeleteDiagram: vi.fn(),
   clipboardWriteText: vi.fn(),
   saveAs: vi.fn(),
+  diagramExportImage: vi.fn(),
 }));
 
 vi.mock("@/lib/api/documents", () => ({
@@ -59,7 +61,12 @@ vi.mock("@/lib/hooks/use-diagrams", () => ({
 }));
 
 vi.mock("@/components/studio/diagram-viewer", () => ({
-  DiagramViewer: () => <div data-testid="diagram-viewer" />,
+  DiagramViewer: forwardRef((props, ref) => {
+    useImperativeHandle(ref, () => ({
+      exportImage: mocks.diagramExportImage,
+    }));
+    return <div data-testid="diagram-viewer" />;
+  }),
 }));
 
 vi.mock("@/components/ui/confirm-dialog", () => ({
@@ -149,6 +156,7 @@ describe("StudioPanel diagrams", () => {
     mocks.clipboardWriteText.mockReset();
     mocks.exportNoteMarkdown.mockReset();
     mocks.saveAs.mockReset();
+    mocks.diagramExportImage.mockReset();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -205,5 +213,48 @@ describe("StudioPanel diagrams", () => {
       expect(mocks.exportNoteMarkdown).toHaveBeenCalledWith("note-1");
     });
     expect(mocks.saveAs).toHaveBeenCalledTimes(1);
+  });
+
+  it("places diagram PNG export in top action bar and triggers export", async () => {
+    useStudioStore.setState({
+      studioView: "diagram-detail",
+      activeDiagramId: "diag-flow-001",
+      activeNoteId: null,
+      activeVideoId: null,
+      activeMarkId: null,
+    });
+    mocks.useDiagram.mockReturnValue({
+      data: {
+        diagram_id: "diag-flow-001",
+        notebook_id: "notebook-1",
+        title: "Course Flow",
+        diagram_type: "flowchart",
+        format: "mermaid",
+        document_ids: ["doc-1"],
+        node_positions: null,
+        created_at: "2026-03-20T00:00:00Z",
+        updated_at: "2026-03-20T00:00:00Z",
+      },
+      isLoading: false,
+    });
+    mocks.useDiagramContent.mockReturnValue({
+      data: "graph TD; A-->B;",
+      isLoading: false,
+      isError: false,
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    const backButton = await screen.findByRole("button", { name: /back to list/i });
+    const topActionBar = backButton.parentElement;
+    expect(topActionBar).not.toBeNull();
+    const exportButton = within(topActionBar as HTMLElement).getByRole("button", {
+      name: /export png/i,
+    });
+
+    await user.click(exportButton);
+
+    expect(mocks.diagramExportImage).toHaveBeenCalledWith("Course Flow.png");
   });
 });
