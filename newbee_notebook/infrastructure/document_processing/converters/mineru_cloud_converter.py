@@ -47,6 +47,11 @@ class MinerUCloudConverter(Converter):
         enable_curl_fallback: bool = True,
         curl_binary: str = "curl",
         curl_insecure: bool = False,
+        model_version: str | None = None,
+        enable_formula: bool = True,
+        enable_table: bool = True,
+        is_ocr: bool | None = None,
+        language: str = "ch",
     ) -> None:
         key = (api_key or "").strip()
         if not key:
@@ -67,6 +72,11 @@ class MinerUCloudConverter(Converter):
         self._enable_curl_fallback = bool(enable_curl_fallback)
         self._curl_binary = (curl_binary or "curl").strip() or "curl"
         self._curl_insecure = bool(curl_insecure)
+        self._model_version = (model_version or "").strip() or None
+        self._enable_formula = bool(enable_formula)
+        self._enable_table = bool(enable_table)
+        self._is_ocr = is_ocr
+        self._language = (language or "ch").strip() or "ch"
 
     def can_handle(self, ext: str) -> bool:
         return ext.lower() in self.SUPPORTED_EXTENSIONS
@@ -113,7 +123,18 @@ class MinerUCloudConverter(Converter):
 
     def _request_upload_url(self, file_name: str) -> tuple[str, str]:
         url = f"{self._api_base}/api/v4/file-urls/batch"
-        payload = {"files": [{"name": file_name}]}
+        file_entry: dict[str, Any] = {"name": file_name}
+        if self._is_ocr is not None:
+            file_entry["is_ocr"] = self._is_ocr
+
+        payload: dict[str, Any] = {
+            "files": [file_entry],
+            "enable_formula": self._enable_formula,
+            "enable_table": self._enable_table,
+            "language": self._language,
+        }
+        if self._model_version:
+            payload["model_version"] = self._model_version
         headers = self._headers()
         headers["Content-Type"] = "application/json"
 

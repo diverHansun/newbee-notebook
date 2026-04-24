@@ -44,6 +44,24 @@ def _parse_bool(value: object, default: bool) -> bool:
     return default
 
 
+def _parse_optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if not v:
+            return None
+        if v in {"1", "true", "yes", "y", "on"}:
+            return True
+        if v in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
+
+
 def _parse_int(value: object, default: int) -> int:
     if value is None:
         return default
@@ -87,6 +105,7 @@ class DocumentProcessor:
                 api_key = str(cloud_cfg.get("api_key", "") or "").strip()
                 if api_key:
                     try:
+                        model_version = str(cloud_cfg.get("model_version", "") or "").strip() or None
                         converters.append(
                             MinerUCloudConverter(
                                 api_key=api_key,
@@ -103,6 +122,11 @@ class DocumentProcessor:
                                     cloud_cfg.get("cdn_curl_insecure"),
                                     False,
                                 ),
+                                model_version=model_version,
+                                enable_formula=_parse_bool(cloud_cfg.get("enable_formula"), True),
+                                enable_table=_parse_bool(cloud_cfg.get("enable_table"), True),
+                                is_ocr=_parse_optional_bool(cloud_cfg.get("is_ocr")),
+                                language=str(cloud_cfg.get("language", "ch") or "ch").strip() or "ch",
                             )
                         )
                     except ValueError as exc:
@@ -135,6 +159,9 @@ class DocumentProcessor:
                             local_cfg.get("retry_backoff_seconds"),
                             10.0,
                         ),
+                        parse_method=str(local_cfg.get("parse_method", "auto") or "auto").strip() or "auto",
+                        formula_enable=_parse_bool(local_cfg.get("formula_enable"), True),
+                        table_enable=_parse_bool(local_cfg.get("table_enable"), True),
                     )
                 )
             else:

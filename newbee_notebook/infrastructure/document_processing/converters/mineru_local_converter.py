@@ -43,6 +43,9 @@ class MinerULocalConverter(Converter):
         max_pages_per_batch: int = _DEFAULT_MAX_PAGES_PER_BATCH,
         request_retry_attempts: int = _DEFAULT_REQUEST_RETRY_ATTEMPTS,
         retry_backoff_seconds: float = _DEFAULT_RETRY_BACKOFF_SECONDS,
+        parse_method: str = "auto",
+        formula_enable: bool = True,
+        table_enable: bool = True,
     ) -> None:
         self._base_url = (base_url or "http://mineru-api:8000").rstrip("/")
         self._timeout = timeout_seconds
@@ -54,6 +57,9 @@ class MinerULocalConverter(Converter):
         self._max_pages_per_batch = max(1, max_pages_per_batch)
         self._request_retry_attempts = max(0, request_retry_attempts)
         self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
+        self._parse_method = (parse_method or "auto").strip() or "auto"
+        self._formula_enable = bool(formula_enable)
+        self._table_enable = bool(table_enable)
 
     @staticmethod
     def _normalize_lang_list(value: object) -> list[str]:
@@ -236,6 +242,9 @@ class MinerULocalConverter(Converter):
             ("response_format_zip", "true"),
             ("start_page_id", str(start_page)),
             ("end_page_id", str(end_page)),
+            ("parse_method", self._parse_method),
+            ("formula_enable", "true" if self._formula_enable else "false"),
+            ("table_enable", "true" if self._table_enable else "false"),
         ]
         for language in self._normalize_lang_list(self._lang_list):
             form_data.append(("lang_list", language))
