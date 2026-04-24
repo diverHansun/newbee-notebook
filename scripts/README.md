@@ -19,10 +19,10 @@
 1. `scripts/upload_documents.py`
    - 用途：上传一个或多个本地文档（Windows 中文文件名友好）
    - 示例：`python scripts/upload_documents.py "D:\\docs\\中文病例.pdf"`
-2. `scripts/up-mineru.ps1`
-   - 用途：按 CPU/GPU 自动选择 compose 配置启动 MinerU 服务
-3. `scripts/mineru_v4_smoke_test.py`
-   - 用途：对 MinerU v4 云端流程进行端到端冒烟测试
+2. `scripts/mineru_v4_smoke_test.py`
+   - 用途：对 MinerU v4 云端流程进行多文件、多类型的端到端冒烟测试
+   - 支持：PDF / DOC / DOCX / PPT / PPTX / HTML / 图片
+   - 特性：自动把 HTML 拆到 `MinerU-HTML` 路由，并按官方批量接口上传
 
 ## 3. 后端脚本示例
 
