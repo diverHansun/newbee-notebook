@@ -82,3 +82,12 @@ def test_gpu_override_switches_embedding_and_mineru_to_local_gpu() -> None:
     assert api_env["QWEN3_EMBEDDING_MODEL_PATH"] == "models/Qwen3-Embedding-0.6B"
     assert services["api"]["volumes"] == ["./models:/app/models:ro"]
     assert "mineru-api" in services
+
+
+def test_gpu_override_mineru_healthcheck_uses_health_endpoint() -> None:
+    compose = _load_compose("docker-compose.gpu.yml")
+    healthcheck = compose["services"]["mineru-api"]["healthcheck"]["test"]
+    rendered = " ".join(healthcheck)
+
+    assert "/health" in rendered
+    assert "/docs" not in rendered

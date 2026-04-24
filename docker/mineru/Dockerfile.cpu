@@ -23,7 +23,7 @@ RUN apt-get update && \
 # Install CPU-only PyTorch first so pip won't pull in CUDA/cuDNN (saves ~700MB+ and avoids long "stuck" downloads)
 RUN python -m pip install -U --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 # CPU pipeline + FastAPI server (no GPU required)
-RUN python -m pip install -U --no-cache-dir "mineru[api,pipeline]>=2.7.0"
+RUN python -m pip install -U --no-cache-dir "mineru[api,pipeline]>=3.0.0"
 
 # Pre-download models during build to avoid first-request delay (~3min download + ~2min init)
 # Models are downloaded to /root/.cache/modelscope which should be mounted as a volume for persistence
