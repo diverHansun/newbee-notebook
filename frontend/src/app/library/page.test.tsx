@@ -58,14 +58,43 @@ describe("LibraryPage", () => {
     mockDeleteLibraryDocument.mockResolvedValue(undefined);
   });
 
-  it("exposes pptx and epub in the upload input and support hint", async () => {
+  it("renders the upload trigger as a real button for browser interaction", async () => {
+    const user = userEvent.setup();
+    const { container } = renderLibraryPage();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+
+    expect(input).not.toBeNull();
+    const clickSpy = vi.spyOn(input as HTMLInputElement, "click");
+
+    const trigger = await screen.findByRole("button", {
+      name: /upload documents/i,
+    });
+
+    expect(trigger).toBeInTheDocument();
+
+    await user.click(trigger);
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes html, ppt, and common image formats in the upload input and support hint", async () => {
     const { container } = renderLibraryPage();
 
-    expect(await screen.findByText(/supports pdf, word, powerpoint, epub/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/supports pdf, word, powerpoint, html, images, epub/i)
+    ).toBeInTheDocument();
 
     const input = container.querySelector('input[type="file"]');
     expect(input).not.toBeNull();
+    expect(input?.getAttribute("accept")).toContain(".ppt");
     expect(input?.getAttribute("accept")).toContain(".pptx");
+    expect(input?.getAttribute("accept")).toContain(".html");
+    expect(input?.getAttribute("accept")).toContain(".htm");
+    expect(input?.getAttribute("accept")).toContain(".png");
+    expect(input?.getAttribute("accept")).toContain(".jpg");
+    expect(input?.getAttribute("accept")).toContain(".jpeg");
+    expect(input?.getAttribute("accept")).toContain(".gif");
+    expect(input?.getAttribute("accept")).toContain(".jp2");
     expect(input?.getAttribute("accept")).toContain(".epub");
   });
 

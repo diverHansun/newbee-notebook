@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadDocumentsToLibrary } from "@/lib/api/documents";
@@ -18,7 +18,7 @@ type PendingDeleteAction =
   | { kind: "batch"; documentIds: string[]; count: number };
 
 const DOCUMENT_UPLOAD_ACCEPT =
-  ".pdf,.txt,.md,.markdown,.csv,.xls,.xlsx,.doc,.docx,.pptx,.epub";
+  ".pdf,.txt,.md,.markdown,.csv,.xls,.xlsx,.doc,.docx,.ppt,.pptx,.epub,.html,.htm,.png,.jpg,.jpeg,.bmp,.webp,.gif,.jp2,.tif,.tiff";
 
 type UploadFeedback =
   | {
@@ -76,6 +76,7 @@ function formatDate(dateString: string, lang: "zh" | "en"): string {
 export default function LibraryPage() {
   const { lang, t, ti } = useLang();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback>(null);
@@ -208,23 +209,29 @@ export default function LibraryPage() {
               {t(uiStrings.libraryPage.supportedFormatsHint)}
             </span>
           </div>
-          <label className="btn btn-primary" style={{ cursor: "pointer" }}>
+          <button
+            className="btn btn-primary"
+            type="button"
+            disabled={uploadMutation.isPending}
+            onClick={() => fileInputRef.current?.click()}
+          >
             {t(uiStrings.libraryPage.uploadDocuments)}
-            <input
-              type="file"
-              multiple
-              accept={DOCUMENT_UPLOAD_ACCEPT}
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []);
-                if (files.length > 0) {
-                  setUploadFeedback(null);
-                  uploadMutation.mutate(files);
-                }
-                e.target.value = "";
-              }}
-            />
-          </label>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={DOCUMENT_UPLOAD_ACCEPT}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length > 0) {
+                setUploadFeedback(null);
+                uploadMutation.mutate(files);
+              }
+              e.target.value = "";
+            }}
+          />
         </div>
 
         {/* Upload pending indicator */}

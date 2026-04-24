@@ -583,8 +583,8 @@ export const uiStrings = {
     title: { zh: "Library 文档管理", en: "Library document management" },
     uploadDocuments: { zh: "上传文档", en: "Upload documents" },
     supportedFormatsHint: {
-      zh: "支持 PDF、Word、PowerPoint、EPUB、Markdown、文本、表格与 CSV 文件上传。",
-      en: "Supports PDF, Word, PowerPoint, EPUB, Markdown, text, spreadsheet, and CSV uploads.",
+      zh: "支持 PDF、Word、PowerPoint、HTML、图片、EPUB、Markdown、文本、表格与 CSV 文件上传。",
+      en: "Supports PDF, Word, PowerPoint, HTML, images, EPUB, Markdown, text, spreadsheet, and CSV uploads.",
     },
     uploadFailedTitle: {
       zh: "以下文件上传失败，请检查文件类型或前端代理连接。",
