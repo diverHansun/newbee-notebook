@@ -14,6 +14,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudLimitExceededError,
     MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
@@ -235,13 +236,25 @@ def test_processor_cloud_mode_office_prefers_mineru_then_markitdown(ext: str):
     assert isinstance(converters[1], MarkItDownConverter)
 
 
-def test_processor_cloud_mode_pptx_uses_markitdown_only():
+@pytest.mark.parametrize("ext", [".ppt", ".pptx", ".html", ".htm"])
+def test_processor_cloud_mode_new_document_types_prefer_mineru_then_markitdown(ext: str):
     cfg = _base_config()
     processor = DocumentProcessor(config=cfg)
 
-    converters = processor._get_converters_for_ext(".pptx")
+    converters = processor._get_converters_for_ext(ext)
+    assert len(converters) == 2
+    assert isinstance(converters[0], MinerUCloudConverter)
+    assert isinstance(converters[1], MarkItDownConverter)
+
+
+@pytest.mark.parametrize("ext", [".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".jp2", ".tif", ".tiff"])
+def test_processor_cloud_mode_images_use_mineru_only(ext: str):
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
     assert len(converters) == 1
-    assert isinstance(converters[0], MarkItDownConverter)
+    assert isinstance(converters[0], MinerUCloudConverter)
 
 
 def test_processor_cloud_mode_epub_uses_markitdown_only():
@@ -336,6 +349,30 @@ def test_processor_trips_cooldown_on_mineru_cdn_transient_error(monkeypatch):
     result = asyncio.run(processor.convert("sample.pdf"))
     assert result.markdown == "# fallback"
     assert processor._mineru_unavailable_until > time.monotonic()
+
+
+def test_processor_falls_back_without_cooldown_when_cloud_limit_exceeded(monkeypatch):
+    cfg = _base_config()
+    cfg["document_processing"]["fail_threshold"] = 1
+    processor = DocumentProcessor(config=cfg)
+
+    mineru = next(c for c in processor._converters if isinstance(c, MinerUCloudConverter))
+    markitdown = next(c for c in processor._converters if isinstance(c, MarkItDownConverter))
+
+    async def _mineru_limit(_file_path: str):
+        raise MinerUCloudLimitExceededError("MinerU cloud page limit exceeded")
+
+    async def _fallback_ok(_file_path: str):
+        return ConversionResult(markdown="# fallback")
+
+    monkeypatch.setattr(mineru, "convert", _mineru_limit)
+    monkeypatch.setattr(markitdown, "convert", _fallback_ok)
+
+    result = asyncio.run(processor.convert("sample.html"))
+
+    assert result.markdown == "# fallback"
+    assert processor._mineru_unavailable_until <= time.monotonic()
+    assert processor._mineru_consecutive_failures == 0
 
 
 def test_processor_error_chain_preserves_root_cause(monkeypatch):

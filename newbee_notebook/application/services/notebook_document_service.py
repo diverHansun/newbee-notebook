@@ -20,8 +20,12 @@ from newbee_notebook.domain.repositories.notebook_repository import NotebookRepo
 from newbee_notebook.domain.repositories.reference_repository import NotebookDocumentRefRepository
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
+from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
+    MinerUCloudConverter,
+)
 from newbee_notebook.infrastructure.tasks.document_tasks import (
     index_document_task,
+    process_document_cloud_batch_task,
     process_document_task,
 )
 
@@ -78,6 +82,8 @@ class NotebookDocumentService:
         added: List[Document] = []
         skipped: List[AddDocumentError] = []
         failed: List[AddDocumentError] = []
+        pending_full_pipeline: list[tuple[Document, str, bool]] = []
+        batchable_full_pipeline: list[tuple[Document, str, bool]] = []
 
         for document_id in document_ids:
             document = await self._document_repo.get(document_id)
@@ -102,6 +108,12 @@ class NotebookDocumentService:
                 continue
 
             action, task_name, force = self._determine_processing_action(document)
+            if task_name == "process_document":
+                pending_full_pipeline.append((document, action, force))
+                if self._is_cloud_batch_candidate(document):
+                    batchable_full_pipeline.append((document, action, force))
+                continue
+
             if task_name is not None:
                 queued_status = self._get_queued_status_for_task(task_name)
                 await self._document_repo.update_status(
@@ -123,6 +135,46 @@ class NotebookDocumentService:
             current = await self._document_repo.get(document_id)
             if current:
                 added.append(AddedDocument(document=current, action=action))
+
+        batchable_ids = {document.document_id for document, _action, _force in batchable_full_pipeline}
+        use_cloud_batch = self._should_use_cloud_batch(len(batchable_full_pipeline))
+        batch_ids: list[str] = []
+        for document, action, force in pending_full_pipeline:
+            task_name = (
+                "process_document_cloud_batch"
+                if use_cloud_batch and document.document_id in batchable_ids
+                else "process_document"
+            )
+            queued_status = self._get_queued_status_for_task(task_name)
+            await self._document_repo.update_status(
+                document_id=document.document_id,
+                status=queued_status,
+                error_message=None,
+                processing_stage=ProcessingStage.QUEUED.value,
+                processing_meta={
+                    "queued_by": "notebook_add",
+                    "action": action,
+                    "task_name": task_name,
+                    "force": force,
+                },
+            )
+            await self._document_repo.commit()
+
+            if use_cloud_batch:
+                batch_ids.append(document.document_id)
+            else:
+                self._enqueue_processing(
+                    document_id=document.document_id,
+                    task_name="process_document",
+                    force=force,
+                )
+
+            current = await self._document_repo.get(document.document_id)
+            if current:
+                added.append(AddedDocument(document=current, action=action))
+
+        if batch_ids:
+            self._enqueue_cloud_batch_processing(batch_ids)
 
         return AddDocumentResult(
             notebook_id=notebook_id,
@@ -195,6 +247,18 @@ class NotebookDocumentService:
             return DocumentStatus.CONVERTED
         return DocumentStatus.PENDING
 
+    @staticmethod
+    def _should_use_cloud_batch(full_pipeline_count: int) -> bool:
+        mode = (os.getenv("MINERU_MODE", "cloud") or "cloud").strip().lower()
+        return mode == "cloud" and full_pipeline_count > 1
+
+    @staticmethod
+    def _is_cloud_batch_candidate(document: Document) -> bool:
+        suffix = os.path.splitext((document.file_path or document.title or "").strip())[1].lower()
+        if suffix:
+            return suffix in MinerUCloudConverter.SUPPORTED_EXTENSIONS
+        return document.content_type.value in {"pdf", "docx", "pptx", "html", "image"}
+
     def _enqueue_processing(self, document_id: str, task_name: str, force: bool = False) -> None:
         """Dispatch processing task with sync fallback for local development."""
         if os.getenv("PROCESS_UPLOAD_SYNC", "").lower() in {"1", "true", "yes", "on"}:
@@ -230,3 +294,24 @@ class NotebookDocumentService:
                 asyncio.create_task(_index_document_async(document_id, force=force))
             else:
                 asyncio.create_task(_process_document_async(document_id, force=force))
+
+    def _enqueue_cloud_batch_processing(self, document_ids: list[str]) -> None:
+        if not document_ids:
+            return
+        if os.getenv("PROCESS_UPLOAD_SYNC", "").lower() in {"1", "true", "yes", "on"}:
+            from newbee_notebook.infrastructure.tasks.document_tasks import _process_document_cloud_batch_async
+
+            asyncio.create_task(_process_document_cloud_batch_async(document_ids))
+            return
+
+        try:
+            process_document_cloud_batch_task.delay(document_ids)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Celery enqueue failed for cloud batch %s; running inline. error=%s",
+                document_ids,
+                exc,
+            )
+            from newbee_notebook.infrastructure.tasks.document_tasks import _process_document_cloud_batch_async
+
+            asyncio.create_task(_process_document_cloud_batch_async(document_ids))

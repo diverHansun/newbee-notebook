@@ -7,7 +7,7 @@ import logging
 import os
 import shutil
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable
 from uuid import uuid4
@@ -31,6 +31,12 @@ from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.document_processing import DocumentProcessor
+from newbee_notebook.infrastructure.document_processing.cloud_batch_service import (
+    CloudBatchDocument,
+    MinerUCloudBatchService,
+)
+from newbee_notebook.infrastructure.document_processing.converters.base import ConversionResult
+from newbee_notebook.infrastructure.document_processing.store import save_markdown_with_storage
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.persistence.database import get_database
 from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl import (
@@ -223,6 +229,16 @@ def index_document_task(document_id: str, force: bool = False) -> None:
         asyncio.run(_index_document_async(document_id, force=force))
     finally:
         _cleanup_worker_memory(task_name="index_document_task", document_id=document_id)
+
+
+@app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.process_document_cloud_batch_task")
+def process_document_cloud_batch_task(document_ids: list[str]) -> None:
+    """Run cloud batch conversion pipeline for multiple documents."""
+    try:
+        asyncio.run(_process_document_cloud_batch_async(document_ids))
+    finally:
+        joined = ",".join(document_ids[:5]) if document_ids else "-"
+        _cleanup_worker_memory(task_name="process_document_cloud_batch_task", document_id=joined)
 
 
 @app.task(name="newbee_notebook.infrastructure.tasks.document_tasks.convert_pending_task")
@@ -533,6 +549,210 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
         pipeline_fn=_do_full_pipeline,
         skip_if_status=None if force else {DocumentStatus.COMPLETED},
     )
+
+
+async def _process_document_cloud_batch_async(document_ids: list[str]) -> None:
+    """Run shared MinerU cloud batch conversion, then continue indexing per document."""
+    if not document_ids:
+        return
+
+    db = await get_database()
+    async with db.session() as session:
+        doc_repo = DocumentRepositoryImpl(session)
+        claimed_documents = await _claim_cloud_batch_documents(doc_repo, session, document_ids)
+        if not claimed_documents:
+            return
+
+        await sync_mineru_runtime_env_from_db(session)
+        processor = DocumentProcessor()
+        cloud_converter = processor.get_mineru_cloud_converter()
+
+        async with AsyncExitStack() as stack:
+            source_paths: dict[str, Path] = {}
+            for document in claimed_documents:
+                source_paths[document.document_id] = await stack.enter_async_context(
+                    _materialize_document_source(document)
+                )
+
+            batch_results: dict[str, ConversionResult] = {}
+            batch_failures: dict[str, Exception] = {}
+            if cloud_converter is not None:
+                batch_documents = [
+                    CloudBatchDocument(
+                        document_id=document.document_id,
+                        title=document.title,
+                        local_path=source_paths[document.document_id],
+                    )
+                    for document in claimed_documents
+                    if cloud_converter.can_handle(source_paths[document.document_id].suffix.lower())
+                ]
+                if batch_documents:
+                    service = MinerUCloudBatchService(cloud_converter)
+                    results, failures = await asyncio.to_thread(service.convert_documents, batch_documents)
+                    batch_results = {item.document_id: item.result for item in results}
+                    batch_failures = {item.document_id: item.error for item in failures}
+
+            for document in claimed_documents:
+                source_path = source_paths[document.document_id]
+                ctx = PipelineContext(
+                    document_id=document.document_id,
+                    document=document,
+                    doc_repo=doc_repo,
+                    session=session,
+                    mode="cloud_batch",
+                    original_status=document.status,
+                )
+                try:
+                    await ctx.set_stage(
+                        ProcessingStage.CONVERTING,
+                        {
+                            "mode": "cloud_batch",
+                            "shared_batch": document.document_id in batch_results,
+                        },
+                    )
+
+                    result = batch_results.get(document.document_id)
+                    if result is None:
+                        batch_error = batch_failures.get(document.document_id)
+                        if batch_error is not None:
+                            logger.warning(
+                                "Shared MinerU batch fallback for %s: %s",
+                                document.document_id,
+                                batch_error,
+                            )
+                        result, rel_content_path, content_size = await processor.process_and_save(
+                            document_id=document.document_id,
+                            file_path=str(source_path),
+                        )
+                    else:
+                        rel_content_path, content_size = await save_markdown_with_storage(
+                            document_id=document.document_id,
+                            markdown=result.markdown,
+                            image_assets=result.image_assets,
+                            metadata_assets=result.metadata_assets,
+                        )
+
+                    await _finalize_claimed_conversion(
+                        ctx=ctx,
+                        result=result,
+                        content_path=rel_content_path,
+                        content_size=content_size,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "[cloud_batch] Pipeline failed for %s at stage=%s: %s",
+                        document.document_id,
+                        ctx.current_stage,
+                        exc,
+                        exc_info=True,
+                    )
+                    await _mark_claimed_document_failed(ctx, exc)
+
+
+async def _claim_cloud_batch_documents(
+    doc_repo: DocumentRepositoryImpl,
+    session,
+    document_ids: list[str],
+) -> list[Document]:
+    claimed: list[Document] = []
+    for document_id in document_ids:
+        document = await doc_repo.get(document_id)
+        if not document:
+            logger.error("[cloud_batch] Document %s not found", document_id)
+            continue
+        if document.status in {DocumentStatus.PROCESSING, DocumentStatus.COMPLETED, DocumentStatus.CONVERTED}:
+            logger.info(
+                "[cloud_batch] Document %s status=%s, skip",
+                document_id,
+                document.status.value,
+            )
+            continue
+
+        claimed_ok = await doc_repo.claim_processing(
+            document_id=document_id,
+            from_statuses=[
+                DocumentStatus.UPLOADED,
+                DocumentStatus.PENDING,
+                DocumentStatus.FAILED,
+            ],
+            processing_stage=ProcessingStage.QUEUED.value,
+            processing_meta={"mode": "cloud_batch"},
+        )
+        if not claimed_ok:
+            latest = await doc_repo.get(document_id)
+            latest_status = latest.status.value if latest else "unknown"
+            logger.warning(
+                "[cloud_batch] Failed to claim document %s (current=%s)",
+                document_id,
+                latest_status,
+            )
+            await session.rollback()
+            continue
+
+        await session.commit()
+        claimed_document = await doc_repo.get(document_id)
+        if claimed_document:
+            claimed.append(claimed_document)
+    return claimed
+
+
+async def _finalize_claimed_conversion(
+    *,
+    ctx: PipelineContext,
+    result: ConversionResult,
+    content_path: str,
+    content_size: int,
+) -> None:
+    await ctx.doc_repo.update_status(
+        document_id=ctx.document_id,
+        status=DocumentStatus.PROCESSING,
+        page_count=result.page_count or 0,
+        content_path=content_path,
+        content_size=content_size,
+        content_format="markdown",
+        error_message=None,
+    )
+    await ctx.session.commit()
+
+    refreshed = await ctx.doc_repo.get(ctx.document_id)
+    if refreshed:
+        ctx.document = refreshed
+
+    await ctx.set_stage(ProcessingStage.SPLITTING)
+    nodes = await _load_markdown_nodes(ctx.document, content_path)
+
+    await _index_to_stores(nodes, ctx)
+
+    await ctx.set_stage(ProcessingStage.FINALIZING, {"chunk_count": len(nodes)})
+    await ctx.set_terminal_status(
+        status=DocumentStatus.COMPLETED,
+        chunk_count=len(nodes),
+    )
+
+
+async def _mark_claimed_document_failed(ctx: PipelineContext, exc: Exception) -> None:
+    await ctx.session.rollback()
+
+    if ctx.indexed_anything:
+        try:
+            await _delete_document_nodes_async(ctx.document_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("Compensation cleanup failed for %s", ctx.document_id)
+
+    latest = await ctx.doc_repo.get(ctx.document_id)
+    has_conversion = bool((latest or ctx.document).content_path)
+    await ctx.doc_repo.update_status(
+        document_id=ctx.document_id,
+        status=DocumentStatus.FAILED,
+        error_message=str(exc)[:500],
+        processing_stage=ctx.current_stage,
+        processing_meta={
+            "failed_stage": ctx.current_stage,
+            "conversion_preserved": has_conversion,
+            "mode": ctx.mode,
+        },
+    )
+    await ctx.session.commit()
 
 
 async def _resolve_existing_storage_key(

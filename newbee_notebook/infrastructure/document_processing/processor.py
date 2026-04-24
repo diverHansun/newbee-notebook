@@ -18,6 +18,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudLimitExceededError,
     MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
@@ -225,6 +226,12 @@ class DocumentProcessor:
         """Get all converters that can handle the given extension."""
         return [c for c in self._converters if c.can_handle(ext)]
 
+    def get_mineru_cloud_converter(self) -> MinerUCloudConverter | None:
+        for converter in self._converters:
+            if isinstance(converter, MinerUCloudConverter):
+                return converter
+        return None
+
     async def convert(self, file_path: str) -> ConversionResult:
         """Convert file with fallback support.
 
@@ -259,6 +266,17 @@ class DocumentProcessor:
                         file_path,
                         e,
                     )
+
+                if isinstance(converter, MinerUCloudConverter) and isinstance(
+                    e, MinerUCloudLimitExceededError
+                ):
+                    logger.warning(
+                        "MinerU cloud limit exceeded for %s: %s. Falling back.",
+                        file_path,
+                        e,
+                    )
+                    last_error = e
+                    continue
 
                 # MinerU is an external service; if unreachable, back off for a while.
                 if self._should_trip_circuit_breaker(converter, e):

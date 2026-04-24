@@ -20,6 +20,7 @@ class MarkItDownConverter(Converter):
             ".doc",
             ".xlsx",
             ".xls",
+            ".ppt",
             ".pptx",
             ".epub",
             ".csv",
