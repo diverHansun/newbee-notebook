@@ -151,6 +151,45 @@ def test_processor_local_mode_uses_local_converter():
     assert isinstance(pdf_converters[1], MarkItDownConverter)
 
 
+@pytest.mark.parametrize(
+    ("ext", "expected_types"),
+    [
+        (".pdf", [MinerULocalConverter, MarkItDownConverter]),
+        (".docx", [MinerULocalConverter, MarkItDownConverter]),
+        (".pptx", [MinerULocalConverter, MarkItDownConverter]),
+        (".xlsx", [MinerULocalConverter, MarkItDownConverter]),
+        (".png", [MinerULocalConverter]),
+        (".jpg", [MinerULocalConverter]),
+        (".jpeg", [MinerULocalConverter]),
+        (".bmp", [MinerULocalConverter]),
+        (".webp", [MinerULocalConverter]),
+        (".gif", [MinerULocalConverter]),
+        (".jp2", [MinerULocalConverter]),
+        (".tif", [MinerULocalConverter]),
+        (".tiff", [MinerULocalConverter]),
+    ],
+)
+def test_processor_local_mode_official_supported_types_prefer_local_converter(ext: str, expected_types: list[type]):
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
+    assert [type(c) for c in converters] == expected_types
+
+
+@pytest.mark.parametrize("ext", [".doc", ".ppt", ".html", ".htm"])
+def test_processor_local_mode_cloud_only_types_do_not_route_to_local(ext: str):
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
+    assert converters
+    assert isinstance(converters[0], MarkItDownConverter)
+    assert all(not isinstance(c, MinerULocalConverter) for c in converters)
+
+
 def test_processor_local_mode_wires_new_local_options():
     cfg = _base_config()
     cfg["document_processing"]["mineru_mode"] = "local"
@@ -412,7 +451,7 @@ def test_local_converter_retries_transient_batch_failure(monkeypatch, tmp_path):
 
     calls = {"count": 0}
 
-    async def _convert_range(_path, *, start_page, end_page, total_pages):
+    async def _convert_range(_path, *, start_page, end_page):
         calls["count"] += 1
         if calls["count"] == 1:
             response = requests.Response()

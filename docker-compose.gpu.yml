@@ -25,6 +25,9 @@ services:
       EMBEDDING_PROVIDER: qwen3-embedding
       QWEN3_EMBEDDING_MODE: local
       QWEN3_EMBEDDING_DEVICE: cuda
+    depends_on:
+      mineru-api:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
@@ -42,8 +45,12 @@ services:
     environment:
       MINERU_MODE: local
       MINERU_LOCAL_ENABLED: "true"
+      MINERU_BACKEND: hybrid-auto-engine
       QWEN3_EMBEDDING_MODE: local
       QWEN3_EMBEDDING_MODEL_PATH: models/Qwen3-Embedding-0.6B
+    depends_on:
+      mineru-api:
+        condition: service_healthy
 
   # GPU MinerU PDF -> Markdown service.
   # Use together with the base compose file:
@@ -54,12 +61,23 @@ services:
       dockerfile: Dockerfile.gpu
     image: newbee-notebook/mineru-api:gpu
     container_name: newbee-notebook-mineru-api
+    command:
+      - mineru-api
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # Reduce async VLM fan-out to improve stability on long PDFs.
+      - --max-concurrency
+      - "${MINERU_VL_MAX_CONCURRENCY:-8}"
     restart: unless-stopped
     environment:
       MINERU_MODEL_SOURCE: modelscope
       MINERU_DEVICE_MODE: cuda
       MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
       MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}
+      # Process large files in smaller windows to reduce VLM peak load.
+      MINERU_PROCESSING_WINDOW_SIZE: "${MINERU_PROCESSING_WINDOW_SIZE:-16}"
       # Limit PDF rendering parallelism to reduce peak memory usage.
       MINERU_PDF_RENDER_THREADS: "1"
       # Force clean_vram() to trigger after each inference stage.

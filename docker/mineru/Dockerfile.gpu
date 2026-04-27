@@ -16,7 +16,7 @@ RUN apt-get update && \
 
 # Install MinerU (GPU runtime is provided by the vllm base image)
 # Use Aliyun PyPI mirror for faster installs in China
-RUN python3 -m pip install -U --no-cache-dir 'mineru[core]>=3.0.0' \
+RUN python3 -m pip install -U --no-cache-dir 'mineru[core]==3.1.4' \
         -i https://mirrors.aliyun.com/pypi/simple \
         --break-system-packages && \
     python3 -m pip cache purge

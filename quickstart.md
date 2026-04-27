@@ -156,6 +156,14 @@ POSTGRES_PASSWORD=your_password
 
 文档解析依赖 [MinerU](https://github.com/opendatalab/MinerU)，支持 cloud 和 local 两种模式。默认 Docker 模式当前对接的是官方 `v4` 精准解析 API，项目里实际接入的云端类型为 `PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF）`，输出仍然是 Markdown 及关联资源文件。
 
+术语映射（避免混淆）：
+
+| 层级 | 参数 | 可选值 | 说明 |
+| --- | --- | --- | --- |
+| 项目接入模式 | `MINERU_MODE` | `cloud` / `local` | 决定走云端 API 还是本地 `mineru-api` |
+| 本地链路选择 | `MINERU_BACKEND` | `pipeline` / `vlm-*` / `hybrid-*` | 仅在 `MINERU_MODE=local` 时生效 |
+| 云端模型版本 | `model_version` | `pipeline` / `vlm` / `MinerU-HTML` | 仅在 `MINERU_MODE=cloud` 时生效 |
+
 **默认 Docker 模式（推荐，开箱即用）：**
 
 ```bash
@@ -229,7 +237,8 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 
 | 文件类型 | 处理链路 |
 |---|---|
-| PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | 优先 MinerU（cloud / local）→ 超限或失败时走 fallback |
+| Cloud：PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=cloud` 时优先走 MinerU cloud，超限或失败时走 fallback |
+| Local（当前 GPU 适配范围）：PDF / DOCX / PPTX / XLSX / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=local` 时优先走本地 MinerU；`DOC / PPT / HTML` 不走本地 MinerU，建议使用 cloud 模式 |
 | TXT / MD / CSV / XLS / XLSX / EPUB 等 | MarkItDown → Markdown |
 
 默认 Docker 部署和宿主机 FastAPI 调试都会把处理后的文件存储在 MinIO 的 `documents` bucket 中；只有离线脚本 / 测试显式切到 `STORAGE_BACKEND=local` 时，才会写入 `data/documents/{document_id}/`。
@@ -304,6 +313,7 @@ GPU 模式配置说明：
 - mineru-api 设置 `MINERU_VIRTUAL_VRAM_SIZE=8`，触发每次推理后清理显存，适配 8GB 显卡
 - mineru-api 容器 `shm_size=32gb`，Worker 容器 `shm_size=16gb`，请确保系统内存充裕
 - `MINERU_BACKEND` 默认为 `hybrid-auto-engine`
+- 本地 MinerU 支持集为 `PDF / image / DOCX / PPTX / XLSX`；`DOC / PPT / HTML` 建议继续走 cloud 模式
 - 这个模式会新增本地 `mineru-api` 容器（端口 `8001`）
 
 > **注意：PyTorch 镜像版本需与你的显卡驱动匹配。**

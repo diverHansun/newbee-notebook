@@ -78,6 +78,7 @@ def test_gpu_override_switches_embedding_and_mineru_to_local_gpu() -> None:
 
     assert api_env["MINERU_MODE"] == "local"
     assert api_env["MINERU_LOCAL_ENABLED"] == "true"
+    assert api_env["MINERU_BACKEND"] == "hybrid-auto-engine"
     assert api_env["QWEN3_EMBEDDING_MODE"] == "local"
     assert api_env["QWEN3_EMBEDDING_MODEL_PATH"] == "models/Qwen3-Embedding-0.6B"
     assert services["api"]["volumes"] == ["./models:/app/models:ro"]
@@ -91,3 +92,14 @@ def test_gpu_override_mineru_healthcheck_uses_health_endpoint() -> None:
 
     assert "/health" in rendered
     assert "/docs" not in rendered
+
+
+def test_gpu_override_waits_for_mineru_api_health_before_api_and_worker() -> None:
+    compose = _load_compose("docker-compose.gpu.yml")
+    services = compose["services"]
+
+    worker_depends_on = services["celery-worker"]["depends_on"]
+    api_depends_on = services["api"]["depends_on"]
+
+    assert worker_depends_on["mineru-api"]["condition"] == "service_healthy"
+    assert api_depends_on["mineru-api"]["condition"] == "service_healthy"
