@@ -213,6 +213,12 @@ docker compose up -d
 
 欢迎提交 Issue 和 Pull Request。
 
+## 官方微信交流群
+
+欢迎加入官方微信交流群，获取版本更新、使用交流和问题反馈支持。
+
+<img src="assets/screenshots/weixin.png" alt="官方微信交流群二维码" width="320" />
+
 ## License
 
 [AGPL-3.0](LICENSE.md)

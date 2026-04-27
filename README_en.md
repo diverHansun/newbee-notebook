@@ -213,6 +213,12 @@ The PDF document parsing capability of this project is powered by [MinerU](https
 
 Issues and Pull Requests are welcome.
 
+## Official WeChat Group
+
+You are welcome to join the official WeChat group for release updates, community discussion, and support.
+
+<img src="assets/screenshots/weixin.png" alt="Official WeChat Group QR Code" width="320" />
+
 ## License
 
 [AGPL-3.0](LICENSE.md)
