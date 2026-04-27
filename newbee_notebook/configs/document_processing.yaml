@@ -18,6 +18,13 @@ document_processing:
     cdn_curl_binary: ${MINERU_CDN_CURL_BINARY:curl}
     # Optional insecure mode for emergency diagnostics only.
     cdn_curl_insecure: ${MINERU_CDN_CURL_INSECURE:false}
+    # MinerU v4 model version: pipeline | vlm | MinerU-HTML. Empty means API default.
+    model_version: ${MINERU_CLOUD_MODEL_VERSION:}
+    enable_formula: ${MINERU_CLOUD_ENABLE_FORMULA:true}
+    enable_table: ${MINERU_CLOUD_ENABLE_TABLE:true}
+    # Empty means API auto-detect; true/false forces OCR behavior.
+    is_ocr: ${MINERU_CLOUD_IS_OCR:}
+    language: ${MINERU_CLOUD_LANGUAGE:ch}
 
   # MinerU local docker API settings.
   mineru_local:
@@ -35,6 +42,9 @@ document_processing:
     # Keep MinerU structured metadata by default (used by viewer/debug/recovery flows).
     return_content_list: ${MINERU_LOCAL_RETURN_CONTENT_LIST:true}
     return_model_output: ${MINERU_LOCAL_RETURN_MODEL_OUTPUT:true}
+    parse_method: ${MINERU_LOCAL_PARSE_METHOD:auto}
+    formula_enable: ${MINERU_LOCAL_FORMULA_ENABLE:true}
+    table_enable: ${MINERU_LOCAL_TABLE_ENABLE:true}
 
   # MinerU circuit breaker settings.
   fail_threshold: ${MINERU_FAIL_THRESHOLD:5}

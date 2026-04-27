@@ -154,7 +154,15 @@ POSTGRES_PASSWORD=your_password
 
 ### MinerU 文档解析
 
-PDF 解析依赖 [MinerU](https://github.com/opendatalab/MinerU)，支持 cloud 和 local 两种模式。
+文档解析依赖 [MinerU](https://github.com/opendatalab/MinerU)，支持 cloud 和 local 两种模式。默认 Docker 模式当前对接的是官方 `v4` 精准解析 API，项目里实际接入的云端类型为 `PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF）`，输出仍然是 Markdown 及关联资源文件。
+
+术语映射（避免混淆）：
+
+| 层级 | 参数 | 可选值 | 说明 |
+| --- | --- | --- | --- |
+| 项目接入模式 | `MINERU_MODE` | `cloud` / `local` | 决定走云端 API 还是本地 `mineru-api` |
+| 本地链路选择 | `MINERU_BACKEND` | `pipeline` / `vlm-*` / `hybrid-*` | 仅在 `MINERU_MODE=local` 时生效 |
+| 云端模型版本 | `model_version` | `pipeline` / `vlm` / `MinerU-HTML` | 仅在 `MINERU_MODE=cloud` 时生效 |
 
 **默认 Docker 模式（推荐，开箱即用）：**
 
@@ -167,6 +175,9 @@ MINERU_API_KEY=your_key_here
 
 说明：
 - `docker compose up -d` 默认固定为云端 MinerU，不会拉起本地 `mineru-api` 容器。
+- 默认云端链路会复用官方批量上传接口 `/api/v4/file-urls/batch`，同一次笔记本添加操作中的多份受支持文档会尽量合并到同一个 MinerU batch。
+- `HTML` 会自动走 `model_version=MinerU-HTML`，其它文档继续使用常规 `pipeline / vlm` 路由。
+- 官方云端限制当前为单文件 `200MB`、PDF `200 页`、单次申请上传链接最多 `50` 个文件；超限文档会回退到现有 fallback 链路。
 - 只有 GPU 覆盖栈才内置了本地 `mineru-api` 容器与 `MINERU_LOCAL_ENABLED=true`，可在设置面板中切换 `cloud/local`。
 - 纯 CPU 机器如果想本地跑 MinerU，需要自行准备 CPU 版 `mineru-api` 服务；这条路径至少建议 32GB 内存，且不推荐。
 - 如果开启 Clash Verge 或系统代理后，`cdn-mineru.openxlab.org.cn` 报 `UNEXPECTED_EOF_WHILE_READING` / `curl: (35) TLS connect error`，说明问题已经发生在 OpenXLab CDN 的 TLS 握手阶段，单纯给 Docker 容器补 `HTTP_PROXY` 不一定能修复。优先在 Clash 中给 `cdn-mineru.openxlab.org.cn`、`openxlab.org.cn` 配置 DIRECT 规则；只有在你已经准备好可访问的本地 `mineru-api` 服务时，才建议切到 `MINERU_MODE=local`。仅修改这个变量并不会自动绕过 CDN；如果本地 MinerU 不可用，PDF 最终仍可能回退到 MarkItDown。
@@ -226,8 +237,9 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 
 | 文件类型 | 处理链路 |
 |---|---|
-| PDF | MinerU（cloud / local）→ PyPDF fallback |
-| CSV / Word / TXT / MD / HTML 等 | MarkItDown → Markdown |
+| Cloud：PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=cloud` 时优先走 MinerU cloud，超限或失败时走 fallback |
+| Local（当前 GPU 适配范围）：PDF / DOCX / PPTX / XLSX / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=local` 时优先走本地 MinerU；`DOC / PPT / HTML` 不走本地 MinerU，建议使用 cloud 模式 |
+| TXT / MD / CSV / XLS / XLSX / EPUB 等 | MarkItDown → Markdown |
 
 默认 Docker 部署和宿主机 FastAPI 调试都会把处理后的文件存储在 MinIO 的 `documents` bucket 中；只有离线脚本 / 测试显式切到 `STORAGE_BACKEND=local` 时，才会写入 `data/documents/{document_id}/`。
 
@@ -237,7 +249,7 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 
 ### 模式一：默认 Docker 模式（推荐，无特殊硬件要求）
 
-这是当前仓库的默认一键启动方式。PDF 解析使用 MinerU 云端 API，Embedding 默认使用通义千问 API，存储使用 MinIO。需要配置 `MINERU_API_KEY` 和 `DASHSCOPE_API_KEY`。
+这是当前仓库的默认一键启动方式。MinerU 使用官方 `v4` 精准解析 API，Embedding 默认使用通义千问 API，存储使用 MinIO。需要配置 `MINERU_API_KEY` 和 `DASHSCOPE_API_KEY`。
 
 ```bash
 docker compose up -d
@@ -265,6 +277,10 @@ docker compose logs -f
 
 这个模式下：
 - 不会启动本地 `mineru-api` 容器，MinerU 只能走云端。
+- 云端已接入 `PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF）`。
+- `HTML` 会自动切到 `MinerU-HTML`，其它支持类型继续使用常规模型版本。
+- 笔记本里同一次添加的多份受支持文档，会尽量复用同一个 MinerU batch 任务。
+- 官方云端限制当前为 `200MB / 200 页 / 单批最多 50 文件`；超限文档会自动回退到 fallback 链路。
 - 如果开启了 `FEATURE_MODEL_SWITCH=true`，设置面板中 MinerU 不可切到本地。
 - Embedding 默认是 API 模式；如果你已经准备了本地 Embedding 模型，仍可切到本地 CPU 模式。
 - 适用于大多数设备，包括 Windows / macOS / Linux 的无 GPU 机器、Apple Silicon，以及当前没有官方 GPU 覆盖配置的 AMD / Intel GPU 设备。
@@ -297,6 +313,7 @@ GPU 模式配置说明：
 - mineru-api 设置 `MINERU_VIRTUAL_VRAM_SIZE=8`，触发每次推理后清理显存，适配 8GB 显卡
 - mineru-api 容器 `shm_size=32gb`，Worker 容器 `shm_size=16gb`，请确保系统内存充裕
 - `MINERU_BACKEND` 默认为 `hybrid-auto-engine`
+- 本地 MinerU 支持集为 `PDF / image / DOCX / PPTX / XLSX`；`DOC / PPT / HTML` 建议继续走 cloud 模式
 - 这个模式会新增本地 `mineru-api` 容器（端口 `8001`）
 
 > **注意：PyTorch 镜像版本需与你的显卡驱动匹配。**
@@ -414,7 +431,7 @@ docker compose ps
 curl http://localhost:9200
 
 # 如果启用了本地 MinerU
-curl http://localhost:8001/docs
+curl http://localhost:8001/health
 
 # 如果启用了 MinIO
 curl http://localhost:9000/minio/health/live
@@ -440,6 +457,12 @@ python scripts/upload_documents.py "D:\docs\测试文档.pdf"
 
 # 上传多个文件
 python scripts/upload_documents.py "D:\docs\文档A.pdf" "D:\docs\文档B.docx"
+```
+
+如需直接验证 MinerU 官方云端 `v4` 批量接口，可使用：
+
+```bash
+python scripts/mineru_v4_smoke_test.py "D:\docs\示例A.ppt" "D:\docs\示例B.html"
 ```
 
 ---

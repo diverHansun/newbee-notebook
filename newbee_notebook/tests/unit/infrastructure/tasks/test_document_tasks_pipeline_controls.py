@@ -145,3 +145,21 @@ def test_execute_pipeline_reraises_after_failed_status_written(monkeypatch):
 
     assert state["failed_written"] is True
     assert session.rollback_calls == 1
+
+
+def test_process_document_cloud_batch_task_runs_async_impl_and_cleanup(monkeypatch):
+    state = {"document_ids": None, "cleanup": False}
+
+    async def _fake_async(document_ids: list[str]):
+        state["document_ids"] = document_ids
+
+    def _fake_cleanup(task_name: str, document_id: str | None = None):  # noqa: ARG001
+        state["cleanup"] = True
+
+    monkeypatch.setattr(document_tasks, "_process_document_cloud_batch_async", _fake_async)
+    monkeypatch.setattr(document_tasks, "_cleanup_worker_memory", _fake_cleanup)
+
+    document_tasks.process_document_cloud_batch_task(["doc-1", "doc-2"])
+
+    assert state["document_ids"] == ["doc-1", "doc-2"]
+    assert state["cleanup"] is True

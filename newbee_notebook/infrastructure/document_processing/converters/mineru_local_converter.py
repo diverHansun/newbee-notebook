@@ -3,6 +3,7 @@ import gc
 import io
 import json
 import logging
+import mimetypes
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -26,10 +27,42 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_PAGES_PER_BATCH = 50
 _DEFAULT_REQUEST_RETRY_ATTEMPTS = 2
 _DEFAULT_RETRY_BACKOFF_SECONDS = 10.0
+_SUPPORTED_LOCAL_EXTENSIONS = frozenset(
+    {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".bmp",
+        ".webp",
+        ".gif",
+        ".jp2",
+        ".tif",
+        ".tiff",
+    }
+)
+_MIME_OVERRIDES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".jp2": "image/jp2",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+}
 
 
 class MinerULocalConverter(Converter):
-    """Converter for PDFs via MinerU local HTTP API."""
+    """Converter for local MinerU HTTP API (PDF/image/DOCX/PPTX/XLSX)."""
 
     def __init__(
         self,
@@ -43,6 +76,9 @@ class MinerULocalConverter(Converter):
         max_pages_per_batch: int = _DEFAULT_MAX_PAGES_PER_BATCH,
         request_retry_attempts: int = _DEFAULT_REQUEST_RETRY_ATTEMPTS,
         retry_backoff_seconds: float = _DEFAULT_RETRY_BACKOFF_SECONDS,
+        parse_method: str = "auto",
+        formula_enable: bool = True,
+        table_enable: bool = True,
     ) -> None:
         self._base_url = (base_url or "http://mineru-api:8000").rstrip("/")
         self._timeout = timeout_seconds
@@ -54,6 +90,9 @@ class MinerULocalConverter(Converter):
         self._max_pages_per_batch = max(1, max_pages_per_batch)
         self._request_retry_attempts = max(0, request_retry_attempts)
         self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
+        self._parse_method = (parse_method or "auto").strip() or "auto"
+        self._formula_enable = bool(formula_enable)
+        self._table_enable = bool(table_enable)
 
     @staticmethod
     def _normalize_lang_list(value: object) -> list[str]:
@@ -80,12 +119,55 @@ class MinerULocalConverter(Converter):
             return 0
 
     def can_handle(self, ext: str) -> bool:
-        return ext.lower() == ".pdf"
+        return ext.lower() in _SUPPORTED_LOCAL_EXTENSIONS
+
+    def _build_form_data(
+        self,
+        *,
+        start_page: int | None = None,
+        end_page: int | None = None,
+    ) -> list[tuple[str, str]]:
+        form_data: list[tuple[str, str]] = [
+            ("backend", self._backend),
+            ("return_md", "true"),
+            ("return_content_list", "true" if self._return_content_list else "false"),
+            ("return_model_output", "true" if self._return_model_output else "false"),
+            ("return_images", "true" if self._return_images else "false"),
+            ("response_format_zip", "true"),
+            ("parse_method", self._parse_method),
+            ("formula_enable", "true" if self._formula_enable else "false"),
+            ("table_enable", "true" if self._table_enable else "false"),
+        ]
+        if start_page is not None and end_page is not None:
+            form_data.extend(
+                [
+                    ("start_page_id", str(start_page)),
+                    ("end_page_id", str(end_page)),
+                ]
+            )
+        for language in self._normalize_lang_list(self._lang_list):
+            form_data.append(("lang_list", language))
+        return form_data
+
+    @staticmethod
+    def _guess_mime_type(path: Path) -> str:
+        suffix = path.suffix.lower()
+        overridden = _MIME_OVERRIDES.get(suffix)
+        if overridden:
+            return overridden
+        guessed, _ = mimetypes.guess_type(path.name)
+        return guessed or "application/octet-stream"
 
     async def convert(self, file_path: str) -> ConversionResult:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(file_path)
+        ext = path.suffix.lower()
+        if ext not in _SUPPORTED_LOCAL_EXTENSIONS:
+            raise RuntimeError(f"Unsupported file type for MinerU local mode: {ext or '<none>'}")
+
+        if ext != ".pdf":
+            return await self._convert_non_pdf_with_retry(path)
 
         total_pages = await self._count_pages(path)
         if total_pages <= 0:
@@ -97,7 +179,6 @@ class MinerULocalConverter(Converter):
                 path,
                 start_page=0,
                 end_page=total_pages - 1,
-                total_pages=total_pages,
             )
 
         # ---- Large PDF: split into batches ----
@@ -122,7 +203,6 @@ class MinerULocalConverter(Converter):
                 path,
                 start_page=batch_start,
                 end_page=batch_end,
-                total_pages=total_pages,
             )
 
             all_markdown.append(result.markdown)
@@ -183,7 +263,6 @@ class MinerULocalConverter(Converter):
         *,
         start_page: int,
         end_page: int,
-        total_pages: int,
     ) -> ConversionResult:
         attempts = self._request_retry_attempts + 1
         for attempt in range(1, attempts + 1):
@@ -192,7 +271,6 @@ class MinerULocalConverter(Converter):
                     path,
                     start_page=start_page,
                     end_page=end_page,
-                    total_pages=total_pages,
                 )
             except Exception as exc:
                 if attempt >= attempts or not self._should_retry_request(exc):
@@ -212,9 +290,34 @@ class MinerULocalConverter(Converter):
                 if delay > 0:
                     await asyncio.sleep(delay)
 
+    async def _convert_non_pdf_with_retry(self, path: Path) -> ConversionResult:
+        attempts = self._request_retry_attempts + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                return await self._convert_non_pdf(path)
+            except Exception as exc:
+                if attempt >= attempts or not self._should_retry_request(exc):
+                    raise
+                delay = self._retry_delay_seconds(attempt)
+                logger.warning(
+                    "MinerU local non-PDF file failed attempt %d/%d for %s: %s. Retrying in %.1fs",
+                    attempt,
+                    attempts,
+                    path,
+                    exc,
+                    delay,
+                )
+                gc.collect()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
     # ------------------------------------------------------------------
     # Internal: convert a page range via MinerU API
     # ------------------------------------------------------------------
+
+    async def _convert_non_pdf(self, path: Path) -> ConversionResult:
+        form_data = self._build_form_data()
+        return await self._convert_request(path, form_data=form_data, fallback_page_count=1)
 
     async def _convert_range(
         self,
@@ -222,30 +325,31 @@ class MinerULocalConverter(Converter):
         *,
         start_page: int,
         end_page: int,
-        total_pages: int,
     ) -> ConversionResult:
         """Send a single request to MinerU covering *start_page* .. *end_page*."""
+        form_data = self._build_form_data(start_page=start_page, end_page=end_page)
+        return await self._convert_request(
+            path,
+            form_data=form_data,
+            fallback_page_count=end_page - start_page + 1,
+        )
+
+    async def _convert_request(
+        self,
+        path: Path,
+        *,
+        form_data: list[tuple[str, str]],
+        fallback_page_count: int,
+    ) -> ConversionResult:
         url = f"{self._base_url}/file_parse"
 
-        form_data: list[tuple[str, str]] = [
-            ("backend", self._backend),
-            ("return_md", "true"),
-            ("return_content_list", "true" if self._return_content_list else "false"),
-            ("return_model_output", "true" if self._return_model_output else "false"),
-            ("return_images", "true" if self._return_images else "false"),
-            ("response_format_zip", "true"),
-            ("start_page_id", str(start_page)),
-            ("end_page_id", str(end_page)),
-        ]
-        for language in self._normalize_lang_list(self._lang_list):
-            form_data.append(("lang_list", language))
-
         read_timeout = None if self._timeout <= 0 else float(self._timeout)
+        file_mime = self._guess_mime_type(path)
 
         def _sync_upload() -> tuple[str, str]:
             zip_path = ""
             with path.open("rb") as file:
-                files = {"files": (path.name, file, "application/pdf")}
+                files = {"files": (path.name, file, file_mime)}
                 with requests.post(
                     url,
                     files=files,
@@ -280,7 +384,7 @@ class MinerULocalConverter(Converter):
                 pass
         page_count = _extract_page_count(metadata_assets)
         if not page_count:
-            page_count = end_page - start_page + 1
+            page_count = max(1, fallback_page_count)
 
         return ConversionResult(
             markdown=markdown,

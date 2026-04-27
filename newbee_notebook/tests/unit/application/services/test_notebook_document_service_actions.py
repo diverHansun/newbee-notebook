@@ -192,3 +192,81 @@ def test_add_documents_requeues_failed_document_with_content_as_index_only(monke
     assert result.added[0].document.status == DocumentStatus.CONVERTED
     assert result.added[0].action == "index_only"
 
+
+def test_add_documents_batches_multiple_full_pipeline_documents_in_cloud_mode(monkeypatch):
+    monkeypatch.setenv("MINERU_MODE", "cloud")
+
+    notebook_repo = AsyncMock()
+    notebook_repo.get = AsyncMock(return_value=SimpleNamespace(notebook_id="nb-1"))
+    notebook_repo.increment_document_count = AsyncMock()
+
+    doc_one = Document(
+        document_id="doc-1",
+        library_id="lib-1",
+        title="doc-one",
+        status=DocumentStatus.UPLOADED,
+    )
+    doc_two = Document(
+        document_id="doc-2",
+        library_id="lib-1",
+        title="doc-two",
+        status=DocumentStatus.UPLOADED,
+    )
+    queued_one = Document(
+        document_id="doc-1",
+        library_id="lib-1",
+        title="doc-one",
+        status=DocumentStatus.PENDING,
+        processing_stage="queued",
+    )
+    queued_two = Document(
+        document_id="doc-2",
+        library_id="lib-1",
+        title="doc-two",
+        status=DocumentStatus.PENDING,
+        processing_stage="queued",
+    )
+
+    document_repo = AsyncMock()
+    get_counts = {"doc-1": 0, "doc-2": 0}
+
+    async def _get(document_id: str):
+        get_counts[document_id] += 1
+        if document_id == "doc-1":
+            return doc_one if get_counts[document_id] == 1 else queued_one
+        if document_id == "doc-2":
+            return doc_two if get_counts[document_id] == 1 else queued_two
+        return None
+
+    document_repo.get = AsyncMock(side_effect=_get)
+    document_repo.update_status = AsyncMock()
+    document_repo.commit = AsyncMock()
+
+    ref_repo = AsyncMock()
+    ref_repo.get_by_notebook_and_document = AsyncMock(return_value=None)
+    ref_repo.create = AsyncMock()
+
+    batch_delay = Mock()
+    single_delay = Mock()
+    monkeypatch.setattr(
+        "newbee_notebook.application.services.notebook_document_service.process_document_cloud_batch_task.delay",
+        batch_delay,
+    )
+    monkeypatch.setattr(
+        "newbee_notebook.application.services.notebook_document_service.process_document_task.delay",
+        single_delay,
+    )
+
+    service = NotebookDocumentService(
+        notebook_repo=notebook_repo,
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+    )
+
+    result = asyncio.run(service.add_documents("nb-1", ["doc-1", "doc-2"]))
+
+    assert document_repo.update_status.await_count == 2
+    batch_delay.assert_called_once_with(["doc-1", "doc-2"])
+    single_delay.assert_not_called()
+    assert [item.action for item in result.added] == ["full_pipeline", "full_pipeline"]
+

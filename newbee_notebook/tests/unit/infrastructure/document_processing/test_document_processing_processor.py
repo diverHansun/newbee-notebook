@@ -14,6 +14,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudLimitExceededError,
     MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
@@ -70,6 +71,28 @@ def test_get_document_processing_config_resolves_mineru_local_stability_env(monk
     assert local_cfg["retry_backoff_seconds"] == "10"
 
 
+def test_get_document_processing_config_resolves_new_mineru_30_env(monkeypatch):
+    monkeypatch.setenv("MINERU_CLOUD_MODEL_VERSION", "vlm")
+    monkeypatch.setenv("MINERU_CLOUD_ENABLE_FORMULA", "false")
+    monkeypatch.setenv("MINERU_CLOUD_ENABLE_TABLE", "true")
+    monkeypatch.setenv("MINERU_CLOUD_IS_OCR", "true")
+    monkeypatch.setenv("MINERU_CLOUD_LANGUAGE", "en")
+    monkeypatch.setenv("MINERU_LOCAL_PARSE_METHOD", "ocr")
+    monkeypatch.setenv("MINERU_LOCAL_FORMULA_ENABLE", "false")
+    monkeypatch.setenv("MINERU_LOCAL_TABLE_ENABLE", "true")
+
+    cfg = get_document_processing_config()["document_processing"]
+
+    assert cfg["mineru_cloud"]["model_version"] == "vlm"
+    assert cfg["mineru_cloud"]["enable_formula"] == "false"
+    assert cfg["mineru_cloud"]["enable_table"] == "true"
+    assert cfg["mineru_cloud"]["is_ocr"] == "true"
+    assert cfg["mineru_cloud"]["language"] == "en"
+    assert cfg["mineru_local"]["parse_method"] == "ocr"
+    assert cfg["mineru_local"]["formula_enable"] == "false"
+    assert cfg["mineru_local"]["table_enable"] == "true"
+
+
 def test_get_document_processing_config_supports_empty_default(monkeypatch):
     monkeypatch.delenv("MINERU_API_KEY", raising=False)
     cfg = get_document_processing_config()
@@ -96,6 +119,27 @@ def test_processor_cloud_mode_without_api_key_skips_mineru():
     assert isinstance(pdf_converters[0], MarkItDownConverter)
 
 
+def test_processor_cloud_mode_wires_new_v4_options():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_cloud"].update(
+        {
+            "model_version": "vlm",
+            "enable_formula": False,
+            "enable_table": True,
+            "is_ocr": "false",
+            "language": "en",
+        }
+    )
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_cloud = next(c for c in processor._converters if isinstance(c, MinerUCloudConverter))
+    assert mineru_cloud._model_version == "vlm"
+    assert mineru_cloud._enable_formula is False
+    assert mineru_cloud._enable_table is True
+    assert mineru_cloud._is_ocr is False
+    assert mineru_cloud._language == "en"
+
+
 def test_processor_local_mode_uses_local_converter():
     cfg = _base_config()
     cfg["document_processing"]["mineru_mode"] = "local"
@@ -105,6 +149,63 @@ def test_processor_local_mode_uses_local_converter():
     assert len(pdf_converters) == 2
     assert isinstance(pdf_converters[0], MinerULocalConverter)
     assert isinstance(pdf_converters[1], MarkItDownConverter)
+
+
+@pytest.mark.parametrize(
+    ("ext", "expected_types"),
+    [
+        (".pdf", [MinerULocalConverter, MarkItDownConverter]),
+        (".docx", [MinerULocalConverter, MarkItDownConverter]),
+        (".pptx", [MinerULocalConverter, MarkItDownConverter]),
+        (".xlsx", [MinerULocalConverter, MarkItDownConverter]),
+        (".png", [MinerULocalConverter]),
+        (".jpg", [MinerULocalConverter]),
+        (".jpeg", [MinerULocalConverter]),
+        (".bmp", [MinerULocalConverter]),
+        (".webp", [MinerULocalConverter]),
+        (".gif", [MinerULocalConverter]),
+        (".jp2", [MinerULocalConverter]),
+        (".tif", [MinerULocalConverter]),
+        (".tiff", [MinerULocalConverter]),
+    ],
+)
+def test_processor_local_mode_official_supported_types_prefer_local_converter(ext: str, expected_types: list[type]):
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
+    assert [type(c) for c in converters] == expected_types
+
+
+@pytest.mark.parametrize("ext", [".doc", ".ppt", ".html", ".htm"])
+def test_processor_local_mode_cloud_only_types_do_not_route_to_local(ext: str):
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
+    assert converters
+    assert isinstance(converters[0], MarkItDownConverter)
+    assert all(not isinstance(c, MinerULocalConverter) for c in converters)
+
+
+def test_processor_local_mode_wires_new_local_options():
+    cfg = _base_config()
+    cfg["document_processing"]["mineru_mode"] = "local"
+    cfg["document_processing"]["mineru_local"].update(
+        {
+            "parse_method": "ocr",
+            "formula_enable": False,
+            "table_enable": True,
+        }
+    )
+    processor = DocumentProcessor(config=cfg)
+
+    mineru_local = next(c for c in processor._converters if isinstance(c, MinerULocalConverter))
+    assert mineru_local._parse_method == "ocr"
+    assert mineru_local._formula_enable is False
+    assert mineru_local._table_enable is True
 
 
 def test_processor_local_mode_uses_batch_size_50_by_default():
@@ -174,13 +275,25 @@ def test_processor_cloud_mode_office_prefers_mineru_then_markitdown(ext: str):
     assert isinstance(converters[1], MarkItDownConverter)
 
 
-def test_processor_cloud_mode_pptx_uses_markitdown_only():
+@pytest.mark.parametrize("ext", [".ppt", ".pptx", ".html", ".htm"])
+def test_processor_cloud_mode_new_document_types_prefer_mineru_then_markitdown(ext: str):
     cfg = _base_config()
     processor = DocumentProcessor(config=cfg)
 
-    converters = processor._get_converters_for_ext(".pptx")
+    converters = processor._get_converters_for_ext(ext)
+    assert len(converters) == 2
+    assert isinstance(converters[0], MinerUCloudConverter)
+    assert isinstance(converters[1], MarkItDownConverter)
+
+
+@pytest.mark.parametrize("ext", [".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".jp2", ".tif", ".tiff"])
+def test_processor_cloud_mode_images_use_mineru_only(ext: str):
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(ext)
     assert len(converters) == 1
-    assert isinstance(converters[0], MarkItDownConverter)
+    assert isinstance(converters[0], MinerUCloudConverter)
 
 
 def test_processor_cloud_mode_epub_uses_markitdown_only():
@@ -277,6 +390,30 @@ def test_processor_trips_cooldown_on_mineru_cdn_transient_error(monkeypatch):
     assert processor._mineru_unavailable_until > time.monotonic()
 
 
+def test_processor_falls_back_without_cooldown_when_cloud_limit_exceeded(monkeypatch):
+    cfg = _base_config()
+    cfg["document_processing"]["fail_threshold"] = 1
+    processor = DocumentProcessor(config=cfg)
+
+    mineru = next(c for c in processor._converters if isinstance(c, MinerUCloudConverter))
+    markitdown = next(c for c in processor._converters if isinstance(c, MarkItDownConverter))
+
+    async def _mineru_limit(_file_path: str):
+        raise MinerUCloudLimitExceededError("MinerU cloud page limit exceeded")
+
+    async def _fallback_ok(_file_path: str):
+        return ConversionResult(markdown="# fallback")
+
+    monkeypatch.setattr(mineru, "convert", _mineru_limit)
+    monkeypatch.setattr(markitdown, "convert", _fallback_ok)
+
+    result = asyncio.run(processor.convert("sample.html"))
+
+    assert result.markdown == "# fallback"
+    assert processor._mineru_unavailable_until <= time.monotonic()
+    assert processor._mineru_consecutive_failures == 0
+
+
 def test_processor_error_chain_preserves_root_cause(monkeypatch):
     cfg = _base_config()
     processor = DocumentProcessor(config=cfg)
@@ -314,7 +451,7 @@ def test_local_converter_retries_transient_batch_failure(monkeypatch, tmp_path):
 
     calls = {"count": 0}
 
-    async def _convert_range(_path, *, start_page, end_page, total_pages):
+    async def _convert_range(_path, *, start_page, end_page):
         calls["count"] += 1
         if calls["count"] == 1:
             response = requests.Response()

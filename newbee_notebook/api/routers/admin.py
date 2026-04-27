@@ -357,7 +357,7 @@ async def system_memory():
     """Report backend process memory and MinerU service health.
 
     Backend memory is read directly; MinerU health is probed via its
-    /docs endpoint (same endpoint used by Docker healthcheck).
+    /health endpoint (same endpoint used by Docker healthcheck).
     """
     # Backend process stats
     backend: Dict[str, object] = {
@@ -381,7 +381,7 @@ async def system_memory():
     mineru: Dict[str, object] = {"api_url": probe_urls[0], "probe_candidates": probe_urls}
     for idx, mineru_url in enumerate(probe_urls):
         try:
-            resp = http_requests.get(f"{mineru_url}/docs", timeout=3.0)
+            resp = http_requests.get(f"{mineru_url}/health", timeout=3.0)
             if resp.ok:
                 mineru["status"] = "healthy"
             else:

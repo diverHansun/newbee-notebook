@@ -26,16 +26,41 @@ class MinerUCloudTransientError(RuntimeError):
     """Transient MinerU cloud error that should trigger fallback/cooldown."""
 
 
+class MinerUCloudLimitExceededError(RuntimeError):
+    """Cloud request exceeds official MinerU limits and should fall back."""
+
+
 class MinerUCloudConverter(Converter):
-    """Converter for PDF/DOC/DOCX files via MinerU v4 Smart Parsing API."""
+    """Converter for cloud-supported documents via MinerU v4 Smart Parsing API."""
 
     DONE_STATES = {"done"}
     RUNNING_STATES = {"waiting-file", "pending", "running", "converting"}
-    SUPPORTED_EXTENSIONS = frozenset({".pdf", ".doc", ".docx"})
+    SUPPORTED_EXTENSIONS = frozenset(
+        {
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".ppt",
+            ".pptx",
+            ".html",
+            ".htm",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".webp",
+            ".gif",
+            ".jp2",
+            ".tif",
+            ".tiff",
+        }
+    )
     _FAKE_IP_NETWORKS = (
         ipaddress.ip_network("198.18.0.0/15"),
         ipaddress.ip_network("100.64.0.0/10"),
     )
+    _MAX_FILE_BYTES = 200 * 1024 * 1024
+    _MAX_PDF_PAGES = 200
 
     def __init__(
         self,
@@ -47,6 +72,11 @@ class MinerUCloudConverter(Converter):
         enable_curl_fallback: bool = True,
         curl_binary: str = "curl",
         curl_insecure: bool = False,
+        model_version: str | None = None,
+        enable_formula: bool = True,
+        enable_table: bool = True,
+        is_ocr: bool | None = None,
+        language: str = "ch",
     ) -> None:
         key = (api_key or "").strip()
         if not key:
@@ -67,6 +97,11 @@ class MinerUCloudConverter(Converter):
         self._enable_curl_fallback = bool(enable_curl_fallback)
         self._curl_binary = (curl_binary or "curl").strip() or "curl"
         self._curl_insecure = bool(curl_insecure)
+        self._model_version = (model_version or "").strip() or None
+        self._enable_formula = bool(enable_formula)
+        self._enable_table = bool(enable_table)
+        self._is_ocr = is_ocr
+        self._language = (language or "ch").strip() or "ch"
 
     def can_handle(self, ext: str) -> bool:
         return ext.lower() in self.SUPPORTED_EXTENSIONS
@@ -75,6 +110,12 @@ class MinerUCloudConverter(Converter):
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(file_path)
+
+        preflight_page_count = 0
+        if path.suffix.lower() == ".pdf":
+            preflight_page_count = await self._count_pages(path)
+
+        await asyncio.to_thread(self._validate_cloud_limits, path, preflight_page_count or None)
 
         batch_id, upload_url = await asyncio.to_thread(self._request_upload_url, path.name)
         await asyncio.to_thread(self._upload_file, upload_url, path)
@@ -88,7 +129,7 @@ class MinerUCloudConverter(Converter):
         markdown, image_assets, metadata_assets, page_count = self._parse_result_zip(zip_bytes)
 
         if not page_count:
-            page_count = await self._count_pages(path)
+            page_count = preflight_page_count or await self._count_pages(path)
 
         return ConversionResult(
             markdown=markdown,
@@ -111,9 +152,74 @@ class MinerUCloudConverter(Converter):
         """Longer read timeout for large upload/download transfers."""
         return self._connect_timeout_seconds, max(self._timeout_seconds, 300)
 
-    def _request_upload_url(self, file_name: str) -> tuple[str, str]:
+    @staticmethod
+    def _is_html_extension(file_name: str) -> bool:
+        return Path(file_name).suffix.lower() in {".html", ".htm"}
+
+    def _resolve_model_version_for_file(self, file_name: str) -> str | None:
+        if self._is_html_extension(file_name):
+            return "MinerU-HTML"
+        if self._model_version == "MinerU-HTML":
+            logger.warning("Ignoring MinerU-HTML model_version for non-HTML file: %s", file_name)
+            return None
+        return self._model_version
+
+    def _validate_cloud_limits(self, path: Path, page_count: int | None = None) -> None:
+        size_bytes = path.stat().st_size
+        if size_bytes > self._MAX_FILE_BYTES:
+            raise MinerUCloudLimitExceededError(
+                f"MinerU cloud size limit exceeded for {path.name}: {size_bytes} bytes > {self._MAX_FILE_BYTES}"
+            )
+        if path.suffix.lower() == ".pdf" and page_count and page_count > self._MAX_PDF_PAGES:
+            raise MinerUCloudLimitExceededError(
+                f"MinerU cloud page limit exceeded for {path.name}: {page_count} pages > {self._MAX_PDF_PAGES}"
+            )
+
+    def _request_upload_url(self, file_name: str, data_id: str | None = None) -> tuple[str, str]:
+        batch_id, upload_urls = self._request_upload_urls(
+            [{"name": file_name, "data_id": data_id} if data_id else {"name": file_name}]
+        )
+        upload_url = str(upload_urls[0]) if upload_urls else ""
+        if not batch_id or not upload_url:
+            raise RuntimeError(
+                "MinerU v4 file-urls/batch missing batch_id/file_urls "
+                f"for file={file_name}"
+            )
+        return batch_id, upload_url
+
+    def _request_upload_urls(
+        self,
+        file_entries: list[dict[str, Any]],
+        model_version: str | None = None,
+    ) -> tuple[str, list[str]]:
+        if not file_entries:
+            raise ValueError("file_entries must not be empty")
+
         url = f"{self._api_base}/api/v4/file-urls/batch"
-        payload = {"files": [{"name": file_name}]}
+        normalized_entries: list[dict[str, Any]] = []
+        file_names: list[str] = []
+        for raw_entry in file_entries:
+            file_name = str(raw_entry.get("name") or "").strip()
+            if not file_name:
+                raise ValueError("file_entries[].name is required")
+            normalized_entry: dict[str, Any] = {"name": file_name}
+            if self._is_ocr is not None:
+                normalized_entry["is_ocr"] = self._is_ocr
+            data_id = str(raw_entry.get("data_id") or "").strip()
+            if data_id:
+                normalized_entry["data_id"] = data_id
+            normalized_entries.append(normalized_entry)
+            file_names.append(file_name)
+
+        resolved_model_version = self._resolve_batch_model_version(file_names, model_version)
+        payload: dict[str, Any] = {
+            "files": normalized_entries,
+            "enable_formula": self._enable_formula,
+            "enable_table": self._enable_table,
+            "language": self._language,
+        }
+        if resolved_model_version:
+            payload["model_version"] = resolved_model_version
         headers = self._headers()
         headers["Content-Type"] = "application/json"
 
@@ -125,13 +231,12 @@ class MinerUCloudConverter(Converter):
 
         data = body.get("data") or {}
         batch_id = str(data.get("batch_id") or "").strip()
-        file_urls = data.get("file_urls") or []
-        upload_url = str(file_urls[0]) if file_urls else ""
-        if not batch_id or not upload_url:
+        file_urls = [str(item) for item in (data.get("file_urls") or []) if str(item).strip()]
+        if not batch_id or not file_urls:
             raise RuntimeError(
                 f"MinerU v4 file-urls/batch missing batch_id/file_urls: {json.dumps(body, ensure_ascii=False)}"
             )
-        return batch_id, upload_url
+        return batch_id, file_urls
 
     def _upload_file(self, upload_url: str, file_path: Path) -> None:
         with file_path.open("rb") as handle:
@@ -139,26 +244,49 @@ class MinerUCloudConverter(Converter):
         response.raise_for_status()
 
     def _poll_until_done(self, batch_id: str) -> dict[str, Any]:
+        items = self._poll_until_done_items(batch_id)
+        return items[0] if items else {}
+
+    def _poll_until_done_items(self, batch_id: str) -> list[dict[str, Any]]:
         start = time.monotonic()
         while True:
-            item = self._fetch_batch_state(batch_id)
-            state = str(item.get("state") or "").strip().lower()
+            items = self._fetch_batch_state_items(batch_id)
+            if items:
+                failures = [item for item in items if str(item.get("state") or "").strip().lower() == "failed"]
+                if failures:
+                    failed_item = failures[0]
+                    err_msg = failed_item.get("err_msg") or "Unknown error"
+                    data_id = str(failed_item.get("data_id") or "").strip()
+                    if data_id:
+                        raise RuntimeError(f"MinerU v4 task failed for {data_id}: {err_msg}")
+                    raise RuntimeError(f"MinerU v4 task failed: {err_msg}")
 
-            if state in self.DONE_STATES:
-                return item
-            if state == "failed":
-                err_msg = item.get("err_msg") or "Unknown error"
-                raise RuntimeError(f"MinerU v4 task failed: {err_msg}")
+                states = [str(item.get("state") or "").strip().lower() for item in items]
+                if states and all(state in self.DONE_STATES for state in states):
+                    return items
 
             elapsed = time.monotonic() - start
             if elapsed >= self._max_wait_seconds:
+                last_states = ",".join(
+                    sorted(
+                        {
+                            str(item.get("state") or "").strip().lower() or "unknown"
+                            for item in items
+                        }
+                    )
+                )
                 raise TimeoutError(
-                    f"MinerU v4 polling timed out after {self._max_wait_seconds}s (last_state={state or 'unknown'})"
+                    "MinerU v4 polling timed out after "
+                    f"{self._max_wait_seconds}s (last_states={last_states or 'unknown'})"
                 )
 
             time.sleep(self._poll_interval)
 
     def _fetch_batch_state(self, batch_id: str) -> dict[str, Any]:
+        items = self._fetch_batch_state_items(batch_id)
+        return items[0] if items else {}
+
+    def _fetch_batch_state_items(self, batch_id: str) -> list[dict[str, Any]]:
         url = f"{self._api_base}/api/v4/extract-results/batch/{batch_id}"
         response = requests.get(url, headers=self._headers(), timeout=self._api_timeout())
         response.raise_for_status()
@@ -171,10 +299,29 @@ class MinerUCloudConverter(Converter):
         data = body.get("data") or {}
         result = data.get("extract_result")
         if isinstance(result, list) and result:
-            return result[0] or {}
+            return [item or {} for item in result]
         if isinstance(result, dict):
-            return result
-        return {}
+            return [result]
+        return []
+
+    def _resolve_batch_model_version(
+        self,
+        file_names: list[str],
+        override_model_version: str | None = None,
+    ) -> str | None:
+        explicit = (override_model_version or "").strip() or None
+        if explicit:
+            return explicit
+
+        html_flags = [self._is_html_extension(file_name) for file_name in file_names]
+        if html_flags and all(html_flags):
+            return "MinerU-HTML"
+        if any(html_flags):
+            raise ValueError("MinerU cloud HTML files must be uploaded in a dedicated batch")
+        if self._model_version == "MinerU-HTML":
+            logger.warning("Ignoring MinerU-HTML model_version for non-HTML batch")
+            return None
+        return self._model_version
 
     def _download_zip(self, full_zip_url: str, max_retries: int = 3) -> bytes:
         """Download result zip with retry on transient SSL/connection errors."""

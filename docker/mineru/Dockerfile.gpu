@@ -1,8 +1,6 @@
-# RTX 5060 Ti (Blackwell, Compute Capability >= 10.0) requires vllm v0.11.0
-# vllm v0.10.x only supports CC 8.0-9.0 (Ampere / Ada Lovelace / Hopper)
-# vllm v0.11.0 supports CC 7.0-7.9 (Volta/Turing) AND CC >= 10.0 (Blackwell)
+# RTX 50xx / Blackwell requires vLLM 0.11.x; MinerU 3.x aligns with the official 0.11.2 image.
 # DaoCloud mirror for China-region pull acceleration
-FROM docker.m.daocloud.io/vllm/vllm-openai:v0.11.0
+FROM docker.m.daocloud.io/vllm/vllm-openai:v0.11.2
 
 # Install libgl for opencv support & Noto fonts for Chinese characters
 RUN apt-get update && \
@@ -18,7 +16,7 @@ RUN apt-get update && \
 
 # Install MinerU (GPU runtime is provided by the vllm base image)
 # Use Aliyun PyPI mirror for faster installs in China
-RUN python3 -m pip install -U --no-cache-dir 'mineru[core]>=2.7.0' \
+RUN python3 -m pip install -U --no-cache-dir 'mineru[core]==3.1.4' \
         -i https://mirrors.aliyun.com/pypi/simple \
         --break-system-packages && \
     python3 -m pip cache purge

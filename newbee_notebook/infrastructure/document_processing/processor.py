@@ -18,6 +18,7 @@ from newbee_notebook.infrastructure.document_processing.converters.markitdown_co
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_cloud_converter import (
     MinerUCloudConverter,
+    MinerUCloudLimitExceededError,
     MinerUCloudTransientError,
 )
 from newbee_notebook.infrastructure.document_processing.converters.mineru_local_converter import (
@@ -42,6 +43,24 @@ def _parse_bool(value: object, default: bool) -> bool:
         if v in {"0", "false", "no", "n", "off", ""}:
             return False
     return default
+
+
+def _parse_optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if not v:
+            return None
+        if v in {"1", "true", "yes", "y", "on"}:
+            return True
+        if v in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
 
 
 def _parse_int(value: object, default: int) -> int:
@@ -87,6 +106,7 @@ class DocumentProcessor:
                 api_key = str(cloud_cfg.get("api_key", "") or "").strip()
                 if api_key:
                     try:
+                        model_version = str(cloud_cfg.get("model_version", "") or "").strip() or None
                         converters.append(
                             MinerUCloudConverter(
                                 api_key=api_key,
@@ -103,6 +123,11 @@ class DocumentProcessor:
                                     cloud_cfg.get("cdn_curl_insecure"),
                                     False,
                                 ),
+                                model_version=model_version,
+                                enable_formula=_parse_bool(cloud_cfg.get("enable_formula"), True),
+                                enable_table=_parse_bool(cloud_cfg.get("enable_table"), True),
+                                is_ocr=_parse_optional_bool(cloud_cfg.get("is_ocr")),
+                                language=str(cloud_cfg.get("language", "ch") or "ch").strip() or "ch",
                             )
                         )
                     except ValueError as exc:
@@ -135,6 +160,9 @@ class DocumentProcessor:
                             local_cfg.get("retry_backoff_seconds"),
                             10.0,
                         ),
+                        parse_method=str(local_cfg.get("parse_method", "auto") or "auto").strip() or "auto",
+                        formula_enable=_parse_bool(local_cfg.get("formula_enable"), True),
+                        table_enable=_parse_bool(local_cfg.get("table_enable"), True),
                     )
                 )
             else:
@@ -198,6 +226,12 @@ class DocumentProcessor:
         """Get all converters that can handle the given extension."""
         return [c for c in self._converters if c.can_handle(ext)]
 
+    def get_mineru_cloud_converter(self) -> MinerUCloudConverter | None:
+        for converter in self._converters:
+            if isinstance(converter, MinerUCloudConverter):
+                return converter
+        return None
+
     async def convert(self, file_path: str) -> ConversionResult:
         """Convert file with fallback support.
 
@@ -232,6 +266,17 @@ class DocumentProcessor:
                         file_path,
                         e,
                     )
+
+                if isinstance(converter, MinerUCloudConverter) and isinstance(
+                    e, MinerUCloudLimitExceededError
+                ):
+                    logger.warning(
+                        "MinerU cloud limit exceeded for %s: %s. Falling back.",
+                        file_path,
+                        e,
+                    )
+                    last_error = e
+                    continue
 
                 # MinerU is an external service; if unreachable, back off for a while.
                 if self._should_trip_circuit_breaker(converter, e):

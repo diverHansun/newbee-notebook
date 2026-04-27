@@ -117,8 +117,20 @@ SUPPORTED_EXTENSIONS = {
     "xlsx",
     "doc",
     "docx",
+    "ppt",
     "pptx",
     "epub",
+    "html",
+    "htm",
+    "png",
+    "jpg",
+    "jpeg",
+    "bmp",
+    "webp",
+    "gif",
+    "jp2",
+    "tif",
+    "tiff",
 }
 
 
