@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.core.session import SessionRunResult
-from newbee_notebook.core.skills import SkillRegistry
+from newbee_notebook.core.skills import SkillContext, SkillManifest, SkillRegistry
 from newbee_notebook.core.tools.contracts import SourceItem
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.mode_type import ModeType
@@ -84,3 +84,57 @@ def test_skill_registry_supports_video_command():
     _, command, cleaned_message = matched
     assert command == "/video"
     assert cleaned_message == "summarize BV1xx411c7mD"
+
+
+class _CaptureSkillProvider:
+    skill_name = "demo"
+    slash_commands = ["/demo"]
+    content_hash = "hash123"
+    skill_dir = "configs/skills/demo"
+    scripts_dir = "configs/skills/demo/scripts"
+    work_dir_mount = "/work"
+
+    def __init__(self):
+        self.context: SkillContext | None = None
+
+    def build_manifest(self, context: SkillContext) -> SkillManifest:
+        self.context = context
+        return SkillManifest(
+            name="demo",
+            slash_command=context.activated_command,
+            description="Demo skill",
+            tools=[],
+            system_prompt_addition="demo prompt",
+        )
+
+
+def test_resolve_skill_runtime_passes_config_skill_metadata():
+    provider = _CaptureSkillProvider()
+    registry = SkillRegistry()
+    registry.register(provider)
+    service = ChatService(
+        session_repo=AsyncMock(),
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=AsyncMock(),
+        ref_repo=AsyncMock(),
+        message_repo=AsyncMock(),
+        session_manager=AsyncMock(),
+        skill_registry=registry,
+    )
+
+    runtime = service._resolve_skill_runtime(
+        notebook_id="nb-1",
+        message="/demo summarize",
+        runtime_mode=ModeType.CHAT,
+        source_document_ids=["doc-1"],
+    )
+
+    assert runtime[0] == "summarize"
+    assert runtime[1] == ModeType.AGENT
+    assert runtime[3] == "demo prompt"
+    assert provider.context is not None
+    assert provider.context.skill_name == "demo"
+    assert provider.context.content_hash == "hash123"
+    assert provider.context.skill_dir == "configs/skills/demo"
+    assert provider.context.scripts_dir == "configs/skills/demo/scripts"

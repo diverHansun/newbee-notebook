@@ -14,6 +14,11 @@ class SkillContext:
     activated_command: str
     selected_document_ids: list[str] = field(default_factory=list)
     request_message: str = ""
+    skill_name: str | None = None
+    content_hash: str = ""
+    skill_dir: str = ""
+    scripts_dir: str = ""
+    work_dir_mount: str = "/work"
 
 
 @dataclass(frozen=True)

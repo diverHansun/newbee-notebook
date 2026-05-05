@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
+from newbee_notebook.core.skills.errors import SkillNameConflictError
 from newbee_notebook.core.skills.registry import SkillRegistry
+
+pytestmark = pytest.mark.unit
 
 
 @dataclass
 class _FakeProvider:
     skill_name: str
     slash_commands: list[str]
+    enabled: bool = True
 
 
 def test_match_command_returns_provider_and_cleaned_message():
@@ -60,3 +66,27 @@ def test_match_command_supports_diagram_single_entry():
     _, activated_command, cleaned_message = matched
     assert activated_command == "/diagram"
     assert cleaned_message == "build a hierarchy map"
+
+
+def test_register_rejects_duplicate_slash_command():
+    registry = SkillRegistry()
+    registry.register(_FakeProvider(skill_name="note", slash_commands=["/note"]))
+
+    with pytest.raises(SkillNameConflictError, match="/note"):
+        registry.register(_FakeProvider(skill_name="note2", slash_commands=["/note"]))
+
+
+def test_match_command_skips_disabled_provider():
+    registry = SkillRegistry()
+    registry.register(_FakeProvider(skill_name="demo", slash_commands=["/demo"], enabled=False))
+
+    assert registry.match_command("/demo run") is None
+
+
+def test_unregister_removes_provider_by_skill_name():
+    registry = SkillRegistry()
+    registry.register(_FakeProvider(skill_name="demo", slash_commands=["/demo"]))
+
+    registry.unregister("demo")
+
+    assert registry.match_command("/demo run") is None

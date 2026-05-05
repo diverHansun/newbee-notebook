@@ -864,6 +864,11 @@ class ChatService:
                 activated_command=activated_command,
                 selected_document_ids=list(source_document_ids or []),
                 request_message=cleaned_message,
+                skill_name=str(getattr(provider, "skill_name", "") or "") or None,
+                content_hash=str(getattr(provider, "content_hash", "") or ""),
+                skill_dir=str(getattr(provider, "skill_dir", "") or ""),
+                scripts_dir=str(getattr(provider, "scripts_dir", "") or ""),
+                work_dir_mount=str(getattr(provider, "work_dir_mount", "/work") or "/work"),
             )
         )
         return (

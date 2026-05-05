@@ -49,6 +49,7 @@ from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
 from newbee_notebook.core.mcp import MCPClientManager
 from newbee_notebook.core.skills import SkillRegistry
+from newbee_notebook.core.skills.lifecycle import register_installed_config_skills
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
@@ -683,6 +684,7 @@ async def get_runtime_skill_registry_dep(
     mark_service: MarkService = Depends(get_mark_service),
     diagram_service: DiagramService = Depends(get_diagram_service),
     video_service: VideoService = Depends(get_video_service),
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
 ) -> SkillRegistry:
     registry = SkillRegistry()
     registry.register(
@@ -700,6 +702,11 @@ async def get_runtime_skill_registry_dep(
         VideoSkillProvider(
             video_service=video_service,
         )
+    )
+    await register_installed_config_skills(
+        skills_root=get_configs_directory() / "skills",
+        settings_service=settings_service,
+        registry=registry,
     )
     return registry
 

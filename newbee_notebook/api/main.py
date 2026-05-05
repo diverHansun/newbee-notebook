@@ -38,6 +38,7 @@ from newbee_notebook.api.routers import (
     videos,
     bilibili_auth,
     export,
+    skills,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(generated_images.router, prefix="/api/v1", tags=["Generated Images"])
     app.include_router(videos.router, prefix="/api/v1", tags=["Videos"])
     app.include_router(export.router, prefix="/api/v1", tags=["Export"])
+    app.include_router(skills.router, prefix="/api/v1", tags=["Skills"])
     app.include_router(bilibili_auth.router, prefix="/api/v1", tags=["Bilibili Auth"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
 

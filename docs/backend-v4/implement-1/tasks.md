@@ -10,23 +10,23 @@
 ## Progress Summary
 
 - Total: 11 tasks
-- Completed: 0
+- Completed: 11
 - In Progress: 0
-- Remaining: 11
+- Remaining: 0
 
 ## Phase 1: Skills MVP
 
-- [ ] T001 Define Phase 1 source file layout under `newbee_notebook/core/skills/`.
-- [ ] T002 Implement `ManifestParser` with Anthropic-compatible `name` and `description` validation.
-- [ ] T003 Implement `ContentHasher` with deterministic path sorting and SHA-256 tree hashing.
-- [ ] T004 Extend skill contracts with config skill metadata while preserving existing provider protocol.
-- [ ] T005 Upgrade `SkillRegistry` to support built-in providers and enabled config providers without command conflicts.
-- [ ] T006 Implement `ConfigSkillProvider` and `ActivationContextBuilder` with prompt-only progressive disclosure.
-- [ ] T007 Implement local copy-only install preview and lifecycle list/enable/disable/uninstall services.
-- [ ] T008 Add `/api/skills` list and lifecycle contract endpoints.
-- [ ] T009 Integrate config skill activation into `ChatService._resolve_skill_runtime`.
-- [ ] T010 Add unit and contract tests according to `docs-test/` directory rules.
-- [ ] T011 Run targeted Phase 1 tests and update this plan with any discovered scope corrections before moving to Phase 2.
+- [X] T001 Define Phase 1 source file layout under `newbee_notebook/core/skills/`.
+- [X] T002 Implement `ManifestParser` with Anthropic-compatible `name` and `description` validation.
+- [X] T003 Implement `ContentHasher` with deterministic path sorting and SHA-256 tree hashing.
+- [X] T004 Extend skill contracts with config skill metadata while preserving existing provider protocol.
+- [X] T005 Upgrade `SkillRegistry` to support built-in providers and enabled config providers without command conflicts.
+- [X] T006 Implement `ConfigSkillProvider` and `ActivationContextBuilder` with prompt-only progressive disclosure.
+- [X] T007 Implement local copy-only install preview and lifecycle list/enable/disable/uninstall services.
+- [X] T008 Add `/api/skills` list and lifecycle contract endpoints.
+- [X] T009 Integrate config skill activation into `ChatService._resolve_skill_runtime`.
+- [X] T010 Add unit and contract tests according to `docs-test/` directory rules.
+- [X] T011 Run targeted Phase 1 tests and update this plan with any discovered scope corrections before moving to Phase 2.
 
 ## Definition Of Done
 
