@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.prompts import load_prompt
 from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
@@ -40,6 +41,10 @@ class RecordingLoop:
         confirmation_gateway=None,
         force_first_tool_call=False,
         required_tool_call_before_response=None,
+        policy_decider=None,
+        agent_policy=None,
+        session_id=None,
+        skill_context=None,
     ):
         self.llm_client = llm_client
         self.tools = tools
@@ -51,6 +56,10 @@ class RecordingLoop:
         self.confirmation_gateway = confirmation_gateway
         self.force_first_tool_call = force_first_tool_call
         self.required_tool_call_before_response = required_tool_call_before_response
+        self.policy_decider = policy_decider
+        self.agent_policy = agent_policy
+        self.session_id = session_id
+        self.skill_context = skill_context
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
@@ -429,6 +438,37 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
     assert [tool.name for tool in loop.tools] == ["list_notes"]
     assert loop.confirmation_required == frozenset({"update_note"})
     assert loop.confirmation_gateway is confirmation_gateway
+    assert isinstance(loop.policy_decider, PolicyDecider)
+    assert loop.session_id == "s1"
+
+
+@pytest.mark.anyio
+async def test_session_manager_threads_skill_policy_context_into_loop():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="run skill",
+        mode_type=ModeType.AGENT,
+        skill_context=SkillPolicyContext(name="demo", content_hash="hash123"),
+    )
+
+    loop = RecordingLoop.instances[-1]
+    assert loop.skill_context == SkillPolicyContext(name="demo", content_hash="hash123")
 
 
 def test_build_context_budget_uses_provider_specific_context_windows():

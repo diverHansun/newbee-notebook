@@ -26,6 +26,7 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.llm.qwen import (
     DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
     QWEN_CONTEXT_WINDOWS,
@@ -140,6 +141,7 @@ class SessionManager:
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        policy_decider: PolicyDecider | None = None,
         runtime_config: LLMRuntimeConfig | None = None,
         token_counter: TokenCounter | None = None,
         compressor: Compressor | None = None,
@@ -156,6 +158,7 @@ class SessionManager:
             system_prompt_provider or self._default_system_prompt
         )
         self._confirmation_gateway = confirmation_gateway
+        self._policy_decider = policy_decider or PolicyDecider()
         self._runtime_config = runtime_config or getattr(
             llm_client, "runtime_config", None
         )
@@ -344,6 +347,7 @@ class SessionManager:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
     ):
         effective_confirmation_gateway = (
             confirmation_gateway or self._confirmation_gateway
@@ -366,6 +370,9 @@ class SessionManager:
             confirmation_required=confirmation_required,
             confirmation_meta=confirmation_meta,
             confirmation_gateway=effective_confirmation_gateway,
+            policy_decider=self._policy_decider,
+            session_id=self._current_session.session_id if self._current_session else "",
+            skill_context=skill_context,
         )
         if force_first_tool_call:
             loop_kwargs["force_first_tool_call"] = True
@@ -390,6 +397,7 @@ class SessionManager:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
@@ -426,6 +434,7 @@ class SessionManager:
                 confirmation_gateway=confirmation_gateway,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
+                skill_context=skill_context,
             )
             async for event in loop.stream(
                 message=runtime_message, chat_history=chat_history
@@ -449,6 +458,7 @@ class SessionManager:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
     ) -> SessionRunResult:
         content_parts: list[str] = []
@@ -469,6 +479,7 @@ class SessionManager:
             confirmation_gateway=confirmation_gateway,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
+            skill_context=skill_context,
             lang=lang,
         ):
             if isinstance(event, ContentEvent):

@@ -11,6 +11,7 @@ from newbee_notebook.application.services.diagram_service import (
     DiagramTypeNotFoundError,
     DiagramValidationError,
 )
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 from newbee_notebook.domain.entities.diagram import Diagram
 
@@ -193,6 +194,8 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
             "required": ["title", "diagram_type", "content"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -227,6 +230,8 @@ def _build_update_diagram_tool(service: DiagramService, notebook_id: str) -> Too
             "required": ["diagram_id", "content"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -254,6 +259,8 @@ def _build_delete_diagram_tool(service: DiagramService, notebook_id: str) -> Too
             "required": ["diagram_id"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.DANGEROUS,
     )
 
 
@@ -310,6 +317,8 @@ def _build_update_diagram_positions_tool(service: DiagramService, notebook_id: s
             "required": ["diagram_id", "positions"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 

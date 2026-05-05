@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
 from newbee_notebook.core.tools.contracts import ToolDefinition, ToolCallResult
 from newbee_notebook.core.tools.registry import ToolRegistry
@@ -33,6 +34,16 @@ def test_builtin_tool_provider_returns_ask_tools(monkeypatch):
     tools = provider.get_tools("ask")
 
     assert [tool.name for tool in tools] == ["knowledge_base", "time"]
+    assert [tool.tool_class for tool in tools] == [ToolClass.READ, ToolClass.READ]
+    assert [tool.risk_level for tool in tools] == [RiskLevel.SAFE, RiskLevel.SAFE]
+
+
+def test_tool_definition_defaults_to_read_safe_metadata_for_backward_compatibility():
+    tool = _external_tool("legacy_tool")
+
+    assert tool.tool_class == ToolClass.READ
+    assert tool.risk_level == RiskLevel.SAFE
+    assert tool.sandbox_required is False
 
 
 def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_only(monkeypatch):

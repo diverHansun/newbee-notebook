@@ -49,6 +49,7 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.skills import SkillContext, SkillRegistry
+from newbee_notebook.core.policy import SkillPolicyContext
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools.contracts import ToolDefinition
 from newbee_notebook.core.tools.image_generation import (
@@ -350,6 +351,7 @@ class ChatService:
             confirmation_meta,
             force_first_tool_call,
             required_tool_call_before_response,
+            skill_policy_context,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -415,6 +417,7 @@ class ChatService:
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
             confirmation_gateway=self._confirmation_gateway,
+            skill_context=skill_policy_context,
             lang=lang,
         )
         response_content = self._strip_generated_image_markup(
@@ -560,6 +563,7 @@ class ChatService:
             confirmation_meta,
             force_first_tool_call,
             required_tool_call_before_response,
+            skill_policy_context,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -630,6 +634,7 @@ class ChatService:
                 confirmation_meta=confirmation_meta,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
+                skill_context=skill_policy_context,
                 confirmation_gateway=self._confirmation_gateway,
                 lang=lang,
             )
@@ -696,6 +701,11 @@ class ChatService:
                         "target_type": event.target_type,
                         "args_summary": event.args_summary,
                         "description": event.description,
+                        "capability_signature": event.capability_signature,
+                        "risk_level": str(event.risk_level or ""),
+                        "skill_name": event.skill_name,
+                        "content_hash": event.content_hash,
+                        "response_options": event.response_options,
                     }
                     continue
                 if isinstance(event, ContentEvent):
@@ -849,28 +859,29 @@ class ChatService:
         dict,
         bool,
         str | frozenset[str] | None,
+        SkillPolicyContext | None,
     ]:
         if not self._skill_registry:
-            return message, runtime_mode, None, "", frozenset(), {}, False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None, None
 
         matched = self._skill_registry.match_command(message)
         if not matched:
-            return message, runtime_mode, None, "", frozenset(), {}, False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None, None
 
         provider, activated_command, cleaned_message = matched
-        manifest = provider.build_manifest(
-            SkillContext(
-                notebook_id=notebook_id,
-                activated_command=activated_command,
-                selected_document_ids=list(source_document_ids or []),
-                request_message=cleaned_message,
-                skill_name=str(getattr(provider, "skill_name", "") or "") or None,
-                content_hash=str(getattr(provider, "content_hash", "") or ""),
-                skill_dir=str(getattr(provider, "skill_dir", "") or ""),
-                scripts_dir=str(getattr(provider, "scripts_dir", "") or ""),
-                work_dir_mount=str(getattr(provider, "work_dir_mount", "/work") or "/work"),
-            )
+        skill_context = SkillContext(
+            notebook_id=notebook_id,
+            activated_command=activated_command,
+            selected_document_ids=list(source_document_ids or []),
+            request_message=cleaned_message,
+            skill_name=str(getattr(provider, "skill_name", "") or "") or None,
+            content_hash=str(getattr(provider, "content_hash", "") or ""),
+            skill_dir=str(getattr(provider, "skill_dir", "") or ""),
+            scripts_dir=str(getattr(provider, "scripts_dir", "") or ""),
+            work_dir_mount=str(getattr(provider, "work_dir_mount", "/work") or "/work"),
         )
+        manifest = provider.build_manifest(skill_context)
+        skill_policy_context = SkillPolicyContext.from_any(skill_context)
         return (
             cleaned_message,
             ModeType.AGENT,
@@ -880,6 +891,7 @@ class ChatService:
             manifest.confirmation_meta,
             manifest.force_first_tool_call,
             manifest.required_tool_call_before_response,
+            skill_policy_context,
         )
 
     async def confirm_action(

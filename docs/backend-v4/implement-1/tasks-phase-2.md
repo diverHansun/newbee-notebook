@@ -18,22 +18,22 @@
 ## Progress Summary
 
 - Total: 10 tasks
-- Completed: 0
+- Completed: 10
 - In Progress: 0
-- Remaining: 10
+- Remaining: 0
 
 ## Phase 2: Policy Gate MVP
 
-- [ ] T201 Add `newbee_notebook/core/policy/` pure decision contracts and exports.
-- [ ] T202 Implement deterministic capability signatures with stable canonical JSON.
-- [ ] T203 Implement default/yolo decision matrix and dangerous bash command risk upgrade.
-- [ ] T204 Extend `ToolDefinition` with `tool_class`, `risk_level`, and `sandbox_required` metadata while preserving existing constructor compatibility.
-- [ ] T205 Annotate existing global tools in `newbee_notebook/core/tools/` with read/write risk metadata.
-- [ ] T206 Annotate built-in skill tools that perform writes so policy can replace legacy confirm rules later.
-- [ ] T207 Add optional policy gate to `AgentLoop` before every tool execution path, including final-synthesis textual tool calls.
-- [ ] T208 Pass active skill name and content hash from skills runtime into policy signatures.
-- [ ] T209 Keep existing confirmation behavior compatible while routing policy `ASK` through the same user approval event.
-- [ ] T210 Run targeted unit tests and update task status before moving to the permission gateway batch.
+- [X] T201 Add `newbee_notebook/core/policy/` pure decision contracts and exports.
+- [X] T202 Implement deterministic capability signatures with stable canonical JSON.
+- [X] T203 Implement default/yolo decision matrix and dangerous bash command risk upgrade.
+- [X] T204 Extend `ToolDefinition` with `tool_class`, `risk_level`, and `sandbox_required` metadata while preserving existing constructor compatibility.
+- [X] T205 Annotate existing global tools in `newbee_notebook/core/tools/` with read/write risk metadata.
+- [X] T206 Annotate built-in skill tools that perform writes so policy can replace legacy confirm rules later.
+- [X] T207 Add optional policy gate to `AgentLoop` before every tool execution path, including final-synthesis textual tool calls.
+- [X] T208 Pass active skill name and content hash from skills runtime into policy signatures.
+- [X] T209 Keep existing confirmation behavior compatible while routing policy `ASK` through the same user approval event.
+- [X] T210 Run targeted unit tests and update task status before moving to the permission gateway batch.
 
 ## Definition Of Done
 

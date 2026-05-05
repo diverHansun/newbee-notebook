@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from newbee_notebook.core.policy import RiskLevel, ToolClass
+
 
 @dataclass(frozen=True)
 class SourceItem:
@@ -56,3 +58,6 @@ class ToolDefinition:
     description: str
     parameters: dict[str, Any]
     execute: ToolExecutor
+    tool_class: ToolClass | str = ToolClass.READ
+    risk_level: RiskLevel | str = RiskLevel.SAFE
+    sandbox_required: bool = False

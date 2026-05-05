@@ -66,6 +66,11 @@ class ConfirmationRequestEvent:
     description: str
     action_type: str = "confirm"
     target_type: str = "unknown"
+    capability_signature: str = ""
+    risk_level: str = ""
+    skill_name: str | None = None
+    content_hash: str = ""
+    response_options: list[str] = field(default_factory=list)
     event: str = "confirmation_request"
 
 

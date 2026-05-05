@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from newbee_notebook.application.services.note_service import NoteNotFoundError
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.skills import SkillContext
 from newbee_notebook.domain.entities.mark import Mark
 from newbee_notebook.domain.entities.note import Note
@@ -34,6 +35,19 @@ def note_service():
 @pytest.fixture
 def mark_service():
     return AsyncMock()
+
+
+def test_note_write_tools_declare_policy_metadata():
+    create_tool = build_create_note_tool(note_service=object(), notebook_id="nb1")
+    update_tool = build_update_note_tool(note_service=object())
+    delete_tool = build_delete_note_tool(note_service=object())
+
+    assert create_tool.tool_class == ToolClass.WRITE
+    assert create_tool.risk_level == RiskLevel.MODERATE
+    assert update_tool.tool_class == ToolClass.WRITE
+    assert update_tool.risk_level == RiskLevel.MODERATE
+    assert delete_tool.tool_class == ToolClass.WRITE
+    assert delete_tool.risk_level == RiskLevel.DANGEROUS
 
 
 @pytest.mark.anyio

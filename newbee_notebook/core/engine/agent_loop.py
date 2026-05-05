@@ -26,6 +26,14 @@ from newbee_notebook.core.engine.stream_events import (
     ToolResultEvent,
     WarningEvent,
 )
+from newbee_notebook.core.policy import (
+    AgentPolicy,
+    DecideRequest,
+    Decision,
+    PolicyDecider,
+    PolicyVerdict,
+    SkillPolicyContext,
+)
 from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
 
 
@@ -93,6 +101,10 @@ class AgentLoop:
         confirmation_gateway: ConfirmationGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        policy_decider: PolicyDecider | None = None,
+        agent_policy: AgentPolicy | str | None = None,
+        session_id: str | None = None,
+        skill_context: SkillPolicyContext | Any | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -107,6 +119,10 @@ class AgentLoop:
         self._confirmation_gateway = confirmation_gateway
         self._force_first_tool_call = force_first_tool_call
         self._required_tool_call_before_response = required_tool_call_before_response
+        self._policy_decider = policy_decider
+        self._agent_policy = agent_policy
+        self._session_id = str(session_id or "")
+        self._skill_context = SkillPolicyContext.from_any(skill_context)
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -429,6 +445,58 @@ class AgentLoop:
     def _confirmation_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in arguments.items() if key != "content"}
 
+    def _decide_tool_execution(
+        self,
+        *,
+        tool: ToolDefinition,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Decision | None:
+        if self._policy_decider is None:
+            return None
+        return self._policy_decider.decide(
+            DecideRequest(
+                session_id=self._session_id,
+                agent_policy=self._agent_policy,
+                tool_name=tool_name,
+                tool_args=arguments,
+                tool_class=tool.tool_class,
+                risk_level=tool.risk_level,
+                skill_context=self._skill_context,
+            )
+        )
+
+    def _create_confirmation_event(
+        self,
+        *,
+        request_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        decision: Decision | None = None,
+    ) -> ConfirmationRequestEvent:
+        meta = self._confirmation_meta.get(tool_name)
+        skill_name = self._skill_context.name if self._skill_context else None
+        content_hash = self._skill_context.content_hash if self._skill_context else ""
+        return ConfirmationRequestEvent(
+            request_id=request_id,
+            tool_name=tool_name,
+            args_summary=self._confirmation_args_summary(arguments),
+            description=f"Agent requested to run {tool_name}",
+            action_type=meta.action_type if meta else "confirm",
+            target_type=meta.target_type if meta else "unknown",
+            capability_signature=decision.capability_signature if decision else "",
+            risk_level=decision.risk_level if decision else "",
+            skill_name=skill_name,
+            content_hash=content_hash,
+            response_options=["once", "always_session", "always_persist", "reject"],
+        )
+
+    def _rejection_result(self) -> ToolCallResult:
+        return ToolCallResult(
+            content="The user did not approve this action. The tool call was cancelled.",
+            error="user_rejected",
+        )
+
     def _first_turn_tool_repair_message(self) -> dict[str, str]:
         tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name or "the relevant tool"
         return {
@@ -694,24 +762,46 @@ class AgentLoop:
                     effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
                     tool = self._tools[tool_name]
 
-                    if tool_name in self._confirmation_required and self._confirmation_gateway:
+                    policy_decision = self._decide_tool_execution(
+                        tool=tool,
+                        tool_name=tool_name,
+                        arguments=effective_arguments,
+                    )
+                    confirmation_decision = (
+                        policy_decision
+                        if policy_decision
+                        and policy_decision.verdict == PolicyVerdict.ASK
+                        else None
+                    )
+                    legacy_confirmation_required = (
+                        confirmation_decision is None
+                        and tool_name in self._confirmation_required
+                    )
+                    if confirmation_decision or legacy_confirmation_required:
+                        if not self._confirmation_gateway:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                quality_meta=None,
+                            )
+                            continue
                         request_id = str(uuid4())
                         self._confirmation_gateway.create(request_id)
-                        meta = self._confirmation_meta.get(tool_name)
-                        yield ConfirmationRequestEvent(
+                        yield self._create_confirmation_event(
                             request_id=request_id,
                             tool_name=tool_name,
-                            args_summary=self._confirmation_args_summary(effective_arguments),
-                            description=f"Agent requested to run {tool_name}",
-                            action_type=meta.action_type if meta else "confirm",
-                            target_type=meta.target_type if meta else "unknown",
+                            arguments=effective_arguments,
+                            decision=confirmation_decision,
                         )
                         approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
                         if not approved:
-                            rejection_result = ToolCallResult(
-                                content="The user did not approve this action. The tool call was cancelled.",
-                                error="user_rejected",
-                            )
+                            rejection_result = self._rejection_result()
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
                             )
@@ -816,24 +906,46 @@ class AgentLoop:
                     effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
                     tool = self._tools[tool_name]
 
-                    if tool_name in self._confirmation_required and self._confirmation_gateway:
+                    policy_decision = self._decide_tool_execution(
+                        tool=tool,
+                        tool_name=tool_name,
+                        arguments=effective_arguments,
+                    )
+                    confirmation_decision = (
+                        policy_decision
+                        if policy_decision
+                        and policy_decision.verdict == PolicyVerdict.ASK
+                        else None
+                    )
+                    legacy_confirmation_required = (
+                        confirmation_decision is None
+                        and tool_name in self._confirmation_required
+                    )
+                    if confirmation_decision or legacy_confirmation_required:
+                        if not self._confirmation_gateway:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                quality_meta=None,
+                            )
+                            continue
                         request_id = str(uuid4())
                         self._confirmation_gateway.create(request_id)
-                        meta = self._confirmation_meta.get(tool_name)
-                        yield ConfirmationRequestEvent(
+                        yield self._create_confirmation_event(
                             request_id=request_id,
                             tool_name=tool_name,
-                            args_summary=self._confirmation_args_summary(effective_arguments),
-                            description=f"Agent requested to run {tool_name}",
-                            action_type=meta.action_type if meta else "confirm",
-                            target_type=meta.target_type if meta else "unknown",
+                            arguments=effective_arguments,
+                            decision=confirmation_decision,
                         )
                         approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
                         if not approved:
-                            rejection_result = ToolCallResult(
-                                content="The user did not approve this action. The tool call was cancelled.",
-                                error="user_rejected",
-                            )
+                            rejection_result = self._rejection_result()
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
                             )

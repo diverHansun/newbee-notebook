@@ -8,6 +8,7 @@ from newbee_notebook.application.services.video_service import (
     VideoService,
     VideoSummaryNotFoundError,
 )
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 from newbee_notebook.domain.entities.video_summary import VideoSummary
 
@@ -206,6 +207,8 @@ def build_summarize_video_tool(service: VideoService, notebook_id: str) -> ToolD
             "required": ["url_or_id"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -302,6 +305,8 @@ def build_update_summary_tool(service: VideoService) -> ToolDefinition:
             "required": ["summary_id", "content"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -327,6 +332,8 @@ def build_delete_summary_tool(service: VideoService) -> ToolDefinition:
             "required": ["summary_id"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.DANGEROUS,
     )
 
 
@@ -358,6 +365,8 @@ def build_associate_notebook_tool(service: VideoService, notebook_id: str) -> To
             "required": ["summary_id"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -388,4 +397,6 @@ def build_disassociate_notebook_tool(service: VideoService) -> ToolDefinition:
             "required": ["summary_id"],
         },
         execute=execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )

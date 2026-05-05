@@ -133,6 +133,8 @@ def test_resolve_skill_runtime_passes_config_skill_metadata():
     assert runtime[0] == "summarize"
     assert runtime[1] == ModeType.AGENT
     assert runtime[3] == "demo prompt"
+    assert runtime[8].name == "demo"
+    assert runtime[8].content_hash == "hash123"
     assert provider.context is not None
     assert provider.context.skill_name == "demo"
     assert provider.context.content_hash == "hash123"
