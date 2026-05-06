@@ -895,12 +895,29 @@ class ChatService:
         )
 
     async def confirm_action(
-        self, session_id: str, request_id: str, approved: bool
+        self,
+        session_id: str,
+        request_id: str,
+        approved: bool | None = None,
+        response: str | None = None,
+        suggestion: str | None = None,
     ) -> bool:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
         if not self._confirmation_gateway:
+            return False
+        if response is not None:
+            return bool(
+                self._confirmation_gateway.resolve_response(
+                    request_id,
+                    {
+                        "response": response,
+                        "suggestion": suggestion,
+                    },
+                )
+            )
+        if approved is None:
             return False
         return bool(self._confirmation_gateway.resolve(request_id, approved))
 

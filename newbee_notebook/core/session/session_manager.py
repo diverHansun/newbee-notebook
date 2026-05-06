@@ -26,6 +26,7 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.permission import PermissionGateway
 from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.llm.qwen import (
     DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
@@ -141,6 +142,7 @@ class SessionManager:
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        permission_gateway: PermissionGateway | None = None,
         policy_decider: PolicyDecider | None = None,
         runtime_config: LLMRuntimeConfig | None = None,
         token_counter: TokenCounter | None = None,
@@ -158,6 +160,7 @@ class SessionManager:
             system_prompt_provider or self._default_system_prompt
         )
         self._confirmation_gateway = confirmation_gateway
+        self._permission_gateway = permission_gateway
         self._policy_decider = policy_decider or PolicyDecider()
         self._runtime_config = runtime_config or getattr(
             llm_client, "runtime_config", None
@@ -374,6 +377,8 @@ class SessionManager:
             session_id=self._current_session.session_id if self._current_session else "",
             skill_context=skill_context,
         )
+        if self._permission_gateway is not None:
+            loop_kwargs["permission_gateway"] = self._permission_gateway
         if force_first_tool_call:
             loop_kwargs["force_first_tool_call"] = True
         if required_tool_call_before_response:

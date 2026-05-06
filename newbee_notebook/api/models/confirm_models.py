@@ -1,8 +1,20 @@
 """Pydantic models for chat confirmation callbacks."""
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, model_validator
 
 
 class ConfirmActionRequest(BaseModel):
     request_id: str
-    approved: bool
+    approved: bool | None = None
+    response: Literal["once", "always_session", "always_persist", "reject"] | None = None
+    suggestion: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_choice(self) -> "ConfirmActionRequest":
+        if self.approved is None and self.response is None:
+            raise ValueError("Either approved or response is required")
+        if self.approved is not None and self.response is not None:
+            raise ValueError("Use either approved or response, not both")
+        return self

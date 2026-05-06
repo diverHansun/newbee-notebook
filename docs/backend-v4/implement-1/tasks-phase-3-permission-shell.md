@@ -68,18 +68,25 @@
 
 ## Phase 3 Task List
 
-- [ ] P301 Extend `ConfirmationGateway` with rich responses while preserving `approved: bool` compatibility.
-- [ ] P302 Add permission contracts for request, response, allow scope, decision source, and rejection suggestion.
-- [ ] P303 Implement `SessionAllowCache` with session-scoped signature lookup and skill-scoped cleanup.
-- [ ] P304 Implement `AllowStore` as the only reader/writer for `permissions.*` app_settings keys.
-- [ ] P305 Implement `ConfirmationDispatcher` to translate permission requests into confirmation events and response choices.
-- [ ] P306 Implement `PermissionGateway` orchestration: session allow, permanent allow, ask, record, fail-closed.
-- [ ] P307 Wire `PermissionGateway` into `AgentLoop` for all policy `ASK` paths, including final-synthesis textual tool calls.
-- [ ] P308 Wire request-scoped `PermissionGateway` through FastAPI dependencies and `SessionManager`.
-- [ ] P309 Extend chat confirm API to accept either legacy `approved: bool` or explicit `response: once | always_session | always_persist | reject`.
-- [ ] P310 Add `clear_skill_permissions(name)` integration point for skill uninstall and session cache cleanup.
-- [ ] P311 Add focused unit and contract tests according to `docs-test/` rules.
-- [ ] P312 Run targeted verification, update this task file with discovered scope corrections, then commit Phase 3 implementation.
+- [X] P301 Extend `ConfirmationGateway` with rich responses while preserving `approved: bool` compatibility.
+- [X] P302 Add permission contracts for request, response, allow scope, decision source, and rejection suggestion.
+- [X] P303 Implement `SessionAllowCache` with session-scoped signature lookup and skill-scoped cleanup.
+- [X] P304 Implement `AllowStore` as the only reader/writer for `permissions.*` app_settings keys.
+- [X] P305 Implement `ConfirmationDispatcher` to translate permission requests into confirmation events and response choices.
+- [X] P306 Implement `PermissionGateway` orchestration: session allow, permanent allow, ask, record, fail-closed.
+- [X] P307 Wire `PermissionGateway` into `AgentLoop` for all policy `ASK` paths, including final-synthesis textual tool calls.
+- [X] P308 Wire request-scoped `PermissionGateway` through FastAPI dependencies and `SessionManager`.
+- [X] P309 Extend chat confirm API to accept either legacy `approved: bool` or explicit `response: once | always_session | always_persist | reject`.
+- [X] P310 Add `clear_skill_permissions(name)` integration point for skill uninstall and session cache cleanup.
+- [X] P311 Add focused unit and contract tests according to `docs-test/` rules.
+- [X] P312 Run targeted verification, update this task file with discovered scope corrections, then commit Phase 3 implementation.
+
+## Phase 3 Implementation Notes
+
+- Implemented permission as the global gate for policy `ASK` decisions while retaining the legacy `confirmation_required` path for built-in skill compatibility.
+- `ConfirmationGateway` now supports `wait_response()` and `resolve_response()`; existing `wait()` and `resolve(approved: bool)` remain compatible.
+- `AllowStore` uses exact key lookup for capability signatures and scans `permissions.` keys only for skill uninstall cleanup because `AppSettingsService` currently exposes prefix deletion, not SQL LIKE pattern deletion.
+- The current batch intentionally does not implement `core/shell`, `bash`, or filesystem tools; their module boundary is documented under `docs/backend-v4/filesys-tools/`.
 
 ## Acceptance Criteria
 

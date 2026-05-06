@@ -5,9 +5,10 @@ from __future__ import annotations
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 
-from newbee_notebook.api.dependencies import get_app_settings_service
+from newbee_notebook.api.dependencies import get_app_settings_service, get_permission_gateway_dep
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.core.common.project_paths import get_configs_directory
+from newbee_notebook.core.permission import PermissionGateway
 from newbee_notebook.core.skills.errors import SkillNotFoundError
 from newbee_notebook.core.skills.lifecycle import SkillLifecycle, SkillRecord
 from newbee_notebook.core.skills.registry import SkillRegistry
@@ -40,11 +41,13 @@ class DeleteSkillResponse(BaseModel):
 
 def get_skill_lifecycle_dep(
     settings_service: AppSettingsService = Depends(get_app_settings_service),
+    permission_gateway: PermissionGateway = Depends(get_permission_gateway_dep),
 ) -> SkillLifecycle:
     return SkillLifecycle(
         skills_root=get_configs_directory() / "skills",
         settings_service=settings_service,
         registry=SkillRegistry(),
+        permission_gateway=permission_gateway,
     )
 
 

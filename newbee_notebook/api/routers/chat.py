@@ -386,6 +386,8 @@ async def confirm_action(
             session_id=session_id,
             request_id=request.request_id,
             approved=request.approved,
+            response=request.response,
+            suggestion=request.suggestion,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

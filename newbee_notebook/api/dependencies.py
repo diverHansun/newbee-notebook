@@ -53,6 +53,7 @@ from newbee_notebook.core.skills.lifecycle import register_installed_config_skil
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+from newbee_notebook.core.permission import AllowStore, PermissionGateway, SessionAllowCache
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
@@ -252,6 +253,7 @@ _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
 _runtime_confirmation_gateway = None
+_runtime_permission_session_cache = None
 _video_concurrency_controller = None
 
 
@@ -343,6 +345,13 @@ def get_runtime_confirmation_gateway_singleton() -> ConfirmationGateway:
     return _runtime_confirmation_gateway
 
 
+def get_runtime_permission_session_cache_singleton() -> SessionAllowCache:
+    global _runtime_permission_session_cache
+    if _runtime_permission_session_cache is None:
+        _runtime_permission_session_cache = SessionAllowCache()
+    return _runtime_permission_session_cache
+
+
 def get_mcp_client_manager_singleton() -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
@@ -428,6 +437,17 @@ def get_confirmation_gateway_dep() -> ConfirmationGateway:
     return get_runtime_confirmation_gateway_singleton()
 
 
+def get_permission_gateway_dep(
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
+    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+) -> PermissionGateway:
+    return PermissionGateway(
+        allow_store=AllowStore(settings_service),
+        session_cache=get_runtime_permission_session_cache_singleton(),
+        confirmation_gateway=confirmation_gateway,
+    )
+
+
 async def get_mcp_client_manager_dep(
     settings_service: AppSettingsService = Depends(get_app_settings_service),
 ) -> MCPClientManager:
@@ -449,6 +469,7 @@ async def get_runtime_session_manager_dep(
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_gateway: PermissionGateway = Depends(get_permission_gateway_dep),
     session=Depends(get_db_session),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
@@ -461,6 +482,7 @@ async def get_runtime_session_manager_dep(
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
         confirmation_gateway=confirmation_gateway,
+        permission_gateway=permission_gateway,
         runtime_config=runtime_config,
     )
 

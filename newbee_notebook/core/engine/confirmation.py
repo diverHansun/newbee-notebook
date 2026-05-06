@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
 class PendingConfirmation:
     event: asyncio.Event = field(default_factory=asyncio.Event)
     approved: bool = False
+    response: Any = False
 
 
 class ConfirmationGateway:
@@ -20,21 +22,39 @@ class ConfirmationGateway:
         self._pending[request_id] = PendingConfirmation()
 
     async def wait(self, request_id: str, timeout: float = 180.0) -> bool:
+        response = await self.wait_response(request_id, timeout=timeout)
+        if isinstance(response, bool):
+            return response
+        if isinstance(response, str):
+            return response in {"once", "always_session", "always_persist"}
+        if isinstance(response, dict):
+            value = response.get("approved")
+            if isinstance(value, bool):
+                return value
+            choice = str(response.get("response") or response.get("choice") or "")
+            return choice in {"once", "always_session", "always_persist"}
+        return False
+
+    async def wait_response(self, request_id: str, timeout: float = 180.0) -> Any:
         pending = self._pending.get(request_id)
         if pending is None:
             return False
         try:
             await asyncio.wait_for(pending.event.wait(), timeout=timeout)
-            return pending.approved
+            return pending.response
         except asyncio.TimeoutError:
             return False
         finally:
             self._pending.pop(request_id, None)
 
     def resolve(self, request_id: str, approved: bool) -> bool:
+        return self.resolve_response(request_id, approved)
+
+    def resolve_response(self, request_id: str, response: Any) -> bool:
         pending = self._pending.get(request_id)
         if pending is None:
             return False
-        pending.approved = approved
+        pending.approved = bool(response)
+        pending.response = response
         pending.event.set()
         return True
