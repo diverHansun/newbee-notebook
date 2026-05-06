@@ -17,6 +17,15 @@ async def _fake_tool_result(_: dict) -> ToolCallResult:
     return ToolCallResult(content="ok")
 
 
+FILESYSTEM_TOOL_NAMES = [
+    "read_file",
+    "glob_files",
+    "grep_files",
+    "edit_file",
+    "write_file",
+]
+
+
 def _external_tool(name: str) -> ToolDefinition:
     return ToolDefinition(
         name=name,
@@ -66,7 +75,12 @@ async def test_tool_registry_merges_external_agent_tools_without_changing_contra
 
     tools = await registry.get_tools("agent", external_tools=[_external_tool("mcp.search")])
 
-    assert [tool.name for tool in tools] == ["knowledge_base", "time", "mcp.search"]
+    assert [tool.name for tool in tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "mcp.search",
+    ]
     assert all(isinstance(tool, ToolDefinition) for tool in tools)
 
 
@@ -94,7 +108,12 @@ async def test_tool_registry_reads_cached_mcp_tools_for_agent_only(monkeypatch):
     agent_tools = await registry.get_tools("agent")
     ask_tools = await registry.get_tools("ask")
 
-    assert [tool.name for tool in agent_tools] == ["knowledge_base", "time", "weather_forecast"]
+    assert [tool.name for tool in agent_tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "weather_forecast",
+    ]
     assert [tool.name for tool in ask_tools] == ["knowledge_base", "time"]
 
 
@@ -116,6 +135,11 @@ async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only(monkeypatc
     agent_tools = await registry.get_tools("agent")
     explain_tools = await registry.get_tools("explain")
 
-    assert [tool.name for tool in agent_tools] == ["knowledge_base", "time", "filesystem_read_file"]
+    assert [tool.name for tool in agent_tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "filesystem_read_file",
+    ]
     assert [tool.name for tool in explain_tools] == ["knowledge_base"]
     assert supplier_calls == ["agent"]

@@ -27,6 +27,14 @@ from newbee_notebook.core.tools.image_generation import (
     ImageToolContext,
     build_image_generation_tool,
 )
+from newbee_notebook.core.tools.filesystem import (
+    build_edit_file_tool,
+    build_filesystem_tools,
+    build_glob_files_tool,
+    build_grep_files_tool,
+    build_read_file_tool,
+    build_write_file_tool,
+)
 
 __all__ = [
     "SourceItem",
@@ -46,6 +54,12 @@ __all__ = [
     "get_current_datetime",
     "ImageToolContext",
     "build_image_generation_tool",
+    "build_edit_file_tool",
+    "build_filesystem_tools",
+    "build_glob_files_tool",
+    "build_grep_files_tool",
+    "build_read_file_tool",
+    "build_write_file_tool",
 ]
 
 

@@ -6,6 +6,11 @@ import os
 from collections.abc import Awaitable, Callable, Sequence
 
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
+from newbee_notebook.core.shell import (
+    ShellEnvironment,
+    build_default_shell_environment,
+)
+from newbee_notebook.core.tools.filesystem import build_filesystem_tools
 from newbee_notebook.core.tools.knowledge_base import build_knowledge_base_tool
 from newbee_notebook.core.tools.tavily_tools import (
     build_tavily_crawl_runtime_tool,
@@ -32,11 +37,15 @@ class BuiltinToolProvider:
         semantic_search: SearchExecutor | None = None,
         keyword_search: SearchExecutor | None = None,
         default_allowed_document_ids: Sequence[str] | None = None,
+        filesystem_environment: ShellEnvironment | None = None,
+        enable_filesystem_tools: bool = True,
     ):
         self._hybrid_search = hybrid_search
         self._semantic_search = semantic_search
         self._keyword_search = keyword_search
         self._default_allowed_document_ids = list(default_allowed_document_ids) if default_allowed_document_ids is not None else None
+        self._filesystem_environment = filesystem_environment
+        self._enable_filesystem_tools = enable_filesystem_tools
 
     def _build_knowledge_base_tool(
         self,
@@ -75,6 +84,12 @@ class BuiltinToolProvider:
             ])
         return tools
 
+    def _build_agent_filesystem_tools(self) -> list[ToolDefinition]:
+        if not self._enable_filesystem_tools:
+            return []
+        environment = self._filesystem_environment or build_default_shell_environment()
+        return build_filesystem_tools(environment)
+
     def get_tools(self, mode: str) -> list[ToolDefinition]:
         normalized = str(mode).strip().lower()
         if normalized in {"explain", "conclude"}:
@@ -97,5 +112,6 @@ class BuiltinToolProvider:
             tools = [knowledge_base, self._build_time_tool()]
             if normalized in {"agent", "chat"}:
                 tools.extend(self._build_agent_web_tools())
+                tools.extend(self._build_agent_filesystem_tools())
             return tools
         return []
