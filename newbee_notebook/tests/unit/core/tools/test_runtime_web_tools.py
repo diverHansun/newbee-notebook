@@ -14,6 +14,7 @@ FILESYSTEM_TOOL_NAMES = [
     "grep_files",
     "edit_file",
     "write_file",
+    "bash",
 ]
 
 

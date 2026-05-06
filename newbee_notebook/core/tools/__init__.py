@@ -27,6 +27,7 @@ from newbee_notebook.core.tools.image_generation import (
     ImageToolContext,
     build_image_generation_tool,
 )
+from newbee_notebook.core.tools.bash import build_bash_tool
 from newbee_notebook.core.tools.filesystem import (
     build_edit_file_tool,
     build_filesystem_tools,
@@ -54,6 +55,7 @@ __all__ = [
     "get_current_datetime",
     "ImageToolContext",
     "build_image_generation_tool",
+    "build_bash_tool",
     "build_edit_file_tool",
     "build_filesystem_tools",
     "build_glob_files_tool",

@@ -10,6 +10,8 @@ from newbee_notebook.core.shell import (
     ShellEnvironment,
     build_default_shell_environment,
 )
+from newbee_notebook.core.sandbox import SandboxExecutor
+from newbee_notebook.core.tools.bash import build_bash_tool
 from newbee_notebook.core.tools.filesystem import build_filesystem_tools
 from newbee_notebook.core.tools.knowledge_base import build_knowledge_base_tool
 from newbee_notebook.core.tools.tavily_tools import (
@@ -39,6 +41,8 @@ class BuiltinToolProvider:
         default_allowed_document_ids: Sequence[str] | None = None,
         filesystem_environment: ShellEnvironment | None = None,
         enable_filesystem_tools: bool = True,
+        sandbox_executor: SandboxExecutor | None = None,
+        enable_bash_tool: bool = True,
     ):
         self._hybrid_search = hybrid_search
         self._semantic_search = semantic_search
@@ -46,6 +50,8 @@ class BuiltinToolProvider:
         self._default_allowed_document_ids = list(default_allowed_document_ids) if default_allowed_document_ids is not None else None
         self._filesystem_environment = filesystem_environment
         self._enable_filesystem_tools = enable_filesystem_tools
+        self._sandbox_executor = sandbox_executor
+        self._enable_bash_tool = enable_bash_tool
 
     def _build_knowledge_base_tool(
         self,
@@ -90,6 +96,17 @@ class BuiltinToolProvider:
         environment = self._filesystem_environment or build_default_shell_environment()
         return build_filesystem_tools(environment)
 
+    def _build_agent_bash_tools(self) -> list[ToolDefinition]:
+        if not self._enable_bash_tool:
+            return []
+        environment = self._filesystem_environment or build_default_shell_environment()
+        return [
+            build_bash_tool(
+                environment,
+                sandbox_executor=self._sandbox_executor,
+            )
+        ]
+
     def get_tools(self, mode: str) -> list[ToolDefinition]:
         normalized = str(mode).strip().lower()
         if normalized in {"explain", "conclude"}:
@@ -113,5 +130,6 @@ class BuiltinToolProvider:
             if normalized in {"agent", "chat"}:
                 tools.extend(self._build_agent_web_tools())
                 tools.extend(self._build_agent_filesystem_tools())
+                tools.extend(self._build_agent_bash_tools())
             return tools
         return []
