@@ -28,6 +28,7 @@ class SandboxRequest:
     network_enabled: bool = False
     run_dir: Path | str | None = None
     stdin: str | None = None
+    sandbox_session_key: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.argv, str):
@@ -54,6 +55,8 @@ class SandboxRequest:
             if self.run_dir is not None
             else None,
         )
+        key = str(self.sandbox_session_key or "").strip()
+        object.__setattr__(self, "sandbox_session_key", key or None)
 
 
 @dataclass(frozen=True)

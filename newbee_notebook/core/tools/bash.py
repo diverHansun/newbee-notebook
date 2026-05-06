@@ -6,7 +6,12 @@ from typing import Any
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.sandbox import SandboxExecutor
-from newbee_notebook.core.shell import ShellEnvironment, ShellExecutionResult, ShellExecutor
+from newbee_notebook.core.shell import (
+    BackgroundBashTaskManager,
+    ShellEnvironment,
+    ShellExecutionResult,
+    ShellExecutor,
+)
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 
 
@@ -15,6 +20,7 @@ def build_bash_tool(
     *,
     sandbox_executor: SandboxExecutor | None = None,
     shell_executor: ShellExecutor | None = None,
+    background_task_manager: BackgroundBashTaskManager | None = None,
 ) -> ToolDefinition:
     executor = shell_executor or ShellExecutor(
         environment=environment,
@@ -25,13 +31,39 @@ def build_bash_tool(
         command = str(args.get("command") or "")
         if not command.strip():
             return ToolCallResult(content="command is required", error="empty_command")
+        timeout_seconds = args.get("timeout_seconds", args.get("timeout"))
         if bool(args.get("background", False)):
+            if background_task_manager is None:
+                return ToolCallResult(
+                    content="Background bash execution is not configured.",
+                    error="background_not_configured",
+                )
+            description = str(args.get("description") or "").strip()
+            if not description:
+                return ToolCallResult(
+                    content="description is required for background bash tasks",
+                    error="invalid_description",
+                )
+            task = await background_task_manager.start(
+                command=command,
+                description=description,
+                environment=environment,
+                sandbox_executor=sandbox_executor,
+                timeout_seconds=timeout_seconds,
+            )
             return ToolCallResult(
-                content="Background bash execution is not supported in this batch.",
-                error="background_not_supported",
+                content=(
+                    f"Started background bash task {task.task_id}.\n"
+                    f"Status: {task.status}\n"
+                    f"Log: {task.log_path}"
+                ),
+                metadata={
+                    "task_id": task.task_id,
+                    "status": task.status,
+                    "log_path": str(task.log_path),
+                },
             )
 
-        timeout_seconds = args.get("timeout_seconds", args.get("timeout"))
         shell_result = await executor.execute_bash(
             command,
             timeout_seconds=timeout_seconds,
@@ -59,6 +91,15 @@ def build_bash_tool(
                 "description": {"type": "string"},
             },
             "required": ["command"],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"background": {"const": True}},
+                        "required": ["background"],
+                    },
+                    "then": {"required": ["command", "description"]},
+                }
+            ],
         },
         execute=_execute,
         tool_class=ToolClass.BASH,

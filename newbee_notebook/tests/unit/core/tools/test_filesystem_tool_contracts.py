@@ -51,5 +51,8 @@ def test_builtin_provider_adds_filesystem_tools_to_agent_only(tmp_path, monkeypa
         "edit_file",
         "write_file",
         "bash",
+        "bash_task_list",
+        "bash_task_output",
+        "bash_task_stop",
     ]
     assert ask_names == ["knowledge_base", "time"]

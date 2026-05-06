@@ -51,6 +51,12 @@ class PathPolicy:
 
     def resolve_write_path(self, path: Path | str) -> Path:
         resolved = self._resolve_user_path(path)
+        if self._requires_work_alias_for_writes(path, resolved):
+            raise PathAccessError(
+                "outside_workspace",
+                "Notebook work directory writes must use the /work path alias.",
+                resolved,
+            )
         self._ensure_not_sensitive(resolved)
         self._ensure_inside_any_root(resolved.parent, self.environment.write_roots)
         return resolved
@@ -61,16 +67,47 @@ class PathPolicy:
 
     def relative_to_cwd(self, path: Path | str) -> str:
         resolved = Path(path).resolve(strict=False)
+        if self.environment.run_dir is not None:
+            try:
+                suffix = resolved.relative_to(self.environment.run_dir).as_posix()
+                return f"/work/{suffix}" if suffix else "/work"
+            except ValueError:
+                pass
         try:
             return resolved.relative_to(self.environment.cwd).as_posix()
         except ValueError:
             return str(resolved)
 
     def _resolve_user_path(self, path: Path | str) -> Path:
+        mapped = self._map_container_path(str(path))
+        if mapped is not None:
+            return mapped.resolve(strict=False)
         raw_path = Path(path).expanduser()
         if not raw_path.is_absolute():
             raw_path = self.environment.cwd / raw_path
         return raw_path.resolve(strict=False)
+
+    def _map_container_path(self, path: str) -> Path | None:
+        normalized = str(path or "").strip().replace("\\", "/")
+        if normalized == "/workspace":
+            return self.environment.cwd
+        if normalized.startswith("/workspace/"):
+            return self.environment.cwd / normalized[len("/workspace/") :]
+        if self.environment.run_dir is None:
+            return None
+        if normalized == "/work":
+            return self.environment.run_dir
+        if normalized.startswith("/work/"):
+            return self.environment.run_dir / normalized[len("/work/") :]
+        return None
+
+    def _requires_work_alias_for_writes(self, path: Path | str, resolved: Path) -> bool:
+        if self.environment.allow_workspace_write or self.environment.run_dir is None:
+            return False
+        if not _is_relative_to(resolved, self.environment.run_dir):
+            return False
+        normalized = str(path or "").strip().replace("\\", "/")
+        return not (normalized == "/work" or normalized.startswith("/work/"))
 
     def _ensure_inside_any_root(self, path: Path, roots: tuple[Path, ...]) -> None:
         if any(_is_relative_to(path, root) for root in roots):

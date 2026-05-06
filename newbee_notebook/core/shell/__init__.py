@@ -7,8 +7,16 @@ from newbee_notebook.core.shell.environment import (
 from newbee_notebook.core.shell.executor import ShellExecutor
 from newbee_notebook.core.shell.path_policy import PathAccessError, PathPolicy
 from newbee_notebook.core.shell.result import ShellExecutionResult
+from newbee_notebook.core.shell.background_tasks import (
+    BackgroundBashTaskManager,
+    BackgroundBashTaskOutput,
+    BackgroundBashTaskRecord,
+)
 
 __all__ = [
+    "BackgroundBashTaskManager",
+    "BackgroundBashTaskOutput",
+    "BackgroundBashTaskRecord",
     "PathAccessError",
     "PathPolicy",
     "ShellExecutionResult",

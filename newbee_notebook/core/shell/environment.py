@@ -32,6 +32,8 @@ class ShellEnvironment:
     additional_roots: tuple[Path | str, ...] = ()
     skill_roots: tuple[Path | str, ...] = ()
     run_dir: Path | str | None = None
+    sandbox_session_key: str | None = None
+    allow_workspace_write: bool = True
     env: Mapping[str, str] = field(default_factory=dict)
     timeout_seconds: float = 30.0
     max_output_bytes: int = 120_000
@@ -48,6 +50,8 @@ class ShellEnvironment:
             "run_dir",
             _resolve_path(self.run_dir) if self.run_dir is not None else None,
         )
+        key = str(self.sandbox_session_key or "").strip()
+        object.__setattr__(self, "sandbox_session_key", key or None)
         object.__setattr__(self, "env", dict(self.env))
 
     @property
@@ -59,7 +63,7 @@ class ShellEnvironment:
 
     @property
     def write_roots(self) -> tuple[Path, ...]:
-        roots = [*self.workspace_roots]
+        roots = [*self.workspace_roots] if self.allow_workspace_write else []
         if self.run_dir is not None:
             roots.append(self.run_dir)
         return tuple(roots)

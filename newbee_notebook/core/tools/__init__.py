@@ -28,6 +28,11 @@ from newbee_notebook.core.tools.image_generation import (
     build_image_generation_tool,
 )
 from newbee_notebook.core.tools.bash import build_bash_tool
+from newbee_notebook.core.tools.bash_tasks import (
+    build_bash_task_list_tool,
+    build_bash_task_output_tool,
+    build_bash_task_stop_tool,
+)
 from newbee_notebook.core.tools.filesystem import (
     build_edit_file_tool,
     build_filesystem_tools,
@@ -56,6 +61,9 @@ __all__ = [
     "ImageToolContext",
     "build_image_generation_tool",
     "build_bash_tool",
+    "build_bash_task_list_tool",
+    "build_bash_task_output_tool",
+    "build_bash_task_stop_tool",
     "build_edit_file_tool",
     "build_filesystem_tools",
     "build_glob_files_tool",

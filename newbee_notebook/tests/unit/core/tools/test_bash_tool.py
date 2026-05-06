@@ -6,8 +6,13 @@ import pytest
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.sandbox import SandboxRequest, SandboxResult
-from newbee_notebook.core.shell import ShellEnvironment
+from newbee_notebook.core.shell import BackgroundBashTaskManager, ShellEnvironment
 from newbee_notebook.core.tools.bash import build_bash_tool
+from newbee_notebook.core.tools.bash_tasks import (
+    build_bash_task_list_tool,
+    build_bash_task_output_tool,
+    build_bash_task_stop_tool,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -57,17 +62,70 @@ async def test_bash_tool_fails_closed_when_no_sandbox_executor_is_configured(tmp
 
 
 @pytest.mark.anyio
-async def test_bash_tool_rejects_background_mode_for_first_batch(tmp_path: Path):
+async def test_bash_tool_starts_background_task_when_manager_is_configured(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
+    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
     tool = build_bash_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=sandbox,
+        background_task_manager=manager,
     )
 
-    result = await tool.execute({"command": "sleep 5", "background": True})
+    result = await tool.execute(
+        {
+            "command": "echo background",
+            "background": True,
+            "description": "run in background",
+        }
+    )
 
-    assert result.error == "background_not_supported"
-    assert sandbox.requests == []
+    assert result.error is None
+    assert result.metadata["task_id"]
+    completed = await manager.wait(result.metadata["task_id"], timeout_seconds=2)
+    assert completed.status == "completed"
+
+
+def test_bash_tool_schema_requires_description_for_background_tasks(tmp_path: Path):
+    tool = build_bash_tool(
+        ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
+        sandbox_executor=RecordingSandboxExecutor(),
+    )
+
+    assert {
+        "if": {
+            "properties": {"background": {"const": True}},
+            "required": ["background"],
+        },
+        "then": {"required": ["command", "description"]},
+    } in tool.parameters["allOf"]
+
+
+@pytest.mark.anyio
+async def test_bash_task_tools_list_output_and_stop(tmp_path: Path):
+    sandbox = RecordingSandboxExecutor()
+    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
+    task = await manager.start(
+        command="echo hello",
+        description="hello",
+        environment=environment,
+        sandbox_executor=sandbox,
+    )
+    await manager.wait(task.task_id, timeout_seconds=2)
+    list_tool = build_bash_task_list_tool(manager)
+    output_tool = build_bash_task_output_tool(manager)
+    stop_tool = build_bash_task_stop_tool(manager)
+
+    listed = await list_tool.execute({})
+    output = await output_tool.execute({"task_id": task.task_id})
+    stopped = await stop_tool.execute({"task_id": task.task_id})
+
+    assert listed.error is None
+    assert task.task_id in listed.content
+    assert output.error is None
+    assert "hello" in output.content
+    assert stopped.error is None
+    assert "completed" in stopped.content
 
 
 @pytest.mark.anyio

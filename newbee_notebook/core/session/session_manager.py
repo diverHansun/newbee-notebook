@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
 
 from newbee_notebook.core.context import (
@@ -28,6 +30,8 @@ from newbee_notebook.core.engine.stream_events import (
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
 from newbee_notebook.core.permission import PermissionGateway
 from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
+from newbee_notebook.core.sandbox import NotebookSandboxWorkspace
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.llm.qwen import (
     DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
     QWEN_CONTEXT_WINDOWS,
@@ -149,6 +153,8 @@ class SessionManager:
         compressor: Compressor | None = None,
         context_budget: ContextBudget | None = None,
         compaction_service: CompactionService | None = None,
+        sandbox_workspace: NotebookSandboxWorkspace | None = None,
+        tool_cwd: Path | str | None = None,
     ):
         self._session_repo = session_repo
         self._message_repo = message_repo
@@ -170,6 +176,8 @@ class SessionManager:
         self._context_budget = context_budget or _build_context_budget(
             self._runtime_config
         )
+        self._sandbox_workspace = sandbox_workspace
+        self._tool_cwd = Path(tool_cwd or Path.cwd()).expanduser().resolve(strict=False)
         self._current_session: Session | None = None
         self._current_mode: ModeType = ModeType.AGENT
         self._memory = SessionMemory()
@@ -355,8 +363,9 @@ class SessionManager:
         effective_confirmation_gateway = (
             confirmation_gateway or self._confirmation_gateway
         )
-        tools = await self._tool_registry.get_tools(
-            mode.value, external_tools=external_tools
+        tools = await self._get_tools_for_loop(
+            mode=mode,
+            external_tools=external_tools,
         )
         mode_config = ModeConfigFactory.build(mode, tools)
         tool_argument_defaults = self._build_tool_argument_defaults(
@@ -386,6 +395,38 @@ class SessionManager:
                 required_tool_call_before_response
             )
         return self._agent_loop_cls(**loop_kwargs)
+
+    def _build_tool_environment(self) -> ShellEnvironment | None:
+        if self._sandbox_workspace is None or self._current_session is None:
+            return None
+        notebook_id = str(self._current_session.notebook_id or "").strip()
+        if not notebook_id:
+            return None
+        workspace = self._sandbox_workspace.for_notebook(notebook_id)
+        return ShellEnvironment(
+            cwd=self._tool_cwd,
+            workspace_roots=(self._tool_cwd,),
+            run_dir=workspace.work_dir,
+            sandbox_session_key=notebook_id,
+            allow_workspace_write=False,
+        )
+
+    async def _get_tools_for_loop(
+        self,
+        *,
+        mode: ModeType,
+        external_tools: list[Any] | None,
+    ) -> list[Any]:
+        filesystem_environment = self._build_tool_environment()
+        get_tools = self._tool_registry.get_tools
+        parameters = inspect.signature(get_tools).parameters
+        if "filesystem_environment" in parameters:
+            return await get_tools(
+                mode.value,
+                external_tools=external_tools,
+                filesystem_environment=filesystem_environment,
+            )
+        return await get_tools(mode.value, external_tools=external_tools)
 
     async def chat_stream(
         self,

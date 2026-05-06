@@ -46,6 +46,7 @@ class ShellExecutor:
             max_output_bytes=self._environment.max_output_bytes,
             network_enabled=False,
             run_dir=self._environment.run_dir,
+            sandbox_session_key=self._environment.sandbox_session_key,
         )
         try:
             sandbox_result = await self._sandbox_executor.execute(request)

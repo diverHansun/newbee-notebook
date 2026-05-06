@@ -7,6 +7,9 @@ FastAPI dependency injection configuration.
 import logging
 import os
 import tempfile
+import asyncio
+import contextlib
+from dataclasses import replace
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -54,6 +57,13 @@ from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
 from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.permission import AllowStore, PermissionGateway, SessionAllowCache
+from newbee_notebook.core.sandbox import (
+    DockerSandboxExecutor,
+    DockerSandboxSessionRegistry,
+    NotebookSandboxWorkspace,
+    SandboxExecutor,
+    build_docker_run_config_from_env,
+)
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
@@ -249,6 +259,10 @@ _embed_model = None
 _pgvector_index = None
 _es_index = None
 _runtime_builtin_tool_provider = None
+_runtime_sandbox_executor = None
+_runtime_docker_session_registry = None
+_runtime_docker_session_reaper_task = None
+_runtime_notebook_sandbox_workspace = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
@@ -317,8 +331,136 @@ def get_runtime_builtin_tool_provider_singleton() -> BuiltinToolProvider:
             hybrid_search=_hybrid_search,
             semantic_search=_semantic_search,
             keyword_search=_keyword_search,
+            sandbox_executor=get_runtime_sandbox_executor_singleton(),
         )
     return _runtime_builtin_tool_provider
+
+
+def get_runtime_sandbox_executor_singleton() -> SandboxExecutor | None:
+    """Get the runtime sandbox executor for dangerous built-in tools."""
+
+    global _runtime_sandbox_executor
+    backend = (os.getenv("NEWBEE_SANDBOX_BACKEND") or "docker").strip().lower()
+    if backend in {"", "0", "false", "none", "off", "disabled"}:
+        return None
+    if backend != "docker":
+        logger.warning("Unsupported NEWBEE_SANDBOX_BACKEND=%s; sandbox disabled", backend)
+        return None
+    if _runtime_sandbox_executor is None:
+        config = build_docker_run_config_from_env()
+        config = replace(
+            config,
+            additional_run_roots=(
+                *config.additional_run_roots,
+                _resolve_sandbox_work_root(),
+            ),
+        )
+        _runtime_sandbox_executor = DockerSandboxExecutor(
+            config=config,
+            session_registry=get_runtime_docker_session_registry_singleton(config),
+        )
+    return _runtime_sandbox_executor
+
+
+def get_runtime_docker_session_registry_singleton(
+    config=None,
+) -> DockerSandboxSessionRegistry:
+    """Get the runtime notebook-scoped Docker session registry."""
+
+    global _runtime_docker_session_registry
+    if _runtime_docker_session_registry is None:
+        resolved_config = config or replace(
+            build_docker_run_config_from_env(),
+            additional_run_roots=(_resolve_sandbox_work_root(),),
+        )
+        ttl = os.getenv("NEWBEE_SANDBOX_SESSION_IDLE_TTL_SECONDS")
+        try:
+            idle_ttl_seconds = float(ttl) if ttl else 30 * 60
+        except ValueError:
+            idle_ttl_seconds = 30 * 60
+        _runtime_docker_session_registry = DockerSandboxSessionRegistry(
+            config=resolved_config,
+            idle_ttl_seconds=idle_ttl_seconds,
+        )
+    return _runtime_docker_session_registry
+
+
+async def reap_runtime_docker_sessions_once() -> list[str]:
+    """Reap idle Docker sandbox sessions when the registry is active."""
+
+    if _runtime_docker_session_registry is None:
+        return []
+    return await _runtime_docker_session_registry.reap_idle()
+
+
+def start_runtime_docker_session_reaper() -> None:
+    """Start the background idle-session reaper if it is not already running."""
+
+    global _runtime_docker_session_reaper_task
+    if _runtime_docker_session_reaper_task is not None:
+        return
+    _runtime_docker_session_reaper_task = asyncio.create_task(
+        _runtime_docker_session_reaper_loop()
+    )
+
+
+async def stop_runtime_docker_session_reaper() -> None:
+    """Stop the background Docker session reaper task."""
+
+    global _runtime_docker_session_reaper_task
+    task = _runtime_docker_session_reaper_task
+    _runtime_docker_session_reaper_task = None
+    if task is None:
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def stop_runtime_docker_sessions() -> None:
+    """Stop all active runtime Docker sandbox sessions."""
+
+    if _runtime_docker_session_registry is None:
+        return
+    await _runtime_docker_session_registry.stop_all()
+
+
+async def _runtime_docker_session_reaper_loop() -> None:
+    while True:
+        await asyncio.sleep(_runtime_docker_session_reap_interval_seconds())
+        try:
+            await reap_runtime_docker_sessions_once()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Docker sandbox idle reaper failed: %s", exc)
+
+
+def _runtime_docker_session_reap_interval_seconds() -> float:
+    value = os.getenv("NEWBEE_SANDBOX_SESSION_REAP_INTERVAL_SECONDS")
+    try:
+        interval = float(value) if value else 60.0
+    except ValueError:
+        interval = 60.0
+    return max(interval, 1.0)
+
+
+def _resolve_sandbox_work_root() -> Path:
+    root = os.getenv("NEWBEE_SANDBOX_WORK_ROOT")
+    return (
+        Path(root).expanduser().resolve(strict=False)
+        if root
+        else (Path.cwd() / ".tmp" / "sandbox-work").resolve(strict=False)
+    )
+
+
+def get_runtime_notebook_sandbox_workspace_singleton() -> NotebookSandboxWorkspace:
+    """Get the runtime notebook-scoped sandbox workspace manager."""
+
+    global _runtime_notebook_sandbox_workspace
+    if _runtime_notebook_sandbox_workspace is None:
+        _runtime_notebook_sandbox_workspace = NotebookSandboxWorkspace(
+            root=_resolve_sandbox_work_root(),
+        )
+    return _runtime_notebook_sandbox_workspace
 
 
 def get_runtime_tool_registry_singleton() -> ToolRegistry:
@@ -484,6 +626,7 @@ async def get_runtime_session_manager_dep(
         confirmation_gateway=confirmation_gateway,
         permission_gateway=permission_gateway,
         runtime_config=runtime_config,
+        sandbox_workspace=get_runtime_notebook_sandbox_workspace_singleton(),
     )
 
 

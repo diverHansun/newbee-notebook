@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Iterable
 
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
 from newbee_notebook.core.tools.contracts import ToolDefinition
+from newbee_notebook.core.shell import ShellEnvironment
 
 
 class ToolRegistry:
@@ -22,8 +23,14 @@ class ToolRegistry:
         self,
         mode: str,
         external_tools: Iterable[ToolDefinition] | None = None,
+        filesystem_environment: ShellEnvironment | None = None,
     ) -> list[ToolDefinition]:
-        tools = list(self._builtin_provider.get_tools(mode))
+        tools = list(
+            self._builtin_provider.get_tools(
+                mode,
+                filesystem_environment=filesystem_environment,
+            )
+        )
         if str(mode).strip().lower() in {"agent", "chat"} and self._mcp_tool_supplier is not None:
             supplied = self._mcp_tool_supplier()
             if inspect.isawaitable(supplied):

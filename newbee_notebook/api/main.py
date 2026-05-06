@@ -18,6 +18,11 @@ from newbee_notebook.core.common.config_db import (
     is_model_switch_enabled,
     sync_runtime_env_from_db,
 )
+from newbee_notebook.api.dependencies import (
+    start_runtime_docker_session_reaper,
+    stop_runtime_docker_session_reaper,
+    stop_runtime_docker_sessions,
+)
 
 # Import routers
 from newbee_notebook.api.routers import config
@@ -69,9 +74,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Orphan detection skipped due to startup error: %s", exc)
+    start_runtime_docker_session_reaper()
     yield
     # Shutdown
     print("Shutting down Newbee Notebook API...")
+    await stop_runtime_docker_session_reaper()
+    await stop_runtime_docker_sessions()
 
 
 def create_app() -> FastAPI:

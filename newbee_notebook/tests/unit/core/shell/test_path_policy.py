@@ -56,3 +56,55 @@ def test_path_policy_allows_write_to_new_file_when_parent_is_inside_workspace(tm
     resolved = policy.resolve_write_path("generated/out.md")
 
     assert resolved == (workspace / "generated" / "out.md").resolve()
+
+
+def test_path_policy_maps_container_workspace_and_work_paths(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    work_dir = tmp_path / "work"
+    workspace.mkdir()
+    work_dir.mkdir()
+    policy = PathPolicy(
+        ShellEnvironment(
+            cwd=workspace,
+            workspace_roots=(workspace,),
+            run_dir=work_dir,
+            allow_workspace_write=False,
+        )
+    )
+
+    assert policy.resolve_read_path("/workspace/brief.md") == (workspace / "brief.md").resolve()
+    assert policy.resolve_read_path("/work/out.md") == (work_dir / "out.md").resolve()
+
+    with pytest.raises(PathAccessError) as exc_info:
+        policy.resolve_write_path("/workspace/brief.md")
+    assert exc_info.value.code == "outside_workspace"
+    assert policy.resolve_write_path("/work/out.md") == (work_dir / "out.md").resolve()
+
+
+def test_path_policy_requires_work_alias_for_notebook_work_writes(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    work_dir = workspace / ".tmp" / "sandbox-work" / "notebooks" / "nb1" / "work"
+    workspace.mkdir()
+    work_dir.mkdir(parents=True)
+    policy = PathPolicy(
+        ShellEnvironment(
+            cwd=workspace,
+            workspace_roots=(workspace,),
+            run_dir=work_dir,
+            allow_workspace_write=False,
+        )
+    )
+
+    with pytest.raises(PathAccessError) as workspace_alias:
+        policy.resolve_write_path(
+            "/workspace/.tmp/sandbox-work/notebooks/nb1/work/out.md"
+        )
+    with pytest.raises(PathAccessError) as relative_alias:
+        policy.resolve_write_path(".tmp/sandbox-work/notebooks/nb1/work/out.md")
+    with pytest.raises(PathAccessError) as absolute_alias:
+        policy.resolve_write_path(work_dir / "out.md")
+
+    assert workspace_alias.value.code == "outside_workspace"
+    assert relative_alias.value.code == "outside_workspace"
+    assert absolute_alias.value.code == "outside_workspace"
+    assert policy.resolve_write_path("/work/out.md") == (work_dir / "out.md").resolve()

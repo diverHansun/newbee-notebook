@@ -55,3 +55,42 @@ async def test_write_file_overwrite_and_append_modes_return_diff(tmp_path: Path)
     assert target.read_text(encoding="utf-8") == "beta\ngamma\n"
     assert "-alpha" in overwrite.content
     assert "+gamma" in append.content
+
+
+@pytest.mark.anyio
+async def test_write_and_edit_scoped_environment_only_modify_work_dir(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    work_dir = tmp_path / "work"
+    workspace.mkdir()
+    work_dir.mkdir()
+    (workspace / "host.md").write_text("host\n", encoding="utf-8")
+    (work_dir / "draft.md").write_text("draft\n", encoding="utf-8")
+    environment = ShellEnvironment(
+        cwd=workspace,
+        workspace_roots=(workspace,),
+        run_dir=work_dir,
+        allow_workspace_write=False,
+    )
+    write_tool = build_write_file_tool(environment)
+    edit_tool = build_edit_file_tool(environment)
+
+    host_write = await write_tool.execute(
+        {"path": "/workspace/host.md", "content": "changed\n"}
+    )
+    work_write = await write_tool.execute(
+        {"path": "/work/new.md", "content": "created\n"}
+    )
+    host_edit = await edit_tool.execute(
+        {"path": "/workspace/host.md", "old": "host", "new": "changed"}
+    )
+    work_edit = await edit_tool.execute(
+        {"path": "/work/draft.md", "old": "draft", "new": "edited"}
+    )
+
+    assert host_write.error == "outside_workspace"
+    assert host_edit.error == "outside_workspace"
+    assert work_write.error is None
+    assert work_edit.error is None
+    assert (workspace / "host.md").read_text(encoding="utf-8") == "host\n"
+    assert (work_dir / "new.md").read_text(encoding="utf-8") == "created\n"
+    assert (work_dir / "draft.md").read_text(encoding="utf-8") == "edited\n"

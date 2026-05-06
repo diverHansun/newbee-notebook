@@ -45,3 +45,28 @@ async def test_grep_files_filters_sensitive_files(tmp_path: Path):
     assert result.error is None
     assert ".env" not in result.content
     assert "a.md" in result.content
+
+
+@pytest.mark.anyio
+async def test_grep_files_skips_symlink_escape(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (outside / "secret.md").write_text("needle outside\n", encoding="utf-8")
+    link = workspace / "linked-secret.md"
+    try:
+        link.symlink_to(outside / "secret.md")
+    except OSError:
+        pytest.skip("symlink creation is unavailable in this environment")
+    (workspace / "public.md").write_text("needle public\n", encoding="utf-8")
+    tool = build_grep_files_tool(ShellEnvironment(cwd=workspace, workspace_roots=(workspace,)))
+
+    result = await tool.execute(
+        {"pattern": "needle", "path": ".", "output_mode": "content"}
+    )
+
+    assert result.error is None
+    assert "public.md" in result.content
+    assert "linked-secret.md" not in result.content
+    assert "outside" not in result.content

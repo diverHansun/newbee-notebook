@@ -56,13 +56,17 @@ def build_grep_files_tool(environment: ShellEnvironment) -> ToolDefinition:
         results: list[str] = []
         match_counts: list[tuple[str, int]] = []
         for file_path in _iter_candidate_files(search_path):
-            if policy.is_sensitive_path(file_path):
+            try:
+                resolved_file_path = policy.resolve_read_path(file_path)
+            except PathAccessError:
                 continue
-            rel_path = policy.relative_to_cwd(file_path)
+            if policy.is_sensitive_path(resolved_file_path):
+                continue
+            rel_path = policy.relative_to_cwd(resolved_file_path)
             if glob_pattern and not fnmatch.fnmatch(rel_path, str(glob_pattern)):
                 continue
             try:
-                text, _ = read_text_file(file_path)
+                text, _ = read_text_file(resolved_file_path)
             except UnicodeDecodeError:
                 continue
 

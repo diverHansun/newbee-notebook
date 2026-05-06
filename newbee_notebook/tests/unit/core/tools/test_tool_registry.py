@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
+from newbee_notebook.core.sandbox import SandboxRequest, SandboxResult
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
 from newbee_notebook.core.tools.contracts import ToolDefinition, ToolCallResult
 from newbee_notebook.core.tools.registry import ToolRegistry
@@ -24,6 +26,9 @@ FILESYSTEM_TOOL_NAMES = [
     "edit_file",
     "write_file",
     "bash",
+    "bash_task_list",
+    "bash_task_output",
+    "bash_task_stop",
 ]
 
 
@@ -144,3 +149,40 @@ async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only(monkeypatc
     ]
     assert [tool.name for tool in explain_tools] == ["knowledge_base"]
     assert supplier_calls == ["agent"]
+
+
+@pytest.mark.anyio
+async def test_tool_registry_uses_runtime_filesystem_environment_for_bash(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+
+    class RecordingSandbox:
+        def __init__(self):
+            self.requests: list[SandboxRequest] = []
+
+        async def execute(self, request: SandboxRequest) -> SandboxResult:
+            self.requests.append(request)
+            return SandboxResult(exit_code=0, stdout="ok\n")
+
+    sandbox = RecordingSandbox()
+    provider = BuiltinToolProvider(sandbox_executor=sandbox)
+    registry = ToolRegistry(builtin_provider=provider)
+    runtime_environment = ShellEnvironment(
+        cwd=tmp_path,
+        workspace_roots=(tmp_path,),
+        run_dir=tmp_path / "notebook-work",
+    )
+
+    tools = await registry.get_tools(
+        "agent",
+        filesystem_environment=runtime_environment,
+    )
+    bash_tool = next(tool for tool in tools if tool.name == "bash")
+
+    result = await bash_tool.execute({"command": "echo ok"})
+
+    assert result.error is None
+    assert sandbox.requests[0].run_dir == (tmp_path / "notebook-work").resolve()

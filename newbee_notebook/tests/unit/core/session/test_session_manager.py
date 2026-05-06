@@ -8,6 +8,8 @@ import pytest
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
 from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.prompts import load_prompt
+from newbee_notebook.core.sandbox import NotebookSandboxWorkspace
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
 from newbee_notebook.core.session.session_manager import SessionManager
@@ -81,6 +83,21 @@ class DummyToolRegistry:
 
     async def get_tools(self, mode, external_tools=None):
         self.calls.append(str(mode))
+        return []
+
+
+class CapturingToolRegistry:
+    def __init__(self):
+        self.calls: list[tuple[str, ShellEnvironment | None]] = []
+
+    async def get_tools(
+        self,
+        mode,
+        external_tools=None,
+        filesystem_environment: ShellEnvironment | None = None,
+    ):
+        del external_tools
+        self.calls.append((str(mode), filesystem_environment))
         return []
 
 
@@ -328,6 +345,41 @@ async def test_session_manager_awaits_async_tool_registry_for_agent_mode():
     await manager.chat(message="hello", mode_type=ModeType.AGENT)
 
     assert registry.calls == ["awaited:agent"]
+
+
+@pytest.mark.anyio
+async def test_session_manager_passes_notebook_workspace_environment_to_tool_registry(
+    tmp_path,
+):
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    registry = CapturingToolRegistry()
+    workspace = NotebookSandboxWorkspace(root=tmp_path / "sandbox-work")
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=registry,
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+        sandbox_workspace=workspace,
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(message="hello", mode_type=ModeType.AGENT)
+
+    assert registry.calls[0][0] == "agent"
+    environment = registry.calls[0][1]
+    assert environment is not None
+    expected = workspace.for_notebook("nb1").work_dir
+    assert environment.run_dir == expected
+    assert environment.sandbox_session_key == "nb1"
+    assert expected.is_dir()
 
 
 def test_default_system_prompt_loads_mode_prompt_files(monkeypatch):

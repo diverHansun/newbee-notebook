@@ -32,6 +32,7 @@ async def test_shell_executor_translates_bash_command_to_sandbox_request(tmp_pat
         cwd=tmp_path,
         workspace_roots=(tmp_path,),
         env={"A": "1"},
+        sandbox_session_key="notebook-123",
         timeout_seconds=20,
         max_output_bytes=1024,
     )
@@ -49,6 +50,7 @@ async def test_shell_executor_translates_bash_command_to_sandbox_request(tmp_pat
     assert request.timeout_seconds == 5
     assert request.max_output_bytes == 1024
     assert request.network_enabled is False
+    assert request.sandbox_session_key == "notebook-123"
 
 
 @pytest.mark.anyio
