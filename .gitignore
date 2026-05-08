@@ -116,6 +116,9 @@ htmlcov/
 coding_guide.md
 
 MinerU/
+!docker/mineru/
+!docker/mineru/patches/
+!docker/mineru/patches/**
 
 # Local Postman assets (contain private endpoint mapping)
 postman_collection.json

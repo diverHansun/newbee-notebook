@@ -22,9 +22,12 @@ services:
       MINERU_MODE: local
       MINERU_LOCAL_ENABLED: "true"
       MINERU_BACKEND: hybrid-auto-engine
+      MINERU_TITLE_AIDED_CONFIG_PATH: /app/data/mineru/mineru-runtime.json
       EMBEDDING_PROVIDER: qwen3-embedding
       QWEN3_EMBEDDING_MODE: local
       QWEN3_EMBEDDING_DEVICE: cuda
+    volumes:
+      - ./data/mineru:/app/data/mineru
     deploy:
       resources:
         reservations:
@@ -39,9 +42,11 @@ services:
   api:
     volumes:
       - ./models:/app/models:ro
+      - ./data/mineru:/app/data/mineru
     environment:
       MINERU_MODE: local
       MINERU_LOCAL_ENABLED: "true"
+      MINERU_TITLE_AIDED_CONFIG_PATH: /app/data/mineru/mineru-runtime.json
       QWEN3_EMBEDDING_MODE: local
       QWEN3_EMBEDDING_MODEL_PATH: models/Qwen3-Embedding-0.6B
 
@@ -60,12 +65,14 @@ services:
       MINERU_DEVICE_MODE: cuda
       MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
       MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}
+      NEWBEE_MINERU_TITLE_AIDED_CONFIG_JSON: /root/mineru-runtime/mineru-runtime.json
       # Limit PDF rendering parallelism to reduce peak memory usage.
       MINERU_PDF_RENDER_THREADS: "1"
       # Force clean_vram() to trigger after each inference stage.
       MINERU_VIRTUAL_VRAM_SIZE: "8"
     volumes:
       - mineru_cache:/root/.cache
+      - ./data/mineru:/root/mineru-runtime:ro
     ports:
       - "8001:8000"
     networks:

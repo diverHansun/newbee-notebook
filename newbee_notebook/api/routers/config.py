@@ -70,6 +70,7 @@ class MinerUConfigResponse(BaseModel):
     mode: str
     source: str
     local_enabled: bool
+    title_aided_enabled: bool = False
     api_key_set: bool | None = None
 
 
@@ -135,7 +136,8 @@ class UpdateASRRequest(BaseModel):
 
 
 class UpdateMinerURequest(BaseModel):
-    mode: str
+    mode: str | None = None
+    title_aided_enabled: bool | None = None
 
 
 class ResetResponse(BaseModel):
@@ -209,6 +211,7 @@ async def get_models_config(session=Depends(get_db_session)):
             mode=mineru["mode"],
             source=mineru["source"],
             local_enabled=bool(mineru.get("local_enabled", False)),
+            title_aided_enabled=bool(mineru.get("title_aided_enabled", False)),
             api_key_set=mineru_api_key_set,
         ),
         asr=ASRConfigResponse(
@@ -234,7 +237,7 @@ async def get_available_models(session=Depends(get_db_session)):
             ],
             presets=[
                 PresetModel(name="qwen3.5-plus", label="Qwen 3.5 Plus (Qwen)"),
-                PresetModel(name="glm-5", label="GLM-5 (Zhipu)"),
+                PresetModel(name="glm-5v-turbo", label="GLM-5V-Turbo (Zhipu)"),
             ],
             custom_input=True,
         ),
@@ -441,26 +444,47 @@ async def update_asr_config(req: UpdateASRRequest, session=Depends(get_db_sessio
 
 @router.put("/mineru", response_model=MinerUConfigResponse)
 async def update_mineru_config(req: UpdateMinerURequest, session=Depends(get_db_session)):
-    mode = str(req.mode or "").strip().lower()
+    if req.mode is None and req.title_aided_enabled is None:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one MinerU setting must be provided",
+        )
+
+    current = await get_mineru_config_async(session)
+    mode = str(req.mode or current["mode"]).strip().lower()
     if mode not in {"cloud", "local"}:
         raise HTTPException(status_code=400, detail="mode must be 'cloud' or 'local'")
 
-    current = await get_mineru_config_async(session)
     if mode == "local" and not current.get("local_enabled", False):
         raise HTTPException(
             status_code=400,
             detail="MinerU local mode is disabled for current deployment",
         )
 
+    title_aided_enabled = (
+        bool(req.title_aided_enabled)
+        if req.title_aided_enabled is not None
+        else bool(current.get("title_aided_enabled", False))
+    )
     next_cfg = {
         "mode": mode,
         "source": "db",
         "local_enabled": bool(current.get("local_enabled", False)),
+        "title_aided_enabled": title_aided_enabled,
     }
 
     settings = AppSettingsService(session)
-    await settings.set_many({"mineru.mode": next_cfg["mode"]})
+    setting_values: dict[str, str] = {}
+    if req.mode is not None:
+        setting_values["mineru.mode"] = next_cfg["mode"]
+    if req.title_aided_enabled is not None:
+        setting_values["mineru.title_aided_enabled"] = (
+            "true" if title_aided_enabled else "false"
+        )
+    if setting_values:
+        await settings.set_many(setting_values)
 
+    next_cfg = await get_mineru_config_async(session)
     apply_mineru_runtime_env(next_cfg)
 
     mineru_api_key = resolve_mineru_api_key(next_cfg["mode"])
@@ -526,5 +550,6 @@ async def reset_mineru_config(session=Depends(get_db_session)):
         defaults={
             "mode": default_cfg["mode"],
             "local_enabled": default_cfg["local_enabled"],
+            "title_aided_enabled": bool(default_cfg.get("title_aided_enabled", False)),
         },
     )

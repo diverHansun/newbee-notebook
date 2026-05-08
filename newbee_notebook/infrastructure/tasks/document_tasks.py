@@ -31,6 +31,9 @@ from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.processing_stage import ProcessingStage
 from newbee_notebook.infrastructure.document_processing import DocumentProcessor
+from newbee_notebook.infrastructure.document_processing.mineru_title_aided import (
+    prepare_mineru_title_aided_runtime_from_session,
+)
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.persistence.database import get_database
 from newbee_notebook.infrastructure.persistence.repositories.document_repo_impl import (
@@ -379,7 +382,7 @@ async def _convert_document_async(document_id: str, force: bool = False) -> None
                 )
 
         await ctx.set_stage(ProcessingStage.CONVERTING)
-        await sync_mineru_runtime_env_from_db(ctx.session)
+        await _prepare_mineru_runtime_for_conversion(ctx.session)
         processor = DocumentProcessor()
         async with _materialize_document_source(ctx.document) as source_path:
             result, rel_content_path, content_size = await processor.process_and_save(
@@ -474,7 +477,7 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
 
         if not skip_conversion:
             await ctx.set_stage(ProcessingStage.CONVERTING)
-            await sync_mineru_runtime_env_from_db(ctx.session)
+            await _prepare_mineru_runtime_for_conversion(ctx.session)
             processor = DocumentProcessor()
             async with _materialize_document_source(ctx.document) as source_path:
                 result, rel_content_path, content_size = await processor.process_and_save(
@@ -533,6 +536,19 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
         pipeline_fn=_do_full_pipeline,
         skip_if_status=None if force else {DocumentStatus.COMPLETED},
     )
+
+
+async def _prepare_mineru_runtime_for_conversion(session) -> dict:
+    """Sync MinerU config and prepare local title-aided runtime before conversion."""
+    mineru_cfg = await sync_mineru_runtime_env_from_db(session)
+    try:
+        await prepare_mineru_title_aided_runtime_from_session(session, mineru_cfg)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "MinerU title aided runtime preparation failed; continuing with base conversion: %s",
+            exc,
+        )
+    return mineru_cfg
 
 
 async def _resolve_existing_storage_key(

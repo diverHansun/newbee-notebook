@@ -133,7 +133,7 @@ def build_llm(
     """Build and return an OpenAI-compatible LLM targeting Zhipu models."""
     cfg = _get_zhipu_config()
 
-    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "glm-5")
+    final_model = model or _env_or_none("LLM_MODEL") or cfg.get("model", "glm-5v-turbo")
     final_temperature = (
         temperature
         if temperature is not None
