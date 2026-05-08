@@ -25,7 +25,13 @@ type ChatPanelProps = {
   mode: "agent" | "ask";
   isStreaming: boolean;
   onModeChange: (mode: "agent" | "ask") => void;
-  onSendMessage: (text: string, mode: "agent" | "ask", sourceDocIds?: string[] | null) => void;
+  onEnsureSession: (titleHint?: string) => Promise<string | null>;
+  onSendMessage: (
+    text: string,
+    mode: "agent" | "ask",
+    sourceDocIds?: string[] | null,
+    imageIds?: string[]
+  ) => void;
   onCancel: () => void;
   onSwitchSession: (sessionId: string) => void;
   onCreateSession: (title?: string) => void;
@@ -42,6 +48,7 @@ export function ChatPanel({
   mode,
   isStreaming,
   onModeChange,
+  onEnsureSession,
   onSendMessage,
   onCancel,
   onSwitchSession,
@@ -391,12 +398,16 @@ export function ChatPanel({
       <div style={{ flexShrink: 0, borderTop: "1px solid hsl(var(--border))" }}>
         <ChatInput
           notebookId={notebookId}
+          currentSessionId={currentSessionId}
           mode={mode}
           isStreaming={isStreaming}
           sourceDocIds={sourceDocIds}
           onSourceDocIdsChange={setSourceDocIds}
           onModeChange={onModeChange}
-          onSend={(text, selectedMode) => onSendMessage(text, selectedMode, sourceDocIds)}
+          onEnsureSession={onEnsureSession}
+          onSend={(text, selectedMode, imageIds) =>
+            onSendMessage(text, selectedMode, sourceDocIds, imageIds)
+          }
           onCancel={onCancel}
         />
       </div>

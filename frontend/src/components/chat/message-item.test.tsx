@@ -187,4 +187,26 @@ describe("MessageItem", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/generated_image_url/i)).toBeNull();
   });
+
+  it("renders uploaded user image thumbnails separately from generated image cards", () => {
+    const message: ChatMessage = {
+      id: "user-1",
+      role: "user",
+      mode: "ask",
+      content: "看看这张图",
+      status: "done",
+      createdAt: "2026-03-19T00:00:00.000Z",
+      imageIds: ["img-upload-1", "img-upload-2"],
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    const thumbnails = screen.getAllByRole("img", { name: "上传图片缩略图" });
+    expect(thumbnails).toHaveLength(2);
+    expect(thumbnails[0]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-1/thumbnail");
+    expect(thumbnails[1]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-2/thumbnail");
+    expect(screen.queryByTestId("generated-image-list")).toBeNull();
+  });
 });

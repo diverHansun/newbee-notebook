@@ -42,9 +42,10 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
     text: string,
     mode: MessageMode,
     context?: { document_id: string; selected_text: string },
-    sourceDocIds?: string[] | null
+    sourceDocIds?: string[] | null,
+    imageIds?: string[]
   ) => {
-    await chat.sendMessage(text, mode, context, sourceDocIds);
+    await chat.sendMessage(text, mode, context, sourceDocIds, imageIds);
   };
 
   const mainContent =
@@ -77,7 +78,10 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         mode={chat.currentMode}
         isStreaming={chat.isStreaming}
         onModeChange={chat.setMode}
-        onSendMessage={(text, mode, sourceDocIds) => sendByMode(text, mode, undefined, sourceDocIds)}
+        onEnsureSession={chat.ensureSession}
+        onSendMessage={(text, mode, sourceDocIds, imageIds) =>
+          sendByMode(text, mode, undefined, sourceDocIds, imageIds)
+        }
         onCancel={chat.cancelStream}
         onSwitchSession={chat.switchSession}
         onCreateSession={chat.createSession}

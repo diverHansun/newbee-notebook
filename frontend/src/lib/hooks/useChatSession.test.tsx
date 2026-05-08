@@ -286,4 +286,36 @@ describe("useChatSession", () => {
 
     vi.useRealTimers();
   });
+
+  it("passes uploaded image ids to the stream request and local user message", async () => {
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Please inspect this image", "ask", undefined, null, [
+        "img-upload-1",
+        "img-upload-2",
+      ]);
+    });
+
+    expect(startStream).toHaveBeenCalledWith(
+      "nb-1",
+      expect.objectContaining({
+        image_ids: ["img-upload-1", "img-upload-2"],
+      }),
+      expect.any(Object)
+    );
+    expect(result.current.messages[0]).toEqual(
+      expect.objectContaining({
+        role: "user",
+        imageIds: ["img-upload-1", "img-upload-2"],
+      })
+    );
+  });
 });

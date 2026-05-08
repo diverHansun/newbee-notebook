@@ -97,6 +97,26 @@ function mergeChatImages(
   return merged;
 }
 
+function normalizeImageIds(imageIds: string[] | null | undefined): string[] {
+  if (!imageIds || imageIds.length === 0) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const id of imageIds) {
+    const value = id.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+  }
+  return normalized;
+}
+
+function imageIdsEqual(left: string[] | undefined, right: string[] | undefined): boolean {
+  const leftIds = left || [];
+  const rightIds = right || [];
+  if (leftIds.length !== rightIds.length) return false;
+  return leftIds.every((id, index) => id === rightIds[index]);
+}
+
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
     id: `msg-${msg.message_id}`,
@@ -105,6 +125,7 @@ function mapMessages(messages: SessionMessage[]): ChatMessage[] {
     mode: msg.mode,
     content: msg.content,
     images: mapChatImages(msg.images),
+    imageIds: normalizeImageIds(msg.image_ids),
     status: "done",
     createdAt: msg.created_at,
   }));
@@ -142,6 +163,7 @@ function isSameRecentUserMessage(remote: ChatMessage, local: ChatMessage): boole
   if (remote.role !== "user" || local.role !== "user") return false;
   if (remote.mode !== local.mode) return false;
   if (remote.content.trim() !== local.content.trim()) return false;
+  if (!imageIdsEqual(remote.imageIds, local.imageIds)) return false;
 
   const remoteMs = Date.parse(remote.createdAt);
   const localMs = Date.parse(local.createdAt);
@@ -869,7 +891,8 @@ export function useChatSession(notebookId: string) {
       message: string,
       mode: MessageMode,
       context?: ChatContext,
-      sourceDocumentIds?: string[] | null
+      sourceDocumentIds?: string[] | null,
+      imageIds?: string[]
     ) => {
       const isExplainOrConclude = mode === "explain" || mode === "conclude";
       const explainMode = mode as "explain" | "conclude";
@@ -899,6 +922,7 @@ export function useChatSession(notebookId: string) {
       const isDiagramRequest = isDiagramCommandMessage(message, mode);
       const isNoteRequest = isNoteCommandMessage(message, mode);
       const isVideoRequest = isVideoCommandMessage(message, mode);
+      const requestImageIds = mode === "agent" || mode === "ask" ? normalizeImageIds(imageIds) : [];
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
@@ -908,6 +932,7 @@ export function useChatSession(notebookId: string) {
           role: "user",
           mode,
           content: message,
+          imageIds: requestImageIds,
           status: "done",
           createdAt,
         });
@@ -962,6 +987,7 @@ export function useChatSession(notebookId: string) {
                 session_id: sessionId,
                 context: context || null,
                 source_document_ids: sourceDocumentIds ?? null,
+                image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
               });
 
               pendingIntermediatePhaseRef.current = false;
@@ -1022,6 +1048,7 @@ export function useChatSession(notebookId: string) {
             session_id: sessionId,
             context: context || null,
             source_document_ids: sourceDocumentIds ?? null,
+            image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
           },
           {
             onEvent: (event) => {
@@ -1540,6 +1567,7 @@ export function useChatSession(notebookId: string) {
     isStreaming: stream.isStreaming || isFinalTypewriterActive,
     explainCard,
     setMode,
+    ensureSession,
     sendMessage,
     cancelStream,
     switchSession,

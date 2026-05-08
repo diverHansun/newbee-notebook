@@ -143,8 +143,10 @@ describe("useChatSession intermediate content flow", () => {
       callbacks?.onEvent?.({ type: "content", delta: "Here is the final answer." });
     });
 
-    assistantMessage = result.current.messages.find((message) => message.role === "assistant");
-    expect(assistantMessage?.content).toBe("Here is the final answer.");
+    await waitFor(() => {
+      assistantMessage = result.current.messages.find((message) => message.role === "assistant");
+      expect(assistantMessage?.content).toBe("Here is the final answer.");
+    });
     expect(assistantMessage?.intermediateContent).toBeUndefined();
     expect(assistantMessage?.exitingIntermediateContent).toBe("I will verify it once more.");
     expect(assistantMessage?.intermediateGeneration).toBe(2);

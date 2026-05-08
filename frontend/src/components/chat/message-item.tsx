@@ -4,6 +4,7 @@ import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confi
 import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
+import { getChatImageDataUrl, getChatImageThumbnailUrl } from "@/lib/api/chat-images";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage, ToolStep } from "@/stores/chat-store";
@@ -126,6 +127,32 @@ function ToolStepsIndicator({
   );
 }
 
+function UploadedImageList({ imageIds }: { imageIds: string[] }) {
+  const { t } = useLang();
+  if (imageIds.length === 0) return null;
+
+  return (
+    <div className="uploaded-message-image-list" data-testid="uploaded-message-image-list">
+      {imageIds.map((imageId) => (
+        <a
+          className="uploaded-message-image-link"
+          href={getChatImageDataUrl(imageId)}
+          target="_blank"
+          rel="noreferrer"
+          key={imageId}
+        >
+          <img
+            className="uploaded-message-image-thumb"
+            src={getChatImageThumbnailUrl(imageId)}
+            alt={t(uiStrings.chat.uploadedImageThumbnail)}
+            loading="lazy"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export function MessageItem({
   message,
   roleTransition,
@@ -134,6 +161,7 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
+  const uploadedImageIds = message.imageIds || [];
   const sanitizedAssistantContent = !isUser
     ? sanitizeAssistantContent(message.content, Boolean(message.images && message.images.length > 0))
     : message.content;
@@ -152,7 +180,6 @@ export function MessageItem({
   const showExitingIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !hasFinalPhaseStarted &&
     !!message.exitingIntermediateContent;
   const hasToolSteps =
     canShowProgressIndicators &&
@@ -218,6 +245,7 @@ export function MessageItem({
               color: "hsl(var(--user-bubble-fg))",
             }}
           >
+            <UploadedImageList imageIds={uploadedImageIds} />
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
               {message.content}
             </p>
@@ -245,6 +273,7 @@ export function MessageItem({
 
             {showFinalContent ? (
               <div className="assistant-message-body" data-testid="assistant-message-body">
+                <UploadedImageList imageIds={uploadedImageIds} />
                 <MarkdownViewer content={sanitizedAssistantContent} />
               </div>
             ) : null}

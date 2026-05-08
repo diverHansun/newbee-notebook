@@ -46,6 +46,7 @@ export type ChatMessage = {
   sources?: NormalizedSource[];
   sourcesType?: "document_retrieval" | "tool_results" | "none";
   images?: ChatImage[];
+  imageIds?: string[];
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
   pendingConfirmation?: PendingConfirmation;

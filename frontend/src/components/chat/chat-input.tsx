@@ -1,22 +1,26 @@
 "use client";
 
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
+import { ChatImageAttachmentBar } from "@/components/chat/chat-image-attachment-bar";
 import { SlashCommandHint, shouldShowSlashCommandHint } from "@/components/chat/slash-command-hint";
 import { SourceSelector } from "@/components/chat/source-selector";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { NotebookDocumentItem } from "@/lib/api/types";
+import { useChatImageUpload } from "@/lib/hooks/useChatImageUpload";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
 type ChatInputProps = {
   notebookId: string;
+  currentSessionId: string | null;
   mode: "agent" | "ask";
   isStreaming: boolean;
   sourceDocIds: string[] | null;
   onSourceDocIdsChange: (ids: string[] | null) => void;
   onModeChange: (mode: "agent" | "ask") => void;
-  onSend: (text: string, mode: "agent" | "ask") => void;
+  onEnsureSession: (titleHint?: string) => Promise<string | null>;
+  onSend: (text: string, mode: "agent" | "ask", imageIds?: string[]) => void;
   onCancel: () => void;
 };
 
@@ -49,11 +53,13 @@ function StopIcon() {
 
 export function ChatInput({
   notebookId,
+  currentSessionId,
   mode,
   isStreaming,
   sourceDocIds,
   onSourceDocIdsChange,
   onModeChange,
+  onEnsureSession,
   onSend,
   onCancel,
 }: ChatInputProps) {
@@ -61,15 +67,22 @@ export function ChatInput({
   const [input, setInput] = useState("");
   const [sourceDocs, setSourceDocs] = useState<NotebookDocumentItem[]>([]);
   const [sourceDocsTotal, setSourceDocsTotal] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageUpload = useChatImageUpload({
+    sessionId: currentSessionId,
+    ensureSession: () => onEnsureSession(input.trim().slice(0, 30) || undefined),
+  });
   const showSlashCommandHint = shouldShowSlashCommandHint(input);
 
   const submitCurrentInput = () => {
     const content = input.trim();
-    if (!content || isStreaming) return;
-    onSend(content, mode);
+    if (!content || isStreaming || !imageUpload.allReady) return;
+    const imageIds = imageUpload.imageIds;
+    onSend(content, mode, imageIds.length > 0 ? imageIds : undefined);
     setInput("");
+    imageUpload.reset();
   };
-  const sendDisabled = !input.trim();
+  const sendDisabled = !input.trim() || !imageUpload.allReady;
   const actionClassName = `chat-action-btn${
     isStreaming ? " is-stop" : !sendDisabled ? " is-ready" : ""
   }`;
@@ -103,6 +116,15 @@ export function ChatInput({
       }
     },
     [mode, onModeChange]
+  );
+  const handleImageInputChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = "";
+      if (!file) return;
+      await imageUpload.add(file);
+    },
+    [imageUpload]
   );
 
   return (
@@ -141,6 +163,15 @@ export function ChatInput({
           </div>
         )}
 
+        <ChatImageAttachmentBar
+          attachments={imageUpload.attachments}
+          lastError={imageUpload.lastError}
+          onRemove={imageUpload.remove}
+          onRetry={(id) => {
+            void imageUpload.retry(id);
+          }}
+        />
+
         <textarea
           className="textarea chat-input-textarea"
           placeholder={
@@ -163,6 +194,26 @@ export function ChatInput({
 
         <div className="chat-input-toolbar">
           <div className="chat-input-toolbar-left">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-hidden="true"
+              tabIndex={-1}
+              className="chat-image-file-input"
+              onChange={handleImageInputChange}
+            />
+            <button
+              type="button"
+              className="chat-attachment-add-btn"
+              aria-label={t(uiStrings.chat.addImage)}
+              title={t(uiStrings.chat.addImage)}
+              disabled={isStreaming || !imageUpload.canAddMore}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <span aria-hidden="true">+</span>
+              <span>{t(uiStrings.chat.addImage)}</span>
+            </button>
             <SegmentedControl
               value={mode}
               options={MODE_OPTIONS.map((item) => ({ ...item }))}

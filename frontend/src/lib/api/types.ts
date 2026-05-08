@@ -344,6 +344,7 @@ export type SessionMessage = {
   role: MessageRole;
   content: string;
   images?: ChatImageSse[];
+  image_ids?: string[];
   created_at: string;
 };
 
@@ -380,6 +381,7 @@ export type ChatRequest = {
   context?: ChatContext | null;
   include_ec_context?: boolean | null;
   source_document_ids?: string[] | null;
+  image_ids?: string[];
   lang?: "en" | "zh";
 };
 
