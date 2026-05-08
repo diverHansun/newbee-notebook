@@ -29,6 +29,9 @@ from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.generated_image_repo_impl import (
     GeneratedImageRepositoryImpl,
 )
+from newbee_notebook.infrastructure.persistence.repositories.chat_image_repo_impl import (
+    ChatImageRepositoryImpl,
+)
 from newbee_notebook.infrastructure.persistence.repositories.video_summary_repo_impl import (
     VideoSummaryRepositoryImpl,
 )
@@ -39,6 +42,7 @@ from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
 from newbee_notebook.application.services.generated_image_service import GeneratedImageService
+from newbee_notebook.application.services.chat_image_service import ChatImageService
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
@@ -175,6 +179,13 @@ async def get_generated_image_repo(
     return GeneratedImageRepositoryImpl(session)
 
 
+async def get_chat_image_repo(
+    session=Depends(get_db_session),
+) -> ChatImageRepositoryImpl:
+    """Get ChatImageRepository instance."""
+    return ChatImageRepositoryImpl(session)
+
+
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
     """Get AppSettingsService instance."""
     return AppSettingsService(session)
@@ -245,6 +256,16 @@ async def get_generated_image_service(
     """Get GeneratedImageService instance."""
     return GeneratedImageService(
         generated_image_repo=generated_image_repo,
+        storage=get_storage(),
+    )
+
+
+async def get_chat_image_service(
+    chat_image_repo: ChatImageRepositoryImpl = Depends(get_chat_image_repo),
+) -> ChatImageService:
+    """Get ChatImageService instance."""
+    return ChatImageService(
+        chat_image_repo=chat_image_repo,
         storage=get_storage(),
     )
 
@@ -884,6 +905,7 @@ async def get_chat_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     generated_image_repo: GeneratedImageRepositoryImpl = Depends(get_generated_image_repo),
+    chat_image_service: ChatImageService = Depends(get_chat_image_service),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
     skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
@@ -898,6 +920,7 @@ async def get_chat_service(
         message_repo=message_repo,
         session_manager=session_manager,
         generated_image_repo=generated_image_repo,
+        chat_image_service=chat_image_service,
         storage=get_storage(),
         vector_index_loader=get_pg_index_singleton,
         skill_registry=skill_registry,
