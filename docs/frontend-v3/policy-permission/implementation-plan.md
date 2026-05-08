@@ -1644,17 +1644,21 @@ Expected: PASS.
 
 - [ ] **Step 4: Run backend smoke**
 
-Start FastAPI using the project’s normal backend command. Then verify:
+Start FastAPI using the project’s normal backend command. Then verify with a
+real notebook id from the local database:
 
 ```bash
-curl http://localhost:8000/api/v1/policy/notebooks/nb-smoke/effective
+curl "http://localhost:8000/api/v1/policy/notebooks/<notebook-id>/effective"
 ```
 
 Expected response contains:
 
 ```json
-{"notebook_id":"nb-smoke","session_id":null,"policy":"default","source":"default"}
+{"notebook_id":"<notebook-id>","session_id":null,"policy":"default","source":"default"}
 ```
+
+Unknown notebook ids should return `404 Notebook not found`; this prevents a
+stale or cross-notebook policy value from being treated as authoritative.
 
 - [ ] **Step 5: Run frontend dev server and inspect**
 
