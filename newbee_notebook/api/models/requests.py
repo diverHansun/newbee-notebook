@@ -4,7 +4,7 @@ Newbee Notebook - API Request Models
 
 from typing import Optional, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from newbee_notebook.domain.value_objects.document_type import DocumentType
 
@@ -98,10 +98,31 @@ class ChatRequest(BaseModel):
         None,
         description="Optional document IDs to limit retrieval scope. None uses all notebook documents.",
     )
+    image_ids: list[str] = Field(
+        default_factory=list,
+        description="Uploaded chat image IDs attached to this user turn.",
+    )
     lang: Literal["en", "zh"] = Field(
         "en",
         description="Language for system prompt. Defaults to 'en'.",
     )
+
+    @field_validator("message")
+    @classmethod
+    def _message_must_contain_text(cls, value: str) -> str:
+        if not str(value or "").strip():
+            raise ValueError("message must contain text")
+        return value
+
+    @field_validator("image_ids")
+    @classmethod
+    def _normalize_image_ids(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for image_id in value or []:
+            cleaned = str(image_id or "").strip()
+            if cleaned and cleaned not in normalized:
+                normalized.append(cleaned)
+        return normalized
 
 
 class UpdateSettingRequest(BaseModel):

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from dataclasses import asdict
 
 from newbee_notebook.core.common.config_db import resolve_llm_api_key
+from newbee_notebook.core.llm.vision_policy import VisionPolicy
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.value_objects.mode_type import (
     ModeType,
@@ -127,6 +128,8 @@ class ChatService:
         vector_index_loader: Callable[[], Awaitable[Any]] | None = None,
         skill_registry: SkillRegistry | None = None,
         confirmation_gateway: ConfirmationGateway | None = None,
+        chat_image_service: Any = None,
+        vision_policy: VisionPolicy | None = None,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
@@ -141,6 +144,8 @@ class ChatService:
         self._vector_index_loader = vector_index_loader
         self._skill_registry = skill_registry
         self._confirmation_gateway = confirmation_gateway
+        self._chat_image_service = chat_image_service
+        self._vision_policy = vision_policy or VisionPolicy()
 
     @staticmethod
     def _source_items_to_dicts(items: List[Any]) -> List[dict]:
@@ -307,6 +312,48 @@ class ChatService:
         self._vector_index = await self._vector_index_loader()
         return self._vector_index
 
+    @staticmethod
+    def _normalize_uploaded_image_ids(image_ids: Optional[List[str]]) -> List[str]:
+        normalized: List[str] = []
+        for image_id in image_ids or []:
+            cleaned = str(image_id or "").strip()
+            if cleaned and cleaned not in normalized:
+                normalized.append(cleaned)
+        return normalized
+
+    async def _prepare_uploaded_images_for_runtime(
+        self,
+        *,
+        session_id: str,
+        mode: ModeType,
+        image_ids: Optional[List[str]],
+    ) -> tuple[List[dict[str, Any]], str | None, List[str]]:
+        normalized_ids = self._normalize_uploaded_image_ids(image_ids)
+        if not normalized_ids:
+            return [], None, []
+        if len(normalized_ids) > 10:
+            raise ValueError("At most 10 uploaded images can be attached to one message.")
+        if mode not in {ModeType.AGENT, ModeType.ASK}:
+            raise ValueError("Image uploads are only supported in agent and ask modes.")
+        if self._chat_image_service is None:
+            raise RuntimeError("Chat image service is not configured.")
+
+        await self._chat_image_service.assert_belongs_to_session(
+            session_id=session_id,
+            image_ids=normalized_ids,
+        )
+        image_contents: List[dict[str, Any]] = []
+        for image_id in normalized_ids:
+            image_contents.append(await self._chat_image_service.load_for_llm(image_id))
+
+        runtime_config = getattr(self._session_manager, "runtime_config", None)
+        model_override: str | None = None
+        if runtime_config is not None:
+            decision = self._vision_policy.resolve(runtime_config)
+            if decision.used_fallback:
+                model_override = decision.model
+        return image_contents, model_override, normalized_ids
+
     async def chat(
         self,
         session_id: str,
@@ -316,6 +363,7 @@ class ChatService:
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
+        image_ids: Optional[List[str]] = None,
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -359,6 +407,15 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        (
+            image_contents,
+            model_override,
+            uploaded_image_ids,
+        ) = await self._prepare_uploaded_images_for_runtime(
+            session_id=session_id,
+            mode=runtime_mode_enum,
+            image_ids=image_ids,
+        )
         external_tools = self._merge_external_tools_with_image_tool(
             mode=runtime_mode_enum,
             session_id=session_id,
@@ -419,6 +476,8 @@ class ChatService:
             confirmation_gateway=self._confirmation_gateway,
             skill_context=skill_policy_context,
             lang=lang,
+            image_contents=image_contents,
+            model_override=model_override,
         )
         response_content = self._strip_generated_image_markup(
             runtime_result.content,
@@ -426,7 +485,7 @@ class ChatService:
         )
         sources = self._source_items_to_dicts(runtime_result.sources)
         images = self._image_items_to_dicts(runtime_result.images)
-        image_ids = list(dict.fromkeys(self._image_ids(runtime_result.images)))
+        generated_image_ids = list(dict.fromkeys(self._image_ids(runtime_result.images)))
         warnings.extend(runtime_result.warnings)
         message_id = session.message_count + 1
 
@@ -436,6 +495,7 @@ class ChatService:
             mode=runtime_mode_enum,
             role=MessageRole.USER,
             content=message,
+            image_ids=uploaded_image_ids,
         )
         assistant_msg = Message(
             session_id=session_id,
@@ -450,10 +510,10 @@ class ChatService:
             if isinstance(assistant_msg.message_id, int)
             else None
         )
-        if image_ids and assistant_message_id is not None:
+        if generated_image_ids and assistant_message_id is not None:
             try:
                 await self._backfill_generated_images_message_id(
-                    image_ids=image_ids,
+                    image_ids=generated_image_ids,
                     message_id=assistant_message_id,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -520,6 +580,7 @@ class ChatService:
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
+        image_ids: Optional[List[str]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -571,6 +632,15 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        (
+            image_contents,
+            model_override,
+            uploaded_image_ids,
+        ) = await self._prepare_uploaded_images_for_runtime(
+            session_id=session_id,
+            mode=runtime_mode_enum,
+            image_ids=image_ids,
+        )
         external_tools = self._merge_external_tools_with_image_tool(
             mode=runtime_mode_enum,
             session_id=session_id,
@@ -637,6 +707,8 @@ class ChatService:
                 skill_context=skill_policy_context,
                 confirmation_gateway=self._confirmation_gateway,
                 lang=lang,
+                image_contents=image_contents,
+                model_override=model_override,
             )
             while True:
                 try:
@@ -751,6 +823,7 @@ class ChatService:
                 mode=runtime_mode_enum,
                 role=MessageRole.USER,
                 content=message,
+                image_ids=uploaded_image_ids,
             )
             sanitized_full_response = self._strip_generated_image_markup(
                 full_response,
@@ -926,6 +999,7 @@ class ChatService:
         session_id: str,
         mode: str,
         context: Optional[dict] = None,
+        image_ids: Optional[List[str]] = None,
     ) -> None:
         """Validate requirements for conclude/explain before streaming responses."""
         session = await self._session_repo.get(session_id)
@@ -938,10 +1012,22 @@ class ChatService:
             _,
         ) = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
-        if mode_enum in {ModeType.CHAT, ModeType.AGENT, ModeType.ASK}:
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
+        normalized_image_ids = self._normalize_uploaded_image_ids(image_ids)
+        if normalized_image_ids:
+            if runtime_mode_enum not in {ModeType.AGENT, ModeType.ASK}:
+                raise ValueError("Image uploads are only supported in agent and ask modes.")
+            if self._chat_image_service is None:
+                raise RuntimeError("Chat image service is not configured.")
+            await self._chat_image_service.assert_belongs_to_session(
+                session_id=session_id,
+                image_ids=normalized_image_ids,
+            )
+
+        if runtime_mode_enum in {ModeType.AGENT, ModeType.ASK}:
             return
         await self._validate_mode_guard(
-            mode_enum=mode_enum,
+            mode_enum=runtime_mode_enum,
             allowed_doc_ids=allowed_doc_ids,
             context=context,
             notebook_id=session.notebook_id,

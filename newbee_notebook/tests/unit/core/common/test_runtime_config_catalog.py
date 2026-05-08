@@ -30,3 +30,11 @@ def test_env_example_only_mentions_runtime_supported_env_keys():
 
     for key in REMOVED_ENV_KEYS:
         assert f"{key}=" not in env_example
+
+
+def test_legacy_llm_model_fallback_uses_zhipu_vision_default(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "zhipu")
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setattr(config_module, "get_llm_config", lambda: {})
+
+    assert config_module.get_llm_model() == "glm-5v-turbo"

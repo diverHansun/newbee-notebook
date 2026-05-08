@@ -177,6 +177,97 @@ def test_chat_endpoint_accepts_agent_mode():
     assert response.json()["mode"] == "agent"
 
 
+def test_chat_request_accepts_uploaded_image_ids():
+    request = chat_router.ChatRequest(
+        session_id="session-1",
+        message="Please describe this image.",
+        mode="agent",
+        image_ids=["img-1"],
+    )
+
+    assert request.image_ids == ["img-1"]
+
+
+def test_chat_request_rejects_image_only_payload_without_text():
+    chat_service = AsyncMock()
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=object())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={
+            "session_id": "session-1",
+            "message": "   ",
+            "mode": "agent",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 422
+    chat_service.chat.assert_not_awaited()
+
+
+def test_chat_endpoint_passes_uploaded_image_ids_to_service():
+    chat_service = AsyncMock()
+    chat_service.chat = AsyncMock(
+        return_value=type(
+            "_Result",
+            (),
+            {
+                "session_id": "session-1",
+                "message_id": 1,
+                "content": "hello",
+                "mode": type("_Mode", (), {"value": "agent"})(),
+                "sources": [],
+                "warnings": [],
+            },
+        )()
+    )
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=object())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={
+            "session_id": "session-1",
+            "message": "Please describe this image.",
+            "mode": "agent",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert chat_service.chat.await_args.kwargs["image_ids"] == ["img-1"]
+
+
+def test_chat_stream_endpoint_passes_uploaded_image_ids_to_service():
+    async def _stream():
+        yield {"type": "start", "message_id": 1}
+        yield {"type": "done"}
+
+    chat_service = AsyncMock()
+    chat_service.prevalidate_mode_requirements = AsyncMock(return_value=None)
+    chat_service.chat_stream = lambda **kwargs: _stream()
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=object())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat/stream",
+        json={
+            "session_id": "session-1",
+            "message": "Please describe this image.",
+            "mode": "ask",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert chat_service.prevalidate_mode_requirements.await_args.kwargs["image_ids"] == ["img-1"]
+
+
 def test_confirm_endpoint_returns_200_when_request_is_resolved():
     chat_service = AsyncMock()
     chat_service.confirm_action = AsyncMock(return_value=True)

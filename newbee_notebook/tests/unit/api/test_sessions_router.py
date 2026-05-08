@@ -38,6 +38,7 @@ class _FakeSessionService:
                     role=MessageRole.USER,
                     message_type=MessageType.NORMAL,
                     content="Latest question",
+                    image_ids=["chat-img-1", "chat-img-2"],
                     created_at=datetime(2026, 3, 27, 12, 1, 0),
                 ),
             ],
@@ -79,6 +80,8 @@ def test_list_session_messages_includes_message_type_and_summary_rows():
     assert body["data"][0]["content"] == "Compacted summary"
     assert body["data"][0]["images"][0]["image_id"] == "img-1"
     assert body["data"][1]["message_type"] == "normal"
+    assert body["data"][1]["image_ids"] == ["chat-img-1", "chat-img-2"]
+    assert body["data"][1]["images"] == []
 
 
 def test_create_session_returns_400_with_50_session_limit_contract():

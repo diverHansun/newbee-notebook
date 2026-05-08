@@ -255,6 +255,7 @@ async def chat(
             include_ec_context=request.include_ec_context,
             source_document_ids=request.source_document_ids,
             lang=request.lang,
+            image_ids=request.image_ids,
         )
     except DocumentProcessingError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message)
@@ -318,6 +319,7 @@ async def chat_stream(
             session_id=request.session_id,
             mode=request.mode,
             context=request.context.model_dump() if request.context else None,
+            image_ids=request.image_ids,
         )
     except DocumentProcessingError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message)
@@ -335,6 +337,7 @@ async def chat_stream(
         include_ec_context=request.include_ec_context,
         source_document_ids=request.source_document_ids,
         lang=request.lang,
+        image_ids=request.image_ids,
     )
     stream = sse_adapter(business_stream)
     

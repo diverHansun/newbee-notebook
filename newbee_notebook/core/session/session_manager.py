@@ -359,6 +359,7 @@ class SessionManager:
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
+        model_override: str | None = None,
     ):
         effective_confirmation_gateway = (
             confirmation_gateway or self._confirmation_gateway
@@ -394,7 +395,21 @@ class SessionManager:
             loop_kwargs["required_tool_call_before_response"] = (
                 required_tool_call_before_response
             )
+        if model_override:
+            loop_kwargs["model_override"] = model_override
         return self._agent_loop_cls(**loop_kwargs)
+
+    @staticmethod
+    def _build_current_user_content(
+        message: str,
+        image_contents: list[dict[str, Any]] | None,
+    ) -> str | list[dict[str, Any]]:
+        if not image_contents:
+            return message
+        return [
+            {"type": "text", "text": message},
+            *[dict(item) for item in image_contents],
+        ]
 
     def _build_tool_environment(self) -> ShellEnvironment | None:
         if self._sandbox_workspace is None or self._current_session is None:
@@ -445,6 +460,8 @@ class SessionManager:
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
+        image_contents: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
@@ -481,9 +498,14 @@ class SessionManager:
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
                 skill_context=skill_context,
+                model_override=model_override,
+            )
+            current_user_content = self._build_current_user_content(
+                runtime_message,
+                image_contents,
             )
             async for event in loop.stream(
-                message=runtime_message, chat_history=chat_history
+                message=current_user_content, chat_history=chat_history
             ):
                 if isinstance(event, SourceEvent):
                     self._last_sources = list(event.sources)
@@ -506,6 +528,8 @@ class SessionManager:
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
+        image_contents: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -527,6 +551,8 @@ class SessionManager:
             required_tool_call_before_response=required_tool_call_before_response,
             skill_context=skill_context,
             lang=lang,
+            image_contents=image_contents,
+            model_override=model_override,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)

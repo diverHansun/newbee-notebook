@@ -47,6 +47,7 @@ class RecordingLoop:
         agent_policy=None,
         session_id=None,
         skill_context=None,
+        model_override=None,
     ):
         self.llm_client = llm_client
         self.tools = tools
@@ -62,6 +63,7 @@ class RecordingLoop:
         self.agent_policy = agent_policy
         self.session_id = session_id
         self.skill_context = skill_context
+        self.model_override = model_override
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
@@ -521,6 +523,57 @@ async def test_session_manager_threads_skill_policy_context_into_loop():
 
     loop = RecordingLoop.instances[-1]
     assert loop.skill_context == SkillPolicyContext(name="demo", content_hash="hash123")
+
+
+@pytest.mark.anyio
+async def test_session_manager_threads_image_contents_to_current_user_turn_only():
+    session = Session(session_id="s1", notebook_id="nb1")
+    history = [
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="older question"),
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.ASSISTANT, content="older answer"),
+    ]
+    session_repo = AsyncMock()
+    session_repo.get.return_value = session
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = history
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+    image_contents = [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,AAAA"},
+        }
+    ]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="what is in this image?",
+        mode_type=ModeType.AGENT,
+        image_contents=image_contents,
+        model_override="glm-5v-turbo",
+    )
+
+    loop = RecordingLoop.instances[-1]
+    call = loop.calls[-1]
+    assert call.chat_history == [
+        {"role": "system", "content": "prompt:agent"},
+        {"role": "user", "content": "older question"},
+        {"role": "assistant", "content": "older answer"},
+    ]
+    assert call.message == [
+        {"type": "text", "text": "what is in this image?"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+    ]
+    assert loop.model_override == "glm-5v-turbo"
 
 
 def test_build_context_budget_uses_provider_specific_context_windows():

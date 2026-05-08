@@ -112,6 +112,7 @@ class AgentLoop:
         agent_policy: AgentPolicy | str | None = None,
         session_id: str | None = None,
         skill_context: SkillPolicyContext | Any | None = None,
+        model_override: str | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -131,6 +132,7 @@ class AgentLoop:
         self._agent_policy = agent_policy
         self._session_id = str(session_id or "")
         self._skill_context = SkillPolicyContext.from_any(skill_context)
+        self._model_override = str(model_override or "").strip() or None
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -596,6 +598,7 @@ class AgentLoop:
                         tools=tool_specs,
                         tool_choice=tool_choice,
                         disable_thinking=True,
+                        **({"model": self._model_override} if self._model_override else {}),
                     )
                 )
 
@@ -643,7 +646,7 @@ class AgentLoop:
     async def stream(
         self,
         *,
-        message: str,
+        message: Any,
         chat_history: list[dict[str, Any]],
     ) -> AsyncGenerator[
         StartEvent
@@ -966,6 +969,7 @@ class AgentLoop:
                     tools=None,
                     tool_choice=None,
                     disable_thinking=True,
+                    **({"model": self._model_override} if self._model_override else {}),
                 )
             )
             synthesis_chunks: list[str] = []
@@ -1158,7 +1162,7 @@ class AgentLoop:
     async def run(
         self,
         *,
-        message: str,
+        message: Any,
         chat_history: list[dict[str, Any]],
     ) -> AgentResult:
         response_chunks: list[str] = []

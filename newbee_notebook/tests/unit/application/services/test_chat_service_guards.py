@@ -1162,6 +1162,112 @@ def test_chat_non_stream_strips_generated_markdown_images_from_assistant_content
     assert assistant_message.content == "Here is your image:\n\nWarm bee summary."
 
 
+def test_chat_rejects_uploaded_images_outside_agent_and_ask_modes():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+    ]
+    chat_image_service = AsyncMock()
+    chat_image_service.assert_belongs_to_session = AsyncMock()
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+        chat_image_service=chat_image_service,
+    )
+
+    with pytest.raises(ValueError, match="Image uploads"):
+        asyncio.run(
+            service.chat(
+                session_id="session-1",
+                message="explain this",
+                mode="explain",
+                context={"selected_text": "focus", "document_id": "doc-1"},
+                image_ids=["chat-img-1"],
+            )
+        )
+
+    chat_image_service.assert_belongs_to_session.assert_not_awaited()
+
+
+def test_chat_with_uploaded_images_uses_current_turn_multimodal_payload_and_persists_ids():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 501
+        messages[1].message_id = 502
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    chat_image_service = AsyncMock()
+    chat_image_service.assert_belongs_to_session = AsyncMock(return_value=None)
+    chat_image_service.load_for_llm = AsyncMock(
+        return_value={
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,AAAA"},
+        }
+    )
+    runtime_manager = _DummyRuntimeSessionManager()
+    runtime_manager.runtime_config = SimpleNamespace(provider="zhipu", model="glm-5")
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=runtime_manager,
+        chat_image_service=chat_image_service,
+    )
+
+    result = asyncio.run(
+        service.chat(
+            session_id="session-1",
+            message="Please describe this image.",
+            mode="agent",
+            image_ids=["chat-img-1"],
+        )
+    )
+
+    assert result.content == "runtime answer"
+    chat_image_service.assert_belongs_to_session.assert_awaited_once_with(
+        session_id="session-1",
+        image_ids=["chat-img-1"],
+    )
+    chat_image_service.load_for_llm.assert_awaited_once_with("chat-img-1")
+    assert runtime_manager.chat_kwargs["image_contents"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+    ]
+    assert runtime_manager.chat_kwargs["model_override"] == "glm-5v-turbo"
+    persisted = message_repo.create_batch.await_args.args[0]
+    assert persisted[0].image_ids == ["chat-img-1"]
+    assert persisted[1].image_ids == []
+
+
 def test_chat_stream_persists_sanitized_assistant_content_when_tool_images_present():
     class _DummyStreamingSanitizingSessionManager:
         async def start_session(self, session_id: str):
