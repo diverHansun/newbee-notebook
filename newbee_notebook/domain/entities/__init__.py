@@ -9,6 +9,7 @@ from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.entities.reference import Reference, NotebookDocumentRef
 from newbee_notebook.domain.entities.diagram import Diagram
+from newbee_notebook.domain.entities.chat_image import ChatImage
 
 __all__ = [
     "Entity",
@@ -19,6 +20,7 @@ __all__ = [
     "Reference",
     "NotebookDocumentRef",
     "Diagram",
+    "ChatImage",
 ]
 
 

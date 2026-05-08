@@ -12,6 +12,9 @@ from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.generated_image_repo_impl import (
     GeneratedImageRepositoryImpl,
 )
+from newbee_notebook.infrastructure.persistence.repositories.chat_image_repo_impl import (
+    ChatImageRepositoryImpl,
+)
 
 __all__ = [
     "LibraryRepositoryImpl",
@@ -22,6 +25,7 @@ __all__ = [
     "MessageRepositoryImpl",
     "DiagramRepositoryImpl",
     "GeneratedImageRepositoryImpl",
+    "ChatImageRepositoryImpl",
 ]
 
 

@@ -200,3 +200,52 @@ def test_batch3_models_are_present_in_sqlalchemy_metadata():
     assert "note_mark_refs" in table_names
     assert "diagrams" in table_names
     assert "video_summaries" in table_names
+
+
+def test_batch8_migration_sql_exists_with_chat_images_table():
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "migrations"
+        / "batch8_chat_images.sql"
+    )
+
+    assert migration_path.exists()
+
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS chat_images (" in sql
+    assert "ALTER TABLE IF EXISTS messages" in sql
+    assert "ADD COLUMN IF NOT EXISTS image_ids JSONB" in sql
+    assert "idx_chat_images_session_id" in sql
+
+
+def test_runtime_schema_statements_backfill_chat_image_tables():
+    statements = "\n".join(get_runtime_schema_statements())
+
+    assert "CREATE TABLE IF NOT EXISTS chat_images (" in statements
+    assert "ADD COLUMN IF NOT EXISTS image_ids JSONB" in statements
+    assert "CREATE INDEX IF NOT EXISTS idx_chat_images_session_id" in statements
+
+
+def test_init_postgres_declares_chat_images_and_message_image_ids():
+    sql_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "init-postgres.sql"
+    )
+
+    sql = sql_path.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS chat_images (" in sql
+    assert "image_ids JSONB NOT NULL DEFAULT '[]'::jsonb" in sql
+    assert "chat_images" in sql
+
+
+def test_chat_image_models_are_present_in_sqlalchemy_metadata():
+    table_names = Base.metadata.tables.keys()
+
+    assert "chat_images" in table_names
+    assert "image_ids" in Base.metadata.tables["messages"].columns

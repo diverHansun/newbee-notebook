@@ -16,4 +16,5 @@ class Message(Entity):
     role: MessageRole = MessageRole.USER
     message_type: MessageType = MessageType.NORMAL
     content: str = ""
+    image_ids: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)

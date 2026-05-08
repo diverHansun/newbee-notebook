@@ -226,11 +226,31 @@ CREATE TABLE IF NOT EXISTS messages (
     role VARCHAR(20) NOT NULL CHECK (role IN ('user','assistant','system')),
     message_type VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (message_type IN ('normal','summary')),
     content TEXT NOT NULL,
+    image_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 ALTER TABLE IF EXISTS messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NOT NULL DEFAULT 'normal';
+ALTER TABLE IF EXISTS messages ADD COLUMN IF NOT EXISTS image_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- User-uploaded chat images metadata (binary content is stored in object storage)
+CREATE TABLE IF NOT EXISTS chat_images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    storage_key TEXT NOT NULL UNIQUE,
+    mime_type VARCHAR(64) NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    width INTEGER,
+    height INTEGER,
+    sha256 VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_chat_images_session_id ON chat_images(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_images_created_at ON chat_images(created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_images_deleted_at ON chat_images(deleted_at);
 
 -- Generated images metadata (binary content is stored in object storage)
 CREATE TABLE IF NOT EXISTS generated_images (
@@ -314,7 +334,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Newbee Notebook database initialized successfully';
     RAISE NOTICE 'Extensions enabled: vector, uuid-ossp, pgcrypto';
-    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries, generated_images';
+    RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries, chat_images, generated_images';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';
     RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
