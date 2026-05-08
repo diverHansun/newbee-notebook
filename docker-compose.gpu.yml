@@ -61,7 +61,8 @@ services:
     container_name: newbee-notebook-mineru-api
     restart: unless-stopped
     environment:
-      MINERU_MODEL_SOURCE: modelscope
+      # The upstream MinerU image pre-bakes local models; avoid first-run downloads.
+      MINERU_MODEL_SOURCE: local
       MINERU_DEVICE_MODE: cuda
       MINERU_API_ENABLE_FASTAPI_DOCS: ${MINERU_API_ENABLE_FASTAPI_DOCS:-1}
       MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}

@@ -131,6 +131,7 @@ def test_gpu_override_shares_mineru_title_aided_runtime_config() -> None:
         mineru_api["environment"]["NEWBEE_MINERU_TITLE_AIDED_CONFIG_JSON"]
         == "/root/mineru-runtime/mineru-runtime.json"
     )
+    assert mineru_api["environment"]["MINERU_MODEL_SOURCE"] == "local"
     assert "./data/mineru:/root/mineru-runtime:ro" in mineru_api["volumes"]
     assert mineru_api["environment"]["MINERU_API_MAX_CONCURRENT_REQUESTS"] == "${MINERU_API_MAX_CONCURRENT_REQUESTS:-1}"
 
