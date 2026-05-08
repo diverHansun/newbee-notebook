@@ -41,6 +41,7 @@ from newbee_notebook.api.routers import (
     admin,
     diagrams,
     generated_images,
+    policy,
     videos,
     bilibili_auth,
     export,
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
     app.include_router(diagrams.router, prefix="/api/v1", tags=["Diagrams"])
     app.include_router(generated_images.router, prefix="/api/v1", tags=["Generated Images"])
+    app.include_router(policy.router, prefix="/api/v1", tags=["Policy"])
     app.include_router(videos.router, prefix="/api/v1", tags=["Videos"])
     app.include_router(export.router, prefix="/api/v1", tags=["Export"])
     app.include_router(skills.router, prefix="/api/v1", tags=["Skills"])

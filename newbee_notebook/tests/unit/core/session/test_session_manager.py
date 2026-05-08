@@ -576,6 +576,34 @@ async def test_session_manager_threads_image_contents_to_current_user_turn_only(
     assert loop.model_override == "glm-5v-turbo"
 
 
+@pytest.mark.anyio
+async def test_session_manager_passes_agent_policy_to_agent_loop():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="run without prompts",
+        mode_type=ModeType.AGENT,
+        agent_policy="yolo",
+    )
+
+    assert RecordingLoop.instances[-1].agent_policy == "yolo"
+
+
 def test_build_context_budget_uses_provider_specific_context_windows():
     qwen_budget = session_manager_module._build_context_budget(
         LLMRuntimeConfig(

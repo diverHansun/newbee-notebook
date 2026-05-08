@@ -52,6 +52,16 @@ def _request(signature: str = "global:write_file:abc12345") -> PermissionRequest
     )
 
 
+def test_session_allow_cache_can_allow_all_capabilities_in_session():
+    cache = SessionAllowCache()
+
+    cache.add_all("session-1")
+
+    assert cache.contains("session-1", "global:bash:abc")
+    assert cache.contains("session-1", "global:write_file:def")
+    assert not cache.contains("session-2", "global:bash:abc")
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

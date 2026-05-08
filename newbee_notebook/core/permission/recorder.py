@@ -29,13 +29,14 @@ class DecisionRecorder:
         if normalized_choice is PermissionChoice.ONCE:
             return PermissionResponse.allow(reason="once")
         if normalized_choice is PermissionChoice.ALWAYS_SESSION:
-            self._session_cache.add(request.session_id, request.capability_signature)
+            self._session_cache.add_all(request.session_id)
             return PermissionResponse.allow(reason="always_session")
         if normalized_choice is PermissionChoice.ALWAYS_PERSIST:
             try:
                 await self._allow_store.write(request.capability_signature)
             except Exception:
                 return PermissionResponse.deny(reason="permission_store_write_failed")
+            self._session_cache.add_all(request.session_id)
             return PermissionResponse.allow(reason="always_persist")
         if normalized_choice is PermissionChoice.REJECT_WITH_SUGGESTION:
             return PermissionResponse.reject_with_suggestion(

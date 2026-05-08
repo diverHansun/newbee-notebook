@@ -360,6 +360,7 @@ class SessionManager:
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
         model_override: str | None = None,
+        agent_policy: str | None = None,
     ):
         effective_confirmation_gateway = (
             confirmation_gateway or self._confirmation_gateway
@@ -384,6 +385,7 @@ class SessionManager:
             confirmation_meta=confirmation_meta,
             confirmation_gateway=effective_confirmation_gateway,
             policy_decider=self._policy_decider,
+            agent_policy=agent_policy,
             session_id=self._current_session.session_id if self._current_session else "",
             skill_context=skill_context,
         )
@@ -462,6 +464,7 @@ class SessionManager:
         lang: str = "en",
         image_contents: list[dict[str, Any]] | None = None,
         model_override: str | None = None,
+        agent_policy: str | None = None,
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
@@ -499,6 +502,7 @@ class SessionManager:
                 required_tool_call_before_response=required_tool_call_before_response,
                 skill_context=skill_context,
                 model_override=model_override,
+                agent_policy=agent_policy,
             )
             current_user_content = self._build_current_user_content(
                 runtime_message,
@@ -530,6 +534,7 @@ class SessionManager:
         lang: str = "en",
         image_contents: list[dict[str, Any]] | None = None,
         model_override: str | None = None,
+        agent_policy: str | None = None,
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -553,6 +558,7 @@ class SessionManager:
             lang=lang,
             image_contents=image_contents,
             model_override=model_override,
+            agent_policy=agent_policy,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)

@@ -44,6 +44,9 @@ from newbee_notebook.application.services.notebook_document_service import Noteb
 from newbee_notebook.application.services.generated_image_service import GeneratedImageService
 from newbee_notebook.application.services.chat_image_service import ChatImageService
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
+from newbee_notebook.application.services.policy_preference_service import (
+    PolicyPreferenceService,
+)
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
@@ -189,6 +192,13 @@ async def get_chat_image_repo(
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
     """Get AppSettingsService instance."""
     return AppSettingsService(session)
+
+
+def get_policy_preference_service(
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
+) -> PolicyPreferenceService:
+    """Get frontend-facing agent policy preference service."""
+    return PolicyPreferenceService(settings_service)
 
 
 # =============================================================================
@@ -515,6 +525,10 @@ def get_runtime_permission_session_cache_singleton() -> SessionAllowCache:
     return _runtime_permission_session_cache
 
 
+def get_permission_session_cache_dep() -> SessionAllowCache:
+    return get_runtime_permission_session_cache_singleton()
+
+
 def get_mcp_client_manager_singleton() -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
@@ -603,10 +617,11 @@ def get_confirmation_gateway_dep() -> ConfirmationGateway:
 def get_permission_gateway_dep(
     settings_service: AppSettingsService = Depends(get_app_settings_service),
     confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    session_cache: SessionAllowCache = Depends(get_permission_session_cache_dep),
 ) -> PermissionGateway:
     return PermissionGateway(
         allow_store=AllowStore(settings_service),
-        session_cache=get_runtime_permission_session_cache_singleton(),
+        session_cache=session_cache,
         confirmation_gateway=confirmation_gateway,
     )
 

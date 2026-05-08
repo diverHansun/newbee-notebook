@@ -364,6 +364,7 @@ class ChatService:
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
         image_ids: Optional[List[str]] = None,
+        agent_policy: str = "default",
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -478,6 +479,7 @@ class ChatService:
             lang=lang,
             image_contents=image_contents,
             model_override=model_override,
+            agent_policy=agent_policy,
         )
         response_content = self._strip_generated_image_markup(
             runtime_result.content,
@@ -581,6 +583,7 @@ class ChatService:
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
         image_ids: Optional[List[str]] = None,
+        agent_policy: str = "default",
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -709,6 +712,7 @@ class ChatService:
                 lang=lang,
                 image_contents=image_contents,
                 model_override=model_override,
+                agent_policy=agent_policy,
             )
             while True:
                 try:

@@ -13,9 +13,17 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from newbee_notebook.api.dependencies import get_session_service, get_chat_service
+from newbee_notebook.api.dependencies import (
+    get_chat_service,
+    get_policy_preference_service,
+    get_session_service,
+)
 from newbee_notebook.api.models.confirm_models import ConfirmActionRequest
+from newbee_notebook.api.models.policy_models import EffectivePolicyResponse
 from newbee_notebook.api.models.requests import ChatRequest
+from newbee_notebook.application.services.policy_preference_service import (
+    PolicyPreferenceService,
+)
 from newbee_notebook.application.services.session_service import (
     SessionLimitExceededError,
     SessionService,
@@ -58,6 +66,24 @@ class ChatResponse(BaseModel):
 
 class ConfirmActionResponse(BaseModel):
     status: str
+    effective_policy: EffectivePolicyResponse | None = None
+
+
+def _effective_policy_response(policy) -> EffectivePolicyResponse:
+    return EffectivePolicyResponse(
+        notebook_id=str(getattr(policy, "notebook_id")),
+        session_id=getattr(policy, "session_id", None),
+        policy=getattr(policy, "policy"),
+        source=getattr(policy, "source"),
+    )
+
+
+def _ensure_session_belongs_to_notebook(session, notebook_id: str) -> None:
+    if str(session.notebook_id) != str(notebook_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Session does not belong to notebook",
+        )
 
 
 # =============================================================================
@@ -221,6 +247,7 @@ async def chat(
     request: ChatRequest = None,
     session_service: SessionService = Depends(get_session_service),
     chat_service: ChatService = Depends(get_chat_service),
+    policy_service: PolicyPreferenceService = Depends(get_policy_preference_service),
 ):
     """
     Send a message and get a complete response (non-streaming).
@@ -235,9 +262,10 @@ async def chat(
     # Validate or create session
     if request.session_id:
         try:
-            await session_service.get_or_raise(request.session_id)
+            session = await session_service.get_or_raise(request.session_id)
         except SessionNotFoundError:
             raise HTTPException(status_code=404, detail="Session not found")
+        _ensure_session_belongs_to_notebook(session, notebook_id)
     else:
         # Create a new session
         try:
@@ -245,6 +273,11 @@ async def chat(
             request.session_id = session.session_id
         except SessionLimitExceededError as exc:
             raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
+
+    effective_policy = await policy_service.get_effective(
+        notebook_id=notebook_id,
+        session_id=request.session_id,
+    )
     
     try:
         result = await chat_service.chat(
@@ -256,6 +289,7 @@ async def chat(
             source_document_ids=request.source_document_ids,
             lang=request.lang,
             image_ids=request.image_ids,
+            agent_policy=effective_policy.policy,
         )
     except DocumentProcessingError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message)
@@ -289,6 +323,7 @@ async def chat_stream(
     request: ChatRequest = None,
     session_service: SessionService = Depends(get_session_service),
     chat_service: ChatService = Depends(get_chat_service),
+    policy_service: PolicyPreferenceService = Depends(get_policy_preference_service),
 ):
     """
     Send a message and get a streaming response (SSE).
@@ -303,15 +338,21 @@ async def chat_stream(
     # Validate or create session
     if request.session_id:
         try:
-            await session_service.get_or_raise(request.session_id)
+            session = await session_service.get_or_raise(request.session_id)
         except SessionNotFoundError:
             raise HTTPException(status_code=404, detail="Session not found")
+        _ensure_session_belongs_to_notebook(session, notebook_id)
     else:
         try:
             session = await session_service.create(notebook_id)
             request.session_id = session.session_id
         except SessionLimitExceededError as exc:
             raise HTTPException(status_code=400, detail=_session_limit_detail(exc))
+
+    effective_policy = await policy_service.get_effective(
+        notebook_id=notebook_id,
+        session_id=request.session_id,
+    )
 
     try:
         # Pre-validate to fail fast for conclude/explain
@@ -338,6 +379,7 @@ async def chat_stream(
         source_document_ids=request.source_document_ids,
         lang=request.lang,
         image_ids=request.image_ids,
+        agent_policy=effective_policy.policy,
     )
     stream = sse_adapter(business_stream)
     
@@ -378,11 +420,17 @@ async def cancel_stream(
     }
 
 
-@router.post("/{session_id}/confirm", response_model=ConfirmActionResponse)
+@router.post(
+    "/{session_id}/confirm",
+    response_model=ConfirmActionResponse,
+    response_model_exclude_none=True,
+)
 async def confirm_action(
     session_id: str,
     request: ConfirmActionRequest,
     chat_service: ChatService = Depends(get_chat_service),
+    session_service: SessionService = Depends(get_session_service),
+    policy_service: PolicyPreferenceService = Depends(get_policy_preference_service),
 ):
     try:
         resolved = await chat_service.confirm_action(
@@ -397,7 +445,32 @@ async def confirm_action(
 
     if not resolved:
         raise HTTPException(status_code=404, detail="Confirmation request not found")
-    return ConfirmActionResponse(status="resolved")
+
+    effective_policy = None
+    if request.response in {"always_session", "always_persist"}:
+        try:
+            session = await session_service.get_or_raise(session_id)
+        except SessionNotFoundError:
+            raise HTTPException(status_code=404, detail="Session not found")
+        notebook_id = str(session.notebook_id)
+        if request.response == "always_session":
+            effective_policy = await policy_service.update_session(
+                notebook_id=notebook_id,
+                session_id=session_id,
+                policy="yolo",
+            )
+        else:
+            effective_policy = await policy_service.update_notebook(
+                notebook_id=notebook_id,
+                session_id=session_id,
+                policy="yolo",
+            )
+    return ConfirmActionResponse(
+        status="resolved",
+        effective_policy=_effective_policy_response(effective_policy)
+        if effective_policy is not None
+        else None,
+    )
 
 
 # =============================================================================

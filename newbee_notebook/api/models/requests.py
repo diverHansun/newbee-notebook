@@ -102,6 +102,13 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description="Uploaded chat image IDs attached to this user turn.",
     )
+    agent_policy: Literal["default", "yolo"] = Field(
+        "default",
+        description=(
+            "Agent execution policy. 'default' asks for sensitive actions; "
+            "'yolo' skips permission prompts while keeping sandbox."
+        ),
+    )
     lang: Literal["en", "zh"] = Field(
         "en",
         description="Language for system prompt. Defaults to 'en'.",
