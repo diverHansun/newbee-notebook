@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 
 class _FakeSettingsService:
     def __init__(self, values: dict[str, str]):
@@ -24,6 +26,11 @@ class _FakeSettingsService:
     async def delete(self, key: str):
         self._values.pop(key, None)
         self.delete_calls.append(key)
+
+    async def delete_prefix(self, prefix: str):
+        for key in [key for key in self._values if key.startswith(prefix)]:
+            self._values.pop(key, None)
+            self.delete_calls.append(key)
 
 
 @pytest.fixture
@@ -227,7 +234,7 @@ async def test_get_embedding_config_async_repairs_mismatched_standard_model_with
 async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monkeypatch):
     from newbee_notebook.core.common import config_db
 
-    values = {"mineru.mode": "local"}
+    values = {"mineru.mode": "local", "mineru.title_aided_enabled": "true"}
     monkeypatch.setattr(
         config_db,
         "_get_app_settings_service",
@@ -241,6 +248,38 @@ async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monke
         "mode": "local",
         "source": "db",
         "local_enabled": True,
+        "title_aided_enabled": True,
+    }
+
+
+@pytest.mark.anyio
+async def test_get_mineru_config_async_uses_bootstrap_env_for_title_aided(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    monkeypatch.setattr(
+        config_db,
+        "_get_app_settings_service",
+        lambda _session: _FakeSettingsService({}),
+    )
+    monkeypatch.setattr(
+        config_db,
+        "_BOOTSTRAP_ENV",
+        {
+            "MINERU_MODE": "local",
+            "MINERU_LOCAL_ENABLED": "true",
+            "MINERU_TITLE_AIDED_ENABLED": "true",
+        },
+        raising=False,
+    )
+    monkeypatch.setenv("MINERU_MODE", "cloud")
+
+    payload = await config_db.get_mineru_config_async(object())
+
+    assert payload == {
+        "mode": "local",
+        "source": "env",
+        "local_enabled": True,
+        "title_aided_enabled": True,
     }
 
 
@@ -262,6 +301,7 @@ async def test_get_mineru_config_async_forces_cloud_when_local_disabled(monkeypa
         "mode": "cloud",
         "source": "db",
         "local_enabled": False,
+        "title_aided_enabled": False,
     }
 
 
@@ -285,6 +325,18 @@ def test_resolve_llm_api_key_reuses_provider_keys(monkeypatch):
     assert resolve_llm_api_key("zhipu") == "zhipu-key"
     assert resolve_llm_api_key("qwen") == "dashscope-key"
     assert resolve_llm_api_key("unknown") is None
+
+
+def test_resolve_llm_api_key_matches_runtime_openai_fallback(monkeypatch):
+    from newbee_notebook.core.common.config_db import resolve_llm_api_key
+
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("QWEN_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-compatible-key")
+
+    assert resolve_llm_api_key("zhipu") == "openai-compatible-key"
+    assert resolve_llm_api_key("qwen") == "openai-compatible-key"
 
 
 def test_resolve_embedding_api_key_supports_not_applicable(monkeypatch):
