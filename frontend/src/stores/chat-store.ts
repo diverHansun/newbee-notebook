@@ -2,27 +2,40 @@
 
 import { create } from "zustand";
 
-import { ChatImage, MessageMode, MessageRole } from "@/lib/api/types";
+import {
+  ChatImage,
+  MessageMode,
+  MessageRole,
+  PermissionResponseChoice,
+} from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
 export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
 export type ConfirmationTargetType = "note" | "diagram" | "document" | "video";
 export type PendingConfirmationStatus =
   | "pending"
+  | "resolving"
   | "confirmed"
   | "rejected"
   | "timeout"
+  | "error"
   | "collapsed";
 
 export type PendingConfirmation = {
   requestId: string;
   toolName: string;
-  actionType: ConfirmationActionType;
-  targetType: ConfirmationTargetType;
+  actionType: ConfirmationActionType | string;
+  targetType: ConfirmationTargetType | string;
   argsSummary: Record<string, unknown>;
   description: string;
   status: PendingConfirmationStatus;
   expiresAt: number;
+  capabilitySignature?: string;
+  riskLevel?: string;
+  skillName?: string | null;
+  contentHash?: string;
+  responseOptions?: PermissionResponseChoice[];
+  errorMessage?: string;
   resolvedFrom?: "confirmed" | "rejected" | "timeout";
 };
 

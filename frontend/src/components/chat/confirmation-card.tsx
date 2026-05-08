@@ -3,20 +3,16 @@
 import { useMemo } from "react";
 
 import { useLang } from "@/lib/hooks/useLang";
+import type { PermissionResponseChoice } from "@/lib/api/types";
 import type { LocalizedString } from "@/lib/i18n/strings";
 import { uiStrings } from "@/lib/i18n/strings";
-import type {
-  ConfirmationActionType,
-  ConfirmationTargetType,
-  PendingConfirmation,
-} from "@/stores/chat-store";
+import type { PendingConfirmation } from "@/stores/chat-store";
 
 type TranslateFn = ReturnType<typeof useLang>["t"];
 
 type ConfirmationCardProps = {
   confirmation: PendingConfirmation;
-  onConfirm: () => void;
-  onReject: () => void;
+  onResolve: (response: PermissionResponseChoice) => void;
 };
 
 function formatSummaryValue(value: unknown): string {
@@ -38,28 +34,42 @@ function statusLabel(
       return t(uiStrings.confirmation.rejected);
     case "timeout":
       return t(uiStrings.confirmation.timeout);
+    case "resolving":
+      return t(uiStrings.common.processing);
+    case "error":
+      return t(uiStrings.confirmation.submitFailed);
     default:
       return "";
   }
 }
 
-function confirmationTitle(
-  actionType: ConfirmationActionType,
-  targetType: ConfirmationTargetType,
-  t: TranslateFn
-): string {
-  const actionGroup = uiStrings.confirmation.actionTitle[actionType] as
-    | Record<string, LocalizedString>
-    | undefined;
+function confirmationTitle(actionType: string, targetType: string, t: TranslateFn): string {
+  const actionGroup = (uiStrings.confirmation.actionTitle as Record<
+    string,
+    Record<string, LocalizedString>
+  >)[actionType];
   const key = actionGroup?.[targetType];
   if (key) return t(key);
   return t(uiStrings.confirmation.title);
 }
 
+const DEFAULT_RESPONSE_OPTIONS: PermissionResponseChoice[] = [
+  "once",
+  "always_session",
+  "always_persist",
+  "reject",
+];
+
+function responseLabel(option: PermissionResponseChoice): LocalizedString {
+  if (option === "once") return uiStrings.confirmation.allowOnce;
+  if (option === "always_session") return uiStrings.confirmation.allowSession;
+  if (option === "always_persist") return uiStrings.confirmation.allowNotebook;
+  return uiStrings.confirmation.reject;
+}
+
 export function ConfirmationCard({
   confirmation,
-  onConfirm,
-  onReject,
+  onResolve,
 }: ConfirmationCardProps) {
   const { t } = useLang();
   const summaryEntries = useMemo(
@@ -67,10 +77,14 @@ export function ConfirmationCard({
     [confirmation.argsSummary]
   );
   const isPending = confirmation.status === "pending";
-  const isResolving = ["confirmed", "rejected", "timeout"].includes(confirmation.status);
-  const title = confirmationTitle(confirmation.actionType, confirmation.targetType, t);
+  const isResolving = ["confirmed", "rejected", "timeout", "resolving"].includes(confirmation.status);
+  const title = t(uiStrings.confirmation.permissionTitle);
   const statusBadge = !isPending ? statusLabel(confirmation.status, t) : null;
   const isDestructive = confirmation.actionType === "delete";
+  const options =
+    confirmation.responseOptions && confirmation.responseOptions.length > 0
+      ? confirmation.responseOptions
+      : DEFAULT_RESPONSE_OPTIONS;
 
   return (
     <div
@@ -85,6 +99,15 @@ export function ConfirmationCard({
         {statusBadge ? <span className="badge badge-default">{statusBadge}</span> : null}
       </div>
 
+      <p className="confirmation-card-description">{confirmation.description}</p>
+
+      <dl className="confirmation-card-summary">
+        <div className="confirmation-card-summary-row">
+          <dt>{t(uiStrings.confirmation.tool)}</dt>
+          <dd>{confirmation.toolName}</dd>
+        </div>
+      </dl>
+
       {summaryEntries.length > 0 ? (
         <dl className="confirmation-card-summary">
           {summaryEntries.map(([key, value]) => (
@@ -98,18 +121,22 @@ export function ConfirmationCard({
 
       {isPending ? (
         <div className="confirmation-card-actions">
-          <button
-            className={`btn btn-sm ${isDestructive ? "btn-destructive" : ""}`}
-            type="button"
-            onClick={onConfirm}
-          >
-            {isDestructive
-              ? t(uiStrings.confirmation.confirmDelete)
-              : t(uiStrings.confirmation.confirm)}
-          </button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onReject}>
-            {t(uiStrings.confirmation.reject)}
-          </button>
+          {options.map((option) => (
+            <button
+              key={option}
+              className={`btn btn-sm ${
+                option === "reject"
+                  ? "btn-ghost"
+                  : isDestructive && option === "once"
+                    ? "btn-destructive"
+                    : ""
+              }`}
+              type="button"
+              onClick={() => onResolve(option)}
+            >
+              {t(responseLabel(option))}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>

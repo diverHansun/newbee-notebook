@@ -31,38 +31,44 @@ describe("ConfirmationCard", () => {
   });
 
   it("renders pending confirmation details and resolves actions", async () => {
-    const onConfirm = vi.fn();
-    const onReject = vi.fn();
+    const onResolve = vi.fn();
 
     renderWithLang(
       <ConfirmationCard
-        confirmation={createPendingConfirmation()}
-        onConfirm={onConfirm}
-        onReject={onReject}
+        confirmation={{
+          ...createPendingConfirmation(),
+          responseOptions: ["once", "always_session", "always_persist", "reject"],
+        }}
+        onResolve={onResolve}
       />
     );
 
-    expect(screen.getByText("Update note")).toBeInTheDocument();
+    expect(screen.getByText("Permission request")).toBeInTheDocument();
+    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
+    expect(screen.getByText("update_note")).toBeInTheDocument();
     expect(screen.getByText("note-1")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    fireEvent.click(screen.getByRole("button", { name: "Always allow in this session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Always allow in this notebook" }));
     fireEvent.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onReject).toHaveBeenCalledTimes(1);
+    expect(onResolve).toHaveBeenNthCalledWith(1, "once");
+    expect(onResolve).toHaveBeenNthCalledWith(2, "always_session");
+    expect(onResolve).toHaveBeenNthCalledWith(3, "always_persist");
+    expect(onResolve).toHaveBeenNthCalledWith(4, "reject");
   });
 
   it("renders a resolved status without action buttons", () => {
     renderWithLang(
       <ConfirmationCard
         confirmation={{ ...createPendingConfirmation(), status: "confirmed" }}
-        onConfirm={() => {}}
-        onReject={() => {}}
+        onResolve={() => {}}
       />
     );
 
     expect(screen.getByText("Confirmed")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Allow once" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
   });
 });

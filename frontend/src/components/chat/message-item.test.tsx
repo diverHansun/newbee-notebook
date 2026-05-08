@@ -49,13 +49,13 @@ describe("MessageItem", () => {
     );
 
     expect(screen.getByText("Working on it.")).toBeInTheDocument();
-    expect(screen.getByText("Update note")).toBeInTheDocument();
+    expect(screen.getByText("Permission request")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Allow once" }));
     await user.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(1, "req-1", true);
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", false);
+    expect(onResolveConfirmation).toHaveBeenNthCalledWith(1, "req-1", "once");
+    expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", "reject");
   });
 
   it("keeps intermediate block hidden once final content stream has started", () => {

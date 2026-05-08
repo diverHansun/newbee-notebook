@@ -10,7 +10,12 @@ import {
   buildSessionDisplayTitleMap,
   getSessionDisplayTitle,
 } from "@/lib/chat/session-labels";
-import type { Session } from "@/lib/api/types";
+import type {
+  EffectivePolicy,
+  PermissionResponseChoice,
+  PolicyPreferenceUpdate,
+  Session,
+} from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import type { ChatMessage } from "@/stores/chat-store";
@@ -24,7 +29,9 @@ type ChatPanelProps = {
   messages: ChatMessage[];
   mode: "agent" | "ask";
   isStreaming: boolean;
+  policy?: EffectivePolicy;
   onModeChange: (mode: "agent" | "ask") => void;
+  onPolicyChange?: (update: PolicyPreferenceUpdate) => Promise<void> | void;
   onEnsureSession: (titleHint?: string) => Promise<string | null>;
   onSendMessage: (
     text: string,
@@ -37,7 +44,7 @@ type ChatPanelProps = {
   onCreateSession: (title?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
+  onResolveConfirmation?: (requestId: string, response: PermissionResponseChoice) => void;
 };
 
 export function ChatPanel({
@@ -47,7 +54,9 @@ export function ChatPanel({
   messages,
   mode,
   isStreaming,
+  policy,
   onModeChange,
+  onPolicyChange,
   onEnsureSession,
   onSendMessage,
   onCancel,
@@ -402,7 +411,9 @@ export function ChatPanel({
           mode={mode}
           isStreaming={isStreaming}
           sourceDocIds={sourceDocIds}
+          policy={policy}
           onSourceDocIdsChange={setSourceDocIds}
+          onPolicyChange={onPolicyChange}
           onModeChange={onModeChange}
           onEnsureSession={onEnsureSession}
           onSend={(text, selectedMode, imageIds) =>

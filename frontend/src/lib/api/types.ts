@@ -316,6 +316,27 @@ export type Session = {
 
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageMode = "agent" | "chat" | "ask" | "explain" | "conclude";
+export type AgentPolicy = "default" | "yolo";
+export type PolicyScope = "session" | "notebook";
+export type PolicySource = "default" | "session" | "notebook";
+export type PermissionResponseChoice =
+  | "once"
+  | "always_session"
+  | "always_persist"
+  | "reject";
+
+export type EffectivePolicy = {
+  notebook_id: string;
+  session_id: string | null;
+  policy: AgentPolicy;
+  source: PolicySource;
+};
+
+export type PolicyPreferenceUpdate = {
+  scope: PolicyScope;
+  policy: AgentPolicy;
+  session_id?: string | null;
+};
 
 export type ChatImageSse = {
   image_id: string;
@@ -382,6 +403,7 @@ export type ChatRequest = {
   include_ec_context?: boolean | null;
   source_document_ids?: string[] | null;
   image_ids?: string[];
+  agent_policy?: AgentPolicy;
   lang?: "en" | "zh";
 };
 
@@ -435,10 +457,15 @@ export type SseEventConfirmation = {
   type: "confirmation_request";
   request_id: string;
   tool_name: string;
-  action_type: "create" | "update" | "delete" | "confirm";
-  target_type: "note" | "diagram" | "document" | "video";
+  action_type: string;
+  target_type: string;
   args_summary: Record<string, unknown>;
   description: string;
+  capability_signature?: string;
+  risk_level?: string;
+  skill_name?: string | null;
+  content_hash?: string;
+  response_options?: PermissionResponseChoice[];
 };
 
 export type SseEventToolCall = {

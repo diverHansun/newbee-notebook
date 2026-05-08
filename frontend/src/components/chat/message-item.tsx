@@ -5,6 +5,7 @@ import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { getChatImageDataUrl, getChatImageThumbnailUrl } from "@/lib/api/chat-images";
+import type { PermissionResponseChoice } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage, ToolStep } from "@/stores/chat-store";
@@ -13,7 +14,7 @@ type MessageItemProps = {
   message: ChatMessage;
   roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
+  onResolveConfirmation?: (requestId: string, response: PermissionResponseChoice) => void;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
@@ -307,8 +308,9 @@ export function MessageItem({
           ) : (
             <ConfirmationCard
               confirmation={message.pendingConfirmation}
-              onConfirm={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, true)}
-              onReject={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, false)}
+              onResolve={(response) =>
+                onResolveConfirmation?.(message.pendingConfirmation!.requestId, response)
+              }
             />
           )
         ) : null}

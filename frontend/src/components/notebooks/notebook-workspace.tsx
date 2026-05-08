@@ -77,7 +77,11 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         messages={chat.messages}
         mode={chat.currentMode}
         isStreaming={chat.isStreaming}
+        policy={chat.policy}
         onModeChange={chat.setMode}
+        onPolicyChange={async (update) => {
+          await chat.updatePolicy(update);
+        }}
         onEnsureSession={chat.ensureSession}
         onSendMessage={(text, mode, sourceDocIds, imageIds) =>
           sendByMode(text, mode, undefined, sourceDocIds, imageIds)

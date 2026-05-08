@@ -14,6 +14,9 @@ const listSessionMessages = vi.fn();
 const createSession = vi.fn();
 const deleteSession = vi.fn();
 const chatOnce = vi.fn();
+const confirmChatAction = vi.fn();
+const getEffectivePolicy = vi.fn();
+const updatePolicyPreference = vi.fn();
 const startStream = vi.fn();
 const cancelStream = vi.fn();
 
@@ -26,6 +29,12 @@ vi.mock("@/lib/api/sessions", () => ({
 
 vi.mock("@/lib/api/chat", () => ({
   chatOnce: (...args: unknown[]) => chatOnce(...args),
+  confirmChatAction: (...args: unknown[]) => confirmChatAction(...args),
+}));
+
+vi.mock("@/lib/api/policy", () => ({
+  getEffectivePolicy: (...args: unknown[]) => getEffectivePolicy(...args),
+  updatePolicyPreference: (...args: unknown[]) => updatePolicyPreference(...args),
 }));
 
 vi.mock("@/lib/hooks/useChatStream", () => ({
@@ -99,7 +108,25 @@ describe("useChatSession", () => {
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
+    confirmChatAction.mockReset();
+    getEffectivePolicy.mockReset();
+    updatePolicyPreference.mockReset();
     cancelStream.mockReset();
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "default",
+      source: "default",
+    });
+    updatePolicyPreference.mockImplementation(
+      async (_notebookId: string, update: { policy: string; scope: string; session_id?: string }) => ({
+        notebook_id: "nb-1",
+        session_id: update.session_id ?? "session-1",
+        policy: update.policy,
+        source: update.policy === "yolo" ? update.scope : "default",
+      })
+    );
+    confirmChatAction.mockResolvedValue({ status: "resolved" });
     startStream.mockImplementation(
       async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
         callbacks?.onEvent?.({ type: "start", message_id: 123 });
@@ -317,5 +344,66 @@ describe("useChatSession", () => {
         imageIds: ["img-upload-1", "img-upload-2"],
       })
     );
+  });
+
+  it("sends current agent policy with chat stream requests", async () => {
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "yolo",
+      source: "session",
+    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.policy.policy).toBe("yolo");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run checks", "agent");
+    });
+
+    expect(startStream).toHaveBeenCalledWith(
+      "nb-1",
+      expect.objectContaining({ agent_policy: "yolo" }),
+      expect.any(Object)
+    );
+  });
+
+  it("resolves always_session and updates session policy", async () => {
+    confirmChatAction.mockResolvedValueOnce({
+      status: "resolved",
+      effective_policy: {
+        notebook_id: "nb-1",
+        session_id: "session-1",
+        policy: "yolo",
+        source: "session",
+      },
+    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Update note", "agent");
+    });
+    await act(async () => {
+      await result.current.resolveConfirmation("req-1", "always_session");
+    });
+
+    expect(confirmChatAction).toHaveBeenCalledWith("session-1", {
+      request_id: "req-1",
+      response: "always_session",
+    });
+    expect(result.current.policy.policy).toBe("yolo");
+    expect(result.current.policy.source).toBe("session");
   });
 });

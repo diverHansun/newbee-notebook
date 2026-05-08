@@ -10,7 +10,10 @@ import {
   ChatImage,
   ChatImageSse,
   ChatContext,
+  EffectivePolicy,
   MessageMode,
+  PermissionResponseChoice,
+  PolicyPreferenceUpdate,
   Session,
   SessionMessage,
   SseEventConfirmation,
@@ -20,6 +23,7 @@ import { DIAGRAMS_QUERY_KEY } from "@/lib/hooks/use-diagrams";
 import { ALL_VIDEO_SUMMARIES_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
+import { getEffectivePolicy, updatePolicyPreference } from "@/lib/api/policy";
 import { useChatStream } from "@/lib/hooks/useChatStream";
 import { buildMarkdownVisibleMap, type MarkdownVisibleMap } from "@/lib/utils/markdown-typewriter";
 import { normalizeSources } from "@/lib/utils/sources";
@@ -250,6 +254,7 @@ async function findRecentPersistedAssistantReply(
   sessionId: string,
   mode: MessageMode,
   userContent: string,
+  imageIds: string[],
   startedAtMs: number
 ): Promise<SessionMessage | null> {
   const response = await listSessionMessages(sessionId, {
@@ -267,6 +272,7 @@ async function findRecentPersistedAssistantReply(
     if (assistant.role !== "assistant" || user.role !== "user") continue;
     if (assistant.mode !== mode || user.mode !== mode) continue;
     if (user.content.trim() !== normalizedUserContent) continue;
+    if (!imageIdsEqual(normalizeImageIds(user.image_ids), imageIds)) continue;
 
     const assistantMs = Date.parse(assistant.created_at);
     if (Number.isFinite(assistantMs)) {
@@ -285,6 +291,12 @@ export function useChatSession(notebookId: string) {
   const queryClient = useQueryClient();
   const stream = useChatStream();
   const [isFinalTypewriterActive, setIsFinalTypewriterActive] = useState(false);
+  const [policy, setPolicy] = useState<EffectivePolicy>({
+    notebook_id: notebookId,
+    session_id: null,
+    policy: "default",
+    source: "default",
+  });
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeStreamSessionIdRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
@@ -656,6 +668,25 @@ export function useChatSession(notebookId: string) {
   }, [currentSessionId, setMessages]);
 
   useEffect(() => {
+    let cancelled = false;
+    void getEffectivePolicy(notebookId, currentSessionId).then((nextPolicy) => {
+      if (!cancelled) setPolicy(nextPolicy);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSessionId, notebookId]);
+
+  const updatePolicy = useCallback(
+    async (update: PolicyPreferenceUpdate) => {
+      const nextPolicy = await updatePolicyPreference(notebookId, update);
+      setPolicy(nextPolicy);
+      return nextPolicy;
+    },
+    [notebookId]
+  );
+
+  useEffect(() => {
     sessionMessagesRef.current = {};
     activeAssistantIdRef.current = null;
     activeStreamSessionIdRef.current = null;
@@ -685,6 +716,11 @@ export function useChatSession(notebookId: string) {
         description: event.description,
         status: "pending" as const,
         expiresAt: Date.now() + CONFIRMATION_TIMEOUT_MS,
+        capabilitySignature: event.capability_signature,
+        riskLevel: event.risk_level,
+        skillName: event.skill_name,
+        contentHash: event.content_hash,
+        responseOptions: event.response_options,
       };
 
       updateMessageInSession(sessionId, assistantLocalId, {
@@ -962,6 +998,7 @@ export function useChatSession(notebookId: string) {
                 sessionId,
                 mode,
                 message,
+                requestImageIds,
                 streamStartedAtMs
               );
 
@@ -988,6 +1025,7 @@ export function useChatSession(notebookId: string) {
                 context: context || null,
                 source_document_ids: sourceDocumentIds ?? null,
                 image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
+                agent_policy: policy.policy,
               });
 
               pendingIntermediatePhaseRef.current = false;
@@ -1049,6 +1087,7 @@ export function useChatSession(notebookId: string) {
             context: context || null,
             source_document_ids: sourceDocumentIds ?? null,
             image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
+            agent_policy: policy.policy,
           },
           {
             onEvent: (event) => {
@@ -1339,6 +1378,7 @@ export function useChatSession(notebookId: string) {
                   sessionId,
                   mode,
                   message,
+                  [],
                   streamStartedAtMs
                 );
 
@@ -1367,6 +1407,7 @@ export function useChatSession(notebookId: string) {
                   session_id: sessionId,
                   context: context || null,
                   source_document_ids: sourceDocumentIds ?? null,
+                  agent_policy: policy.policy,
                 });
 
                 setExplainCard((prev) =>
@@ -1449,12 +1490,13 @@ export function useChatSession(notebookId: string) {
       stream,
       trackPendingConfirmation,
       updateMessageInSession,
+      policy.policy,
       t,
     ]
   );
 
   const resolveConfirmation = useCallback(
-    async (requestId: string, approved: boolean) => {
+    async (requestId: string, response: PermissionResponseChoice) => {
       const sessionId = currentSessionId;
       if (!sessionId) return;
 
@@ -1462,34 +1504,77 @@ export function useChatSession(notebookId: string) {
       if (!resolved?.message.pendingConfirmation) return;
 
       clearConfirmationTimer(requestId);
-      const resolvedStatus = approved ? "confirmed" : "rejected";
       updateMessageInSession(resolved.sessionId, resolved.message.id, {
         pendingConfirmation: {
           ...resolved.message.pendingConfirmation,
-          status: resolvedStatus,
+          status: "resolving",
         },
       });
 
-      // Auto-collapse after 1.5s
-      window.setTimeout(() => {
-        const nextResolved = findMessageByConfirmationRequest(requestId);
-        if (nextResolved?.message.pendingConfirmation && nextResolved.message.pendingConfirmation.status !== "pending") {
-          updateMessageInSession(nextResolved.sessionId, nextResolved.message.id, {
-            pendingConfirmation: {
-              ...nextResolved.message.pendingConfirmation,
-              status: "collapsed",
-              resolvedFrom: nextResolved.message.pendingConfirmation.status as "confirmed" | "rejected" | "timeout",
-            },
+      try {
+        const result = await confirmChatAction(sessionId, {
+          request_id: requestId,
+          response,
+        });
+        if (result.effective_policy) {
+          setPolicy(result.effective_policy);
+        } else if (response === "always_session" || response === "always_persist") {
+          const scope = response === "always_session" ? "session" : "notebook";
+          const nextPolicy = await updatePolicyPreference(notebookId, {
+            scope,
+            session_id: sessionId,
+            policy: "yolo",
           });
+          setPolicy(nextPolicy);
         }
-      }, 1500);
 
-      await confirmChatAction(sessionId, {
-        request_id: requestId,
-        approved,
-      });
+        const resolvedStatus = response === "reject" ? "rejected" : "confirmed";
+        updateMessageInSession(resolved.sessionId, resolved.message.id, {
+          pendingConfirmation: {
+            ...resolved.message.pendingConfirmation,
+            status: resolvedStatus,
+          },
+        });
+
+        window.setTimeout(() => {
+          const nextResolved = findMessageByConfirmationRequest(requestId);
+          if (
+            nextResolved?.message.pendingConfirmation &&
+            nextResolved.message.pendingConfirmation.status !== "pending"
+          ) {
+            updateMessageInSession(nextResolved.sessionId, nextResolved.message.id, {
+              pendingConfirmation: {
+                ...nextResolved.message.pendingConfirmation,
+                status: "collapsed",
+                resolvedFrom: nextResolved.message.pendingConfirmation.status as
+                  | "confirmed"
+                  | "rejected"
+                  | "timeout",
+              },
+            });
+          }
+        }, 1500);
+      } catch (error) {
+        updateMessageInSession(resolved.sessionId, resolved.message.id, {
+          pendingConfirmation: {
+            ...resolved.message.pendingConfirmation,
+            status: "error",
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : t(uiStrings.confirmation.submitFailed),
+          },
+        });
+      }
     },
-    [clearConfirmationTimer, currentSessionId, findMessageByConfirmationRequest, updateMessageInSession]
+    [
+      clearConfirmationTimer,
+      currentSessionId,
+      findMessageByConfirmationRequest,
+      notebookId,
+      t,
+      updateMessageInSession,
+    ]
   );
 
   const cancelStream = useCallback(async () => {
@@ -1564,6 +1649,7 @@ export function useChatSession(notebookId: string) {
     currentSessionId,
     messages,
     currentMode,
+    policy,
     isStreaming: stream.isStreaming || isFinalTypewriterActive,
     explainCard,
     setMode,
@@ -1575,6 +1661,7 @@ export function useChatSession(notebookId: string) {
     deleteSession: removeSession,
     closeExplainCard: () => setExplainCard(null),
     resolveConfirmation,
+    updatePolicy,
     refreshSessions: () => queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) }),
   };
 }

@@ -1,5 +1,12 @@
 import { ApiError, apiFetch, buildError } from "@/lib/api/client";
-import { ApiErrorPayload, ChatRequest, ChatResponse, SseEvent } from "@/lib/api/types";
+import {
+  ApiErrorPayload,
+  ChatRequest,
+  ChatResponse,
+  EffectivePolicy,
+  PermissionResponseChoice,
+  SseEvent,
+} from "@/lib/api/types";
 import { parseSseStream } from "@/lib/utils/sse-parser";
 
 function getLangFromStorage(): "en" | "zh" {
@@ -14,11 +21,14 @@ function getLangFromStorage(): "en" | "zh" {
 
 type ConfirmActionRequest = {
   request_id: string;
-  approved: boolean;
+  approved?: boolean;
+  response?: PermissionResponseChoice;
+  suggestion?: string;
 };
 
 type ConfirmActionResponse = {
   status: "resolved";
+  effective_policy?: EffectivePolicy;
 };
 
 type StreamOptions = {

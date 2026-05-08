@@ -3,10 +3,15 @@
 import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
 import { ChatImageAttachmentBar } from "@/components/chat/chat-image-attachment-bar";
+import { PolicySelector } from "@/components/chat/policy-selector";
 import { SlashCommandHint, shouldShowSlashCommandHint } from "@/components/chat/slash-command-hint";
 import { SourceSelector } from "@/components/chat/source-selector";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import type { NotebookDocumentItem } from "@/lib/api/types";
+import type {
+  EffectivePolicy,
+  NotebookDocumentItem,
+  PolicyPreferenceUpdate,
+} from "@/lib/api/types";
 import { useChatImageUpload } from "@/lib/hooks/useChatImageUpload";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
@@ -17,7 +22,9 @@ type ChatInputProps = {
   mode: "agent" | "ask";
   isStreaming: boolean;
   sourceDocIds: string[] | null;
+  policy?: EffectivePolicy;
   onSourceDocIdsChange: (ids: string[] | null) => void;
+  onPolicyChange?: (update: PolicyPreferenceUpdate) => Promise<void> | void;
   onModeChange: (mode: "agent" | "ask") => void;
   onEnsureSession: (titleHint?: string) => Promise<string | null>;
   onSend: (text: string, mode: "agent" | "ask", imageIds?: string[]) => void;
@@ -57,7 +64,9 @@ export function ChatInput({
   mode,
   isStreaming,
   sourceDocIds,
+  policy,
   onSourceDocIdsChange,
+  onPolicyChange,
   onModeChange,
   onEnsureSession,
   onSend,
@@ -67,12 +76,22 @@ export function ChatInput({
   const [input, setInput] = useState("");
   const [sourceDocs, setSourceDocs] = useState<NotebookDocumentItem[]>([]);
   const [sourceDocsTotal, setSourceDocsTotal] = useState(0);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+  const [policyChanging, setPolicyChanging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageUpload = useChatImageUpload({
     sessionId: currentSessionId,
     ensureSession: () => onEnsureSession(input.trim().slice(0, 30) || undefined),
   });
   const showSlashCommandHint = shouldShowSlashCommandHint(input);
+  const effectivePolicy =
+    policy ??
+    ({
+      notebook_id: notebookId,
+      session_id: currentSessionId,
+      policy: "default",
+      source: "default",
+    } as EffectivePolicy);
 
   const submitCurrentInput = () => {
     const content = input.trim();
@@ -126,6 +145,30 @@ export function ChatInput({
     },
     [imageUpload]
   );
+  const handlePolicyChange = useCallback(
+    async (update: PolicyPreferenceUpdate) => {
+      if (!onPolicyChange) return;
+      setPolicyError(null);
+      setPolicyChanging(true);
+      try {
+        await onPolicyChange(update);
+      } catch {
+        setPolicyError(t(uiStrings.policyPermission.updateFailed));
+      } finally {
+        setPolicyChanging(false);
+      }
+    },
+    [onPolicyChange, t]
+  );
+  const policySelectorDisabled =
+    isStreaming ||
+    policyChanging ||
+    !onPolicyChange ||
+    (!effectivePolicy.session_id && effectivePolicy.source !== "notebook");
+  const policyDisabledReason =
+    !effectivePolicy.session_id && effectivePolicy.source !== "notebook"
+      ? t(uiStrings.policyPermission.createSessionFirst)
+      : undefined;
 
   return (
     <form onSubmit={submit} className="chat-input-shell">
@@ -220,6 +263,13 @@ export function ChatInput({
               onChange={(next) => onModeChange(next as "agent" | "ask")}
               disabled={isStreaming}
             />
+            <PolicySelector
+              policy={effectivePolicy}
+              disabled={policySelectorDisabled}
+              disabledReason={policyDisabledReason}
+              onChange={handlePolicyChange}
+            />
+            {policyError ? <span className="policy-selector-error">{policyError}</span> : null}
             <SourceSelector
               notebookId={notebookId}
               selectedIds={sourceDocIds}

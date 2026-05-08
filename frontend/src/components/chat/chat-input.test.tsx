@@ -212,4 +212,30 @@ describe("ChatInput", () => {
     expect(onModeChange).toHaveBeenCalledWith("ask");
     expect(screen.getByRole("img", { name: "Uploaded image preview" })).toBeInTheDocument();
   });
+
+  it("disables policy switching until a session exists", () => {
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId={null}
+        mode="agent"
+        isStreaming={false}
+        sourceDocIds={null}
+        policy={{
+          notebook_id: "nb-1",
+          session_id: null,
+          policy: "default",
+          source: "default",
+        }}
+        onSourceDocIdsChange={() => {}}
+        onPolicyChange={() => {}}
+        onModeChange={() => {}}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Agent permission policy" })).toBeDisabled();
+  });
 });
