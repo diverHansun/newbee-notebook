@@ -33,6 +33,7 @@ export interface MinerUConfig {
   source: string;
   local_enabled: boolean;
   api_key_set: boolean | null;
+  title_aided_enabled?: boolean;
 }
 
 export interface ModelsConfig {
@@ -89,7 +90,8 @@ export interface UpdateASRPayload {
 }
 
 export interface UpdateMinerUPayload {
-  mode: string;
+  mode?: string;
+  title_aided_enabled?: boolean;
 }
 
 export interface ResetResponse {

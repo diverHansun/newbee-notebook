@@ -211,6 +211,18 @@ export const uiStrings = {
       zh: "当前部署未启用本地 MinerU，默认固定为云端模式。",
       en: "Local MinerU is disabled in this deployment. Cloud mode is enforced.",
     },
+    mineruTitleAidedLabel: {
+      zh: "文档标题辅助识别",
+      en: "Document title assisted recognition",
+    },
+    mineruTitleAidedDescription: {
+      zh: "在本地 MinerU 解析 PDF 时，复用当前聊天 LLM 辅助判断标题层级。",
+      en: "Uses the current chat LLM to help classify heading levels during local MinerU PDF parsing.",
+    },
+    mineruTitleAidedRequiresLLMKey: {
+      zh: "启用后需要先配置聊天 LLM API key 才能真正生效。",
+      en: "A chat LLM API key is required for this to take effect.",
+    },
     asrConfig: { zh: "ASR 配置", en: "ASR Configuration" },
     asrProvider: { zh: "Provider", en: "Provider" },
     asrModel: { zh: "模型", en: "Model" },
