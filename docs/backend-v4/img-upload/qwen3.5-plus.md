@@ -1,0 +1,1 @@
+https://bailian.console.aliyun.com/cn-beijing?tab=model#/model-market/detail/qwen3.5-plus?serviceSite=asia-pacific-china
