@@ -73,6 +73,7 @@ export const uiStrings = {
     downloadImage: { zh: "下载图片", en: "Download image" },
     generatedImageFallbackAlt: { zh: "生成图片", en: "Generated image" },
     addImage: { zh: "添加图片", en: "Add image" },
+    uploadImageAction: { zh: "上传图片", en: "Upload image" },
     uploadedImages: { zh: "上传图片", en: "Uploaded images" },
     uploadedImagePreview: { zh: "上传图片预览", en: "Uploaded image preview" },
     uploadedImageThumbnail: { zh: "上传图片缩略图", en: "Uploaded image thumbnail" },

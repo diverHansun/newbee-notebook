@@ -56,10 +56,10 @@
   gap: 5px;
   max-width: 176px;
   height: 30px;
-  border: 1px solid transparent;
+  border: 1px solid hsl(210 80% 55% / 0.28);
   border-radius: 999px;
-  background: hsl(var(--accent));
-  color: hsl(var(--muted-foreground));
+  background: hsl(210 100% 96%);
+  color: hsl(212 75% 38%);
   padding: 0 9px;
   font-size: 12px;
   line-height: 1;
@@ -67,14 +67,26 @@
 }
 
 .policy-selector-trigger.is-yolo {
-  background: hsl(var(--bee-yellow-light));
-  color: hsl(var(--bee-amber));
-  border-color: hsl(var(--bee-amber) / 0.24);
+  background: hsl(14 100% 95%);
+  color: hsl(12 78% 42%);
+  border-color: hsl(12 80% 50% / 0.32);
 }
 
 .policy-selector-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.dark .policy-selector-trigger {
+  background: hsl(212 45% 22%);
+  color: hsl(210 90% 78%);
+  border-color: hsl(210 65% 60% / 0.28);
+}
+
+.dark .policy-selector-trigger.is-yolo {
+  background: hsl(12 55% 24%);
+  color: hsl(14 90% 75%);
+  border-color: hsl(12 75% 55% / 0.34);
 }
 
 .policy-selector-label {
@@ -84,7 +96,8 @@
 }
 
 .policy-selector-chevron {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
   line-height: 1;
 }
 
@@ -148,25 +161,33 @@
   white-space: nowrap;
 }
 
+.chat-attachment-add {
+  position: relative;
+  display: inline-flex;
+}
+
 .chat-attachment-add-btn {
-  min-height: 30px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 8px;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
   background: transparent;
   color: hsl(var(--muted-foreground));
-  padding: 5px 8px;
-  font-size: 13px;
-  line-height: 1.4;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
-  transition: background 160ms ease-out, color 160ms ease-out;
+  transition: border-color 160ms ease-out, background 160ms ease-out, color 160ms ease-out;
 }
 
 .chat-attachment-add-btn:hover:not(:disabled),
-.chat-attachment-add-btn:focus-visible {
+.chat-attachment-add-btn:focus-visible,
+.chat-attachment-add-btn[aria-expanded="true"] {
   outline: none;
+  border-color: hsl(var(--border));
   background: hsl(var(--accent));
   color: hsl(var(--foreground));
 }
@@ -176,16 +197,38 @@
   opacity: 0.55;
 }
 
-.chat-attachment-add-btn > span:first-child {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.chat-attachment-add-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 45;
+  min-width: 140px;
   border: 1px solid hsl(var(--border));
-  border-radius: 50%;
-  font-size: 16px;
-  line-height: 1;
+  border-radius: 10px;
+  background: hsl(var(--card));
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+}
+
+.chat-attachment-add-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-attachment-add-menu-item:hover,
+.chat-attachment-add-menu-item:focus-visible {
+  outline: none;
+  background: hsl(var(--accent));
 }
 
 .chat-uploaded-attachment-region {

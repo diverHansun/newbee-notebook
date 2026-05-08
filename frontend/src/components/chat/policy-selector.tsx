@@ -26,6 +26,20 @@ function ShieldIcon() {
   );
 }
 
+function ChevronDownIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path
+        d="M3 4.5 6 7.5 9 4.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function PolicySelector({
   policy,
   disabled = false,
@@ -91,7 +105,7 @@ export function PolicySelector({
         <ShieldIcon />
         <span className="policy-selector-label">{label}</span>
         <span className="policy-selector-chevron" aria-hidden="true">
-          v
+          <ChevronDownIcon />
         </span>
       </button>
       {open ? (

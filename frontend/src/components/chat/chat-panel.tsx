@@ -404,7 +404,7 @@ export function ChatPanel({
       </div>
 
       {/* Chat input */}
-      <div style={{ flexShrink: 0, borderTop: "1px solid hsl(var(--border))" }}>
+      <div style={{ flexShrink: 0 }}>
         <ChatInput
           notebookId={notebookId}
           currentSessionId={currentSessionId}

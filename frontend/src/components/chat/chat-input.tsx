@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatImageAttachmentBar } from "@/components/chat/chat-image-attachment-bar";
 import { PolicySelector } from "@/components/chat/policy-selector";
@@ -78,7 +78,9 @@ export function ChatInput({
   const [sourceDocsTotal, setSourceDocsTotal] = useState(0);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [policyChanging, setPolicyChanging] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMenuRootRef = useRef<HTMLDivElement | null>(null);
   const imageUpload = useChatImageUpload({
     sessionId: currentSessionId,
     ensureSession: () => onEnsureSession(input.trim().slice(0, 30) || undefined),
@@ -145,6 +147,20 @@ export function ChatInput({
     },
     [imageUpload]
   );
+  const addBtnDisabled = isStreaming || !imageUpload.canAddMore;
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && addMenuRootRef.current?.contains(target)) return;
+      setAddMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [addMenuOpen]);
+  useEffect(() => {
+    if (addBtnDisabled && addMenuOpen) setAddMenuOpen(false);
+  }, [addBtnDisabled, addMenuOpen]);
   const handlePolicyChange = useCallback(
     async (update: PolicyPreferenceUpdate) => {
       if (!onPolicyChange) return;
@@ -246,17 +262,38 @@ export function ChatInput({
               className="chat-image-file-input"
               onChange={handleImageInputChange}
             />
-            <button
-              type="button"
-              className="chat-attachment-add-btn"
-              aria-label={t(uiStrings.chat.addImage)}
-              title={t(uiStrings.chat.addImage)}
-              disabled={isStreaming || !imageUpload.canAddMore}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <span aria-hidden="true">+</span>
-              <span>{t(uiStrings.chat.addImage)}</span>
-            </button>
+            <div className="chat-attachment-add" ref={addMenuRootRef}>
+              <button
+                type="button"
+                className="chat-attachment-add-btn"
+                aria-label={t(uiStrings.chat.addImage)}
+                aria-expanded={addMenuOpen}
+                aria-haspopup="menu"
+                title={t(uiStrings.chat.addImage)}
+                disabled={addBtnDisabled}
+                onClick={() => {
+                  if (addBtnDisabled) return;
+                  setAddMenuOpen((value) => !value);
+                }}
+              >
+                <span aria-hidden="true">+</span>
+              </button>
+              {addMenuOpen ? (
+                <div className="chat-attachment-add-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chat-attachment-add-menu-item"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    {t(uiStrings.chat.uploadImageAction)}
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <SegmentedControl
               value={mode}
               options={MODE_OPTIONS.map((item) => ({ ...item }))}
