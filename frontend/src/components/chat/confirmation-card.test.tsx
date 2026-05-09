@@ -74,6 +74,26 @@ describe("ConfirmationCard", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
   });
 
+  it("displays bash permission requests as shell without changing the raw request", () => {
+    renderWithLang(
+      <ConfirmationCard
+        confirmation={{
+          ...createPendingConfirmation(),
+          toolName: "bash",
+          description: "Agent requested to run bash",
+          argsSummary: {
+            command: "echo ok",
+          },
+        }}
+        onResolve={() => {}}
+      />
+    );
+
+    expect(screen.getByText("AI requested to run shell")).toBeInTheDocument();
+    expect(screen.getByText("shell")).toBeInTheDocument();
+    expect(screen.queryByText("bash")).toBeNull();
+  });
+
   it("renders a resolved status without action buttons", () => {
     renderWithLang(
       <ConfirmationCard

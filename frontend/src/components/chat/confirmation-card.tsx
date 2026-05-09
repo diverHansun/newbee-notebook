@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import { useLang } from "@/lib/hooks/useLang";
 import type { PermissionResponseChoice } from "@/lib/api/types";
+import { toolDisplayName } from "@/lib/chat/tool-presentation";
 import type { LocalizedString } from "@/lib/i18n/strings";
 import { uiStrings } from "@/lib/i18n/strings";
 import type { PendingConfirmation } from "@/stores/chat-store";
@@ -123,7 +124,7 @@ export function ConfirmationCard({
       <dl className="confirmation-card-summary">
         <div className="confirmation-card-summary-row">
           <dt>{t(uiStrings.confirmation.tool)}</dt>
-          <dd>{confirmation.toolName}</dd>
+          <dd>{toolDisplayName(confirmation.toolName)}</dd>
         </div>
       </dl>
 

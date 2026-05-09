@@ -75,7 +75,7 @@ describe("MessageItem", () => {
     renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
 
     expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
-    expect(screen.queryByText("Run bash...")).toBeNull();
+    expect(screen.queryByText("Run shell...")).toBeNull();
     expect(screen.queryByText("Retrieving knowledge base...")).toBeNull();
   });
 
@@ -95,7 +95,28 @@ describe("MessageItem", () => {
     expect(screen.queryByText(/Confirm action/i)).toBeNull();
   });
 
-  it("renders bash nonzero exits as warning instead of failed tool calls", () => {
+  it("renders bash tool progress as shell for users", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingConfirmation: undefined,
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "running",
+        },
+      ],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Run shell...")).toBeInTheDocument();
+    expect(screen.queryByText("Run bash...")).toBeNull();
+  });
+
+  it("renders bash nonzero exits as shell warnings instead of failed tool calls", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
@@ -114,7 +135,7 @@ describe("MessageItem", () => {
 
     renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
 
-    expect(screen.getByText("Bash exited 1")).toBeInTheDocument();
+    expect(screen.getByText("Shell exited 1")).toBeInTheDocument();
     expect(screen.queryByText("Error")).toBeNull();
   });
 

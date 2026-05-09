@@ -28,8 +28,8 @@ export const uiStrings = {
   },
   tools: {
     generic: { zh: "调用工具", en: "Using tool" },
-    bash: { zh: "执行 Bash", en: "Run bash" },
-    bashExited: { zh: "Bash 退出码", en: "Bash exited" },
+    shell: { zh: "执行 Shell", en: "Run shell" },
+    shellExited: { zh: "Shell 退出码", en: "Shell exited" },
     readFile: { zh: "读取文件", en: "Read file" },
     grepFiles: { zh: "搜索文件", en: "Search files" },
     globFiles: { zh: "匹配文件", en: "Match files" },
@@ -347,7 +347,7 @@ export const uiStrings = {
     title: { zh: "确认操作", en: "Confirm action" },
     permissionTitle: { zh: "权限请求", en: "Permission request" },
     toolRequest: {
-      bash: { zh: "AI 请求运行命令", en: "AI requested to run shell" },
+      bash: { zh: "AI 请求执行 Shell 命令", en: "AI requested to run shell" },
     },
     confirm: { zh: "确认", en: "Confirm" },
     confirmDelete: { zh: "确认删除", en: "Confirm delete" },

@@ -6,6 +6,7 @@ import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
 import { getChatImageDataUrl, getChatImageThumbnailUrl } from "@/lib/api/chat-images";
 import type { PermissionResponseChoice } from "@/lib/api/types";
+import { toolLabel } from "@/lib/chat/tool-presentation";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage, ToolStep } from "@/stores/chat-store";
@@ -29,38 +30,7 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
 }
 
 function toolDisplayLabel(toolName: string, t: TranslateFn): string {
-  const known: Record<string, LocalizedString> = {
-    bash: uiStrings.tools.bash,
-    read_file: uiStrings.tools.readFile,
-    grep_files: uiStrings.tools.grepFiles,
-    glob_files: uiStrings.tools.globFiles,
-    edit_file: uiStrings.tools.editFile,
-    write_file: uiStrings.tools.writeFile,
-    knowledge_base: uiStrings.tools.knowledgeBase,
-    image_generate: uiStrings.tools.imageGenerate,
-    tavily_search: uiStrings.tools.webSearch,
-    tavily_crawl: uiStrings.tools.webCrawl,
-    zhipu_web_search: uiStrings.tools.webSearch,
-    zhipu_web_crawl: uiStrings.tools.webCrawl,
-    time: uiStrings.tools.getTime,
-    list_notes: uiStrings.tools.listNotes,
-    read_note: uiStrings.tools.readNote,
-    create_note: uiStrings.tools.createNote,
-    update_note: uiStrings.tools.updateNote,
-    delete_note: uiStrings.tools.deleteNote,
-    list_marks: uiStrings.tools.listMarks,
-    associate_note_document: uiStrings.tools.associateDoc,
-    disassociate_note_document: uiStrings.tools.disassociateDoc,
-    list_diagrams: uiStrings.tools.listDiagrams,
-    read_diagram: uiStrings.tools.readDiagram,
-    confirm_diagram_type: uiStrings.tools.confirmDiagramType,
-    create_diagram: uiStrings.tools.createDiagram,
-    update_diagram: uiStrings.tools.updateDiagram,
-    delete_diagram: uiStrings.tools.deleteDiagram,
-    update_diagram_positions: uiStrings.tools.updateDiagramPositions,
-  };
-  if (known[toolName]) return t(known[toolName]);
-  return t(uiStrings.tools.generic);
+  return t(toolLabel(toolName));
 }
 
 function toolStepDisplayLabel(step: ToolStep, t: TranslateFn): string {
@@ -69,7 +39,7 @@ function toolStepDisplayLabel(step: ToolStep, t: TranslateFn): string {
     step.status === "warning" &&
     step.errorCode === "nonzero_exit"
   ) {
-    return `${t(uiStrings.tools.bashExited)} ${step.exitCode ?? "?"}`;
+    return `${t(uiStrings.tools.shellExited)} ${step.exitCode ?? "?"}`;
   }
   return `${toolDisplayLabel(step.toolName, t)}${step.status === "running" ? "..." : ""}`;
 }
