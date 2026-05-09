@@ -30,6 +30,12 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
 
 function toolDisplayLabel(toolName: string, t: TranslateFn): string {
   const known: Record<string, LocalizedString> = {
+    bash: uiStrings.tools.bash,
+    read_file: uiStrings.tools.readFile,
+    grep_files: uiStrings.tools.grepFiles,
+    glob_files: uiStrings.tools.globFiles,
+    edit_file: uiStrings.tools.editFile,
+    write_file: uiStrings.tools.writeFile,
     knowledge_base: uiStrings.tools.knowledgeBase,
     image_generate: uiStrings.tools.imageGenerate,
     tavily_search: uiStrings.tools.webSearch,
@@ -55,6 +61,17 @@ function toolDisplayLabel(toolName: string, t: TranslateFn): string {
   };
   if (known[toolName]) return t(known[toolName]);
   return t(uiStrings.tools.generic);
+}
+
+function toolStepDisplayLabel(step: ToolStep, t: TranslateFn): string {
+  if (
+    step.toolName === "bash" &&
+    step.status === "warning" &&
+    step.errorCode === "nonzero_exit"
+  ) {
+    return `${t(uiStrings.tools.bashExited)} ${step.exitCode ?? "?"}`;
+  }
+  return `${toolDisplayLabel(step.toolName, t)}${step.status === "running" ? "..." : ""}`;
 }
 
 function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
@@ -120,8 +137,7 @@ function ToolStepsIndicator({
       <div className={`tool-step tool-step--${latestStep.status}`}>
         <span className="tool-step-icon" aria-hidden="true" />
         <span className="tool-step-label">
-          {toolDisplayLabel(latestStep.toolName, t)}
-          {latestStep.status === "running" ? "..." : ""}
+          {toolStepDisplayLabel(latestStep, t)}
         </span>
       </div>
     </div>
@@ -184,6 +200,7 @@ export function MessageItem({
     !!message.exitingIntermediateContent;
   const hasToolSteps =
     canShowProgressIndicators &&
+    !message.pendingConfirmation &&
     message.toolSteps &&
     message.toolSteps.length > 0;
   const isSynthesizing =
@@ -191,7 +208,7 @@ export function MessageItem({
     message.thinkingStage === "synthesizing";
   const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    canShowProgressIndicators && !showToolSteps;
+    canShowProgressIndicators && !showToolSteps && !message.pendingConfirmation;
   const hasRunningImageTool =
     !isUser &&
     message.status === "streaming" &&

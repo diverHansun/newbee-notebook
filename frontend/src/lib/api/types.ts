@@ -481,6 +481,8 @@ export type SseEventToolResult = {
   tool_call_id: string;
   success: boolean;
   content_preview: string;
+  error_code?: string | null;
+  metadata?: Record<string, unknown> | null;
   quality_meta: Record<string, unknown> | null;
 };
 

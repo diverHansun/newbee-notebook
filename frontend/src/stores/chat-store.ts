@@ -42,7 +42,10 @@ export type PendingConfirmation = {
 export type ToolStep = {
   id: string;
   toolName: string;
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "warning" | "error";
+  errorCode?: string | null;
+  exitCode?: number | null;
+  contentPreview?: string;
 };
 
 export type ChatMessage = {
@@ -89,7 +92,7 @@ type ChatState = {
   updateThinkingStage: (id: string, stage: string | null) => void;
   appendMessageContent: (id: string, delta: string) => void;
   addToolStep: (id: string, step: ToolStep) => void;
-  updateToolStep: (id: string, toolCallId: string, status: ToolStep["status"]) => void;
+  updateToolStep: (id: string, toolCallId: string, updates: Partial<ToolStep>) => void;
   setStreaming: (isStreaming: boolean, messageId?: number | null) => void;
   setMode: (mode: "agent" | "ask") => void;
   clearMessages: () => void;
@@ -137,14 +140,14 @@ export const useChatStore = create<ChatState>((set) => ({
           : msg
       ),
     })),
-  updateToolStep: (id, toolCallId, status) =>
+  updateToolStep: (id, toolCallId, updates) =>
     set((state) => ({
       messages: state.messages.map((msg) =>
         msg.id === id
           ? {
               ...msg,
               toolSteps: (msg.toolSteps || []).map((s) =>
-                s.id === toolCallId ? { ...s, status } : s
+                s.id === toolCallId ? { ...s, ...updates } : s
               ),
             }
           : msg

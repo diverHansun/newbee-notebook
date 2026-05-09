@@ -406,4 +406,50 @@ describe("useChatSession", () => {
     expect(result.current.policy.policy).toBe("yolo");
     expect(result.current.policy.source).toBe("session");
   });
+
+  it("maps bash nonzero exit results to warning tool status", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 987 });
+        callbacks?.onEvent?.({
+          type: "tool_call",
+          tool_call_id: "tool-bash",
+          tool_name: "bash",
+          tool_input: { command: "test -d /work/missing" },
+        });
+        callbacks?.onEvent?.({
+          type: "tool_result",
+          tool_call_id: "tool-bash",
+          tool_name: "bash",
+          success: false,
+          error_code: "nonzero_exit",
+          metadata: { exit_code: 1 },
+          content_preview: "Exit code: 1",
+          quality_meta: null,
+        });
+      }
+    );
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run boundary check", "agent");
+    });
+
+    const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
+    expect(assistantMessage?.toolSteps?.[0]).toEqual(
+      expect.objectContaining({
+        toolName: "bash",
+        status: "warning",
+        errorCode: "nonzero_exit",
+        exitCode: 1,
+      })
+    );
+  });
 });

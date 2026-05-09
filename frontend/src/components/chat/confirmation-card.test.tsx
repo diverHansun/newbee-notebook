@@ -43,7 +43,6 @@ describe("ConfirmationCard", () => {
       />
     );
 
-    expect(screen.getByText("Permission request")).toBeInTheDocument();
     expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
     expect(screen.getByText("update_note")).toBeInTheDocument();
     expect(screen.getByText("note-1")).toBeInTheDocument();
@@ -57,6 +56,22 @@ describe("ConfirmationCard", () => {
     expect(onResolve).toHaveBeenNthCalledWith(2, "always_session");
     expect(onResolve).toHaveBeenNthCalledWith(3, "always_persist");
     expect(onResolve).toHaveBeenNthCalledWith(4, "reject");
+  });
+
+  it("renders permission choices as a vertical list", () => {
+    renderWithLang(
+      <ConfirmationCard
+        confirmation={{
+          ...createPendingConfirmation(),
+          responseOptions: ["once", "always_session", "always_persist", "reject"],
+        }}
+        onResolve={() => {}}
+      />
+    );
+
+    const choiceList = screen.getByRole("list", { name: "Permission choices" });
+    expect(choiceList).toHaveAttribute("data-layout", "vertical");
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
   });
 
   it("renders a resolved status without action buttons", () => {

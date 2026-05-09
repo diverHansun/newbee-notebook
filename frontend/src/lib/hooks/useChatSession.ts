@@ -17,6 +17,7 @@ import {
   Session,
   SessionMessage,
   SseEventConfirmation,
+  SseEventToolResult,
 } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { DIAGRAMS_QUERY_KEY } from "@/lib/hooks/use-diagrams";
@@ -39,6 +40,29 @@ const LOCAL_MESSAGE_MATCH_WINDOW_MS = 120_000;
 const FINAL_TYPEWRITER_BASE_CPS = 60;
 const FINAL_TYPEWRITER_CATCHUP_CPS = 120;
 const FINAL_TYPEWRITER_CATCHUP_RAMP_MS = 280;
+
+function numberFromMetadata(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toolStepUpdateFromResult(event: SseEventToolResult): Partial<ToolStep> {
+  const exitCode = numberFromMetadata(event.metadata?.exit_code);
+  const isBashBoundaryResult =
+    event.tool_name === "bash" &&
+    event.error_code === "nonzero_exit";
+
+  return {
+    status: event.success ? "done" : isBashBoundaryResult ? "warning" : "error",
+    errorCode: event.error_code ?? null,
+    exitCode,
+    contentPreview: event.content_preview,
+  };
+}
 
 type FinalTypewriterState = {
   sessionId: string;
@@ -458,14 +482,14 @@ export function useChatSession(notebookId: string) {
   );
 
   const updateToolStepInSession = useCallback(
-    (sessionId: string, id: string, toolCallId: string, status: "running" | "done" | "error") => {
+    (sessionId: string, id: string, toolCallId: string, updates: Partial<ToolStep>) => {
       mutateSessionMessages(sessionId, (items) =>
         items.map((item) =>
           item.id === id
             ? {
                 ...item,
                 toolSteps: (item.toolSteps || []).map((step) =>
-                  step.id === toolCallId ? { ...step, status } : step
+                  step.id === toolCallId ? { ...step, ...updates } : step
                 ),
               }
             : item
@@ -1148,7 +1172,7 @@ export function useChatSession(notebookId: string) {
                     sessionId,
                     activeAssistantIdRef.current,
                     event.tool_call_id,
-                    event.success ? "done" : "error",
+                    toolStepUpdateFromResult(event),
                   );
                 }
                 return;

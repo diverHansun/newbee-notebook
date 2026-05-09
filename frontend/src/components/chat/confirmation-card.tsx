@@ -67,6 +67,23 @@ function responseLabel(option: PermissionResponseChoice): LocalizedString {
   return uiStrings.confirmation.reject;
 }
 
+function localizedDescription(
+  toolName: string,
+  fallback: string,
+  t: TranslateFn
+): string {
+  const map = uiStrings.confirmation.toolRequest as Record<string, LocalizedString | undefined>;
+  const entry = map[toolName];
+  return entry ? t(entry) : fallback;
+}
+
+function summaryValueClassName(key: string): string {
+  const normalized = key.toLowerCase();
+  return normalized === "command" || normalized.endsWith("_command")
+    ? "confirmation-card-summary-value confirmation-card-summary-value--code"
+    : "confirmation-card-summary-value";
+}
+
 export function ConfirmationCard({
   confirmation,
   onResolve,
@@ -78,7 +95,6 @@ export function ConfirmationCard({
   );
   const isPending = confirmation.status === "pending";
   const isResolving = ["confirmed", "rejected", "timeout", "resolving"].includes(confirmation.status);
-  const title = t(uiStrings.confirmation.permissionTitle);
   const statusBadge = !isPending ? statusLabel(confirmation.status, t) : null;
   const isDestructive = confirmation.actionType === "delete";
   const options =
@@ -94,12 +110,15 @@ export function ConfirmationCard({
       data-action-type={confirmation.actionType}
       data-confirmation-status={confirmation.status}
     >
-      <div className="confirmation-card-header">
-        <strong>{title}</strong>
-        {statusBadge ? <span className="badge badge-default">{statusBadge}</span> : null}
-      </div>
+      {statusBadge ? (
+        <div className="confirmation-card-header">
+          <span className="badge badge-default">{statusBadge}</span>
+        </div>
+      ) : null}
 
-      <p className="confirmation-card-description">{confirmation.description}</p>
+      <p className="confirmation-card-description">
+        {localizedDescription(confirmation.toolName, confirmation.description, t)}
+      </p>
 
       <dl className="confirmation-card-summary">
         <div className="confirmation-card-summary-row">
@@ -113,31 +132,38 @@ export function ConfirmationCard({
           {summaryEntries.map(([key, value]) => (
             <div key={key} className="confirmation-card-summary-row">
               <dt>{key}</dt>
-              <dd>{formatSummaryValue(value)}</dd>
+              <dd className={summaryValueClassName(key)}>{formatSummaryValue(value)}</dd>
             </div>
           ))}
         </dl>
       ) : null}
 
       {isPending ? (
-        <div className="confirmation-card-actions">
+        <ul
+          className="confirmation-card-actions"
+          aria-label={t(uiStrings.confirmation.permissionChoices)}
+          data-layout="vertical"
+        >
           {options.map((option) => (
-            <button
-              key={option}
-              className={`btn btn-sm ${
-                option === "reject"
-                  ? "btn-ghost"
-                  : isDestructive && option === "once"
-                    ? "btn-destructive"
-                    : ""
-              }`}
-              type="button"
-              onClick={() => onResolve(option)}
-            >
-              {t(responseLabel(option))}
-            </button>
+            <li key={option}>
+              <button
+                className={`confirmation-card-action ${
+                  option === "reject"
+                    ? "confirmation-card-action--reject"
+                    : isDestructive && option === "once"
+                      ? "confirmation-card-action--danger"
+                      : option === "once"
+                        ? "confirmation-card-action--primary"
+                        : ""
+                }`}
+                type="button"
+                onClick={() => onResolve(option)}
+              >
+                {t(responseLabel(option))}
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : null}
     </div>
   );

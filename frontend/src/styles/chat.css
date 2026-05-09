@@ -477,17 +477,46 @@
 
 .confirmation-card {
   margin-top: 8px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 10px;
-  background: hsl(var(--card));
-  padding: 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  max-width: 480px;
+  border: 1px solid hsl(var(--border) / 0.7);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card) / 0.78),
+    hsl(var(--card) / 0.58)
+  );
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  padding: 14px 16px 12px;
+  box-shadow:
+    0 1px 0 hsl(var(--background) / 0.6) inset,
+    0 12px 32px -12px rgba(15, 23, 42, 0.18),
+    0 0 0 0.5px rgba(15, 23, 42, 0.04);
+}
+
+.dark .confirmation-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card) / 0.62),
+    hsl(var(--card) / 0.45)
+  );
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -8px rgba(0, 0, 0, 0.5);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .confirmation-card {
+    background: hsl(var(--card));
+  }
 }
 
 /* State: pending (default) */
 .confirmation-card--pending {
-  opacity: 1;
-  transform: translateY(0);
+  animation: confirmation-fade-in 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* State: resolving (confirmed/rejected/timeout) — fade out */
@@ -496,11 +525,19 @@
   pointer-events: none;
 }
 
-@keyframes confirmation-fade-out {
-  0% {
-    opacity: 1;
-    transform: translateY(0);
+@keyframes confirmation-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes confirmation-fade-out {
+  0%,
   60% {
     opacity: 1;
     transform: translateY(0);
@@ -511,75 +548,165 @@
   }
 }
 
-/* Danger: delete operations */
+/* Destructive (delete) — left stripe only, keep glass body */
 .confirmation-card[data-action-type="delete"] {
-  border-color: hsl(var(--destructive) / 0.5);
-  background: hsl(var(--destructive) / 0.04);
+  border-left: 3px solid hsl(var(--destructive));
+  padding-left: 14px;
 }
 
-.confirmation-card[data-action-type="delete"] .btn-destructive {
+.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger {
   background: hsl(var(--destructive));
   color: hsl(var(--destructive-foreground));
   border-color: hsl(var(--destructive));
+  font-weight: 600;
 }
 
-.confirmation-card[data-action-type="delete"] .btn-destructive:hover {
+.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger:hover,
+.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger:focus-visible {
   background: hsl(var(--destructive) / 0.9);
+  border-color: hsl(var(--destructive) / 0.9);
 }
 
+/* Header — only shown when statusBadge exists (resolved states) */
 .confirmation-card-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
+/* Description = primary heading */
 .confirmation-card-description {
-  margin: 8px 0 0;
+  margin: 0;
   color: hsl(var(--foreground));
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .confirmation-card-summary {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .confirmation-card-summary-row {
   display: grid;
-  grid-template-columns: minmax(72px, auto) 1fr;
-  gap: 8px;
+  grid-template-columns: minmax(74px, auto) 1fr;
+  gap: 10px;
   font-size: 12px;
+  align-items: baseline;
 }
 
 .confirmation-card-summary-row dt {
   color: hsl(var(--muted-foreground));
+  font-weight: 500;
 }
 
 .confirmation-card-summary-row dd {
   margin: 0;
   word-break: break-word;
+  color: hsl(var(--foreground));
+}
+
+.confirmation-card-summary-value--code {
+  max-height: 68px;
+  overflow: auto;
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.55);
+  color: hsl(var(--foreground));
+  padding: 6px 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .confirmation-card-actions {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
 }
 
-.confirmation-card-actions .btn {
-  min-width: 0;
-  white-space: normal;
+.confirmation-card-action {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  padding: 4px 12px;
+  font-size: 12.5px;
   line-height: 1.25;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
 }
 
-@media (max-width: 520px) {
-  .confirmation-card-actions {
-    grid-template-columns: 1fr;
-  }
+.confirmation-card-action:hover,
+.confirmation-card-action:focus-visible {
+  outline: none;
+  background: hsl(var(--muted) / 0.7);
+  border-color: hsl(var(--border));
+}
+
+.confirmation-card-action:active {
+  transform: scale(0.99);
+}
+
+/* Primary (allow once) — soft charcoal, lighter than pure foreground */
+.confirmation-card-action--primary {
+  background: hsl(220 14% 28%);
+  color: hsl(0 0% 100%);
+  border-color: hsl(220 14% 28%);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.confirmation-card-action--primary:hover,
+.confirmation-card-action--primary:focus-visible {
+  background: hsl(220 14% 34%);
+  border-color: hsl(220 14% 34%);
+}
+
+.dark .confirmation-card-action--primary {
+  background: hsl(214 28% 86%);
+  color: hsl(220 25% 14%);
+  border-color: hsl(214 28% 86%);
+}
+
+.dark .confirmation-card-action--primary:hover,
+.dark .confirmation-card-action--primary:focus-visible {
+  background: hsl(214 28% 92%);
+  border-color: hsl(214 28% 92%);
+}
+
+/* Reject — text-only, destructive tone */
+.confirmation-card-action--reject {
+  border-color: transparent;
+  background: transparent;
+  color: hsl(var(--destructive) / 0.85);
+}
+
+.confirmation-card-action--reject:hover,
+.confirmation-card-action--reject:focus-visible {
+  background: hsl(var(--destructive) / 0.08);
+  border-color: transparent;
+  color: hsl(var(--destructive));
+}
+
+.confirmation-card-action--reject {
+  color: hsl(var(--muted-foreground));
+}
+
+.confirmation-card-action--reject:hover,
+.confirmation-card-action--reject:focus-visible {
+  border-color: hsl(var(--border));
+  background: hsl(var(--accent));
 }
 
 /* Inline tag (collapsed state) */

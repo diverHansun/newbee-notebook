@@ -58,6 +58,50 @@ describe("MessageItem", () => {
     expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", "reject");
   });
 
+  it("shows permission request instead of a running tool row while waiting for approval", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "running",
+        },
+      ],
+      thinkingStage: "retrieving",
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Permission request")).toBeInTheDocument();
+    expect(screen.queryByText("Run bash...")).toBeNull();
+    expect(screen.queryByText("Retrieving knowledge base...")).toBeNull();
+  });
+
+  it("renders bash nonzero exits as warning instead of failed tool calls", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingConfirmation: undefined,
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "warning",
+          errorCode: "nonzero_exit",
+          exitCode: 1,
+        },
+      ],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Bash exited 1")).toBeInTheDocument();
+    expect(screen.queryByText("Error")).toBeNull();
+  });
+
   it("keeps intermediate block hidden once final content stream has started", () => {
     const message: ChatMessage = {
       ...assistantMessage,
