@@ -907,6 +907,49 @@ async def test_agent_loop_accepts_real_llm_client_stream_shape():
 
 
 @pytest.mark.anyio
+async def test_agent_loop_skips_sdk_stream_chunks_with_empty_choices():
+    llm = _FakeLLMClient(
+        reasoning_stream_batches=[
+            [
+                _stream_tool_call_chunk(
+                    _stream_tool_call_delta(
+                        0,
+                        tool_call_id="call-1",
+                        name="knowledge_base",
+                        arguments=json.dumps({"query": "x"}),
+                    )
+                ),
+                SimpleNamespace(choices=[]),
+            ]
+        ],
+        stream_chunks=[_stream_chunk("Real"), SimpleNamespace(choices=[])],
+    )
+    tool = _tool(
+        "knowledge_base",
+        ToolCallResult(
+            content="evidence",
+            sources=[
+                SourceItem(
+                    document_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Doc",
+                    text="evidence",
+                    score=0.9,
+                )
+            ],
+            quality_meta=_quality("high"),
+        ),
+    )
+    config = ModeConfigFactory.build(mode="explain", tools=[tool])
+    loop = AgentLoop(llm_client=llm, tools=[tool], mode_config=config)
+
+    result = await loop.run(message="explain", chat_history=[])
+
+    assert result.response == "Real"
+    assert result.tool_calls_made == ["knowledge_base"]
+
+
+@pytest.mark.anyio
 async def test_agent_loop_normalizes_openai_tool_call_objects():
     llm = _FakeLLMClient(
         chat_responses=[_chat_response(tool_calls=[_object_tool_call("knowledge_base", {"query": "x"})])],

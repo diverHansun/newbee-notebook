@@ -156,7 +156,7 @@ class AgentLoop:
     def _extract_choice(response: Any) -> dict[str, Any]:
         if isinstance(response, dict):
             return (response.get("choices") or [{}])[0]
-        return getattr(response, "choices", [{}])[0]
+        return (getattr(response, "choices", None) or [{}])[0]
 
     @classmethod
     def _extract_message(cls, response: Any) -> dict[str, Any]:
