@@ -1,11 +1,11 @@
 import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConfirmationCard } from "@/components/chat/confirmation-card";
-import type { PendingConfirmation } from "@/stores/chat-store";
+import { PermissionRequestCard } from "@/components/chat/permission-request-card";
+import type { PendingPermissionRequest } from "@/stores/chat-store";
 import { renderWithLang } from "@/test/test-utils";
 
-function createPendingConfirmation(): PendingConfirmation {
+function createPendingPermissionRequest(): PendingPermissionRequest {
   return {
     requestId: "req-1",
     toolName: "update_note",
@@ -20,7 +20,7 @@ function createPendingConfirmation(): PendingConfirmation {
   };
 }
 
-describe("ConfirmationCard", () => {
+describe("PermissionRequestCard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T00:00:00.000Z"));
@@ -30,13 +30,13 @@ describe("ConfirmationCard", () => {
     vi.useRealTimers();
   });
 
-  it("renders pending confirmation details and resolves actions", async () => {
+  it("renders pending permission request details and resolves actions", async () => {
     const onResolve = vi.fn();
 
     renderWithLang(
-      <ConfirmationCard
-        confirmation={{
-          ...createPendingConfirmation(),
+      <PermissionRequestCard
+        request={{
+          ...createPendingPermissionRequest(),
           responseOptions: ["once", "always_session", "always_persist", "reject"],
         }}
         onResolve={onResolve}
@@ -60,9 +60,9 @@ describe("ConfirmationCard", () => {
 
   it("renders permission choices as a vertical list", () => {
     renderWithLang(
-      <ConfirmationCard
-        confirmation={{
-          ...createPendingConfirmation(),
+      <PermissionRequestCard
+        request={{
+          ...createPendingPermissionRequest(),
           responseOptions: ["once", "always_session", "always_persist", "reject"],
         }}
         onResolve={() => {}}
@@ -76,9 +76,9 @@ describe("ConfirmationCard", () => {
 
   it("displays bash permission requests as shell without changing the raw request", () => {
     renderWithLang(
-      <ConfirmationCard
-        confirmation={{
-          ...createPendingConfirmation(),
+      <PermissionRequestCard
+        request={{
+          ...createPendingPermissionRequest(),
           toolName: "bash",
           description: "Agent requested to run bash",
           argsSummary: {
@@ -96,13 +96,13 @@ describe("ConfirmationCard", () => {
 
   it("renders a resolved status without action buttons", () => {
     renderWithLang(
-      <ConfirmationCard
-        confirmation={{ ...createPendingConfirmation(), status: "confirmed" }}
+      <PermissionRequestCard
+        request={{ ...createPendingPermissionRequest(), status: "confirmed" }}
         onResolve={() => {}}
       />
     );
 
-    expect(screen.getByText("Confirmed")).toBeInTheDocument();
+    expect(screen.getByText("Allowed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Allow once" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
   });

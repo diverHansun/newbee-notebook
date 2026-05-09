@@ -44,7 +44,7 @@ type ChatPanelProps = {
   onCreateSession: (title?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, response: PermissionResponseChoice) => void;
+  onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
 };
 
 export function ChatPanel({
@@ -64,7 +64,7 @@ export function ChatPanel({
   onCreateSession,
   onDeleteSession,
   onOpenDocument,
-  onResolveConfirmation,
+  onResolvePermissionRequest,
 }: ChatPanelProps) {
   const { t, ti } = useLang();
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
@@ -384,7 +384,7 @@ export function ChatPanel({
                 message={message}
                 roleTransition={roleTransition}
                 onOpenDocument={onOpenDocument}
-                onResolveConfirmation={onResolveConfirmation}
+                onResolvePermissionRequest={onResolvePermissionRequest}
               />
             );
           })

@@ -21,7 +21,7 @@ const assistantMessage: ChatMessage = {
   content: "Working on it.",
   status: "streaming",
   createdAt: "2026-03-19T00:00:00.000Z",
-  pendingConfirmation: {
+  pendingPermissionRequest: {
     requestId: "req-1",
     toolName: "update_note",
     actionType: "update",
@@ -36,15 +36,15 @@ const assistantMessage: ChatMessage = {
 };
 
 describe("MessageItem", () => {
-  it("renders inline confirmation actions for assistant messages", async () => {
+  it("renders inline permission request actions for assistant messages", async () => {
     const user = userEvent.setup();
-    const onResolveConfirmation = vi.fn();
+    const onResolvePermissionRequest = vi.fn();
 
     renderWithLang(
       <MessageItem
         message={assistantMessage}
         onOpenDocument={() => {}}
-        onResolveConfirmation={onResolveConfirmation}
+        onResolvePermissionRequest={onResolvePermissionRequest}
       />
     );
 
@@ -54,8 +54,8 @@ describe("MessageItem", () => {
     await user.click(screen.getByRole("button", { name: "Allow once" }));
     await user.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(1, "req-1", "once");
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", "reject");
+    expect(onResolvePermissionRequest).toHaveBeenNthCalledWith(1, "req-1", "once");
+    expect(onResolvePermissionRequest).toHaveBeenNthCalledWith(2, "req-1", "reject");
   });
 
   it("shows permission request instead of a running tool row while waiting for approval", () => {
@@ -82,8 +82,8 @@ describe("MessageItem", () => {
   it("hides collapsed confirmed permission status after approval", () => {
     const message: ChatMessage = {
       ...assistantMessage,
-      pendingConfirmation: {
-        ...assistantMessage.pendingConfirmation!,
+      pendingPermissionRequest: {
+        ...assistantMessage.pendingPermissionRequest!,
         status: "collapsed",
         resolvedFrom: "confirmed",
       },
@@ -99,7 +99,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-bash",
@@ -120,7 +120,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-bash",
@@ -145,7 +145,7 @@ describe("MessageItem", () => {
       content: "",
       finalContentStarted: true,
       intermediateContent: "thinking...",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
     };
 
@@ -161,7 +161,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "Partial reply",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       thinkingStage: null,
     };
@@ -175,7 +175,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-1",
@@ -197,7 +197,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-pending",
@@ -221,7 +221,7 @@ describe("MessageItem", () => {
       ...assistantMessage,
       content: " \n",
       finalContentStarted: true,
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       thinkingStage: "retrieving",
     };
@@ -239,7 +239,7 @@ describe("MessageItem", () => {
       content:
         "已为您生成一张软萌小猫插画：\n\n![软萌小猫插画](generated_image_url)\n\n这只小猫有着圆润可爱的外形。",
       status: "done",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       images: [
         {

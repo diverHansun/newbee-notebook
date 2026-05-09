@@ -343,8 +343,8 @@ export const uiStrings = {
     },
     comingSoon: { zh: "即将推出", en: "Coming soon" },
   },
-  confirmation: {
-    title: { zh: "确认操作", en: "Confirm action" },
+  permissionRequest: {
+    title: { zh: "权限请求", en: "Permission request" },
     permissionTitle: { zh: "权限请求", en: "Permission request" },
     toolRequest: {
       bash: { zh: "AI 请求执行 Shell 命令", en: "AI requested to run shell" },
@@ -358,7 +358,7 @@ export const uiStrings = {
     permissionChoices: { zh: "权限选择", en: "Permission choices" },
     waitingApproval: { zh: "等待授权", en: "Waiting for approval" },
     submitFailed: { zh: "权限选择提交失败，请重试。", en: "Failed to submit permission choice. Try again." },
-    confirmed: { zh: "已确认", en: "Confirmed" },
+    allowed: { zh: "已允许", en: "Allowed" },
     rejected: { zh: "已拒绝", en: "Rejected" },
     timeout: { zh: "已超时", en: "Timed out" },
     timeLeft: { zh: "剩余时间", en: "Time left" },

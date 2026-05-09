@@ -35,7 +35,7 @@ const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] 
 const SESSION_PICKER_LIMIT = 50;
 const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
-const CONFIRMATION_TIMEOUT_MS = 180_000;
+const PERMISSION_REQUEST_TIMEOUT_MS = 180_000;
 const LOCAL_MESSAGE_MATCH_WINDOW_MS = 120_000;
 const FINAL_TYPEWRITER_BASE_CPS = 60;
 const FINAL_TYPEWRITER_CATCHUP_CPS = 120;
@@ -326,7 +326,7 @@ export function useChatSession(notebookId: string) {
   const currentSessionIdRef = useRef<string | null>(null);
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({});
   const thinkingTimeoutRef = useRef<number | null>(null);
-  const confirmationTimersRef = useRef<Map<string, number>>(new Map());
+  const permissionRequestTimersRef = useRef<Map<string, number>>(new Map());
   const pendingIntermediatePhaseRef = useRef(false);
   const finalTypewriterStateRef = useRef<FinalTypewriterState | null>(null);
   const finalTypewriterFrameRef = useRef<number | null>(null);
@@ -667,19 +667,19 @@ export function useChatSession(notebookId: string) {
     }
   }, []);
 
-  const clearConfirmationTimer = useCallback((requestId: string) => {
-    const timerId = confirmationTimersRef.current.get(requestId);
+  const clearPermissionRequestTimer = useCallback((requestId: string) => {
+    const timerId = permissionRequestTimersRef.current.get(requestId);
     if (typeof timerId === "number") {
       window.clearTimeout(timerId);
-      confirmationTimersRef.current.delete(requestId);
+      permissionRequestTimersRef.current.delete(requestId);
     }
   }, []);
 
-  const clearAllConfirmationTimers = useCallback(() => {
-    confirmationTimersRef.current.forEach((timerId) => {
+  const clearAllPermissionRequestTimers = useCallback(() => {
+    permissionRequestTimersRef.current.forEach((timerId) => {
       window.clearTimeout(timerId);
     });
-    confirmationTimersRef.current.clear();
+    permissionRequestTimersRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -719,9 +719,9 @@ export function useChatSession(notebookId: string) {
     clearFinalTypewriterState();
   }, [clearFinalTypewriterState, notebookId]);
 
-  const findMessageByConfirmationRequest = useCallback((requestId: string) => {
+  const findMessageByPermissionRequest = useCallback((requestId: string) => {
     for (const [sessionId, items] of Object.entries(sessionMessagesRef.current)) {
-      const message = items.find((item) => item.pendingConfirmation?.requestId === requestId);
+      const message = items.find((item) => item.pendingPermissionRequest?.requestId === requestId);
       if (message) {
         return { sessionId, message };
       }
@@ -729,9 +729,9 @@ export function useChatSession(notebookId: string) {
     return null;
   }, []);
 
-  const trackPendingConfirmation = useCallback(
+  const trackPermissionRequestFromConfirmationEvent = useCallback(
     (sessionId: string, assistantLocalId: string, event: SseEventConfirmation) => {
-      const pendingConfirmation = {
+      const pendingPermissionRequest = {
         requestId: event.request_id,
         toolName: event.tool_name,
         actionType: event.action_type,
@@ -739,7 +739,7 @@ export function useChatSession(notebookId: string) {
         argsSummary: event.args_summary,
         description: event.description,
         status: "pending" as const,
-        expiresAt: Date.now() + CONFIRMATION_TIMEOUT_MS,
+        expiresAt: Date.now() + PERMISSION_REQUEST_TIMEOUT_MS,
         capabilitySignature: event.capability_signature,
         riskLevel: event.risk_level,
         skillName: event.skill_name,
@@ -748,54 +748,54 @@ export function useChatSession(notebookId: string) {
       };
 
       updateMessageInSession(sessionId, assistantLocalId, {
-        pendingConfirmation,
+        pendingPermissionRequest,
       });
 
-      clearConfirmationTimer(event.request_id);
+      clearPermissionRequestTimer(event.request_id);
       const timerId = window.setTimeout(() => {
-        const resolved = findMessageByConfirmationRequest(event.request_id);
-        if (!resolved?.message.pendingConfirmation || resolved.message.pendingConfirmation.status !== "pending") {
-          confirmationTimersRef.current.delete(event.request_id);
+        const resolved = findMessageByPermissionRequest(event.request_id);
+        if (!resolved?.message.pendingPermissionRequest || resolved.message.pendingPermissionRequest.status !== "pending") {
+          permissionRequestTimersRef.current.delete(event.request_id);
           return;
         }
 
         updateMessageInSession(resolved.sessionId, resolved.message.id, {
-          pendingConfirmation: {
-            ...resolved.message.pendingConfirmation,
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
             status: "timeout",
           },
         });
-        confirmationTimersRef.current.delete(event.request_id);
+        permissionRequestTimersRef.current.delete(event.request_id);
 
         // Auto-collapse after 1.5s
         window.setTimeout(() => {
-          const resolvedMessage = findMessageByConfirmationRequest(event.request_id);
-          if (resolvedMessage?.message.pendingConfirmation && resolvedMessage.message.pendingConfirmation.status === "timeout") {
+          const resolvedMessage = findMessageByPermissionRequest(event.request_id);
+          if (resolvedMessage?.message.pendingPermissionRequest && resolvedMessage.message.pendingPermissionRequest.status === "timeout") {
             updateMessageInSession(resolvedMessage.sessionId, resolvedMessage.message.id, {
-              pendingConfirmation: {
-                ...resolvedMessage.message.pendingConfirmation,
+              pendingPermissionRequest: {
+                ...resolvedMessage.message.pendingPermissionRequest,
                 status: "collapsed",
                 resolvedFrom: "timeout",
               },
             });
           }
         }, 1500);
-      }, CONFIRMATION_TIMEOUT_MS);
-      confirmationTimersRef.current.set(event.request_id, timerId);
+      }, PERMISSION_REQUEST_TIMEOUT_MS);
+      permissionRequestTimersRef.current.set(event.request_id, timerId);
     },
-    [clearConfirmationTimer, findMessageByConfirmationRequest, updateMessageInSession]
+    [clearPermissionRequestTimer, findMessageByPermissionRequest, updateMessageInSession]
   );
 
-  const clearConfirmationForMessage = useCallback(
+  const clearPermissionRequestForMessage = useCallback(
     (sessionId: string | null, assistantLocalId: string | null) => {
       if (!sessionId || !assistantLocalId) return;
       const message = (sessionMessagesRef.current[sessionId] ?? []).find((item) => item.id === assistantLocalId);
-      const requestId = message?.pendingConfirmation?.requestId;
+      const requestId = message?.pendingPermissionRequest?.requestId;
       if (requestId) {
-        clearConfirmationTimer(requestId);
+        clearPermissionRequestTimer(requestId);
       }
     },
-    [clearConfirmationTimer]
+    [clearPermissionRequestTimer]
   );
 
   const scheduleThinkingTimeout = useCallback(
@@ -868,10 +868,10 @@ export function useChatSession(notebookId: string) {
   useEffect(() => {
     return () => {
       clearThinkingTimeout();
-      clearAllConfirmationTimers();
+      clearAllPermissionRequestTimers();
       clearFinalTypewriterState();
     };
-  }, [clearAllConfirmationTimers, clearFinalTypewriterState, clearThinkingTimeout]);
+  }, [clearAllPermissionRequestTimers, clearFinalTypewriterState, clearThinkingTimeout]);
 
   const createSessionMutation = useMutation({
     mutationFn: (title?: string) =>
@@ -1204,7 +1204,7 @@ export function useChatSession(notebookId: string) {
               }
               if (event.type === "confirmation_request") {
                 if (activeAssistantIdRef.current) {
-                  trackPendingConfirmation(sessionId, activeAssistantIdRef.current, event);
+                  trackPermissionRequestFromConfirmationEvent(sessionId, activeAssistantIdRef.current, event);
                 }
                 return;
               }
@@ -1212,7 +1212,7 @@ export function useChatSession(notebookId: string) {
                 streamReceivedDone = true;
                 clearThinkingTimeout();
                 const assistantLocalId = activeAssistantIdRef.current;
-                clearConfirmationForMessage(sessionId, assistantLocalId);
+                clearPermissionRequestForMessage(sessionId, assistantLocalId);
 
                 const finalizeDone = () => {
                   if (assistantLocalId) {
@@ -1260,7 +1260,7 @@ export function useChatSession(notebookId: string) {
                 streamReceivedErrorEvent = true;
                 clearThinkingTimeout();
                 const assistantLocalId = activeAssistantIdRef.current;
-                clearConfirmationForMessage(sessionId, assistantLocalId);
+                clearPermissionRequestForMessage(sessionId, assistantLocalId);
                 if (assistantLocalId) {
                   stopFinalTypewriterForMessage(sessionId, assistantLocalId);
                   updateThinkingStageInSession(sessionId, assistantLocalId, null);
@@ -1289,7 +1289,7 @@ export function useChatSession(notebookId: string) {
               if (!assistantLocalId || !shouldAttemptStreamFallback(error)) {
                 if (assistantLocalId) {
                   stopFinalTypewriterForMessage(sessionId, assistantLocalId);
-                  clearConfirmationForMessage(sessionId, assistantLocalId);
+                  clearPermissionRequestForMessage(sessionId, assistantLocalId);
                   updateThinkingStageInSession(sessionId, assistantLocalId, null);
                   updateMessageInSession(sessionId, assistantLocalId, {
                     status: "error",
@@ -1492,7 +1492,7 @@ export function useChatSession(notebookId: string) {
       addToolStepInSession,
       appendExplainContent,
       clearIntermediateVisualStateInSession,
-      clearConfirmationForMessage,
+      clearPermissionRequestForMessage,
       clearFinalTypewriterState,
       clearThinkingTimeout,
       currentSessionId,
@@ -1512,25 +1512,25 @@ export function useChatSession(notebookId: string) {
       setStreaming,
       scheduleThinkingTimeout,
       stream,
-      trackPendingConfirmation,
+      trackPermissionRequestFromConfirmationEvent,
       updateMessageInSession,
       policy.policy,
       t,
     ]
   );
 
-  const resolveConfirmation = useCallback(
+  const resolvePermissionRequest = useCallback(
     async (requestId: string, response: PermissionResponseChoice) => {
       const sessionId = currentSessionId;
       if (!sessionId) return;
 
-      const resolved = findMessageByConfirmationRequest(requestId);
-      if (!resolved?.message.pendingConfirmation) return;
+      const resolved = findMessageByPermissionRequest(requestId);
+      if (!resolved?.message.pendingPermissionRequest) return;
 
-      clearConfirmationTimer(requestId);
+      clearPermissionRequestTimer(requestId);
       updateMessageInSession(resolved.sessionId, resolved.message.id, {
-        pendingConfirmation: {
-          ...resolved.message.pendingConfirmation,
+        pendingPermissionRequest: {
+          ...resolved.message.pendingPermissionRequest,
           status: "resolving",
         },
       });
@@ -1554,23 +1554,23 @@ export function useChatSession(notebookId: string) {
 
         const resolvedStatus = response === "reject" ? "rejected" : "confirmed";
         updateMessageInSession(resolved.sessionId, resolved.message.id, {
-          pendingConfirmation: {
-            ...resolved.message.pendingConfirmation,
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
             status: resolvedStatus,
           },
         });
 
         window.setTimeout(() => {
-          const nextResolved = findMessageByConfirmationRequest(requestId);
+          const nextResolved = findMessageByPermissionRequest(requestId);
           if (
-            nextResolved?.message.pendingConfirmation &&
-            nextResolved.message.pendingConfirmation.status !== "pending"
+            nextResolved?.message.pendingPermissionRequest &&
+            nextResolved.message.pendingPermissionRequest.status !== "pending"
           ) {
             updateMessageInSession(nextResolved.sessionId, nextResolved.message.id, {
-              pendingConfirmation: {
-                ...nextResolved.message.pendingConfirmation,
+              pendingPermissionRequest: {
+                ...nextResolved.message.pendingPermissionRequest,
                 status: "collapsed",
-                resolvedFrom: nextResolved.message.pendingConfirmation.status as
+                resolvedFrom: nextResolved.message.pendingPermissionRequest.status as
                   | "confirmed"
                   | "rejected"
                   | "timeout",
@@ -1580,21 +1580,21 @@ export function useChatSession(notebookId: string) {
         }, 1500);
       } catch (error) {
         updateMessageInSession(resolved.sessionId, resolved.message.id, {
-          pendingConfirmation: {
-            ...resolved.message.pendingConfirmation,
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
             status: "error",
             errorMessage:
               error instanceof Error
                 ? error.message
-                : t(uiStrings.confirmation.submitFailed),
+                : t(uiStrings.permissionRequest.submitFailed),
           },
         });
       }
     },
     [
-      clearConfirmationTimer,
+      clearPermissionRequestTimer,
       currentSessionId,
-      findMessageByConfirmationRequest,
+      findMessageByPermissionRequest,
       notebookId,
       t,
       updateMessageInSession,
@@ -1608,7 +1608,7 @@ export function useChatSession(notebookId: string) {
       const assistantLocalId = activeAssistantIdRef.current;
       const sessionId = activeStreamSessionIdRef.current;
       stopFinalTypewriterForMessage(sessionId, assistantLocalId);
-      clearConfirmationForMessage(sessionId, assistantLocalId);
+      clearPermissionRequestForMessage(sessionId, assistantLocalId);
       const activeAssistantMessage = (sessionMessagesRef.current[sessionId] ?? []).find((msg) => msg.id === assistantLocalId);
       updateThinkingStageInSession(sessionId, assistantLocalId, null);
       if (!activeAssistantMessage?.content?.trim()) {
@@ -1630,7 +1630,7 @@ export function useChatSession(notebookId: string) {
     }
     setStreaming(false, null);
   }, [
-    clearConfirmationForMessage,
+    clearPermissionRequestForMessage,
     clearThinkingTimeout,
     explainCard,
     removeMessageFromSession,
@@ -1684,7 +1684,7 @@ export function useChatSession(notebookId: string) {
     createSession: createNewSession,
     deleteSession: removeSession,
     closeExplainCard: () => setExplainCard(null),
-    resolveConfirmation,
+    resolvePermissionRequest,
     updatePolicy,
     refreshSessions: () => queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) }),
   };

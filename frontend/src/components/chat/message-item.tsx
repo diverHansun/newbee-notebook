@@ -1,6 +1,6 @@
 "use client";
 
-import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confirmation-card";
+import { PermissionRequestCard, PermissionStatusTag } from "@/components/chat/permission-request-card";
 import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
@@ -15,7 +15,7 @@ type MessageItemProps = {
   message: ChatMessage;
   roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, response: PermissionResponseChoice) => void;
+  onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
@@ -144,7 +144,7 @@ export function MessageItem({
   message,
   roleTransition,
   onOpenDocument: _onOpenDocument,
-  onResolveConfirmation,
+  onResolvePermissionRequest,
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
@@ -170,7 +170,7 @@ export function MessageItem({
     !!message.exitingIntermediateContent;
   const hasToolSteps =
     canShowProgressIndicators &&
-    !message.pendingConfirmation &&
+    !message.pendingPermissionRequest &&
     message.toolSteps &&
     message.toolSteps.length > 0;
   const isSynthesizing =
@@ -178,7 +178,7 @@ export function MessageItem({
     message.thinkingStage === "synthesizing";
   const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    canShowProgressIndicators && !showToolSteps && !message.pendingConfirmation;
+    canShowProgressIndicators && !showToolSteps && !message.pendingPermissionRequest;
   const hasRunningImageTool =
     !isUser &&
     message.status === "streaming" &&
@@ -289,14 +289,14 @@ export function MessageItem({
             <DocumentReferencesCard sources={message.sources} />
           </div>
         )}
-        {!isUser && message.pendingConfirmation ? (
-          message.pendingConfirmation.status === "collapsed" ? (
-            <ConfirmationInlineTag confirmation={message.pendingConfirmation} />
+        {!isUser && message.pendingPermissionRequest ? (
+          message.pendingPermissionRequest.status === "collapsed" ? (
+            <PermissionStatusTag request={message.pendingPermissionRequest} />
           ) : (
-            <ConfirmationCard
-              confirmation={message.pendingConfirmation}
+            <PermissionRequestCard
+              request={message.pendingPermissionRequest}
               onResolve={(response) =>
-                onResolveConfirmation?.(message.pendingConfirmation!.requestId, response)
+                onResolvePermissionRequest?.(message.pendingPermissionRequest!.requestId, response)
               }
             />
           )

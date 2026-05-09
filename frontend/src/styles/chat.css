@@ -475,7 +475,7 @@
   font-size: 12px;
 }
 
-.confirmation-card {
+.permission-request-card {
   margin-top: 8px;
   max-width: 480px;
   border: 1px solid hsl(var(--border) / 0.7);
@@ -494,7 +494,7 @@
     0 0 0 0.5px rgba(15, 23, 42, 0.04);
 }
 
-.dark .confirmation-card {
+.dark .permission-request-card {
   border-color: rgba(255, 255, 255, 0.08);
   background: linear-gradient(
     180deg,
@@ -509,23 +509,23 @@
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .confirmation-card {
+  .permission-request-card {
     background: hsl(var(--card));
   }
 }
 
 /* State: pending (default) */
-.confirmation-card--pending {
-  animation: confirmation-fade-in 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+.permission-request-card--pending {
+  animation: permission-request-fade-in 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* State: resolving (confirmed/rejected/timeout) — fade out */
-.confirmation-card--resolving {
-  animation: confirmation-fade-out 1.5s ease-out forwards;
+.permission-request-card--resolving {
+  animation: permission-request-fade-out 1.5s ease-out forwards;
   pointer-events: none;
 }
 
-@keyframes confirmation-fade-in {
+@keyframes permission-request-fade-in {
   from {
     opacity: 0;
     transform: translateY(4px) scale(0.98);
@@ -536,7 +536,7 @@
   }
 }
 
-@keyframes confirmation-fade-out {
+@keyframes permission-request-fade-out {
   0%,
   60% {
     opacity: 1;
@@ -549,33 +549,33 @@
 }
 
 /* Destructive (delete) — left stripe only, keep glass body */
-.confirmation-card[data-action-type="delete"] {
+.permission-request-card[data-action-type="delete"] {
   border-left: 3px solid hsl(var(--destructive));
   padding-left: 14px;
 }
 
-.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger {
+.permission-request-card[data-action-type="delete"] .permission-request-card-action--danger {
   background: hsl(var(--destructive));
   color: hsl(var(--destructive-foreground));
   border-color: hsl(var(--destructive));
   font-weight: 600;
 }
 
-.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger:hover,
-.confirmation-card[data-action-type="delete"] .confirmation-card-action--danger:focus-visible {
+.permission-request-card[data-action-type="delete"] .permission-request-card-action--danger:hover,
+.permission-request-card[data-action-type="delete"] .permission-request-card-action--danger:focus-visible {
   background: hsl(var(--destructive) / 0.9);
   border-color: hsl(var(--destructive) / 0.9);
 }
 
 /* Header — only shown when statusBadge exists (resolved states) */
-.confirmation-card-header {
+.permission-request-card-header {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 8px;
 }
 
 /* Description = primary heading */
-.confirmation-card-description {
+.permission-request-card-description {
   margin: 0;
   color: hsl(var(--foreground));
   font-size: 14px;
@@ -583,13 +583,13 @@
   line-height: 1.45;
 }
 
-.confirmation-card-summary {
+.permission-request-card-summary {
   margin: 10px 0 0;
   display: grid;
   gap: 5px;
 }
 
-.confirmation-card-summary-row {
+.permission-request-card-summary-row {
   display: grid;
   grid-template-columns: minmax(74px, auto) 1fr;
   gap: 10px;
@@ -597,18 +597,18 @@
   align-items: baseline;
 }
 
-.confirmation-card-summary-row dt {
+.permission-request-card-summary-row dt {
   color: hsl(var(--muted-foreground));
   font-weight: 500;
 }
 
-.confirmation-card-summary-row dd {
+.permission-request-card-summary-row dd {
   margin: 0;
   word-break: break-word;
   color: hsl(var(--foreground));
 }
 
-.confirmation-card-summary-value--code {
+.permission-request-card-summary-value--code {
   max-height: 68px;
   overflow: auto;
   border: 1px solid hsl(var(--border) / 0.5);
@@ -622,7 +622,7 @@
   word-break: break-word;
 }
 
-.confirmation-card-actions {
+.permission-request-card-actions {
   margin: 12px 0 0;
   padding: 0;
   display: flex;
@@ -631,7 +631,7 @@
   list-style: none;
 }
 
-.confirmation-card-action {
+.permission-request-card-action {
   width: 100%;
   min-height: 28px;
   border: 1px solid hsl(var(--border));
@@ -647,19 +647,19 @@
   transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
 }
 
-.confirmation-card-action:hover,
-.confirmation-card-action:focus-visible {
+.permission-request-card-action:hover,
+.permission-request-card-action:focus-visible {
   outline: none;
   background: hsl(var(--muted) / 0.7);
   border-color: hsl(var(--border));
 }
 
-.confirmation-card-action:active {
+.permission-request-card-action:active {
   transform: scale(0.99);
 }
 
 /* Primary (allow once) — soft charcoal, lighter than pure foreground */
-.confirmation-card-action--primary {
+.permission-request-card-action--primary {
   background: hsl(220 14% 28%);
   color: hsl(0 0% 100%);
   border-color: hsl(220 14% 28%);
@@ -667,50 +667,50 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.confirmation-card-action--primary:hover,
-.confirmation-card-action--primary:focus-visible {
+.permission-request-card-action--primary:hover,
+.permission-request-card-action--primary:focus-visible {
   background: hsl(220 14% 34%);
   border-color: hsl(220 14% 34%);
 }
 
-.dark .confirmation-card-action--primary {
+.dark .permission-request-card-action--primary {
   background: hsl(214 28% 86%);
   color: hsl(220 25% 14%);
   border-color: hsl(214 28% 86%);
 }
 
-.dark .confirmation-card-action--primary:hover,
-.dark .confirmation-card-action--primary:focus-visible {
+.dark .permission-request-card-action--primary:hover,
+.dark .permission-request-card-action--primary:focus-visible {
   background: hsl(214 28% 92%);
   border-color: hsl(214 28% 92%);
 }
 
 /* Reject — text-only, destructive tone */
-.confirmation-card-action--reject {
+.permission-request-card-action--reject {
   border-color: transparent;
   background: transparent;
   color: hsl(var(--destructive) / 0.85);
 }
 
-.confirmation-card-action--reject:hover,
-.confirmation-card-action--reject:focus-visible {
+.permission-request-card-action--reject:hover,
+.permission-request-card-action--reject:focus-visible {
   background: hsl(var(--destructive) / 0.08);
   border-color: transparent;
   color: hsl(var(--destructive));
 }
 
-.confirmation-card-action--reject {
+.permission-request-card-action--reject {
   color: hsl(var(--muted-foreground));
 }
 
-.confirmation-card-action--reject:hover,
-.confirmation-card-action--reject:focus-visible {
+.permission-request-card-action--reject:hover,
+.permission-request-card-action--reject:focus-visible {
   border-color: hsl(var(--border));
   background: hsl(var(--accent));
 }
 
 /* Inline tag (collapsed state) */
-.confirmation-inline-tag {
+.permission-status-tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -721,15 +721,15 @@
   padding: 2px 0;
 }
 
-.confirmation-inline-tag[data-status="confirmed"] {
+.permission-status-tag[data-status="confirmed"] {
   color: hsl(142 71% 45%);
 }
 
-.confirmation-inline-tag[data-status="rejected"] {
+.permission-status-tag[data-status="rejected"] {
   color: hsl(var(--muted-foreground));
 }
 
-.confirmation-inline-tag[data-status="timeout"] {
+.permission-status-tag[data-status="timeout"] {
   color: hsl(38 92% 50%);
 }
 

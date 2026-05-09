@@ -10,9 +10,9 @@ import {
 } from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
-export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
-export type ConfirmationTargetType = "note" | "diagram" | "document" | "video";
-export type PendingConfirmationStatus =
+export type PermissionRequestActionType = "create" | "update" | "delete" | "confirm";
+export type PermissionRequestTargetType = "note" | "diagram" | "document" | "video";
+export type PermissionRequestStatus =
   | "pending"
   | "resolving"
   | "confirmed"
@@ -21,14 +21,14 @@ export type PendingConfirmationStatus =
   | "error"
   | "collapsed";
 
-export type PendingConfirmation = {
+export type PendingPermissionRequest = {
   requestId: string;
   toolName: string;
-  actionType: ConfirmationActionType | string;
-  targetType: ConfirmationTargetType | string;
+  actionType: PermissionRequestActionType | string;
+  targetType: PermissionRequestTargetType | string;
   argsSummary: Record<string, unknown>;
   description: string;
-  status: PendingConfirmationStatus;
+  status: PermissionRequestStatus;
   expiresAt: number;
   capabilitySignature?: string;
   riskLevel?: string;
@@ -65,7 +65,7 @@ export type ChatMessage = {
   imageIds?: string[];
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
-  pendingConfirmation?: PendingConfirmation;
+  pendingPermissionRequest?: PendingPermissionRequest;
   toolSteps?: ToolStep[];
 };
 

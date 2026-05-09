@@ -7,12 +7,12 @@ import type { PermissionResponseChoice } from "@/lib/api/types";
 import { toolDisplayName } from "@/lib/chat/tool-presentation";
 import type { LocalizedString } from "@/lib/i18n/strings";
 import { uiStrings } from "@/lib/i18n/strings";
-import type { PendingConfirmation } from "@/stores/chat-store";
+import type { PendingPermissionRequest } from "@/stores/chat-store";
 
 type TranslateFn = ReturnType<typeof useLang>["t"];
 
-type ConfirmationCardProps = {
-  confirmation: PendingConfirmation;
+type PermissionRequestCardProps = {
+  request: PendingPermissionRequest;
   onResolve: (response: PermissionResponseChoice) => void;
 };
 
@@ -30,28 +30,28 @@ function statusLabel(
 ): string {
   switch (status) {
     case "confirmed":
-      return t(uiStrings.confirmation.confirmed);
+      return t(uiStrings.permissionRequest.allowed);
     case "rejected":
-      return t(uiStrings.confirmation.rejected);
+      return t(uiStrings.permissionRequest.rejected);
     case "timeout":
-      return t(uiStrings.confirmation.timeout);
+      return t(uiStrings.permissionRequest.timeout);
     case "resolving":
       return t(uiStrings.common.processing);
     case "error":
-      return t(uiStrings.confirmation.submitFailed);
+      return t(uiStrings.permissionRequest.submitFailed);
     default:
       return "";
   }
 }
 
-function confirmationTitle(actionType: string, targetType: string, t: TranslateFn): string {
-  const actionGroup = (uiStrings.confirmation.actionTitle as Record<
+function permissionRequestTitle(actionType: string, targetType: string, t: TranslateFn): string {
+  const actionGroup = (uiStrings.permissionRequest.actionTitle as Record<
     string,
     Record<string, LocalizedString>
   >)[actionType];
   const key = actionGroup?.[targetType];
   if (key) return t(key);
-  return t(uiStrings.confirmation.title);
+  return t(uiStrings.permissionRequest.title);
 }
 
 const DEFAULT_RESPONSE_OPTIONS: PermissionResponseChoice[] = [
@@ -62,10 +62,10 @@ const DEFAULT_RESPONSE_OPTIONS: PermissionResponseChoice[] = [
 ];
 
 function responseLabel(option: PermissionResponseChoice): LocalizedString {
-  if (option === "once") return uiStrings.confirmation.allowOnce;
-  if (option === "always_session") return uiStrings.confirmation.allowSession;
-  if (option === "always_persist") return uiStrings.confirmation.allowNotebook;
-  return uiStrings.confirmation.reject;
+  if (option === "once") return uiStrings.permissionRequest.allowOnce;
+  if (option === "always_session") return uiStrings.permissionRequest.allowSession;
+  if (option === "always_persist") return uiStrings.permissionRequest.allowNotebook;
+  return uiStrings.permissionRequest.reject;
 }
 
 function localizedDescription(
@@ -73,7 +73,7 @@ function localizedDescription(
   fallback: string,
   t: TranslateFn
 ): string {
-  const map = uiStrings.confirmation.toolRequest as Record<string, LocalizedString | undefined>;
+  const map = uiStrings.permissionRequest.toolRequest as Record<string, LocalizedString | undefined>;
   const entry = map[toolName];
   return entry ? t(entry) : fallback;
 }
@@ -81,57 +81,57 @@ function localizedDescription(
 function summaryValueClassName(key: string): string {
   const normalized = key.toLowerCase();
   return normalized === "command" || normalized.endsWith("_command")
-    ? "confirmation-card-summary-value confirmation-card-summary-value--code"
-    : "confirmation-card-summary-value";
+    ? "permission-request-card-summary-value permission-request-card-summary-value--code"
+    : "permission-request-card-summary-value";
 }
 
-export function ConfirmationCard({
-  confirmation,
+export function PermissionRequestCard({
+  request,
   onResolve,
-}: ConfirmationCardProps) {
+}: PermissionRequestCardProps) {
   const { t } = useLang();
   const summaryEntries = useMemo(
-    () => Object.entries(confirmation.argsSummary ?? {}),
-    [confirmation.argsSummary]
+    () => Object.entries(request.argsSummary ?? {}),
+    [request.argsSummary]
   );
-  const isPending = confirmation.status === "pending";
-  const isResolving = ["confirmed", "rejected", "timeout", "resolving"].includes(confirmation.status);
-  const statusBadge = !isPending ? statusLabel(confirmation.status, t) : null;
-  const isDestructive = confirmation.actionType === "delete";
+  const isPending = request.status === "pending";
+  const isResolving = ["confirmed", "rejected", "timeout", "resolving"].includes(request.status);
+  const statusBadge = !isPending ? statusLabel(request.status, t) : null;
+  const isDestructive = request.actionType === "delete";
   const options =
-    confirmation.responseOptions && confirmation.responseOptions.length > 0
-      ? confirmation.responseOptions
+    request.responseOptions && request.responseOptions.length > 0
+      ? request.responseOptions
       : DEFAULT_RESPONSE_OPTIONS;
 
   return (
     <div
-      className={`confirmation-card ${
-        isResolving ? "confirmation-card--resolving" : "confirmation-card--pending"
+      className={`permission-request-card ${
+        isResolving ? "permission-request-card--resolving" : "permission-request-card--pending"
       }`}
-      data-action-type={confirmation.actionType}
-      data-confirmation-status={confirmation.status}
+      data-action-type={request.actionType}
+      data-permission-status={request.status}
     >
       {statusBadge ? (
-        <div className="confirmation-card-header">
+        <div className="permission-request-card-header">
           <span className="badge badge-default">{statusBadge}</span>
         </div>
       ) : null}
 
-      <p className="confirmation-card-description">
-        {localizedDescription(confirmation.toolName, confirmation.description, t)}
+      <p className="permission-request-card-description">
+        {localizedDescription(request.toolName, request.description, t)}
       </p>
 
-      <dl className="confirmation-card-summary">
-        <div className="confirmation-card-summary-row">
-          <dt>{t(uiStrings.confirmation.tool)}</dt>
-          <dd>{toolDisplayName(confirmation.toolName)}</dd>
+      <dl className="permission-request-card-summary">
+        <div className="permission-request-card-summary-row">
+          <dt>{t(uiStrings.permissionRequest.tool)}</dt>
+          <dd>{toolDisplayName(request.toolName)}</dd>
         </div>
       </dl>
 
       {summaryEntries.length > 0 ? (
-        <dl className="confirmation-card-summary">
+        <dl className="permission-request-card-summary">
           {summaryEntries.map(([key, value]) => (
-            <div key={key} className="confirmation-card-summary-row">
+            <div key={key} className="permission-request-card-summary-row">
               <dt>{key}</dt>
               <dd className={summaryValueClassName(key)}>{formatSummaryValue(value)}</dd>
             </div>
@@ -141,20 +141,20 @@ export function ConfirmationCard({
 
       {isPending ? (
         <ul
-          className="confirmation-card-actions"
-          aria-label={t(uiStrings.confirmation.permissionChoices)}
+          className="permission-request-card-actions"
+          aria-label={t(uiStrings.permissionRequest.permissionChoices)}
           data-layout="vertical"
         >
           {options.map((option) => (
             <li key={option}>
               <button
-                className={`confirmation-card-action ${
+                className={`permission-request-card-action ${
                   option === "reject"
-                    ? "confirmation-card-action--reject"
+                    ? "permission-request-card-action--reject"
                     : isDestructive && option === "once"
-                      ? "confirmation-card-action--danger"
+                      ? "permission-request-card-action--danger"
                       : option === "once"
-                        ? "confirmation-card-action--primary"
+                        ? "permission-request-card-action--primary"
                         : ""
                 }`}
                 type="button"
@@ -170,20 +170,20 @@ export function ConfirmationCard({
   );
 }
 
-export function ConfirmationInlineTag({
-  confirmation,
+export function PermissionStatusTag({
+  request,
 }: {
-  confirmation: PendingConfirmation;
+  request: PendingPermissionRequest;
 }) {
   const { t } = useLang();
-  const title = confirmationTitle(confirmation.actionType, confirmation.targetType, t);
-  const resolvedStatus = confirmation.resolvedFrom ?? "confirmed";
+  const title = permissionRequestTitle(request.actionType, request.targetType, t);
+  const resolvedStatus = request.resolvedFrom ?? "confirmed";
   if (resolvedStatus === "confirmed") return null;
   const icon = resolvedStatus === "rejected" || resolvedStatus === "timeout" ? "\u2715" : "\u2713";
-  const verb = statusLabel(resolvedStatus, t) || t(uiStrings.confirmation.confirmed);
+  const verb = statusLabel(resolvedStatus, t) || t(uiStrings.permissionRequest.allowed);
 
   return (
-    <span className="confirmation-inline-tag" data-status={resolvedStatus}>
+    <span className="permission-status-tag" data-status={resolvedStatus}>
       {icon} {verb} — {title}
     </span>
   );

@@ -143,7 +143,7 @@ describe("useChatSession", () => {
     );
   });
 
-  it("stores pending confirmation when the stream emits a confirmation request", async () => {
+  it("stores pending permission request when the stream emits a confirmation request", async () => {
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useChatSession("nb-1"), {
       wrapper,
@@ -159,9 +159,9 @@ describe("useChatSession", () => {
 
     await waitFor(() => {
       const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
-      expect(assistantMessage?.pendingConfirmation?.requestId).toBe("req-1");
-      expect(assistantMessage?.pendingConfirmation?.argsSummary.note_id).toBe("note-1");
-      expect(assistantMessage?.pendingConfirmation?.status).toBe("pending");
+      expect(assistantMessage?.pendingPermissionRequest?.requestId).toBe("req-1");
+      expect(assistantMessage?.pendingPermissionRequest?.argsSummary.note_id).toBe("note-1");
+      expect(assistantMessage?.pendingPermissionRequest?.status).toBe("pending");
     });
   });
 
@@ -396,7 +396,7 @@ describe("useChatSession", () => {
       await result.current.sendMessage("Update note", "agent");
     });
     await act(async () => {
-      await result.current.resolveConfirmation("req-1", "always_session");
+      await result.current.resolvePermissionRequest("req-1", "always_session");
     });
 
     expect(confirmChatAction).toHaveBeenCalledWith("session-1", {

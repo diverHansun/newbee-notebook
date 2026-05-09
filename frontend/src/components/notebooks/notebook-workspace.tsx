@@ -91,7 +91,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         onCreateSession={chat.createSession}
         onDeleteSession={chat.deleteSession}
         onOpenDocument={openDocument}
-        onResolveConfirmation={chat.resolveConfirmation}
+        onResolvePermissionRequest={chat.resolvePermissionRequest}
       />
     );
 
