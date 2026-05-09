@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from newbee_notebook.core.tools.contracts import ImageResult, SourceItem, ToolQualityMeta
 
@@ -46,6 +47,8 @@ class ToolResultEvent:
     tool_call_id: str
     success: bool
     content_preview: str
+    error_code: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     quality_meta: ToolQualityMeta | None = None
     event: str = "tool_result"
 

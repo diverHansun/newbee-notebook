@@ -753,6 +753,8 @@ class ChatService:
                         "tool_call_id": event.tool_call_id,
                         "success": event.success,
                         "content_preview": event.content_preview,
+                        "error_code": event.error_code,
+                        "metadata": event.metadata,
                         "quality_meta": asdict(event.quality_meta)
                         if event.quality_meta
                         else None,

@@ -862,6 +862,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -876,6 +878,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -898,6 +902,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -916,6 +922,8 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
                         content_preview=self._tool_result_preview(result),
+                        error_code=result.error,
+                        metadata=result.metadata,
                         quality_meta=result.quality_meta,
                     )
                     if result.images:
@@ -1050,6 +1058,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -1064,6 +1074,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -1086,6 +1098,8 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -1104,6 +1118,8 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
                         content_preview=self._tool_result_preview(result),
+                        error_code=result.error,
+                        metadata=result.metadata,
                         quality_meta=result.quality_meta,
                     )
                     if result.images:

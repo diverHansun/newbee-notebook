@@ -25,6 +25,8 @@ def test_stream_event_types_and_payloads_are_stable():
         tool_call_id="call-1",
         success=True,
         content_preview="top hit",
+        error_code=None,
+        metadata={"result_count": 2},
         quality_meta=ToolQualityMeta(
             scope_used="document",
             search_type="keyword",
@@ -81,3 +83,18 @@ def test_stream_event_types_and_payloads_are_stable():
     assert image_generated.tool_name == "image_generate"
     assert image_generated.images[0].image_id == "img-1"
     assert tool_result.quality_meta.quality_band == "high"
+    assert tool_result.metadata["result_count"] == 2
+
+
+def test_tool_result_event_carries_error_code_and_metadata():
+    tool_result = ToolResultEvent(
+        tool_name="bash",
+        tool_call_id="call-bash",
+        success=False,
+        content_preview="Exit code: 1",
+        error_code="nonzero_exit",
+        metadata={"exit_code": 1, "timed_out": False},
+    )
+
+    assert tool_result.error_code == "nonzero_exit"
+    assert tool_result.metadata["exit_code"] == 1
