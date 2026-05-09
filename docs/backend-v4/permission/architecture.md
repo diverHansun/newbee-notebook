@@ -116,7 +116,7 @@ newbee_notebook/core/permission/
 
 - **决策逻辑**：policy 模块
 - **工具执行**：agent_loop
-- **UI 渲染**：前端 confirmation-card
+- **UI 渲染**：前端 permission-request-card
 - **skill 内容哈希计算**：skills 模块
 
 ---

@@ -122,7 +122,7 @@ permanent allow key 加 `user_id` 前缀占位（v1 固定 `local`），便于�
 
 ### N2：不渲染 UI
 
-确认卡样式、按钮文案、动画由 [confirmation-card.tsx](../../../frontend/src/components/chat/confirmation-card.tsx) 负责。permission 只发结构化事件。
+确认卡样式、按钮文案、动画由 [permission-request-card.tsx](../../../frontend/src/components/chat/permission-request-card.tsx) 负责。permission 只发结构化事件。
 
 ### N3：不定义工具风险等级
 
@@ -191,7 +191,7 @@ permission 不读 SKILL.md、不解析 scripts/。它只收到 `skill_name + con
 | ConfirmationGateway（v1） | 内部复用 | v1 作为 permission 的 wait/resolve 原语；v2 并入 permission |
 | SessionManager | 被依赖 | 提供 session_id 与 assistant_turn_id；会话结束触发 clear_session |
 | AppSettingsService | 依赖 | 读写 `permissions.user_*.<scope>.allow.<sig>` key |
-| 前端 confirmation-card | 被依赖 | 订阅 SSE 事件；新增 variant 处理四种响应 + skill 内容指纹展示 |
+| 前端 permission-request-card | 被依赖 | 订阅 SSE 事件；新增 variant 处理四种响应 + skill 内容指纹展示 |
 
 ---
 

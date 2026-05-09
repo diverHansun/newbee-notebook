@@ -19,7 +19,7 @@
    - UI 形态参考 Codex 式 compact policy pill：图标 + 短标签 + chevron。
 
 3. **Permission Request Card（审批请求卡）**
-   - 替换旧 `ConfirmationCard`。
+   - 替换旧硬编码审批卡实现。
    - 由 backend SSE `confirmation_request` 驱动，显示 agent 请求执行的工具行为。
    - 支持四个 response choice：once / always_session / always_persist / reject。
 
@@ -52,7 +52,7 @@ ChatInput
 
 SSE confirmation_request
   └─► Permission Event Adapter
-        └─► ChatMessage.pendingPermission
+        └─► ChatMessage.pendingPermissionRequest
               └─► MessageItem
                     └─► PermissionRequestCard
                           ├─ once              → confirm(response="once")
@@ -86,7 +86,7 @@ SSE confirmation_request
 
 ### 3. Generic Permission Card：后端描述优先
 
-旧 confirmation card 的核心问题是前端写死了 `create/update/delete/confirm` 与 `note/diagram/video` 的组合。
+旧硬编码审批卡的核心问题是前端写死了 `create/update/delete/confirm` 与 `note/diagram/video` 的组合。
 
 新版卡片应以 backend event 为事实来源：
 
@@ -136,7 +136,7 @@ frontend/src/
 │     ├ message-item.tsx
 │     │  扩展：渲染 PermissionRequestCard 与 collapsed inline tag
 │     ├ permission-request-card.tsx
-│     │  新增或替代 confirmation-card：通用审批卡
+│     │  通用 Permission Request Card
 │     ├ permission-request-card.test.tsx
 │     │  新增：四按钮 payload 与 UI 状态
 │     ├ policy-selector.tsx

@@ -37,11 +37,11 @@ Frontend files:
 - Modify `frontend/src/lib/api/types.ts`: add `AgentPolicy`, `PolicyScope`, expanded confirmation event, and chat request policy field.
 - Modify `frontend/src/lib/api/chat.ts`: change confirm payload from boolean to response choice.
 - Create `frontend/src/lib/api/policy.ts`: read/update policy preference API client.
-- Modify `frontend/src/stores/chat-store.ts`: rename/extend pending confirmation model to permission-shaped data while preserving migration compatibility.
+- Modify `frontend/src/stores/chat-store.ts`: rename/extend pending permission request model while preserving migration compatibility.
 - Create `frontend/src/components/chat/policy-selector.tsx`: compact policy menu.
 - Create `frontend/src/components/chat/policy-selector.test.tsx`: selector interaction tests.
-- Modify `frontend/src/components/chat/confirmation-card.tsx`: convert the existing confirmation card into the generic permission request card.
-- Modify `frontend/src/components/chat/confirmation-card.test.tsx`: four-choice card tests.
+- Modify `frontend/src/components/chat/permission-request-card.tsx`: implement the generic Permission Request Card.
+- Modify `frontend/src/components/chat/permission-request-card.test.tsx`: four-choice card tests.
 - Modify `frontend/src/components/chat/message-item.tsx`: call `onResolvePermission(requestId, response)`.
 - Modify `frontend/src/components/chat/chat-panel.tsx`: pass policy state and callbacks.
 - Modify `frontend/src/components/chat/chat-input.tsx`: render policy selector in toolbar.
@@ -1187,24 +1187,24 @@ git commit -m "feat(frontend): add chat policy selector"
 ### Task 6: Permission Request Card
 
 **Files:**
-- Modify: `frontend/src/components/chat/confirmation-card.tsx`
-- Modify: `frontend/src/components/chat/confirmation-card.test.tsx`
+- Modify: `frontend/src/components/chat/permission-request-card.tsx`
+- Modify: `frontend/src/components/chat/permission-request-card.test.tsx`
 - Modify: `frontend/src/stores/chat-store.ts`
 - Modify: `frontend/src/lib/i18n/strings.ts`
 - Modify: `frontend/src/styles/chat.css`
 
 - [ ] **Step 1: Update tests for four choices**
 
-Replace the primary test in `frontend/src/components/chat/confirmation-card.test.tsx` with:
+Replace the primary test in `frontend/src/components/chat/permission-request-card.test.tsx` with:
 
 ```tsx
 it("renders permission request details and emits response choices", () => {
   const onResolve = vi.fn();
 
   renderWithLang(
-    <ConfirmationCard
-      confirmation={{
-        ...createPendingConfirmation(),
+    <PermissionRequestCard
+      request={{
+        ...createPendingPermissionRequest(),
         responseOptions: ["once", "always_session", "always_persist", "reject"],
       }}
       onResolve={onResolve}
@@ -1229,9 +1229,9 @@ it("renders permission request details and emits response choices", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd frontend; pnpm vitest run src/components/chat/confirmation-card.test.tsx`
+Run: `cd frontend; pnpm vitest run src/components/chat/permission-request-card.test.tsx`
 
-Expected: FAIL because `ConfirmationCard` still expects `onConfirm/onReject`.
+Expected: FAIL until `PermissionRequestCard` accepts `request` plus response-based `onResolve`.
 
 - [ ] **Step 3: Extend store types**
 
@@ -1240,7 +1240,7 @@ Modify `frontend/src/stores/chat-store.ts`:
 ```ts
 import type { PermissionResponseChoice } from "@/lib/api/types";
 
-export type PendingConfirmationStatus =
+export type PermissionRequestStatus =
   | "pending"
   | "resolving"
   | "confirmed"
@@ -1249,14 +1249,14 @@ export type PendingConfirmationStatus =
   | "error"
   | "collapsed";
 
-export type PendingConfirmation = {
+export type PendingPermissionRequest = {
   requestId: string;
   toolName: string;
   actionType: string;
   targetType: string;
   argsSummary: Record<string, unknown>;
   description: string;
-  status: PendingConfirmationStatus;
+  status: PermissionRequestStatus;
   expiresAt: number;
   capabilitySignature?: string;
   riskLevel?: string;
@@ -1270,7 +1270,7 @@ export type PendingConfirmation = {
 
 - [ ] **Step 4: Add strings**
 
-Modify `frontend/src/lib/i18n/strings.ts` under `confirmation`:
+Modify `frontend/src/lib/i18n/strings.ts` under `permissionRequest`:
 
 ```ts
 permissionTitle: { zh: "权限请求", en: "Permission request" },
@@ -1284,11 +1284,11 @@ submitFailed: { zh: "权限选择提交失败，请重试。", en: "Failed to su
 
 - [ ] **Step 5: Update card component**
 
-Modify `frontend/src/components/chat/confirmation-card.tsx` so props are:
+Modify `frontend/src/components/chat/permission-request-card.tsx` so props are:
 
 ```ts
-type ConfirmationCardProps = {
-  confirmation: PendingConfirmation;
+type PermissionRequestCardProps = {
+  request: PendingPermissionRequest;
   onResolve: (response: PermissionResponseChoice) => void;
 };
 ```
@@ -1296,8 +1296,8 @@ type ConfirmationCardProps = {
 Render buttons from:
 
 ```ts
-const options = confirmation.responseOptions?.length
-  ? confirmation.responseOptions
+const options = request.responseOptions?.length
+  ? request.responseOptions
   : ["once", "always_session", "always_persist", "reject"];
 ```
 
@@ -1305,10 +1305,10 @@ Map labels:
 
 ```ts
 const responseLabels: Record<PermissionResponseChoice, LocalizedString> = {
-  once: uiStrings.confirmation.allowOnce,
-  always_session: uiStrings.confirmation.allowSession,
-  always_persist: uiStrings.confirmation.allowNotebook,
-  reject: uiStrings.confirmation.reject,
+  once: uiStrings.permissionRequest.allowOnce,
+  always_session: uiStrings.permissionRequest.allowSession,
+  always_persist: uiStrings.permissionRequest.allowNotebook,
+  reject: uiStrings.permissionRequest.reject,
 };
 ```
 
@@ -1323,7 +1323,7 @@ onClick={() => onResolve(option)}
 Modify `frontend/src/styles/chat.css`:
 
 ```css
-.confirmation-card {
+.permission-request-card {
   margin-top: 8px;
   border: 1px solid hsl(var(--border));
   border-radius: 10px;
@@ -1332,32 +1332,32 @@ Modify `frontend/src/styles/chat.css`:
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
-.confirmation-card-header strong {
+.permission-request-card-header strong {
   font-size: 13px;
 }
 
-.confirmation-card-description {
+.permission-request-card-description {
   margin: 8px 0 0;
   color: hsl(var(--foreground));
   font-size: 13px;
   line-height: 1.5;
 }
 
-.confirmation-card-actions {
+.permission-request-card-actions {
   margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.confirmation-card-actions .btn {
+.permission-request-card-actions .btn {
   min-width: 0;
   white-space: normal;
   line-height: 1.25;
 }
 
 @media (max-width: 520px) {
-  .confirmation-card-actions {
+  .permission-request-card-actions {
     grid-template-columns: 1fr;
   }
 }
@@ -1365,15 +1365,15 @@ Modify `frontend/src/styles/chat.css`:
 
 - [ ] **Step 7: Run card tests**
 
-Run: `cd frontend; pnpm vitest run src/components/chat/confirmation-card.test.tsx`
+Run: `cd frontend; pnpm vitest run src/components/chat/permission-request-card.test.tsx`
 
 Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/src/components/chat/confirmation-card.tsx frontend/src/components/chat/confirmation-card.test.tsx frontend/src/stores/chat-store.ts frontend/src/lib/i18n/strings.ts frontend/src/styles/chat.css
-git commit -m "feat(frontend): upgrade confirmation card to permission request"
+git add frontend/src/components/chat/permission-request-card.tsx frontend/src/components/chat/permission-request-card.test.tsx frontend/src/stores/chat-store.ts frontend/src/lib/i18n/strings.ts frontend/src/styles/chat.css
+git commit -m "feat(frontend): add permission request card"
 ```
 
 ---
@@ -1465,7 +1465,7 @@ it("resolves always_session and updates session policy", async () => {
     await result.current.sendMessage("Update note", "agent");
   });
   await act(async () => {
-    await result.current.resolveConfirmation("req-1", "always_session");
+    await result.current.resolvePermissionRequest("req-1", "always_session");
   });
 
   expect(confirmChatAction).toHaveBeenCalledWith("session-1", {
@@ -1481,7 +1481,7 @@ it("resolves always_session and updates session policy", async () => {
 
 Run: `cd frontend; pnpm vitest run src/lib/hooks/useChatSession.test.tsx`
 
-Expected: FAIL because `policy` and response-based `resolveConfirmation` are not implemented.
+Expected: FAIL because `policy` and response-based `resolvePermissionRequest` are not implemented.
 
 - [ ] **Step 3: Update hook state and send flow**
 
@@ -1519,7 +1519,7 @@ agent_policy: policy.policy,
 
 - [ ] **Step 4: Update SSE mapping**
 
-In `trackPendingConfirmation`, map expanded fields:
+In `trackPendingPermissionRequest`, map expanded fields:
 
 ```ts
 capabilitySignature: event.capability_signature,
@@ -1534,7 +1534,7 @@ responseOptions: event.response_options,
 Change signature:
 
 ```ts
-const resolveConfirmation = useCallback(
+const resolvePermissionRequest = useCallback(
   async (requestId: string, response: PermissionResponseChoice) => {
 ```
 
@@ -1569,7 +1569,7 @@ if (!result.effective_policy && (response === "always_session" || response === "
 Update prop types:
 
 ```ts
-onResolveConfirmation?: (requestId: string, response: PermissionResponseChoice) => void;
+onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
 ```
 
 Pass `policy` and `onPolicyChange` from `NotebookWorkspace` → `ChatPanel` → `ChatInput`.
@@ -1587,7 +1587,7 @@ In `ChatInput`, render:
 In `MessageItem`, call:
 
 ```tsx
-onResolve={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, response)}
+onResolve={() => onResolvePermissionRequest?.(message.pendingPermissionRequest!.requestId, response)}
 ```
 
 - [ ] **Step 7: Run hook tests**
@@ -1626,7 +1626,7 @@ Run:
 
 ```bash
 cd frontend
-pnpm vitest run src/lib/api/policy.test.ts src/components/chat/policy-selector.test.tsx src/components/chat/confirmation-card.test.tsx src/lib/hooks/useChatSession.test.tsx
+pnpm vitest run src/lib/api/policy.test.ts src/components/chat/policy-selector.test.tsx src/components/chat/permission-request-card.test.tsx src/lib/hooks/useChatSession.test.tsx
 ```
 
 Expected: PASS.

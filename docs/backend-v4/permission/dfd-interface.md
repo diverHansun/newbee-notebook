@@ -229,7 +229,7 @@ backend 启动
 | capability_signature 生成 | policy | permission 仅作字符串 key 使用 |
 | Decision（ALLOW/ASK/DENY） | policy + agent_loop | permission 只处理 ASK 路径 |
 | skill 目录管理 | skills | permission 仅在卸载时被通知清理许可 |
-| UI 渲染 | 前端 confirmation-card | permission 只发结构化事件 |
+| UI 渲染 | 前端 permission-request-card | permission 只发结构化事件 |
 | 工具执行 | agent_loop | permission 返回响应后不调 tool.execute() |
 
 ---

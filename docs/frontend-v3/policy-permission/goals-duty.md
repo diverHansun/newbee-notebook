@@ -14,7 +14,7 @@
    - 权限选择应靠近发送框，类似 Codex 输入框下方的权限按钮。
    - 用户可以在继续对话前随时切换 `默认权限` / `完全访问权限`。
 
-3. **用新版 Permission Request Card 替代硬编码 Confirmation Card**
+3. **用新版 Permission Request Card 替代硬编码 Permission Request Card**
    - 前端不再根据 `action_type + target_type` 写死标题矩阵。
    - 卡片应优先消费后端传来的 `description`、`tool_name`、`args_summary`、`response_options`。
 
