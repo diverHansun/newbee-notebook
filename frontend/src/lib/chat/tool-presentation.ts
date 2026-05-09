@@ -38,3 +38,7 @@ export function toolLabel(toolName: string): LocalizedString {
 export function toolDisplayName(toolName: string): string {
   return toolName === "bash" ? "shell" : toolName;
 }
+
+export function normalizeToolDisplayText(text: string): string {
+  return text.replace(/\bBash\b/g, "Shell").replace(/\bbash\b/g, "shell");
+}

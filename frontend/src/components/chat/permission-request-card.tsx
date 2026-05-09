@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { useLang } from "@/lib/hooks/useLang";
 import type { PermissionResponseChoice } from "@/lib/api/types";
-import { toolDisplayName } from "@/lib/chat/tool-presentation";
+import { normalizeToolDisplayText, toolDisplayName } from "@/lib/chat/tool-presentation";
 import type { LocalizedString } from "@/lib/i18n/strings";
 import { uiStrings } from "@/lib/i18n/strings";
 import type { PendingPermissionRequest } from "@/stores/chat-store";
@@ -75,7 +75,7 @@ function localizedDescription(
 ): string {
   const map = uiStrings.permissionRequest.toolRequest as Record<string, LocalizedString | undefined>;
   const entry = map[toolName];
-  return entry ? t(entry) : fallback;
+  return entry ? t(entry) : normalizeToolDisplayText(fallback);
 }
 
 function summaryValueClassName(key: string): string {

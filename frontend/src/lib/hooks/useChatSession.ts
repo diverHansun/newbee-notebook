@@ -52,12 +52,12 @@ function numberFromMetadata(value: unknown): number | null {
 
 function toolStepUpdateFromResult(event: SseEventToolResult): Partial<ToolStep> {
   const exitCode = numberFromMetadata(event.metadata?.exit_code);
-  const isBashBoundaryResult =
+  const isShellBoundaryResult =
     event.tool_name === "bash" &&
     event.error_code === "nonzero_exit";
 
   return {
-    status: event.success ? "done" : isBashBoundaryResult ? "warning" : "error",
+    status: event.success ? "done" : isShellBoundaryResult ? "warning" : "error",
     errorCode: event.error_code ?? null,
     exitCode,
     contentPreview: event.content_preview,

@@ -348,6 +348,7 @@ export const uiStrings = {
     permissionTitle: { zh: "权限请求", en: "Permission request" },
     toolRequest: {
       bash: { zh: "AI 请求执行 Shell 命令", en: "AI requested to run shell" },
+      shell: { zh: "AI 请求执行 Shell 命令", en: "AI requested to run shell" },
     },
     confirm: { zh: "确认", en: "Confirm" },
     confirmDelete: { zh: "确认删除", en: "Confirm delete" },

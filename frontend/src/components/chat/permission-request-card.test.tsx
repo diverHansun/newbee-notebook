@@ -94,6 +94,26 @@ describe("PermissionRequestCard", () => {
     expect(screen.queryByText("bash")).toBeNull();
   });
 
+  it("displays shell permission requests with shell wording", () => {
+    renderWithLang(
+      <PermissionRequestCard
+        request={{
+          ...createPendingPermissionRequest(),
+          toolName: "shell",
+          description: "Agent requested to run Bash",
+          argsSummary: {
+            command: "echo ok",
+          },
+        }}
+        onResolve={() => {}}
+      />
+    );
+
+    expect(screen.getByText("AI requested to run shell")).toBeInTheDocument();
+    expect(screen.getByText("shell")).toBeInTheDocument();
+    expect(screen.queryByText("Agent requested to run Bash")).toBeNull();
+  });
+
   it("renders a resolved status without action buttons", () => {
     renderWithLang(
       <PermissionRequestCard
