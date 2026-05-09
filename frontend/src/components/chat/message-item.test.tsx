@@ -49,7 +49,7 @@ describe("MessageItem", () => {
     );
 
     expect(screen.getByText("Working on it.")).toBeInTheDocument();
-    expect(screen.getByText("Permission request")).toBeInTheDocument();
+    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Allow once" }));
     await user.click(screen.getByRole("button", { name: "Reject" }));
@@ -74,9 +74,25 @@ describe("MessageItem", () => {
 
     renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
 
-    expect(screen.getByText("Permission request")).toBeInTheDocument();
+    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
     expect(screen.queryByText("Run bash...")).toBeNull();
     expect(screen.queryByText("Retrieving knowledge base...")).toBeNull();
+  });
+
+  it("hides collapsed confirmed permission status after approval", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      pendingConfirmation: {
+        ...assistantMessage.pendingConfirmation!,
+        status: "collapsed",
+        resolvedFrom: "confirmed",
+      },
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.queryByText(/Confirmed/i)).toBeNull();
+    expect(screen.queryByText(/Confirm action/i)).toBeNull();
   });
 
   it("renders bash nonzero exits as warning instead of failed tool calls", () => {

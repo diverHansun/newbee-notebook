@@ -177,6 +177,7 @@ export function ConfirmationInlineTag({
   const { t } = useLang();
   const title = confirmationTitle(confirmation.actionType, confirmation.targetType, t);
   const resolvedStatus = confirmation.resolvedFrom ?? "confirmed";
+  if (resolvedStatus === "confirmed") return null;
   const icon = resolvedStatus === "rejected" || resolvedStatus === "timeout" ? "\u2715" : "\u2713";
   const verb = statusLabel(resolvedStatus, t) || t(uiStrings.confirmation.confirmed);
 
