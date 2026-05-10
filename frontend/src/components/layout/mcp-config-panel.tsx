@@ -109,7 +109,7 @@ export function MCPConfigPanel() {
             <span className="control-panel-readonly-label">
               {t(uiStrings.controlPanel.mcpConfigPath)}
             </span>
-            <span>configs/mcp.json</span>
+            <span>configs/mcp/mcp.json</span>
           </div>
 
           <button

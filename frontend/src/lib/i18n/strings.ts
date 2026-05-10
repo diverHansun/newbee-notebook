@@ -288,12 +288,12 @@ export const uiStrings = {
     mcpConfigPath: { zh: "配置文件", en: "Config file" },
     mcpServers: { zh: "MCP Servers", en: "MCP Servers" },
     mcpServersHint: {
-      zh: "这里只展示已加载的服务状态，服务定义来自 configs/mcp.json。",
-      en: "This panel shows loaded server status only. Server definitions come from configs/mcp.json.",
+      zh: "这里只展示已加载的服务状态，服务定义来自 configs/mcp/mcp.json。",
+      en: "This panel shows loaded server status only. Server definitions come from configs/mcp/mcp.json.",
     },
     mcpEmpty: {
-      zh: "当前未配置任何 MCP 服务，请编辑 configs/mcp.json。",
-      en: "No MCP servers are configured. Edit configs/mcp.json.",
+      zh: "当前未配置任何 MCP 服务，请编辑 configs/mcp/mcp.json。",
+      en: "No MCP servers are configured. Edit configs/mcp/mcp.json.",
     },
     mcpToolCount: { zh: "工具数量", en: "Tool count" },
     mcpStatusConnecting: { zh: "连接中", en: "Connecting" },

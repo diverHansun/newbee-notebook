@@ -57,7 +57,7 @@ from newbee_notebook.application.services.video_concurrency import (
 from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
-from newbee_notebook.core.mcp import MCPClientManager
+from newbee_notebook.core.mcp import MCPClientManager, get_mcp_config_path
 from newbee_notebook.core.skills import SkillRegistry
 from newbee_notebook.core.skills.lifecycle import register_installed_config_skills
 from newbee_notebook.core.rag.embeddings import build_embedding
@@ -540,7 +540,7 @@ def get_permission_session_cache_dep() -> SessionAllowCache:
 def get_mcp_client_manager_singleton() -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
-        _mcp_client_manager = MCPClientManager(config_path=get_configs_directory() / "mcp.json")
+        _mcp_client_manager = MCPClientManager(config_path=get_mcp_config_path())
     return _mcp_client_manager
 
 
