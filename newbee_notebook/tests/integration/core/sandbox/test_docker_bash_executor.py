@@ -78,6 +78,65 @@ async def test_docker_sandbox_executes_bash_and_reads_workspace(tmp_path: Path):
 
 
 @pytest.mark.anyio
+async def test_docker_sandbox_network_enabled_can_resolve_public_dns(tmp_path: Path):
+    executor = _executor(tmp_path)
+
+    result = await executor.execute(
+        SandboxRequest(
+            argv=(
+                "python",
+                "-c",
+                "import socket; print(socket.gethostbyname('example.com'))",
+            ),
+            cwd=tmp_path,
+            timeout_seconds=10,
+        )
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.strip()
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_network_enabled_cannot_resolve_compose_sibling(tmp_path: Path):
+    executor = _executor(tmp_path)
+
+    result = await executor.execute(
+        SandboxRequest(
+            argv=(
+                "python",
+                "-c",
+                "import socket; socket.gethostbyname('postgres')",
+            ),
+            cwd=tmp_path,
+            timeout_seconds=10,
+        )
+    )
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_network_disabled_uses_no_network(tmp_path: Path):
+    executor = _executor(tmp_path)
+
+    result = await executor.execute(
+        SandboxRequest(
+            argv=(
+                "python",
+                "-c",
+                "import socket; socket.gethostbyname('example.com')",
+            ),
+            cwd=tmp_path,
+            timeout_seconds=10,
+            network_enabled=False,
+        )
+    )
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.anyio
 async def test_docker_sandbox_keeps_workspace_readonly_but_allows_work_dir(tmp_path: Path):
     executor = _executor(tmp_path)
     run_dir = tmp_path / "runs" / "manual-run"

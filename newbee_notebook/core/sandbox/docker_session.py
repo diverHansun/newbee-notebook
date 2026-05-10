@@ -23,6 +23,7 @@ from newbee_notebook.core.sandbox.docker_executor import (
     DockerProcessRunner,
     DockerSubprocessRunner,
 )
+from newbee_notebook.core.sandbox.docker_network import DockerSandboxNetworkManager
 
 _SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_.-]+")
 
@@ -52,6 +53,10 @@ class DockerSandboxSessionRegistry:
         self._idle_ttl_seconds = float(idle_ttl_seconds)
         self._clock = clock or time.monotonic
         self._builder = DockerCommandBuilder(config)
+        self._network_manager = DockerSandboxNetworkManager(
+            config,
+            runner=self._runner,
+        )
         self._sessions: dict[str, DockerSandboxSession] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._inflight: dict[str, int] = {}
@@ -166,6 +171,8 @@ class DockerSandboxSessionRegistry:
             )
 
         container_name = self.container_name_for(key)
+        if request.network_enabled:
+            await self._network_manager.ensure_exists()
         start_command = self._builder.build_session_start(
             request,
             container_name=container_name,

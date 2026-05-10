@@ -49,7 +49,7 @@ async def test_shell_executor_translates_shell_command_to_sandbox_request(tmp_pa
     assert request.env == {"A": "1"}
     assert request.timeout_seconds == 5
     assert request.max_output_bytes == 1024
-    assert request.network_enabled is False
+    assert request.network_enabled is True
     assert request.sandbox_session_key == "notebook-123"
 
 

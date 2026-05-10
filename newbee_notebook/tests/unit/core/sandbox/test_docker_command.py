@@ -43,7 +43,7 @@ def test_docker_command_mounts_workspace_readonly_and_run_dir_writable(tmp_path:
     assert command.run_dir == run_dir.resolve()
     assert command.argv[:4] == ("docker", "run", "--rm", "--name")
     assert _value_after(command.argv, "--name") == "newbee-sandbox-test"
-    assert _value_after(command.argv, "--network") == "none"
+    assert _value_after(command.argv, "--network") == "newbee_skill_net"
     assert "--read-only" in command.argv
     assert ("--cap-drop", "ALL") == (
         command.argv[command.argv.index("--cap-drop")],
@@ -69,20 +69,21 @@ def test_docker_command_mounts_workspace_readonly_and_run_dir_writable(tmp_path:
     assert command.argv[-4:] == ("sandbox-image:latest", "bash", "-lc", "echo hi")
 
 
-def test_docker_command_rejects_network_enabled_request(tmp_path: Path):
+def test_docker_command_can_disable_network_per_request(tmp_path: Path):
     config = DockerRunConfig(run_root=tmp_path / "runs")
     request = SandboxRequest(
         argv=("bash", "-lc", "echo hi"),
         cwd=tmp_path,
-        network_enabled=True,
+        network_enabled=False,
     )
 
-    with pytest.raises(SandboxExecutionError, match="network"):
-        DockerCommandBuilder(config).build(
-            request,
-            container_name="newbee-sandbox-test",
-            run_dir=tmp_path / "runs" / "newbee-sandbox-test",
-        )
+    command = DockerCommandBuilder(config).build(
+        request,
+        container_name="newbee-sandbox-test",
+        run_dir=tmp_path / "runs" / "newbee-sandbox-test",
+    )
+
+    assert _value_after(command.argv, "--network") == "none"
 
 
 def test_docker_command_rejects_run_dir_outside_run_root(tmp_path: Path):

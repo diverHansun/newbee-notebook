@@ -44,6 +44,12 @@ def test_sandbox_request_normalizes_execution_limits(tmp_path: Path):
     assert request.network_enabled is False
 
 
+def test_sandbox_request_enables_network_by_default(tmp_path: Path):
+    request = SandboxRequest(argv=("bash", "-lc", "echo hi"), cwd=tmp_path)
+
+    assert request.network_enabled is True
+
+
 @pytest.mark.anyio
 async def test_unavailable_sandbox_executor_fails_closed(tmp_path: Path):
     executor = UnavailableSandboxExecutor()

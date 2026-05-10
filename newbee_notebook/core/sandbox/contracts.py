@@ -25,7 +25,7 @@ class SandboxRequest:
     env: Mapping[str, object] = field(default_factory=dict)
     timeout_seconds: float = 30.0
     max_output_bytes: int = 120_000
-    network_enabled: bool = False
+    network_enabled: bool = True
     run_dir: Path | str | None = None
     stdin: str | None = None
     sandbox_session_key: str | None = None

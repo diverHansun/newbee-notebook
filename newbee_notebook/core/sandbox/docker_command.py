@@ -33,13 +33,9 @@ class DockerCommandBuilder:
         container_name: str,
         run_dir: Path | str,
     ) -> DockerCommand:
-        if request.network_enabled:
-            raise SandboxExecutionError(
-                "network_enabled=True is not supported by the Docker sandbox batch"
-            )
-
         workspace_dir, resolved_run_dir = self._resolve_mounts(request, run_dir)
         argv = self._base_run_argv(
+            request=request,
             container_name=container_name,
             workspace_dir=workspace_dir,
             run_dir=resolved_run_dir,
@@ -64,12 +60,9 @@ class DockerCommandBuilder:
     ) -> DockerCommand:
         """Build `docker run -d ... tail -f /dev/null` for a warm container."""
 
-        if request.network_enabled:
-            raise SandboxExecutionError(
-                "network_enabled=True is not supported by the Docker sandbox batch"
-            )
         workspace_dir, resolved_run_dir = self._resolve_mounts(request, run_dir)
         argv = self._base_run_argv(
+            request=request,
             container_name=container_name,
             workspace_dir=workspace_dir,
             run_dir=resolved_run_dir,
@@ -147,11 +140,13 @@ class DockerCommandBuilder:
     def _base_run_argv(
         self,
         *,
+        request: SandboxRequest,
         container_name: str,
         workspace_dir: Path,
         run_dir: Path,
         detached: bool,
     ) -> list[str]:
+        network_name = self._config.network_name if request.network_enabled else "none"
         argv: list[str] = [
             self._config.docker_bin,
             "run",
@@ -163,7 +158,7 @@ class DockerCommandBuilder:
             "--name",
             container_name,
             "--network",
-            "none",
+            network_name,
             "--read-only",
             "--cap-drop",
             "ALL",

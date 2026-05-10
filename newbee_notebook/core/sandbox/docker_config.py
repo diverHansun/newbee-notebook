@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+_NETWORK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
+_RESERVED_NETWORK_NAMES = {
+    "bridge",
+    "host",
+    "none",
+    "newbee_notebook_network",
+}
 
 
 def _resolve_path(value: Path | str) -> Path:
@@ -47,6 +56,7 @@ class DockerRunConfig:
     run_root: Path | str = Path(".tmp/sandbox-runs")
     additional_run_roots: tuple[Path | str, ...] = ()
     container_prefix: str = "newbee-sandbox"
+    network_name: str = "newbee_skill_net"
     workspace_target: str = "/workspace"
     work_target: str = "/work"
     timeout_seconds: float = 30.0
@@ -62,12 +72,17 @@ class DockerRunConfig:
         image = str(self.image).strip()
         docker_bin = str(self.docker_bin).strip()
         container_prefix = str(self.container_prefix).strip()
+        network_name = str(self.network_name).strip()
         if not image:
             raise ValueError("Docker sandbox image is required")
         if not docker_bin:
             raise ValueError("Docker binary path is required")
         if not container_prefix:
             raise ValueError("container_prefix is required")
+        if not _NETWORK_NAME_RE.match(network_name):
+            raise ValueError("network_name must be a valid Docker network name")
+        if network_name.casefold() in _RESERVED_NETWORK_NAMES:
+            raise ValueError("network_name must not target Docker builtin or compose networks")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if self.max_output_bytes <= 0:
@@ -84,6 +99,7 @@ class DockerRunConfig:
             _resolve_roots(tuple(self.additional_run_roots)),
         )
         object.__setattr__(self, "container_prefix", container_prefix)
+        object.__setattr__(self, "network_name", network_name)
         object.__setattr__(self, "workspace_target", _normalize_container_path(self.workspace_target))
         object.__setattr__(self, "work_target", _normalize_container_path(self.work_target))
 
@@ -101,6 +117,7 @@ def build_docker_run_config_from_env(
         docker_bin=_env_str("NEWBEE_SANDBOX_DOCKER_BIN", "docker"),
         run_root=_resolve_path(run_root) if run_root else root / ".tmp" / "sandbox-runs",
         container_prefix=_env_str("NEWBEE_SANDBOX_CONTAINER_PREFIX", "newbee-sandbox"),
+        network_name=_env_str("NEWBEE_SANDBOX_NETWORK_NAME", "newbee_skill_net"),
         timeout_seconds=_env_float("NEWBEE_SANDBOX_TIMEOUT_SECONDS", 30.0),
         max_output_bytes=_env_int("NEWBEE_SANDBOX_MAX_OUTPUT_BYTES", 120_000),
         cpus=_env_str("NEWBEE_SANDBOX_CPUS", "1"),

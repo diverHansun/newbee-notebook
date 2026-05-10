@@ -29,6 +29,7 @@ def test_runtime_sandbox_executor_singleton_uses_docker_backend(monkeypatch, tmp
     assert isinstance(executor, DockerSandboxExecutor)
     assert executor.config.image == "sandbox-image:latest"
     assert executor.config.run_root == (tmp_path / "runs").resolve()
+    assert executor.config.network_name == "newbee_skill_net"
 
 
 def test_runtime_sandbox_executor_allows_configured_notebook_work_root(

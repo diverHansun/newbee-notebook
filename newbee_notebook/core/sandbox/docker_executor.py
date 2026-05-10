@@ -18,6 +18,7 @@ from newbee_notebook.core.sandbox.contracts import (
 )
 from newbee_notebook.core.sandbox.docker_command import DockerCommandBuilder
 from newbee_notebook.core.sandbox.docker_config import DockerRunConfig
+from newbee_notebook.core.sandbox.docker_network import DockerSandboxNetworkManager
 
 
 @dataclass(frozen=True)
@@ -189,23 +190,24 @@ class DockerSandboxExecutor:
         self._name_factory = name_factory
         self._session_registry = session_registry
         self._builder = DockerCommandBuilder(self._config)
+        self._network_manager = DockerSandboxNetworkManager(
+            self._config,
+            runner=self._runner,
+        )
 
     @property
     def config(self) -> DockerRunConfig:
         return self._config
 
     async def execute(self, request: SandboxRequest) -> SandboxResult:
-        if request.network_enabled:
-            return SandboxResult(
-                exit_code=None,
-                stderr="network_enabled=True is not supported by this sandbox backend",
-                error_code="network_disabled",
-            )
         if request.sandbox_session_key and self._session_registry is not None:
             process_result = await self._session_registry.execute(request)
             if _looks_like_docker_unavailable(process_result):
                 raise SandboxUnavailableError(process_result.stderr.strip() or "Docker is unavailable")
             return _sandbox_result_from_process(process_result)
+
+        if request.network_enabled:
+            await self._network_manager.ensure_exists()
 
         container_name = self._next_container_name()
         run_dir = Path(request.run_dir) if request.run_dir is not None else self._config.run_root / container_name

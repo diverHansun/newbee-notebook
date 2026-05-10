@@ -44,6 +44,32 @@ class RecordingRunner:
         self.cleanups.append(container_name)
 
 
+class NetworkCreateRunner:
+    def __init__(self):
+        self.runs: list[tuple[str, ...]] = []
+        self.cleanups: list[str] = []
+
+    async def run(
+        self,
+        argv: tuple[str, ...],
+        *,
+        stdin: str | None,
+        timeout_seconds: float,
+        max_output_bytes: int,
+    ) -> DockerProcessResult:
+        del stdin, timeout_seconds, max_output_bytes
+        self.runs.append(argv)
+        if argv[:3] == ("docker", "network", "inspect"):
+            return DockerProcessResult(exit_code=1, stderr="network not found")
+        if argv[:3] == ("docker", "network", "create"):
+            return DockerProcessResult(exit_code=0, stdout="newbee_skill_net\n")
+        return DockerProcessResult(exit_code=0, stdout="hello\n")
+
+    async def cleanup(self, *, docker_bin: str, container_name: str) -> None:
+        del docker_bin
+        self.cleanups.append(container_name)
+
+
 class RecordingSessionRegistry:
     def __init__(self, result: DockerProcessResult):
         self.result = result
@@ -104,7 +130,8 @@ async def test_docker_executor_creates_default_run_dir_and_returns_result(tmp_pa
     assert result.error_code is None
     assert runner.cleanups == []
     assert (tmp_path / "runs" / "newbee-sandbox-test").is_dir()
-    assert runner.runs[0][-4:] == ("sandbox-image:latest", "bash", "-lc", "echo hello")
+    assert runner.runs[0] == ("docker", "network", "inspect", "newbee_skill_net")
+    assert runner.runs[-1][-4:] == ("sandbox-image:latest", "bash", "-lc", "echo hello")
 
 
 @pytest.mark.anyio
@@ -125,7 +152,11 @@ async def test_docker_executor_cleans_container_after_timeout(tmp_path: Path):
     )
 
     result = await executor.execute(
-        SandboxRequest(argv=("bash", "-lc", "sleep 99"), cwd=tmp_path)
+        SandboxRequest(
+            argv=("bash", "-lc", "sleep 99"),
+            cwd=tmp_path,
+            network_enabled=False,
+        )
     )
 
     assert result.timed_out is True
@@ -144,7 +175,11 @@ async def test_docker_executor_cleans_container_after_cancellation(tmp_path: Pat
 
     task = asyncio.create_task(
         executor.execute(
-            SandboxRequest(argv=("bash", "-lc", "sleep 99"), cwd=tmp_path)
+            SandboxRequest(
+                argv=("bash", "-lc", "sleep 99"),
+                cwd=tmp_path,
+                network_enabled=False,
+            )
         )
     )
     await runner.started.wait()
@@ -156,11 +191,12 @@ async def test_docker_executor_cleans_container_after_cancellation(tmp_path: Pat
 
 
 @pytest.mark.anyio
-async def test_docker_executor_rejects_network_enabled_without_running_docker(tmp_path: Path):
-    runner = RecordingRunner(DockerProcessResult(exit_code=0, stdout="unexpected"))
+async def test_docker_executor_creates_configured_network_before_networked_run(tmp_path: Path):
+    runner = NetworkCreateRunner()
     executor = DockerSandboxExecutor(
-        config=DockerRunConfig(run_root=tmp_path / "runs"),
+        config=DockerRunConfig(run_root=tmp_path / "runs", network_name="newbee_skill_net"),
         runner=runner,
+        name_factory=lambda: "newbee-sandbox-network",
     )
 
     result = await executor.execute(
@@ -171,9 +207,21 @@ async def test_docker_executor_rejects_network_enabled_without_running_docker(tm
         )
     )
 
-    assert result.exit_code is None
-    assert result.error_code == "network_disabled"
-    assert runner.runs == []
+    assert result.exit_code == 0
+    assert runner.runs[0] == ("docker", "network", "inspect", "newbee_skill_net")
+    assert runner.runs[1] == (
+        "docker",
+        "network",
+        "create",
+        "--driver",
+        "bridge",
+        "--opt",
+        "com.docker.network.bridge.enable_icc=false",
+        "--label",
+        "com.newbee_notebook.role=sandbox",
+        "newbee_skill_net",
+    )
+    assert runner.runs[-1][runner.runs[-1].index("--network") + 1] == "newbee_skill_net"
 
 
 @pytest.mark.anyio
