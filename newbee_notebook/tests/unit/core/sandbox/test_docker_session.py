@@ -134,6 +134,40 @@ class TimeoutStartRunner(RecordingRunner):
         return DockerProcessResult(exit_code=0, stdout="ok\n")
 
 
+class ConflictingNameStartRunner(RecordingRunner):
+    async def run(
+        self,
+        argv: tuple[str, ...],
+        *,
+        stdin: str | None,
+        timeout_seconds: float,
+        max_output_bytes: int,
+    ) -> DockerProcessResult:
+        if argv[:2] == ("docker", "run"):
+            self.runs.append(argv)
+            run_count = sum(
+                1
+                for run_argv in self.runs
+                if run_argv[:2] == ("docker", "run")
+            )
+            if run_count == 1:
+                return DockerProcessResult(
+                    exit_code=125,
+                    stderr=(
+                        'docker: Error response from daemon: Conflict. The container '
+                        'name "/newbee-session-test-notebook-123-stale" is already '
+                        'in use by container "stale-container".'
+                    ),
+                )
+            return DockerProcessResult(exit_code=0, stdout="container-id\n")
+        return await super().run(
+            argv,
+            stdin=stdin,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+        )
+
+
 @pytest.mark.anyio
 async def test_session_registry_starts_once_and_reuses_container(tmp_path: Path):
     workspace = tmp_path / "workspace"
@@ -331,6 +365,41 @@ async def test_session_registry_cleans_container_after_startup_timeout(tmp_path:
         await registry.execute(request)
 
     assert registry.get_active_session("notebook-123") is None
+    assert ("cleanup", registry.container_name_for("notebook-123")) in runner.runs
+
+
+@pytest.mark.anyio
+async def test_session_registry_retries_after_stale_container_name_conflict(
+    tmp_path: Path,
+):
+    workspace = tmp_path / "workspace"
+    work_dir = tmp_path / "work"
+    workspace.mkdir()
+    work_dir.mkdir()
+    runner = ConflictingNameStartRunner()
+    registry = DockerSandboxSessionRegistry(
+        config=DockerRunConfig(
+            run_root=tmp_path / "runs",
+            additional_run_roots=(tmp_path,),
+            container_prefix="newbee-session-test",
+        ),
+        runner=runner,
+    )
+    request = SandboxRequest(
+        argv=("bash", "-lc", "echo ok"),
+        cwd=workspace,
+        run_dir=work_dir,
+        sandbox_session_key="notebook-123",
+    )
+
+    result = await registry.execute(request)
+
+    run_commands = [argv for argv in runner.runs if argv[:2] == ("docker", "run")]
+    exec_commands = [argv for argv in runner.runs if argv[:2] == ("docker", "exec")]
+    assert result.exit_code == 0
+    assert result.stdout == "ok\n"
+    assert len(run_commands) == 2
+    assert len(exec_commands) == 1
     assert ("cleanup", registry.container_name_for("notebook-123")) in runner.runs
 
 

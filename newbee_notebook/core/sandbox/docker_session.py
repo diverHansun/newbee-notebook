@@ -172,15 +172,17 @@ class DockerSandboxSessionRegistry:
             run_dir=request.run_dir or self._config.run_root / container_name,
         )
         try:
-            start_result = await self._runner.run(
-                start_command.argv,
-                stdin=None,
-                timeout_seconds=min(15, self._config.timeout_seconds),
-                max_output_bytes=8_000,
-            )
+            start_result = await self._run_start_command(start_command.argv)
         except asyncio.CancelledError:
             await self._cleanup_container(container_name)
             raise
+        if _looks_like_container_name_conflict(start_result):
+            await self._cleanup_container(container_name)
+            try:
+                start_result = await self._run_start_command(start_command.argv)
+            except asyncio.CancelledError:
+                await self._cleanup_container(container_name)
+                raise
         if start_result.exit_code != 0:
             await self._cleanup_container(container_name)
             if _looks_like_docker_unavailable(start_result):
@@ -203,6 +205,14 @@ class DockerSandboxSessionRegistry:
         )
         self._sessions[key] = session
         return session
+
+    async def _run_start_command(self, argv: tuple[str, ...]) -> DockerProcessResult:
+        return await self._runner.run(
+            argv,
+            stdin=None,
+            timeout_seconds=min(15, self._config.timeout_seconds),
+            max_output_bytes=8_000,
+        )
 
     async def _cleanup_container(self, container_name: str) -> None:
         with contextlib.suppress(Exception):
@@ -245,3 +255,10 @@ def _looks_like_docker_unavailable(result: DockerProcessResult) -> bool:
         or "error during connect" in stderr
         or "is the docker daemon running" in stderr
     )
+
+
+def _looks_like_container_name_conflict(result: DockerProcessResult) -> bool:
+    if result.exit_code != 125:
+        return False
+    output = f"{result.stderr}\n{result.stdout}".casefold()
+    return "container name" in output and "already in use" in output

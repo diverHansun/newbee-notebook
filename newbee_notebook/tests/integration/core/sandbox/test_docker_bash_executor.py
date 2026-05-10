@@ -194,6 +194,60 @@ async def test_docker_sandbox_reuses_notebook_warm_container(tmp_path: Path):
 
 
 @pytest.mark.anyio
+async def test_docker_sandbox_recovers_from_stale_warm_container_name(
+    tmp_path: Path,
+):
+    image = "newbee-notebook/api:latest"
+    _require_docker_image(image)
+    prefix = f"newbee-sandbox-stale-{uuid.uuid4().hex[:8]}"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    notebook_workspace = NotebookSandboxWorkspace(root=tmp_path / "sandbox-work")
+    binding = notebook_workspace.for_notebook("notebook-123")
+    config = DockerRunConfig(
+        image=image,
+        run_root=tmp_path / "runs",
+        additional_run_roots=(notebook_workspace.root,),
+        container_prefix=prefix,
+        timeout_seconds=10,
+    )
+    registry = DockerSandboxSessionRegistry(config=config)
+    executor = DockerSandboxExecutor(config=config, session_registry=registry)
+    container_name = registry.container_name_for("notebook-123")
+    stale = subprocess.run(
+        ["docker", "run", "-d", "--name", container_name, image, "sleep", "60"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert stale.returncode == 0, stale.stderr
+
+    try:
+        result = await executor.execute(
+            SandboxRequest(
+                argv=("bash", "-lc", "echo recovered"),
+                cwd=workspace,
+                run_dir=binding.work_dir,
+                timeout_seconds=10,
+                sandbox_session_key="notebook-123",
+            )
+        )
+
+        assert result.exit_code == 0
+        assert "recovered" in result.stdout
+    finally:
+        await registry.stop("notebook-123")
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+
+
+@pytest.mark.anyio
 async def test_docker_sandbox_timeout_removes_container(tmp_path: Path):
     prefix = f"newbee-sandbox-timeout-{uuid.uuid4().hex[:8]}"
     executor = _executor(tmp_path, prefix=prefix)
