@@ -59,18 +59,35 @@ def test_get_skills_returns_list_contract():
     response = client.get("/api/v1/skills")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "skills": [
-            {
-                "name": "demo",
-                "description": "Prepare a concise notebook brief.",
-                "enabled": True,
-                "source": "local",
-                "content_hash": "hash123",
-                "path": "configs/skills/demo",
-                "scopes": ["/demo"],
-            }
-        ]
+    skills = response.json()["skills"]
+    assert [item["name"] for item in skills] == ["note", "diagram", "video", "demo"]
+    assert skills[0] == {
+        "name": "note",
+        "command": "/note",
+        "description": "Note and mark management skill",
+        "enabled": True,
+        "kind": "builtin",
+        "source": "studio",
+        "content_hash": "",
+        "path": "",
+        "scopes": ["/note"],
+        "manageable": False,
+        "deletable": False,
+        "readonly_reason": "builtin",
+    }
+    assert skills[-1] == {
+        "name": "demo",
+        "command": "/demo",
+        "description": "Prepare a concise notebook brief.",
+        "enabled": True,
+        "kind": "installed",
+        "source": "local",
+        "content_hash": "hash123",
+        "path": "configs/skills/demo",
+        "scopes": ["/demo"],
+        "manageable": True,
+        "deletable": True,
+        "readonly_reason": None,
     }
 
 
@@ -82,6 +99,16 @@ def test_toggle_skill_updates_enabled_status():
     assert response.status_code == 200
     assert response.json()["enabled"] is False
     assert response.json()["name"] == "demo"
+    assert response.json()["manageable"] is True
+
+
+def test_toggle_builtin_skill_returns_readonly_error():
+    client, _lifecycle = _build_client()
+
+    response = client.post("/api/v1/skills/note/toggle", json={"enabled": False})
+
+    assert response.status_code == 400
+    assert "builtin" in response.json()["detail"]
 
 
 def test_delete_skill_uninstalls_and_returns_status():
@@ -92,3 +119,13 @@ def test_delete_skill_uninstalls_and_returns_status():
     assert response.status_code == 200
     assert response.json() == {"deleted": True, "name": "demo"}
     assert lifecycle.deleted == ["demo"]
+
+
+def test_delete_builtin_skill_returns_readonly_error():
+    client, lifecycle = _build_client()
+
+    response = client.delete("/api/v1/skills/video")
+
+    assert response.status_code == 400
+    assert "builtin" in response.json()["detail"]
+    assert lifecycle.deleted == []

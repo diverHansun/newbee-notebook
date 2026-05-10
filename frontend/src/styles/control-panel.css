@@ -464,6 +464,79 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.control-panel-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.control-panel-skill-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--accent) / 0.35);
+}
+
+.control-panel-skill-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.control-panel-skill-title-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.control-panel-skill-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.control-panel-skill-command {
+  font-size: 13px;
+  font-weight: 650;
+  color: hsl(var(--foreground));
+}
+
+.control-panel-skill-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.control-panel-skill-description {
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.control-panel-skill-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-panel-skill-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
 @keyframes control-panel-pop-in {
   from {
     opacity: 0;

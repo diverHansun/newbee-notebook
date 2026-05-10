@@ -5,18 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { MCPConfigPanel } from "@/components/layout/mcp-config-panel";
 import { ModelConfigPanel } from "@/components/layout/model-config-panel";
 import { NotebookExportPanel } from "@/components/layout/notebook-export-panel";
+import { SkillConfigPanel } from "@/components/layout/skill-config-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { getHealthStatus, getSystemInfo } from "@/lib/api/system";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import { useTheme } from "@/lib/theme/theme-context";
 
-export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "data" | "about";
+export type ControlPanelTab = "language" | "theme" | "model" | "mcp" | "skills" | "data" | "about";
 
-type ControlPanelNavIconName =
-  | ControlPanelTab
-  | "mcp"
-  | "skills";
+type ControlPanelNavIconName = ControlPanelTab;
 
 type ControlPanelProps = {
   panelId: string;
@@ -28,20 +26,13 @@ type ActiveNavItem = {
   key: Exclude<ControlPanelTab, "about">;
 };
 
-type DisabledNavItem = {
-  key: "skills";
-};
-
 const ACTIVE_ITEMS: ActiveNavItem[] = [
   { key: "language" },
   { key: "theme" },
   { key: "model" },
   { key: "mcp" },
-  { key: "data" },
-];
-
-const DISABLED_ITEMS: DisabledNavItem[] = [
   { key: "skills" },
+  { key: "data" },
 ];
 
 function ControlPanelNavIcon({ name }: { name: ControlPanelNavIconName }) {
@@ -164,15 +155,6 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
               </button>
             ))}
 
-            {DISABLED_ITEMS.map((item) => (
-              <div key={item.key} className="control-panel-nav-item is-disabled" aria-disabled="true">
-                <span className="control-panel-nav-icon" aria-hidden>
-                  <ControlPanelNavIcon name={item.key} />
-                </span>
-                <span className="control-panel-nav-label">{t(uiStrings.controlPanel[item.key])}</span>
-                <span className="control-panel-badge">{t(uiStrings.controlPanel.comingSoon)}</span>
-              </div>
-            ))}
           </div>
 
           <div className="control-panel-nav-footer">
@@ -227,6 +209,8 @@ export function ControlPanel({ panelId, activeTab, onSelectTab }: ControlPanelPr
           {activeTab === "model" && <ModelConfigPanel />}
 
           {activeTab === "mcp" && <MCPConfigPanel />}
+
+          {activeTab === "skills" && <SkillConfigPanel />}
 
           {activeTab === "data" && <NotebookExportPanel />}
 

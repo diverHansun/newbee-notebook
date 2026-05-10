@@ -6,9 +6,14 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { renderWithLang } from "@/test/test-utils";
 
 const uploadChatImage = vi.fn();
+const listSkills = vi.fn();
 
 vi.mock("@/lib/api/chat-images", () => ({
   uploadChatImage: (...args: unknown[]) => uploadChatImage(...args),
+}));
+
+vi.mock("@/lib/api/skills", () => ({
+  listSkills: () => listSkills(),
 }));
 
 vi.mock("@/components/chat/source-selector", () => ({
@@ -31,6 +36,53 @@ vi.mock("@/components/ui/segmented-control", () => ({
 
 describe("ChatInput", () => {
   beforeEach(() => {
+    listSkills.mockReset();
+    listSkills.mockResolvedValue({
+      skills: [
+        {
+          name: "note",
+          command: "/note",
+          description: "Notes & marks management",
+          enabled: true,
+          kind: "builtin",
+          source: "studio",
+          content_hash: "",
+          path: "",
+          scopes: ["/note"],
+          manageable: false,
+          deletable: false,
+          readonly_reason: "builtin",
+        },
+        {
+          name: "diagram",
+          command: "/diagram",
+          description: "Generate a diagram (mind map / flowchart / sequence)",
+          enabled: true,
+          kind: "builtin",
+          source: "studio",
+          content_hash: "",
+          path: "",
+          scopes: ["/diagram"],
+          manageable: false,
+          deletable: false,
+          readonly_reason: "builtin",
+        },
+        {
+          name: "video",
+          command: "/video",
+          description: "Summarize and manage video content",
+          enabled: true,
+          kind: "builtin",
+          source: "studio",
+          content_hash: "",
+          path: "",
+          scopes: ["/video"],
+          manageable: false,
+          deletable: false,
+          readonly_reason: "builtin",
+        },
+      ],
+    });
     uploadChatImage.mockReset();
     uploadChatImage.mockResolvedValue({
       image_id: "img-1",
@@ -142,6 +194,54 @@ describe("ChatInput", () => {
     await user.click(screen.getByRole("button", { name: /summarize and manage video content/i }));
 
     expect(input).toHaveValue("/video ");
+    expect(onModeChange).toHaveBeenCalledWith("agent");
+  });
+
+  it("includes enabled installed skills in slash command hints", async () => {
+    listSkills.mockResolvedValue({
+      skills: [
+        {
+          name: "brief",
+          command: "/brief",
+          description: "Prepare a concise notebook brief.",
+          enabled: true,
+          kind: "installed",
+          source: "local",
+          content_hash: "hash123",
+          path: "configs/skills/brief",
+          scopes: ["/brief"],
+          manageable: true,
+          deletable: true,
+          readonly_reason: null,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId="session-1"
+        mode="ask"
+        isStreaming={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Ask a question (document search)...");
+    await user.type(input, "/br");
+
+    expect(await screen.findByRole("button", { name: /prepare a concise notebook brief/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /prepare a concise notebook brief/i }));
+
+    expect(input).toHaveValue("/brief ");
     expect(onModeChange).toHaveBeenCalledWith("agent");
   });
 

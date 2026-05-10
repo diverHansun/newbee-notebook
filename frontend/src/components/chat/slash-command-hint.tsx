@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { listSkills } from "@/lib/api/skills";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
@@ -28,7 +30,7 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
   const { t } = useLang();
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const commands = useMemo<SlashCommand[]>(
+  const builtinCommands = useMemo<SlashCommand[]>(
     () => [
       {
         command: "/note",
@@ -48,6 +50,36 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
     ],
     [t]
   );
+
+  const skillsQuery = useQuery({
+    queryKey: ["skills"],
+    queryFn: listSkills,
+    staleTime: 10_000,
+    retry: false,
+  });
+
+  const commands = useMemo<SlashCommand[]>(() => {
+    const catalog = skillsQuery.data?.skills ?? [];
+    if (catalog.length === 0) {
+      return builtinCommands;
+    }
+
+    const builtinDescriptionByCommand = new Map(
+      builtinCommands.map((item) => [item.command, item.description])
+    );
+
+    const fromCatalog = catalog
+      .filter((skill) => skill.enabled)
+      .map((skill) => ({
+        command: skill.command || `/${skill.name}`,
+        description:
+          builtinDescriptionByCommand.get(skill.command || `/${skill.name}`) ||
+          skill.description,
+        available: true,
+      }));
+
+    return fromCatalog.length > 0 ? fromCatalog : builtinCommands;
+  }, [builtinCommands, skillsQuery.data?.skills]);
 
   const query = normalizeCommandQuery(input);
   const filteredCommands = commands.filter((item) => item.command.startsWith(query));
