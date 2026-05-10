@@ -129,8 +129,9 @@ async def list_skills(
     lifecycle: SkillLifecycle = Depends(get_skill_lifecycle_dep),
 ) -> SkillsListResponse:
     records = await lifecycle.list_skills()
+    installed = [record for record in records if not _is_builtin_skill(record.name)]
     return SkillsListResponse(
-        skills=[*BUILTIN_SKILLS, *[_to_response(record) for record in records]]
+        skills=[*BUILTIN_SKILLS, *[_to_response(record) for record in installed]]
     )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import subprocess
 import uuid
@@ -58,6 +59,22 @@ def _executor(tmp_path: Path, *, prefix: str | None = None) -> DockerSandboxExec
     )
 
 
+def _container_ipv4(container_name: str, network_name: str = "newbee_notebook_network") -> str | None:
+    inspected = subprocess.run(
+        ["docker", "inspect", container_name],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if inspected.returncode != 0:
+        return None
+    payload = json.loads(inspected.stdout)
+    networks = payload[0].get("NetworkSettings", {}).get("Networks", {})
+    network = networks.get(network_name)
+    return (network or {}).get("IPAddress") or None
+
+
 @pytest.mark.anyio
 async def test_docker_sandbox_executes_bash_and_reads_workspace(tmp_path: Path):
     (tmp_path / "note.txt").write_text("hello from workspace", encoding="utf-8")
@@ -107,6 +124,58 @@ async def test_docker_sandbox_network_enabled_cannot_resolve_compose_sibling(tmp
                 "python",
                 "-c",
                 "import socket; socket.gethostbyname('postgres')",
+            ),
+            cwd=tmp_path,
+            timeout_seconds=10,
+        )
+    )
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_network_enabled_cannot_connect_to_compose_container_ip(tmp_path: Path):
+    _require_docker_image("newbee-notebook/api:latest")
+    postgres_ip = _container_ipv4("newbee-notebook-postgres")
+    if postgres_ip is None:
+        pytest.skip("newbee-notebook-postgres is not running on the compose network")
+    executor = _executor(tmp_path)
+
+    result = await executor.execute(
+        SandboxRequest(
+            argv=(
+                "python",
+                "-c",
+                (
+                    "import socket; "
+                    "s=socket.create_connection(('"
+                    f"{postgres_ip}"
+                    "', 5432), timeout=2); "
+                    "print('connected')"
+                ),
+            ),
+            cwd=tmp_path,
+            timeout_seconds=10,
+        )
+    )
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_network_enabled_cannot_connect_to_host_gateway(tmp_path: Path):
+    executor = _executor(tmp_path)
+
+    result = await executor.execute(
+        SandboxRequest(
+            argv=(
+                "python",
+                "-c",
+                (
+                    "import socket; "
+                    "s=socket.create_connection(('host.docker.internal', 5432), timeout=2); "
+                    "print('connected')"
+                ),
             ),
             cwd=tmp_path,
             timeout_seconds=10,
@@ -248,6 +317,61 @@ async def test_docker_sandbox_reuses_notebook_warm_container(tmp_path: Path):
             check=False,
         )
         assert visible.stdout.strip() == container_name
+    finally:
+        await registry.stop("notebook-123")
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_rebuilds_warm_container_when_network_mode_changes(tmp_path: Path):
+    image = "newbee-notebook/api:latest"
+    _require_docker_image(image)
+    prefix = f"newbee-sandbox-netmode-{uuid.uuid4().hex[:8]}"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    notebook_workspace = NotebookSandboxWorkspace(root=tmp_path / "sandbox-work")
+    binding = notebook_workspace.for_notebook("notebook-123")
+    config = DockerRunConfig(
+        image=image,
+        run_root=tmp_path / "runs",
+        additional_run_roots=(notebook_workspace.root,),
+        container_prefix=prefix,
+        timeout_seconds=10,
+    )
+    registry = DockerSandboxSessionRegistry(config=config)
+    executor = DockerSandboxExecutor(config=config, session_registry=registry)
+    request_kwargs = {
+        "cwd": workspace,
+        "run_dir": binding.work_dir,
+        "timeout_seconds": 10,
+        "sandbox_session_key": "notebook-123",
+    }
+
+    try:
+        first = await executor.execute(
+            SandboxRequest(
+                argv=(
+                    "python",
+                    "-c",
+                    "import socket; print(socket.gethostbyname('example.com'))",
+                ),
+                network_enabled=True,
+                **request_kwargs,
+            )
+        )
+        second = await executor.execute(
+            SandboxRequest(
+                argv=(
+                    "python",
+                    "-c",
+                    "import socket; socket.gethostbyname('example.com')",
+                ),
+                network_enabled=False,
+                **request_kwargs,
+            )
+        )
+
+        assert first.exit_code == 0
+        assert second.exit_code != 0
     finally:
         await registry.stop("notebook-123")
 

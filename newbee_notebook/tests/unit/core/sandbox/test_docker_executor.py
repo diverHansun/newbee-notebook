@@ -37,6 +37,15 @@ class RecordingRunner:
     ) -> DockerProcessResult:
         del stdin, timeout_seconds, max_output_bytes
         self.runs.append(argv)
+        if argv[:3] == ("docker", "network", "inspect"):
+            return DockerProcessResult(
+                exit_code=0,
+                stdout=(
+                    '[{"Name":"newbee_skill_net","Driver":"bridge","Internal":false,'
+                    '"Labels":{"com.newbee_notebook.role":"sandbox"},'
+                    '"Options":{"com.docker.network.bridge.enable_icc":"false"}}]'
+                ),
+            )
         return self.result
 
     async def cleanup(self, *, docker_bin: str, container_name: str) -> None:
@@ -131,7 +140,7 @@ async def test_docker_executor_creates_default_run_dir_and_returns_result(tmp_pa
     assert runner.cleanups == []
     assert (tmp_path / "runs" / "newbee-sandbox-test").is_dir()
     assert runner.runs[0] == ("docker", "network", "inspect", "newbee_skill_net")
-    assert runner.runs[-1][-4:] == ("sandbox-image:latest", "bash", "-lc", "echo hello")
+    assert runner.runs[-1][-4:] == ("1000:1000", "bash", "-lc", "echo hello")
 
 
 @pytest.mark.anyio

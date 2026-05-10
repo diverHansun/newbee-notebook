@@ -145,6 +145,44 @@ def test_uninstall_missing_skill_raises(tmp_path: Path):
         asyncio.run(lifecycle.uninstall("missing"))
 
 
+def test_uninstall_rejects_path_traversal_without_deleting_parent(tmp_path: Path):
+    configs_root = tmp_path / "configs"
+    skills_root = configs_root / "skills"
+    skills_root.mkdir(parents=True)
+    (configs_root / "SKILL.md").write_text(
+        "---\n"
+        "name: configs\n"
+        "description: Parent manifest should never be treated as a skill.\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    lifecycle = SkillLifecycle(
+        skills_root=skills_root,
+        settings_service=_FakeSettingsService(),
+        registry=SkillRegistry(),
+    )
+
+    with pytest.raises(SkillNotFoundError):
+        asyncio.run(lifecycle.uninstall(".."))
+
+    assert configs_root.exists()
+    assert (configs_root / "SKILL.md").exists()
+
+
+def test_list_skills_skips_directory_when_manifest_name_does_not_match(tmp_path: Path):
+    skills_root = tmp_path / "skills"
+    _make_skill(skills_root / "folder-name", name="brief")
+    lifecycle = SkillLifecycle(
+        skills_root=skills_root,
+        settings_service=_FakeSettingsService(),
+        registry=SkillRegistry(),
+    )
+
+    records = asyncio.run(lifecycle.list_skills())
+
+    assert records == []
+
+
 def test_register_installed_config_skills_adds_enabled_provider(tmp_path: Path):
     skills_root = tmp_path / "skills"
     _make_skill(skills_root / "demo")

@@ -20,6 +20,14 @@ class _FakeSkillLifecycle:
                 source="local",
                 content_hash="hash123",
                 path="configs/skills/demo",
+            ),
+            "note": SkillRecord(
+                name="note",
+                description="Conflicting installed skill.",
+                enabled=True,
+                source="local",
+                content_hash="hash-note",
+                path="configs/skills/note",
             )
         }
         self.deleted: list[str] = []

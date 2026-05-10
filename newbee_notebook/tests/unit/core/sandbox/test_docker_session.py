@@ -33,6 +33,15 @@ class RecordingRunner:
     ) -> DockerProcessResult:
         del stdin, timeout_seconds, max_output_bytes
         self.runs.append(argv)
+        if argv[:3] == ("docker", "network", "inspect"):
+            return DockerProcessResult(
+                exit_code=0,
+                stdout=(
+                    '[{"Name":"newbee_skill_net","Driver":"bridge","Internal":false,'
+                    '"Labels":{"com.newbee_notebook.role":"sandbox"},'
+                    '"Options":{"com.docker.network.bridge.enable_icc":"false"}}]'
+                ),
+            )
         if argv[:2] == ("docker", "run"):
             return DockerProcessResult(exit_code=0, stdout="container-id\n")
         return DockerProcessResult(exit_code=0, stdout="ok\n")
@@ -123,6 +132,13 @@ class TimeoutStartRunner(RecordingRunner):
         timeout_seconds: float,
         max_output_bytes: int,
     ) -> DockerProcessResult:
+        if argv[:3] == ("docker", "network", "inspect"):
+            return await super().run(
+                argv,
+                stdin=stdin,
+                timeout_seconds=timeout_seconds,
+                max_output_bytes=max_output_bytes,
+            )
         del stdin, timeout_seconds, max_output_bytes
         self.runs.append(argv)
         if argv[:2] == ("docker", "run"):
@@ -201,6 +217,49 @@ async def test_session_registry_starts_once_and_reuses_container(tmp_path: Path)
     assert len(run_commands) == 1
     assert len(exec_commands) == 2
     assert registry.container_name_for("notebook-123") in exec_commands[0]
+
+
+@pytest.mark.anyio
+async def test_session_registry_restarts_when_network_mode_changes(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    work_dir = tmp_path / "work"
+    workspace.mkdir()
+    work_dir.mkdir()
+    runner = RecordingRunner()
+    registry = DockerSandboxSessionRegistry(
+        config=DockerRunConfig(
+            image="sandbox-image:latest",
+            run_root=tmp_path / "runs",
+            additional_run_roots=(tmp_path,),
+            container_prefix="newbee-session-test",
+        ),
+        runner=runner,
+    )
+
+    await registry.execute(
+        SandboxRequest(
+            argv=("bash", "-lc", "echo network"),
+            cwd=workspace,
+            run_dir=work_dir,
+            sandbox_session_key="notebook-123",
+            network_enabled=True,
+        )
+    )
+    await registry.execute(
+        SandboxRequest(
+            argv=("bash", "-lc", "echo no-network"),
+            cwd=workspace,
+            run_dir=work_dir,
+            sandbox_session_key="notebook-123",
+            network_enabled=False,
+        )
+    )
+
+    run_commands = [argv for argv in runner.runs if argv[:2] == ("docker", "run")]
+    assert len(run_commands) == 2
+    assert run_commands[0][run_commands[0].index("--network") + 1] == "newbee_skill_net"
+    assert run_commands[1][run_commands[1].index("--network") + 1] == "none"
+    assert any(argv[:3] == ("docker", "stop", "-t") for argv in runner.runs)
 
 
 @pytest.mark.anyio

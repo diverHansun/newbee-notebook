@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Protocol
 
 from newbee_notebook.core.sandbox.contracts import (
@@ -51,6 +52,7 @@ class DockerSandboxNetworkManager:
             max_output_bytes=8_000,
         )
         if _exit_code(inspect_result) == 0:
+            _validate_network(inspect_result, self._config.network_name)
             self._ready = True
             return
         if _looks_like_docker_unavailable(inspect_result):
@@ -73,9 +75,25 @@ class DockerSandboxNetworkManager:
             timeout_seconds=10,
             max_output_bytes=8_000,
         )
-        if _exit_code(create_result) == 0 or "already exists" in _message(create_result).casefold():
+        if _exit_code(create_result) == 0:
             self._ready = True
             return
+        if "already exists" in _message(create_result).casefold():
+            retry_result = await self._runner.run(
+                (
+                    self._config.docker_bin,
+                    "network",
+                    "inspect",
+                    self._config.network_name,
+                ),
+                stdin=None,
+                timeout_seconds=10,
+                max_output_bytes=8_000,
+            )
+            if _exit_code(retry_result) == 0:
+                _validate_network(retry_result, self._config.network_name)
+                self._ready = True
+                return
         if _looks_like_docker_unavailable(create_result):
             raise SandboxUnavailableError(_message(create_result) or "Docker is unavailable")
         raise SandboxExecutionError(
@@ -108,3 +126,29 @@ def _looks_like_docker_unavailable(result: Any) -> bool:
         or "error during connect" in output
         or "is the docker daemon running" in output
     )
+
+
+def _validate_network(result: Any, network_name: str) -> None:
+    try:
+        payload = json.loads(str(getattr(result, "stdout", "") or ""))
+    except json.JSONDecodeError as exc:
+        raise SandboxExecutionError(
+            f"Docker network {network_name} is not a managed sandbox network"
+        ) from exc
+    if not isinstance(payload, list) or not payload:
+        raise SandboxExecutionError(
+            f"Docker network {network_name} is not a managed sandbox network"
+        )
+    network = payload[0]
+    labels = network.get("Labels") or {}
+    options = network.get("Options") or {}
+    if (
+        network.get("Driver") != "bridge"
+        or bool(network.get("Internal")) is True
+        or labels.get("com.newbee_notebook.role") != "sandbox"
+        or "com.docker.compose.network" in labels
+        or options.get("com.docker.network.bridge.enable_icc") != "false"
+    ):
+        raise SandboxExecutionError(
+            f"Docker network {network_name} is not a managed sandbox network"
+        )

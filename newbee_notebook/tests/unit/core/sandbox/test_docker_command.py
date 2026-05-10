@@ -45,10 +45,12 @@ def test_docker_command_mounts_workspace_readonly_and_run_dir_writable(tmp_path:
     assert _value_after(command.argv, "--name") == "newbee-sandbox-test"
     assert _value_after(command.argv, "--network") == "newbee_skill_net"
     assert "--read-only" in command.argv
-    assert ("--cap-drop", "ALL") == (
-        command.argv[command.argv.index("--cap-drop")],
-        command.argv[command.argv.index("--cap-drop") + 1],
-    )
+    assert ("--cap-drop", "ALL") in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--cap-add", "NET_ADMIN") in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--cap-add", "SETUID") in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--cap-add", "SETGID") in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--cap-add", "SETPCAP") in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--user", "1000:1000") not in zip(command.argv, command.argv[1:], strict=False)
     assert ("--security-opt", "no-new-privileges") == (
         command.argv[command.argv.index("--security-opt")],
         command.argv[command.argv.index("--security-opt") + 1],
@@ -66,7 +68,9 @@ def test_docker_command_mounts_workspace_readonly_and_run_dir_writable(tmp_path:
         "--mount",
         f"type=bind,source={run_dir.resolve()},target=/work",
     ) in zip(command.argv, command.argv[1:], strict=False)
-    assert command.argv[-4:] == ("sandbox-image:latest", "bash", "-lc", "echo hi")
+    image_index = command.argv.index("sandbox-image:latest")
+    assert command.argv[image_index + 1 : image_index + 3] == ("python", "-c")
+    assert command.argv[-4:] == ("1000:1000", "bash", "-lc", "echo hi")
 
 
 def test_docker_command_can_disable_network_per_request(tmp_path: Path):
@@ -84,6 +88,9 @@ def test_docker_command_can_disable_network_per_request(tmp_path: Path):
     )
 
     assert _value_after(command.argv, "--network") == "none"
+    assert ("--cap-add", "NET_ADMIN") not in zip(command.argv, command.argv[1:], strict=False)
+    assert ("--user", "1000:1000") in zip(command.argv, command.argv[1:], strict=False)
+    assert command.argv[-4:] == ("newbee-notebook/api:latest", "bash", "-lc", "echo hi")
 
 
 def test_docker_command_rejects_run_dir_outside_run_root(tmp_path: Path):

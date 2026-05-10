@@ -34,6 +34,7 @@ class DockerSandboxSession:
     container_name: str
     workspace_dir: Path
     run_dir: Path
+    network_enabled: bool
     last_used_at: float
 
 
@@ -108,6 +109,7 @@ class DockerSandboxSessionRegistry:
                 container_name=session.container_name,
                 workspace_dir=session.workspace_dir,
                 run_dir=session.run_dir,
+                network_enabled=session.network_enabled,
                 last_used_at=self._clock(),
             )
             return result
@@ -162,11 +164,26 @@ class DockerSandboxSessionRegistry:
         now = self._clock()
         existing = self._sessions.get(key)
         if existing is not None:
+            if existing.network_enabled != request.network_enabled:
+                await self.stop(key)
+            else:
+                return DockerSandboxSession(
+                    key=existing.key,
+                    container_name=existing.container_name,
+                    workspace_dir=existing.workspace_dir,
+                    run_dir=existing.run_dir,
+                    network_enabled=existing.network_enabled,
+                    last_used_at=now,
+                )
+
+        existing = self._sessions.get(key)
+        if existing is not None:
             return DockerSandboxSession(
                 key=existing.key,
                 container_name=existing.container_name,
                 workspace_dir=existing.workspace_dir,
                 run_dir=existing.run_dir,
+                network_enabled=existing.network_enabled,
                 last_used_at=now,
             )
 
@@ -208,6 +225,7 @@ class DockerSandboxSessionRegistry:
             container_name=container_name,
             workspace_dir=start_command.workspace_dir,
             run_dir=start_command.run_dir,
+            network_enabled=request.network_enabled,
             last_used_at=now,
         )
         self._sessions[key] = session
@@ -235,6 +253,7 @@ class DockerSandboxSessionRegistry:
             container_name=session.container_name,
             workspace_dir=session.workspace_dir,
             run_dir=session.run_dir,
+            network_enabled=session.network_enabled,
             last_used_at=self._clock(),
         )
 

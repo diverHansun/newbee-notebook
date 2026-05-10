@@ -34,6 +34,19 @@ class RecordingRunner:
         return DockerProcessResult(exit_code=0, stdout="created\n")
 
 
+VALID_NETWORK_JSON = """
+[
+  {
+    "Name": "newbee_skill_net",
+    "Driver": "bridge",
+    "Internal": false,
+    "Labels": {"com.newbee_notebook.role": "sandbox"},
+    "Options": {"com.docker.network.bridge.enable_icc": "false"}
+  }
+]
+"""
+
+
 @pytest.mark.parametrize("network_name", ["none", "host", "bridge", "newbee_notebook_network"])
 def test_docker_run_config_rejects_unsafe_network_names(network_name: str):
     with pytest.raises(ValueError, match="network_name"):
@@ -69,7 +82,7 @@ async def test_network_manager_creates_isolated_bridge_when_missing():
 
 @pytest.mark.anyio
 async def test_network_manager_reuses_existing_network():
-    runner = RecordingRunner(DockerProcessResult(exit_code=0, stdout="[]"))
+    runner = RecordingRunner(DockerProcessResult(exit_code=0, stdout=VALID_NETWORK_JSON))
     manager = DockerSandboxNetworkManager(
         DockerRunConfig(network_name="newbee_skill_net"),
         runner=runner,
@@ -79,3 +92,30 @@ async def test_network_manager_reuses_existing_network():
     await manager.ensure_exists()
 
     assert runner.runs == [("docker", "network", "inspect", "newbee_skill_net")]
+
+
+@pytest.mark.anyio
+async def test_network_manager_rejects_existing_network_with_wrong_shape():
+    runner = RecordingRunner(
+        DockerProcessResult(
+            exit_code=0,
+            stdout="""
+            [
+              {
+                "Name": "newbee_skill_net",
+                "Driver": "bridge",
+                "Internal": false,
+                "Labels": {},
+                "Options": {}
+              }
+            ]
+            """,
+        )
+    )
+    manager = DockerSandboxNetworkManager(
+        DockerRunConfig(network_name="newbee_skill_net"),
+        runner=runner,
+    )
+
+    with pytest.raises(Exception, match="not a managed sandbox network"):
+        await manager.ensure_exists()

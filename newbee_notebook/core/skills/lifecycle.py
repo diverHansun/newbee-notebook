@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import logging
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,6 +22,8 @@ from newbee_notebook.core.skills.manifest_parser import ManifestParser, SkillMan
 from newbee_notebook.core.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
+
+_SKILL_DIR_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 class SettingsServiceProtocol(Protocol):
@@ -160,12 +163,17 @@ class SkillLifecycle:
         return records
 
     async def _load_record(self, skill_name: str) -> SkillRecord:
-        normalized = str(skill_name or "").strip()
-        target_dir = self._skills_root / normalized
+        normalized = self._normalize_skill_dir_name(skill_name)
+        target_dir = (self._skills_root / normalized).resolve(strict=False)
+        skills_root = self._skills_root.resolve(strict=False)
+        if not _is_relative_to(target_dir, skills_root):
+            raise SkillNotFoundError(f"skill not found: {normalized}")
         skill_file = target_dir / "SKILL.md"
         if not skill_file.exists():
             raise SkillNotFoundError(f"skill not found: {normalized}")
         manifest = self._manifest_parser.parse_file(skill_file)
+        if manifest.name != normalized:
+            raise SkillNotFoundError(f"skill not found: {normalized}")
         enabled = (await self._settings.get(f"skills.{manifest.name}.enabled")) != "false"
         source = await self._settings.get(f"skills.{manifest.name}.source") or "local"
         content_hash = await self._settings.get(f"skills.{manifest.name}.content_hash")
@@ -217,6 +225,21 @@ class SkillLifecycle:
                 )
             )
         return items
+
+    @staticmethod
+    def _normalize_skill_dir_name(skill_name: str) -> str:
+        normalized = str(skill_name or "").strip()
+        if not _SKILL_DIR_NAME_RE.fullmatch(normalized):
+            raise SkillNotFoundError(f"skill not found: {normalized}")
+        return normalized
+
+
+def _is_relative_to(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 async def register_installed_config_skills(

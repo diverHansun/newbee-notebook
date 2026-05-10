@@ -11,6 +11,98 @@ from newbee_notebook.core.sandbox.docker_config import DockerRunConfig
 
 _ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
+_NETWORK_EGRESS_GUARD = r"""
+import errno
+import os
+import socket
+import struct
+import sys
+
+BLOCKS = (
+    ("10.0.0.0", 8),
+    ("100.64.0.0", 10),
+    ("169.254.0.0", 16),
+    ("172.16.0.0", 12),
+    ("192.168.0.0", 16),
+)
+NLMSG_ERROR = 2
+RTM_NEWROUTE = 24
+NLM_F_REQUEST = 1
+NLM_F_ACK = 4
+NLM_F_EXCL = 0x200
+NLM_F_CREATE = 0x400
+RT_TABLE_MAIN = 254
+RTPROT_STATIC = 4
+RT_SCOPE_UNIVERSE = 0
+RTN_BLACKHOLE = 6
+RTA_DST = 1
+
+def align(length):
+    return (length + 3) & ~3
+
+def attr(kind, payload):
+    length = 4 + len(payload)
+    return struct.pack("HH", length, kind) + payload + (b"\0" * (align(length) - length))
+
+def add_blackhole(sock, seq, cidr):
+    address, prefix = cidr
+    payload = struct.pack(
+        "BBBBBBBBI",
+        socket.AF_INET,
+        prefix,
+        0,
+        0,
+        RT_TABLE_MAIN,
+        RTPROT_STATIC,
+        RT_SCOPE_UNIVERSE,
+        RTN_BLACKHOLE,
+        0,
+    )
+    payload += attr(RTA_DST, socket.inet_aton(address))
+    header = struct.pack(
+        "IHHII",
+        16 + len(payload),
+        RTM_NEWROUTE,
+        NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+        seq,
+        0,
+    )
+    sock.send(header + payload)
+    data = sock.recv(65535)
+    message_type = struct.unpack_from("H", data, 4)[0]
+    if message_type != NLMSG_ERROR:
+        return
+    error = struct.unpack_from("i", data, 16)[0]
+    if error not in (0, -errno.EEXIST):
+        raise OSError(-error, os.strerror(-error))
+
+sock = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, socket.NETLINK_ROUTE)
+for index, block in enumerate(BLOCKS, start=1):
+    add_blackhole(sock, index, block)
+user = sys.argv[1]
+cmd = sys.argv[2:]
+if not cmd:
+    raise SystemExit("missing sandbox command")
+uid, _, gid = user.partition(":")
+gid = gid or uid
+os.execvp(
+    "setpriv",
+    [
+        "setpriv",
+        "--reuid",
+        uid,
+        "--regid",
+        gid,
+        "--clear-groups",
+        "--bounding-set=-all",
+        "--inh-caps=-all",
+        "--ambient-caps=-all",
+        "--",
+        *cmd,
+    ],
+)
+""".strip()
+
 
 @dataclass(frozen=True)
 class DockerCommand:
@@ -43,7 +135,7 @@ class DockerCommandBuilder:
         )
         _append_request_env(argv, request.env)
 
-        argv.extend([self._config.image, *request.argv])
+        _append_image_and_request_argv(argv, self._config, request)
         return DockerCommand(
             argv=tuple(argv),
             container_name=container_name,
@@ -68,7 +160,18 @@ class DockerCommandBuilder:
             run_dir=resolved_run_dir,
             detached=True,
         )
-        argv.extend([self._config.image, "tail", "-f", "/dev/null"])
+        start_request = SandboxRequest(
+            argv=("tail", "-f", "/dev/null"),
+            cwd=request.cwd,
+            env=request.env,
+            timeout_seconds=request.timeout_seconds,
+            max_output_bytes=request.max_output_bytes,
+            network_enabled=request.network_enabled,
+            run_dir=request.run_dir,
+            stdin=request.stdin,
+            sandbox_session_key=request.sandbox_session_key,
+        )
+        _append_image_and_request_argv(argv, self._config, start_request)
         return DockerCommand(
             argv=tuple(argv),
             container_name=container_name,
@@ -98,6 +201,7 @@ class DockerCommandBuilder:
         if request.stdin is not None:
             argv.append("-i")
         argv.extend(["--workdir", container_cwd])
+        argv.extend(["--user", self._config.user])
         argv.extend(["--env", f"NEWBEE_RUN_DIR={self._config.work_target}"])
         _append_request_env(argv, request.env)
         argv.extend([container_name, *request.argv])
@@ -164,6 +268,13 @@ class DockerCommandBuilder:
             "ALL",
             "--security-opt",
             "no-new-privileges",
+        ])
+        if request.network_enabled:
+            argv.extend(["--cap-add", "NET_ADMIN"])
+            argv.extend(["--cap-add", "SETUID"])
+            argv.extend(["--cap-add", "SETGID"])
+            argv.extend(["--cap-add", "SETPCAP"])
+        argv.extend([
             "--pids-limit",
             str(self._config.pids_limit),
             "--cpus",
@@ -172,8 +283,6 @@ class DockerCommandBuilder:
             self._config.memory,
             "--memory-swap",
             self._config.memory_swap,
-            "--user",
-            self._config.user,
             "--tmpfs",
             self._config.tmpfs,
             "--mount",
@@ -193,6 +302,8 @@ class DockerCommandBuilder:
             "--env",
             f"NEWBEE_RUN_DIR={self._config.work_target}",
         ])
+        if not request.network_enabled:
+            argv.extend(["--user", self._config.user])
         return argv
 
     def _ensure_run_dir_is_allowed(self, run_dir: Path) -> None:
@@ -227,6 +338,26 @@ def _append_request_env(argv: list[str], env: dict | object) -> None:
             continue
         argv.extend(["--env", f"{key}={value}"])
     argv.extend(["--env", "HOME=/tmp"])
+
+
+def _append_image_and_request_argv(
+    argv: list[str],
+    config: DockerRunConfig,
+    request: SandboxRequest,
+) -> None:
+    if request.network_enabled:
+        argv.extend(
+            [
+                config.image,
+                "python",
+                "-c",
+                _NETWORK_EGRESS_GUARD,
+                config.user,
+                *request.argv,
+            ]
+        )
+        return
+    argv.extend([config.image, *request.argv])
 
 
 def _container_path_for(host_path: Path, host_root: Path, container_root: str) -> str:
