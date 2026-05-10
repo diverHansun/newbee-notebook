@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.skills import SkillContext, SkillManifest
-from newbee_notebook.core.skills.contracts import ConfirmationMeta
+from newbee_notebook.core.skills.contracts import PermissionMeta
 from newbee_notebook.skills.video.tools import (
     build_associate_notebook_tool,
     build_delete_summary_tool,
@@ -71,18 +71,18 @@ class VideoSkillProvider:
                 ),
                 build_disassociate_notebook_tool(service=self._video_service),
             ],
-            confirmation_required=frozenset({
+            permission_required=frozenset({
                 "delete_summary",
                 "disassociate_notebook",
                 "update_summary",
             }),
-            confirmation_meta={
-                "delete_summary": ConfirmationMeta(action_type="delete", target_type="video"),
-                "disassociate_notebook": ConfirmationMeta(
+            permission_meta={
+                "delete_summary": PermissionMeta(action_type="delete", target_type="video"),
+                "disassociate_notebook": PermissionMeta(
                     action_type="delete",
                     target_type="video",
                 ),
-                "update_summary": ConfirmationMeta(
+                "update_summary": PermissionMeta(
                     action_type="update",
                     target_type="video",
                 ),

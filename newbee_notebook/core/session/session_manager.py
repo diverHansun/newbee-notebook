@@ -17,7 +17,6 @@ from newbee_notebook.core.context import (
     StoredMessage,
     TokenCounter,
 )
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.stream_events import (
@@ -28,7 +27,7 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
-from newbee_notebook.core.permission import PermissionGateway
+from newbee_notebook.core.permission import PermissionGateway, PermissionRequestGateway
 from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.sandbox import NotebookSandboxWorkspace
 from newbee_notebook.core.shell import ShellEnvironment
@@ -145,7 +144,8 @@ class SessionManager:
         lock_manager: SessionLockManager | None = None,
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         permission_gateway: PermissionGateway | None = None,
         policy_decider: PolicyDecider | None = None,
         runtime_config: LLMRuntimeConfig | None = None,
@@ -165,7 +165,10 @@ class SessionManager:
         self._system_prompt_provider = (
             system_prompt_provider or self._default_system_prompt
         )
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_request_gateway = (
+            permission_request_gateway or confirmation_gateway
+        )
+        self._confirmation_gateway = self._permission_request_gateway
         self._permission_gateway = permission_gateway
         self._policy_decider = policy_decider or PolicyDecider()
         self._runtime_config = runtime_config or getattr(
@@ -353,17 +356,30 @@ class SessionManager:
         allowed_document_ids: list[str] | None,
         context: dict | None,
         external_tools: list[Any] | None = None,
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
         model_override: str | None = None,
         agent_policy: str | None = None,
     ):
-        effective_confirmation_gateway = (
-            confirmation_gateway or self._confirmation_gateway
+        effective_permission_required = (
+            permission_required
+            if permission_required is not None
+            else confirmation_required
+        )
+        effective_permission_meta = (
+            permission_meta if permission_meta is not None else confirmation_meta
+        )
+        effective_permission_request_gateway = (
+            permission_request_gateway
+            or confirmation_gateway
+            or self._permission_request_gateway
         )
         tools = await self._get_tools_for_loop(
             mode=mode,
@@ -381,9 +397,9 @@ class SessionManager:
             tools=tools,
             mode_config=mode_config,
             tool_argument_defaults=tool_argument_defaults,
-            confirmation_required=confirmation_required,
-            confirmation_meta=confirmation_meta,
-            confirmation_gateway=effective_confirmation_gateway,
+            permission_required=effective_permission_required,
+            permission_meta=effective_permission_meta,
+            permission_request_gateway=effective_permission_request_gateway,
             policy_decider=self._policy_decider,
             agent_policy=agent_policy,
             session_id=self._current_session.session_id if self._current_session else "",
@@ -455,9 +471,12 @@ class SessionManager:
         include_ec_context: bool = False,
         external_tools: list[Any] | None = None,
         system_prompt_addition: str = "",
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
@@ -495,6 +514,9 @@ class SessionManager:
                 allowed_document_ids=allowed_document_ids,
                 context=context,
                 external_tools=external_tools,
+                permission_required=permission_required,
+                permission_meta=permission_meta,
+                permission_request_gateway=permission_request_gateway,
                 confirmation_required=confirmation_required,
                 confirmation_meta=confirmation_meta,
                 confirmation_gateway=confirmation_gateway,
@@ -525,9 +547,12 @@ class SessionManager:
         include_ec_context: bool = False,
         external_tools: list[Any] | None = None,
         system_prompt_addition: str = "",
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
         skill_context: SkillPolicyContext | None = None,
@@ -549,6 +574,9 @@ class SessionManager:
             include_ec_context=include_ec_context,
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
+            permission_required=permission_required,
+            permission_meta=permission_meta,
+            permission_request_gateway=permission_request_gateway,
             confirmation_required=confirmation_required,
             confirmation_meta=confirmation_meta,
             confirmation_gateway=confirmation_gateway,

@@ -1,4 +1,4 @@
-"""Agent-visible bash tool backed by the sandbox contract."""
+"""Agent-visible shell tool backed by the sandbox contract."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.sandbox import SandboxExecutor
 from newbee_notebook.core.shell import (
-    BackgroundBashTaskManager,
+    BackgroundShellTaskManager,
     ShellEnvironment,
     ShellExecutionResult,
     ShellExecutor,
@@ -15,12 +15,12 @@ from newbee_notebook.core.shell import (
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 
 
-def build_bash_tool(
+def build_shell_tool(
     environment: ShellEnvironment,
     *,
     sandbox_executor: SandboxExecutor | None = None,
     shell_executor: ShellExecutor | None = None,
-    background_task_manager: BackgroundBashTaskManager | None = None,
+    background_task_manager: BackgroundShellTaskManager | None = None,
 ) -> ToolDefinition:
     executor = shell_executor or ShellExecutor(
         environment=environment,
@@ -35,13 +35,13 @@ def build_bash_tool(
         if bool(args.get("background", False)):
             if background_task_manager is None:
                 return ToolCallResult(
-                    content="Background bash execution is not configured.",
+                    content="Background shell execution is not configured.",
                     error="background_not_configured",
                 )
             description = str(args.get("description") or "").strip()
             if not description:
                 return ToolCallResult(
-                    content="description is required for background bash tasks",
+                    content="description is required for background shell tasks",
                     error="invalid_description",
                 )
             task = await background_task_manager.start(
@@ -53,7 +53,7 @@ def build_bash_tool(
             )
             return ToolCallResult(
                 content=(
-                    f"Started background bash task {task.task_id}.\n"
+                    f"Started background shell task {task.task_id}.\n"
                     f"Status: {task.status}\n"
                     f"Log: {task.log_path}"
                 ),
@@ -64,7 +64,7 @@ def build_bash_tool(
                 },
             )
 
-        shell_result = await executor.execute_bash(
+        shell_result = await executor.execute_shell(
             command,
             timeout_seconds=timeout_seconds,
         )
@@ -80,8 +80,8 @@ def build_bash_tool(
         )
 
     return ToolDefinition(
-        name="bash",
-        description="Run a bash command inside the configured sandbox and return stdout, stderr, and exit code.",
+        name="shell",
+        description="Run a shell command inside the configured sandbox and return stdout, stderr, and exit code.",
         parameters={
             "type": "object",
             "properties": {
@@ -102,7 +102,7 @@ def build_bash_tool(
             ],
         },
         execute=_execute,
-        tool_class=ToolClass.BASH,
+        tool_class=ToolClass.SHELL,
         risk_level=RiskLevel.DANGEROUS,
         sandbox_required=True,
     )

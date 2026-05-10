@@ -18,7 +18,7 @@ class PermissionChoice(StrEnum):
 class PermissionResponseKind(StrEnum):
     ALLOW = "allow"
     DENY = "deny"
-    NEEDS_CONFIRMATION = "needs_confirmation"
+    NEEDS_PERMISSION = "needs_permission"
     REJECT_WITH_SUGGESTION = "reject_with_suggestion"
 
 
@@ -52,8 +52,12 @@ class PermissionResponse:
         return self.kind is PermissionResponseKind.ALLOW
 
     @property
+    def requires_permission(self) -> bool:
+        return self.kind is PermissionResponseKind.NEEDS_PERMISSION
+
+    @property
     def requires_confirmation(self) -> bool:
-        return self.kind is PermissionResponseKind.NEEDS_CONFIRMATION
+        return self.requires_permission
 
     @classmethod
     def allow(cls, *, reason: str) -> "PermissionResponse":
@@ -64,16 +68,28 @@ class PermissionResponse:
         return cls(kind=PermissionResponseKind.DENY, reason=reason)
 
     @classmethod
+    def needs_permission_response(
+        cls,
+        *,
+        reason: str = "allow_not_found",
+    ) -> "PermissionResponse":
+        return cls(kind=PermissionResponseKind.NEEDS_PERMISSION, reason=reason)
+
+    @classmethod
+    def needs_permission(cls, *, reason: str = "allow_not_found") -> "PermissionResponse":
+        return cls.needs_permission_response(reason=reason)
+
+    @classmethod
+    def needs_confirmation(cls, *, reason: str = "allow_not_found") -> "PermissionResponse":
+        return cls.needs_permission_response(reason=reason)
+
+    @classmethod
     def needs_confirmation_response(
         cls,
         *,
         reason: str = "allow_not_found",
     ) -> "PermissionResponse":
-        return cls(kind=PermissionResponseKind.NEEDS_CONFIRMATION, reason=reason)
-
-    @classmethod
-    def needs_confirmation(cls, *, reason: str = "allow_not_found") -> "PermissionResponse":
-        return cls.needs_confirmation_response(reason=reason)
+        return cls.needs_permission_response(reason=reason)
 
     @classmethod
     def reject_with_suggestion(

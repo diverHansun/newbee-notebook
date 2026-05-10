@@ -19,14 +19,14 @@ function getLangFromStorage(): "en" | "zh" {
   return "zh";
 }
 
-type ConfirmActionRequest = {
+type PermissionResolveRequest = {
   request_id: string;
   approved?: boolean;
   response?: PermissionResponseChoice;
   suggestion?: string;
 };
 
-type ConfirmActionResponse = {
+type PermissionResolveResponse = {
   status: "resolved";
   effective_policy?: EffectivePolicy;
 };
@@ -91,9 +91,11 @@ export function cancelChatStream(messageId: number) {
   });
 }
 
-export function confirmChatAction(sessionId: string, request: ConfirmActionRequest) {
-  return apiFetch<ConfirmActionResponse>(`/chat/${sessionId}/confirm`, {
+export function resolvePermissionRequest(sessionId: string, request: PermissionResolveRequest) {
+  return apiFetch<PermissionResolveResponse>(`/chat/${sessionId}/permission-requests/resolve`, {
     method: "POST",
     body: request,
   });
 }
+
+export const confirmChatAction = resolvePermissionRequest;

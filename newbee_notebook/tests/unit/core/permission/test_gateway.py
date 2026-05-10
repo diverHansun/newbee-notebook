@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
-
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.permission import (
     AllowStore,
     PermissionChoice,
     PermissionGateway,
     PermissionRequest,
+    PermissionRequestGateway,
+    PermissionResponse,
     PermissionResponseKind,
     SessionAllowCache,
 )
@@ -68,8 +68,8 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-async def test_confirmation_gateway_supports_rich_response_and_legacy_bool():
-    gateway = ConfirmationGateway()
+async def test_permission_request_gateway_supports_rich_response_and_legacy_bool():
+    gateway = PermissionRequestGateway()
     gateway.create("req-rich")
     assert gateway.resolve_response("req-rich", {"response": "always_session"})
     assert await gateway.wait_response("req-rich") == {"response": "always_session"}
@@ -80,14 +80,15 @@ async def test_confirmation_gateway_supports_rich_response_and_legacy_bool():
 
 
 @pytest.mark.anyio
-async def test_permission_gateway_allows_when_session_cache_matches_without_confirmation():
+@pytest.mark.anyio
+async def test_permission_gateway_allows_when_session_cache_matches_without_permission_request():
     settings = _FakeSettingsService()
     cache = SessionAllowCache()
     cache.add("session-1", "global:write_file:abc12345")
     gateway = PermissionGateway(
         allow_store=AllowStore(settings),
         session_cache=cache,
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.check(_request())
@@ -103,7 +104,7 @@ async def test_permission_gateway_records_always_session_choice_in_cache():
     gateway = PermissionGateway(
         allow_store=AllowStore(settings),
         session_cache=cache,
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.record_choice(_request(), PermissionChoice.ALWAYS_SESSION)
@@ -120,7 +121,7 @@ async def test_permission_gateway_records_always_persist_after_store_write_succe
     gateway = PermissionGateway(
         allow_store=AllowStore(settings),
         session_cache=SessionAllowCache(),
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.record_choice(_request(), PermissionChoice.ALWAYS_PERSIST)
@@ -139,7 +140,7 @@ async def test_permission_gateway_fails_closed_when_persist_write_fails():
     gateway = PermissionGateway(
         allow_store=AllowStore(settings),
         session_cache=SessionAllowCache(),
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.record_choice(_request(), PermissionChoice.ALWAYS_PERSIST)
@@ -150,19 +151,28 @@ async def test_permission_gateway_fails_closed_when_persist_write_fails():
 
 
 @pytest.mark.anyio
-async def test_permission_gateway_treats_store_read_failure_as_confirmation_miss():
+async def test_permission_gateway_treats_store_read_failure_as_permission_miss():
     settings = _FakeSettingsService()
     settings.raise_on_get = True
     gateway = PermissionGateway(
         allow_store=AllowStore(settings),
         session_cache=SessionAllowCache(),
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.check(_request())
 
-    assert response.kind is PermissionResponseKind.NEEDS_CONFIRMATION
+    assert response.kind is PermissionResponseKind.NEEDS_PERMISSION
     assert response.reason == "allow_not_found"
+
+
+def test_permission_response_uses_permission_request_semantics_with_legacy_alias():
+    response = PermissionResponse.needs_permission()
+
+    assert response.kind is PermissionResponseKind.NEEDS_PERMISSION
+    assert response.requires_permission
+    assert response.requires_confirmation
+    assert PermissionResponse.needs_confirmation().kind is PermissionResponseKind.NEEDS_PERMISSION
 
 
 @pytest.mark.anyio
@@ -170,7 +180,7 @@ async def test_permission_gateway_normalizes_reject_with_suggestion_response():
     gateway = PermissionGateway(
         allow_store=AllowStore(_FakeSettingsService()),
         session_cache=SessionAllowCache(),
-        confirmation_gateway=ConfirmationGateway(),
+        permission_request_gateway=PermissionRequestGateway(),
     )
 
     response = await gateway.record_choice(

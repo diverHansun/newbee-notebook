@@ -62,8 +62,12 @@ from newbee_notebook.core.skills import SkillRegistry
 from newbee_notebook.core.skills.lifecycle import register_installed_config_skills
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
-from newbee_notebook.core.permission import AllowStore, PermissionGateway, SessionAllowCache
+from newbee_notebook.core.permission import (
+    AllowStore,
+    PermissionGateway,
+    PermissionRequestGateway,
+    SessionAllowCache,
+)
 from newbee_notebook.core.sandbox import (
     DockerSandboxExecutor,
     DockerSandboxSessionRegistry,
@@ -297,7 +301,7 @@ _runtime_notebook_sandbox_workspace = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
-_runtime_confirmation_gateway = None
+_runtime_permission_request_gateway = None
 _runtime_permission_session_cache = None
 _video_concurrency_controller = None
 
@@ -511,11 +515,15 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
     return _runtime_session_lock_manager
 
 
-def get_runtime_confirmation_gateway_singleton() -> ConfirmationGateway:
-    global _runtime_confirmation_gateway
-    if _runtime_confirmation_gateway is None:
-        _runtime_confirmation_gateway = ConfirmationGateway()
-    return _runtime_confirmation_gateway
+def get_runtime_permission_request_gateway_singleton() -> PermissionRequestGateway:
+    global _runtime_permission_request_gateway
+    if _runtime_permission_request_gateway is None:
+        _runtime_permission_request_gateway = PermissionRequestGateway()
+    return _runtime_permission_request_gateway
+
+
+def get_runtime_confirmation_gateway_singleton() -> PermissionRequestGateway:
+    return get_runtime_permission_request_gateway_singleton()
 
 
 def get_runtime_permission_session_cache_singleton() -> SessionAllowCache:
@@ -610,19 +618,23 @@ def get_runtime_tool_registry_dep() -> ToolRegistry:
     return get_runtime_tool_registry_singleton()
 
 
-def get_confirmation_gateway_dep() -> ConfirmationGateway:
+def get_permission_request_gateway_dep() -> PermissionRequestGateway:
+    return get_runtime_permission_request_gateway_singleton()
+
+
+def get_confirmation_gateway_dep() -> PermissionRequestGateway:
     return get_runtime_confirmation_gateway_singleton()
 
 
 def get_permission_gateway_dep(
     settings_service: AppSettingsService = Depends(get_app_settings_service),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
     session_cache: SessionAllowCache = Depends(get_permission_session_cache_dep),
 ) -> PermissionGateway:
     return PermissionGateway(
         allow_store=AllowStore(settings_service),
         session_cache=session_cache,
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 
 
@@ -646,7 +658,7 @@ async def get_runtime_session_manager_dep(
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
     permission_gateway: PermissionGateway = Depends(get_permission_gateway_dep),
     session=Depends(get_db_session),
 ) -> SessionManager:
@@ -659,7 +671,7 @@ async def get_runtime_session_manager_dep(
         llm_client=llm_client,
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
         permission_gateway=permission_gateway,
         runtime_config=runtime_config,
         sandbox_workspace=get_runtime_notebook_sandbox_workspace_singleton(),
@@ -923,7 +935,7 @@ async def get_chat_service(
     chat_image_service: ChatImageService = Depends(get_chat_image_service),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
     skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
 ) -> ChatService:
     """Get ChatService instance."""
     return ChatService(
@@ -939,6 +951,6 @@ async def get_chat_service(
         storage=get_storage(),
         vector_index_loader=get_pg_index_singleton,
         skill_registry=skill_registry,
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 

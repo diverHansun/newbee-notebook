@@ -9,22 +9,22 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 from uuid import uuid4
 
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.permission import (
     PermissionGateway,
     PermissionRequest,
+    PermissionRequestGateway,
     PermissionResponse,
     PermissionResponseKind,
 )
-from newbee_notebook.core.skills.contracts import ConfirmationMeta
+from newbee_notebook.core.skills.contracts import PermissionMeta
 from newbee_notebook.core.engine.mode_config import ModeConfig
 from newbee_notebook.core.engine.stream_events import (
-    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
     ImageGeneratedEvent,
     IntermediateContentEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -41,6 +41,9 @@ from newbee_notebook.core.policy import (
     SkillPolicyContext,
 )
 from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
+
+# Accept legacy model/tool-call text after the public tool name moved to shell.
+LEGACY_TOOL_ALIASES = {"bash": "shell"}
 
 
 @dataclass(frozen=True)
@@ -102,9 +105,12 @@ class AgentLoop:
         mode_config: ModeConfig,
         llm_retry_attempts: int = 1,
         tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict[str, PermissionMeta] | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
-        confirmation_meta: dict[str, ConfirmationMeta] | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_meta: dict[str, PermissionMeta] | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         permission_gateway: PermissionGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
@@ -122,9 +128,17 @@ class AgentLoop:
             str(name): dict(values)
             for name, values in (tool_argument_defaults or {}).items()
         }
-        self._confirmation_required = confirmation_required or frozenset()
-        self._confirmation_meta = confirmation_meta or {}
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_required = (
+            permission_required
+            if permission_required is not None
+            else (confirmation_required or frozenset())
+        )
+        self._permission_meta = (
+            permission_meta
+            if permission_meta is not None
+            else (confirmation_meta or {})
+        )
+        self._permission_request_gateway = permission_request_gateway or confirmation_gateway
         self._permission_gateway = permission_gateway
         self._force_first_tool_call = force_first_tool_call
         self._required_tool_call_before_response = required_tool_call_before_response
@@ -134,6 +148,11 @@ class AgentLoop:
         self._skill_context = SkillPolicyContext.from_any(skill_context)
         self._model_override = str(model_override or "").strip() or None
         self._cancelled = False
+
+    @staticmethod
+    def _canonical_tool_name(tool_name: str) -> str:
+        normalized = str(tool_name or "").strip()
+        return LEGACY_TOOL_ALIASES.get(normalized, normalized)
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -376,12 +395,32 @@ class AgentLoop:
         assert last_error is not None
         raise last_error
 
-    @staticmethod
+    def _canonical_tool_calls(
+        self,
+        tool_calls: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        canonical_calls: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            item = dict(tool_call)
+            function_payload = dict(item.get("function") or {})
+            if function_payload:
+                function_payload["name"] = self._canonical_tool_name(
+                    function_payload.get("name") or ""
+                )
+                item["function"] = function_payload
+            canonical_calls.append(item)
+        return canonical_calls
+
     def _assistant_tool_message(
+        self,
         tool_calls: list[dict[str, Any]],
         content: str | None = None,
     ) -> dict[str, Any]:
-        return {"role": "assistant", "content": content or None, "tool_calls": tool_calls}
+        return {
+            "role": "assistant",
+            "content": content or None,
+            "tool_calls": self._canonical_tool_calls(tool_calls),
+        }
 
     @staticmethod
     def _tool_result_message(tool_call_id: str, result: ToolCallResult) -> dict[str, Any]:
@@ -452,7 +491,7 @@ class AgentLoop:
         }
 
     @staticmethod
-    def _confirmation_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
+    def _permission_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in arguments.items() if key != "content"}
 
     def _decide_tool_execution(
@@ -476,21 +515,21 @@ class AgentLoop:
             )
         )
 
-    def _create_confirmation_event(
+    def _create_permission_request_event(
         self,
         *,
         request_id: str,
         tool_name: str,
         arguments: dict[str, Any],
         decision: Decision | None = None,
-    ) -> ConfirmationRequestEvent:
-        meta = self._confirmation_meta.get(tool_name)
+    ) -> PermissionRequestEvent:
+        meta = self._permission_meta.get(tool_name)
         skill_name = self._skill_context.name if self._skill_context else None
         content_hash = self._skill_context.content_hash if self._skill_context else ""
-        return ConfirmationRequestEvent(
+        return PermissionRequestEvent(
             request_id=request_id,
             tool_name=tool_name,
-            args_summary=self._confirmation_args_summary(arguments),
+            args_summary=self._permission_args_summary(arguments),
             description=f"Agent requested to run {tool_name}",
             action_type=meta.action_type if meta else "confirm",
             target_type=meta.target_type if meta else "unknown",
@@ -534,7 +573,7 @@ class AgentLoop:
             tool_call_id=tool_call_id,
             capability_signature=decision.capability_signature,
             tool_name=tool_name,
-            args_summary=self._confirmation_args_summary(arguments),
+            args_summary=self._permission_args_summary(arguments),
             risk_level=str(getattr(decision.risk_level, "value", decision.risk_level) or ""),
             skill_name=skill_name,
             content_hash=content_hash,
@@ -653,7 +692,7 @@ class AgentLoop:
         | WarningEvent
         | PhaseEvent
         | IntermediateContentEvent
-        | ConfirmationRequestEvent
+        | PermissionRequestEvent
         | ToolCallEvent
         | ToolResultEvent
         | SourceEvent
@@ -783,7 +822,7 @@ class AgentLoop:
 
                 for tool_call in tool_calls:
                     function_payload = tool_call.get("function") or {}
-                    tool_name = str(function_payload.get("name") or "")
+                    tool_name = self._canonical_tool_name(function_payload.get("name") or "")
                     if (
                         self._mode_config.loop_policy.require_tool_every_iteration
                         and tool_name != self._mode_config.loop_policy.required_tool_name
@@ -812,37 +851,37 @@ class AgentLoop:
                         tool_name=tool_name,
                         arguments=effective_arguments,
                     )
-                    confirmation_decision = (
+                    permission_decision = (
                         policy_decision
                         if policy_decision
                         and policy_decision.verdict == PolicyVerdict.ASK
                         else None
                     )
-                    legacy_confirmation_required = (
-                        confirmation_decision is None
-                        and tool_name in self._confirmation_required
+                    legacy_permission_required = (
+                        permission_decision is None
+                        and tool_name in self._permission_required
                     )
-                    if confirmation_decision and self._permission_gateway is not None:
+                    if permission_decision and self._permission_gateway is not None:
                         permission_request = self._create_permission_request(
                             tool_call_id=str(tool_call.get("id") or ""),
                             tool_name=tool_name,
                             arguments=effective_arguments,
-                            decision=confirmation_decision,
+                            decision=permission_decision,
                             assistant_turn_id=assistant_turn_id,
                         )
                         permission_response = await self._permission_gateway.check(permission_request)
-                        if permission_response.kind is PermissionResponseKind.NEEDS_CONFIRMATION:
+                        if permission_response.kind is PermissionResponseKind.NEEDS_PERMISSION:
                             request_id = str(uuid4())
-                            if not self._permission_gateway.create_confirmation(request_id):
+                            if not self._permission_gateway.create_request(request_id):
                                 permission_response = PermissionResponse.deny(
-                                    reason="confirmation_gateway_unavailable"
+                                    reason="permission_request_gateway_unavailable"
                                 )
                             else:
-                                yield self._create_confirmation_event(
+                                yield self._create_permission_request_event(
                                     request_id=request_id,
                                     tool_name=tool_name,
                                     arguments=effective_arguments,
-                                    decision=confirmation_decision,
+                                    decision=permission_decision,
                                 )
                                 permission_choice = await self._permission_gateway.wait_for_choice(
                                     request_id,
@@ -867,8 +906,8 @@ class AgentLoop:
                                 quality_meta=None,
                             )
                             continue
-                    elif confirmation_decision or legacy_confirmation_required:
-                        if not self._confirmation_gateway:
+                    elif permission_decision or legacy_permission_required:
+                        if not self._permission_request_gateway:
                             rejection_result = self._rejection_result()
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
@@ -884,14 +923,14 @@ class AgentLoop:
                             )
                             continue
                         request_id = str(uuid4())
-                        self._confirmation_gateway.create(request_id)
-                        yield self._create_confirmation_event(
+                        self._permission_request_gateway.create(request_id)
+                        yield self._create_permission_request_event(
                             request_id=request_id,
                             tool_name=tool_name,
                             arguments=effective_arguments,
-                            decision=confirmation_decision,
+                            decision=permission_decision,
                         )
-                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
+                        approved = await self._permission_request_gateway.wait(request_id, timeout=180.0)
                         if not approved:
                             rejection_result = self._rejection_result()
                             messages.append(
@@ -994,7 +1033,7 @@ class AgentLoop:
 
                 for tool_call in synthesis_tool_calls:
                     function_payload = tool_call.get("function") or {}
-                    tool_name = str(function_payload.get("name") or "")
+                    tool_name = self._canonical_tool_name(function_payload.get("name") or "")
                     raw_arguments = function_payload.get("arguments") or "{}"
                     try:
                         parsed_arguments = json.loads(raw_arguments)
@@ -1008,37 +1047,37 @@ class AgentLoop:
                         tool_name=tool_name,
                         arguments=effective_arguments,
                     )
-                    confirmation_decision = (
+                    permission_decision = (
                         policy_decision
                         if policy_decision
                         and policy_decision.verdict == PolicyVerdict.ASK
                         else None
                     )
-                    legacy_confirmation_required = (
-                        confirmation_decision is None
-                        and tool_name in self._confirmation_required
+                    legacy_permission_required = (
+                        permission_decision is None
+                        and tool_name in self._permission_required
                     )
-                    if confirmation_decision and self._permission_gateway is not None:
+                    if permission_decision and self._permission_gateway is not None:
                         permission_request = self._create_permission_request(
                             tool_call_id=str(tool_call.get("id") or ""),
                             tool_name=tool_name,
                             arguments=effective_arguments,
-                            decision=confirmation_decision,
+                            decision=permission_decision,
                             assistant_turn_id=assistant_turn_id,
                         )
                         permission_response = await self._permission_gateway.check(permission_request)
-                        if permission_response.kind is PermissionResponseKind.NEEDS_CONFIRMATION:
+                        if permission_response.kind is PermissionResponseKind.NEEDS_PERMISSION:
                             request_id = str(uuid4())
-                            if not self._permission_gateway.create_confirmation(request_id):
+                            if not self._permission_gateway.create_request(request_id):
                                 permission_response = PermissionResponse.deny(
-                                    reason="confirmation_gateway_unavailable"
+                                    reason="permission_request_gateway_unavailable"
                                 )
                             else:
-                                yield self._create_confirmation_event(
+                                yield self._create_permission_request_event(
                                     request_id=request_id,
                                     tool_name=tool_name,
                                     arguments=effective_arguments,
-                                    decision=confirmation_decision,
+                                    decision=permission_decision,
                                 )
                                 permission_choice = await self._permission_gateway.wait_for_choice(
                                     request_id,
@@ -1063,8 +1102,8 @@ class AgentLoop:
                                 quality_meta=None,
                             )
                             continue
-                    elif confirmation_decision or legacy_confirmation_required:
-                        if not self._confirmation_gateway:
+                    elif permission_decision or legacy_permission_required:
+                        if not self._permission_request_gateway:
                             rejection_result = self._rejection_result()
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
@@ -1080,14 +1119,14 @@ class AgentLoop:
                             )
                             continue
                         request_id = str(uuid4())
-                        self._confirmation_gateway.create(request_id)
-                        yield self._create_confirmation_event(
+                        self._permission_request_gateway.create(request_id)
+                        yield self._create_permission_request_event(
                             request_id=request_id,
                             tool_name=tool_name,
                             arguments=effective_arguments,
-                            decision=confirmation_decision,
+                            decision=permission_decision,
                         )
-                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
+                        approved = await self._permission_request_gateway.wait(request_id, timeout=180.0)
                         if not approved:
                             rejection_result = self._rejection_result()
                             messages.append(

@@ -15,12 +15,15 @@ from newbee_notebook.core.engine.mode_config import (
     ToolPolicy,
 )
 from newbee_notebook.core.engine.agent_loop import AgentLoop, AgentResult
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway, PendingConfirmation
+from newbee_notebook.core.permission import (
+    PendingPermissionRequest,
+    PermissionRequestGateway,
+)
 from newbee_notebook.core.engine.stream_events import (
-    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -33,8 +36,6 @@ from newbee_notebook.domain.value_objects.mode_type import ModeType
 __all__ = [
     "AgentLoop",
     "AgentResult",
-    "ConfirmationGateway",
-    "ConfirmationRequestEvent",
     "ContentEvent",
     "DoneEvent",
     "ErrorEvent",
@@ -48,7 +49,9 @@ __all__ = [
     "ModeConfigFactory",
     "ModeType",
     "PhaseEvent",
-    "PendingConfirmation",
+    "PendingPermissionRequest",
+    "PermissionRequestEvent",
+    "PermissionRequestGateway",
     "SourceEvent",
     "SourcePolicy",
     "StartEvent",

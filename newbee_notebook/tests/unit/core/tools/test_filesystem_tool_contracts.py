@@ -4,7 +4,7 @@ import pytest
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.shell import ShellEnvironment
-from newbee_notebook.core.tools.bash import build_bash_tool
+from newbee_notebook.core.tools.shell import build_shell_tool
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
 from newbee_notebook.core.tools.filesystem import build_filesystem_tools
 
@@ -23,11 +23,11 @@ def test_filesystem_tools_expose_policy_metadata(tmp_path):
     assert tools["write_file"].risk_level == RiskLevel.MODERATE
 
 
-def test_bash_tool_exposes_sandbox_policy_metadata(tmp_path):
-    tool = build_bash_tool(ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)))
+def test_shell_tool_exposes_sandbox_policy_metadata(tmp_path):
+    tool = build_shell_tool(ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)))
 
-    assert tool.name == "bash"
-    assert tool.tool_class == ToolClass.BASH
+    assert tool.name == "shell"
+    assert tool.tool_class == ToolClass.SHELL
     assert tool.risk_level == RiskLevel.DANGEROUS
     assert tool.sandbox_required is True
 
@@ -50,9 +50,9 @@ def test_builtin_provider_adds_filesystem_tools_to_agent_only(tmp_path, monkeypa
         "grep_files",
         "edit_file",
         "write_file",
-        "bash",
-        "bash_task_list",
-        "bash_task_output",
-        "bash_task_stop",
+        "shell",
+        "shell_task_list",
+        "shell_task_output",
+        "shell_task_stop",
     ]
     assert ask_names == ["knowledge_base", "time"]

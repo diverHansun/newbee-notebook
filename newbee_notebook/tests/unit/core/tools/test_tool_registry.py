@@ -25,10 +25,10 @@ FILESYSTEM_TOOL_NAMES = [
     "grep_files",
     "edit_file",
     "write_file",
-    "bash",
-    "bash_task_list",
-    "bash_task_output",
-    "bash_task_stop",
+    "shell",
+    "shell_task_list",
+    "shell_task_output",
+    "shell_task_stop",
 ]
 
 
@@ -71,6 +71,24 @@ def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_on
 
     assert [tool.name for tool in explain_tools] == ["knowledge_base"]
     assert [tool.name for tool in conclude_tools] == ["knowledge_base"]
+
+
+def test_builtin_tool_provider_can_disable_shell_tools(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    provider = BuiltinToolProvider(enable_shell_tool=False)
+
+    tools = provider.get_tools("agent")
+
+    assert [tool.name for tool in tools] == [
+        "knowledge_base",
+        "time",
+        "read_file",
+        "glob_files",
+        "grep_files",
+        "edit_file",
+        "write_file",
+    ]
 
 
 @pytest.mark.anyio
@@ -152,7 +170,7 @@ async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only(monkeypatc
 
 
 @pytest.mark.anyio
-async def test_tool_registry_uses_runtime_filesystem_environment_for_bash(
+async def test_tool_registry_uses_runtime_filesystem_environment_for_shell(
     tmp_path,
     monkeypatch,
 ):
@@ -180,9 +198,9 @@ async def test_tool_registry_uses_runtime_filesystem_environment_for_bash(
         "agent",
         filesystem_environment=runtime_environment,
     )
-    bash_tool = next(tool for tool in tools if tool.name == "bash")
+    shell_tool = next(tool for tool in tools if tool.name == "shell")
 
-    result = await bash_tool.execute({"command": "echo ok"})
+    result = await shell_tool.execute({"command": "echo ok"})
 
     assert result.error is None
     assert sandbox.requests[0].run_dir == (tmp_path / "notebook-work").resolve()

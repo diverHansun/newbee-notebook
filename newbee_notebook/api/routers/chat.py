@@ -7,7 +7,7 @@ Handles chat-related API endpoints including streaming responses.
 import asyncio
 import json
 from contextlib import suppress
-from typing import Optional, AsyncGenerator
+from typing import Awaitable, Callable, Optional, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import StreamingResponse
@@ -18,7 +18,10 @@ from newbee_notebook.api.dependencies import (
     get_policy_preference_service,
     get_session_service,
 )
-from newbee_notebook.api.models.confirm_models import ConfirmActionRequest
+from newbee_notebook.api.models.confirm_models import (
+    ConfirmActionRequest,
+    PermissionResolveRequest,
+)
 from newbee_notebook.api.models.policy_models import EffectivePolicyResponse
 from newbee_notebook.api.models.requests import ChatRequest
 from newbee_notebook.application.services.policy_preference_service import (
@@ -64,9 +67,12 @@ class ChatResponse(BaseModel):
     warnings: list = Field(default_factory=list)
 
 
-class ConfirmActionResponse(BaseModel):
+class PermissionResolveResponse(BaseModel):
     status: str
     effective_policy: EffectivePolicyResponse | None = None
+
+
+ConfirmActionResponse = PermissionResolveResponse
 
 
 def _effective_policy_response(policy) -> EffectivePolicyResponse:
@@ -84,6 +90,56 @@ def _ensure_session_belongs_to_notebook(session, notebook_id: str) -> None:
             status_code=400,
             detail="Session does not belong to notebook",
         )
+
+
+async def _resolve_permission_request_response(
+    *,
+    session_id: str,
+    request: PermissionResolveRequest,
+    resolve: Callable[..., Awaitable[bool]],
+    session_service: SessionService,
+    policy_service: PolicyPreferenceService,
+    not_found_detail: str,
+) -> PermissionResolveResponse:
+    try:
+        resolved = await resolve(
+            session_id=session_id,
+            request_id=request.request_id,
+            approved=request.approved,
+            response=request.response,
+            suggestion=request.suggestion,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    if not resolved:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+
+    effective_policy = None
+    if request.response in {"always_session", "always_persist"}:
+        try:
+            session = await session_service.get_or_raise(session_id)
+        except SessionNotFoundError:
+            raise HTTPException(status_code=404, detail="Session not found")
+        notebook_id = str(session.notebook_id)
+        if request.response == "always_session":
+            effective_policy = await policy_service.update_session(
+                notebook_id=notebook_id,
+                session_id=session_id,
+                policy="yolo",
+            )
+        else:
+            effective_policy = await policy_service.update_notebook(
+                notebook_id=notebook_id,
+                session_id=session_id,
+                policy="yolo",
+            )
+    return PermissionResolveResponse(
+        status="resolved",
+        effective_policy=_effective_policy_response(effective_policy)
+        if effective_policy is not None
+        else None,
+    )
 
 
 # =============================================================================
@@ -421,6 +477,28 @@ async def cancel_stream(
 
 
 @router.post(
+    "/{session_id}/permission-requests/resolve",
+    response_model=PermissionResolveResponse,
+    response_model_exclude_none=True,
+)
+async def resolve_permission_request(
+    session_id: str,
+    request: PermissionResolveRequest,
+    chat_service: ChatService = Depends(get_chat_service),
+    session_service: SessionService = Depends(get_session_service),
+    policy_service: PolicyPreferenceService = Depends(get_policy_preference_service),
+):
+    return await _resolve_permission_request_response(
+        session_id=session_id,
+        request=request,
+        resolve=chat_service.resolve_permission_request,
+        session_service=session_service,
+        policy_service=policy_service,
+        not_found_detail="Permission request not found",
+    )
+
+
+@router.post(
     "/{session_id}/confirm",
     response_model=ConfirmActionResponse,
     response_model_exclude_none=True,
@@ -432,44 +510,13 @@ async def confirm_action(
     session_service: SessionService = Depends(get_session_service),
     policy_service: PolicyPreferenceService = Depends(get_policy_preference_service),
 ):
-    try:
-        resolved = await chat_service.confirm_action(
-            session_id=session_id,
-            request_id=request.request_id,
-            approved=request.approved,
-            response=request.response,
-            suggestion=request.suggestion,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-    if not resolved:
-        raise HTTPException(status_code=404, detail="Confirmation request not found")
-
-    effective_policy = None
-    if request.response in {"always_session", "always_persist"}:
-        try:
-            session = await session_service.get_or_raise(session_id)
-        except SessionNotFoundError:
-            raise HTTPException(status_code=404, detail="Session not found")
-        notebook_id = str(session.notebook_id)
-        if request.response == "always_session":
-            effective_policy = await policy_service.update_session(
-                notebook_id=notebook_id,
-                session_id=session_id,
-                policy="yolo",
-            )
-        else:
-            effective_policy = await policy_service.update_notebook(
-                notebook_id=notebook_id,
-                session_id=session_id,
-                policy="yolo",
-            )
-    return ConfirmActionResponse(
-        status="resolved",
-        effective_policy=_effective_policy_response(effective_policy)
-        if effective_policy is not None
-        else None,
+    return await _resolve_permission_request_response(
+        session_id=session_id,
+        request=request,
+        resolve=chat_service.confirm_action,
+        session_service=session_service,
+        policy_service=policy_service,
+        not_found_detail="Confirmation request not found",
     )
 
 

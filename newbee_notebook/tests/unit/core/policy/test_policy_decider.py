@@ -60,7 +60,25 @@ def test_yolo_policy_allows_write_tools_but_still_builds_signature():
     assert decision.reason == "yolo policy allows tool execution"
 
 
-def test_default_policy_upgrades_dangerous_bash_commands_to_ask():
+def test_default_policy_upgrades_dangerous_shell_commands_to_ask():
+    decider = PolicyDecider()
+
+    decision = decider.decide(
+        DecideRequest(
+            session_id="s1",
+            tool_name="shell",
+            tool_args={"command": "rm -rf /tmp/demo"},
+            tool_class=ToolClass.SHELL,
+            risk_level=RiskLevel.SAFE,
+        )
+    )
+
+    assert decision.verdict == PolicyVerdict.ASK
+    assert decision.risk_level == RiskLevel.DANGEROUS
+    assert "dangerous shell" in decision.reason
+
+
+def test_policy_coerces_legacy_bash_tool_class_and_name_to_shell():
     decider = PolicyDecider()
 
     decision = decider.decide(
@@ -68,11 +86,11 @@ def test_default_policy_upgrades_dangerous_bash_commands_to_ask():
             session_id="s1",
             tool_name="bash",
             tool_args={"command": "rm -rf /tmp/demo"},
-            tool_class=ToolClass.BASH,
+            tool_class="bash",
             risk_level=RiskLevel.SAFE,
         )
     )
 
+    assert decision.tool_class == ToolClass.SHELL
     assert decision.verdict == PolicyVerdict.ASK
-    assert decision.risk_level == RiskLevel.DANGEROUS
-    assert "dangerous bash" in decision.reason
+    assert decision.capability_signature.startswith("global:shell:")

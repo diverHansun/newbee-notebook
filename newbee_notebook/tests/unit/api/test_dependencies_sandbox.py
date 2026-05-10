@@ -170,8 +170,8 @@ async def test_runtime_builtin_tool_provider_injects_sandbox_executor(monkeypatc
 
     try:
         provider = dependencies.get_runtime_builtin_tool_provider_singleton()
-        bash_tool = next(tool for tool in provider.get_tools("agent") if tool.name == "bash")
-        result = await bash_tool.execute({"command": "echo ok"})
+        shell_tool = next(tool for tool in provider.get_tools("agent") if tool.name == "shell")
+        result = await shell_tool.execute({"command": "echo ok"})
     finally:
         dependencies._runtime_builtin_tool_provider = None
 

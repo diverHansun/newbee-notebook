@@ -1,4 +1,4 @@
-"""Confirmation primitives for pause-and-resume tool execution."""
+"""Permission request primitives for pause-and-resume tool execution."""
 
 from __future__ import annotations
 
@@ -8,32 +8,36 @@ from typing import Any
 
 
 @dataclass
-class PendingConfirmation:
+class PendingPermissionRequest:
     event: asyncio.Event = field(default_factory=asyncio.Event)
     approved: bool = False
     response: Any = False
 
 
-class ConfirmationGateway:
+def _response_is_allowed(response: Any) -> bool:
+    if isinstance(response, bool):
+        return response
+    if isinstance(response, str):
+        return response in {"once", "always_session", "always_persist"}
+    if isinstance(response, dict):
+        value = response.get("approved")
+        if isinstance(value, bool):
+            return value
+        choice = str(response.get("response") or response.get("choice") or "")
+        return choice in {"once", "always_session", "always_persist"}
+    return False
+
+
+class PermissionRequestGateway:
     def __init__(self) -> None:
-        self._pending: dict[str, PendingConfirmation] = {}
+        self._pending: dict[str, PendingPermissionRequest] = {}
 
     def create(self, request_id: str) -> None:
-        self._pending[request_id] = PendingConfirmation()
+        self._pending[request_id] = PendingPermissionRequest()
 
     async def wait(self, request_id: str, timeout: float = 180.0) -> bool:
         response = await self.wait_response(request_id, timeout=timeout)
-        if isinstance(response, bool):
-            return response
-        if isinstance(response, str):
-            return response in {"once", "always_session", "always_persist"}
-        if isinstance(response, dict):
-            value = response.get("approved")
-            if isinstance(value, bool):
-                return value
-            choice = str(response.get("response") or response.get("choice") or "")
-            return choice in {"once", "always_session", "always_persist"}
-        return False
+        return _response_is_allowed(response)
 
     async def wait_response(self, request_id: str, timeout: float = 180.0) -> Any:
         pending = self._pending.get(request_id)
@@ -54,7 +58,7 @@ class ConfirmationGateway:
         pending = self._pending.get(request_id)
         if pending is None:
             return False
-        pending.approved = bool(response)
+        pending.approved = _response_is_allowed(response)
         pending.response = response
         pending.event.set()
         return True

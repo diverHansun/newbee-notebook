@@ -7,7 +7,7 @@ import pytest
 
 from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
-from newbee_notebook.core.engine.stream_events import ConfirmationRequestEvent, ToolResultEvent
+from newbee_notebook.core.engine.stream_events import PermissionRequestEvent, ToolResultEvent
 from newbee_notebook.core.permission import (
     PermissionChoice,
     PermissionRequest,
@@ -98,7 +98,7 @@ class _PromptingPermissionGateway:
         self.calls.append(_PermissionCall("check", request=request))
         return PermissionResponse.needs_confirmation()
 
-    def create_confirmation(self, request_id: str) -> bool:
+    def create_request(self, request_id: str) -> bool:
         self.created.append(request_id)
         return True
 
@@ -116,7 +116,7 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-async def test_policy_ask_uses_permission_allow_without_emitting_confirmation():
+async def test_policy_ask_uses_permission_allow_without_emitting_permission_request():
     execute_payloads: list[dict] = []
 
     async def _execute(payload: dict) -> ToolCallResult:
@@ -149,13 +149,13 @@ async def test_policy_ask_uses_permission_allow_without_emitting_confirmation():
     events = [event async for event in loop.stream(message="write", chat_history=[])]
 
     assert execute_payloads == [{"path": "out.md"}]
-    assert not any(isinstance(event, ConfirmationRequestEvent) for event in events)
+    assert not any(isinstance(event, PermissionRequestEvent) for event in events)
     assert permission_gateway.calls[0].request is not None
     assert permission_gateway.calls[0].request.capability_signature.startswith("global:write_file:")
 
 
 @pytest.mark.anyio
-async def test_policy_ask_records_permission_choice_after_confirmation_event():
+async def test_policy_ask_records_permission_choice_after_permission_request_event():
     execute_payloads: list[dict] = []
 
     async def _execute(payload: dict) -> ToolCallResult:
@@ -187,9 +187,10 @@ async def test_policy_ask_records_permission_choice_after_confirmation_event():
 
     events = [event async for event in loop.stream(message="write", chat_history=[])]
 
-    confirmation_events = [event for event in events if isinstance(event, ConfirmationRequestEvent)]
-    assert len(confirmation_events) == 1
-    assert confirmation_events[0].response_options == [
+    permission_events = [event for event in events if isinstance(event, PermissionRequestEvent)]
+    assert len(permission_events) == 1
+    assert permission_events[0].event == "permission_request"
+    assert permission_events[0].response_options == [
         "once",
         "always_session",
         "always_persist",

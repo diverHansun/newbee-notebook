@@ -468,6 +468,10 @@ export type SseEventConfirmation = {
   response_options?: PermissionResponseChoice[];
 };
 
+export type SseEventPermissionRequest = Omit<SseEventConfirmation, "type"> & {
+  type: "permission_request";
+};
+
 export type SseEventToolCall = {
   type: "tool_call";
   tool_name: string;
@@ -504,6 +508,7 @@ export type SseEvent =
   | SseEventError
   | SseEventHeartbeat
   | SseEventConfirmation
+  | SseEventPermissionRequest
   | SseEventToolCall
   | SseEventToolResult
   | SseEventImageGenerated;

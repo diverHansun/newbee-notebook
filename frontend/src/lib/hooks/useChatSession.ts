@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { chatOnce, confirmChatAction } from "@/lib/api/chat";
+import { chatOnce, resolvePermissionRequest as resolvePermissionRequestApi } from "@/lib/api/chat";
 import {
   ApiListResponse,
   ChatImage,
@@ -17,6 +17,7 @@ import {
   Session,
   SessionMessage,
   SseEventConfirmation,
+  SseEventPermissionRequest,
   SseEventToolResult,
 } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
@@ -53,7 +54,7 @@ function numberFromMetadata(value: unknown): number | null {
 function toolStepUpdateFromResult(event: SseEventToolResult): Partial<ToolStep> {
   const exitCode = numberFromMetadata(event.metadata?.exit_code);
   const isShellBoundaryResult =
-    event.tool_name === "bash" &&
+    (event.tool_name === "bash" || event.tool_name === "shell") &&
     event.error_code === "nonzero_exit";
 
   return {
@@ -729,8 +730,8 @@ export function useChatSession(notebookId: string) {
     return null;
   }, []);
 
-  const trackPermissionRequestFromConfirmationEvent = useCallback(
-    (sessionId: string, assistantLocalId: string, event: SseEventConfirmation) => {
+  const trackPermissionRequestFromEvent = useCallback(
+    (sessionId: string, assistantLocalId: string, event: SseEventConfirmation | SseEventPermissionRequest) => {
       const pendingPermissionRequest = {
         requestId: event.request_id,
         toolName: event.tool_name,
@@ -1202,9 +1203,9 @@ export function useChatSession(notebookId: string) {
                 }
                 return;
               }
-              if (event.type === "confirmation_request") {
+              if (event.type === "confirmation_request" || event.type === "permission_request") {
                 if (activeAssistantIdRef.current) {
-                  trackPermissionRequestFromConfirmationEvent(sessionId, activeAssistantIdRef.current, event);
+                  trackPermissionRequestFromEvent(sessionId, activeAssistantIdRef.current, event);
                 }
                 return;
               }
@@ -1512,7 +1513,7 @@ export function useChatSession(notebookId: string) {
       setStreaming,
       scheduleThinkingTimeout,
       stream,
-      trackPermissionRequestFromConfirmationEvent,
+      trackPermissionRequestFromEvent,
       updateMessageInSession,
       policy.policy,
       t,
@@ -1536,7 +1537,7 @@ export function useChatSession(notebookId: string) {
       });
 
       try {
-        const result = await confirmChatAction(sessionId, {
+        const result = await resolvePermissionRequestApi(sessionId, {
           request_id: requestId,
           response,
         });

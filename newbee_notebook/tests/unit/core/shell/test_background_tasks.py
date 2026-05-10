@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from newbee_notebook.core.sandbox import SandboxRequest, SandboxResult
-from newbee_notebook.core.shell.background_tasks import BackgroundBashTaskManager
+from newbee_notebook.core.shell.background_tasks import (
+    BackgroundShellTaskManager,
+)
 from newbee_notebook.core.shell.environment import ShellEnvironment
 
 pytestmark = pytest.mark.unit
@@ -32,9 +34,9 @@ class FakeSandboxExecutor:
 
 
 @pytest.mark.anyio
-async def test_background_bash_task_completes_and_writes_log(tmp_path: Path):
+async def test_background_shell_task_completes_and_writes_log(tmp_path: Path):
     sandbox = FakeSandboxExecutor()
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
 
     task = await manager.start(
@@ -53,10 +55,10 @@ async def test_background_bash_task_completes_and_writes_log(tmp_path: Path):
 
 
 @pytest.mark.anyio
-async def test_background_bash_task_stop_cancels_running_task(tmp_path: Path):
+async def test_background_shell_task_stop_cancels_running_task(tmp_path: Path):
     sandbox = FakeSandboxExecutor()
     sandbox.block = True
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
 
     task = await manager.start(
@@ -74,10 +76,10 @@ async def test_background_bash_task_stop_cancels_running_task(tmp_path: Path):
 
 
 @pytest.mark.anyio
-async def test_background_bash_task_wait_timeout_does_not_cancel_task(tmp_path: Path):
+async def test_background_shell_task_wait_timeout_does_not_cancel_task(tmp_path: Path):
     sandbox = FakeSandboxExecutor()
     sandbox.block = True
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
 
     task = await manager.start(
@@ -98,11 +100,11 @@ async def test_background_bash_task_wait_timeout_does_not_cancel_task(tmp_path: 
 
 
 @pytest.mark.anyio
-async def test_background_bash_task_immediate_stop_marks_pending_task_stopped(
+async def test_background_shell_task_immediate_stop_marks_pending_task_stopped(
     tmp_path: Path,
 ):
     sandbox = FakeSandboxExecutor()
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
 
     task = await manager.start(
@@ -117,8 +119,8 @@ async def test_background_bash_task_immediate_stop_marks_pending_task_stopped(
     assert "stopped by request" in manager.output(task.task_id).content
 
 
-def test_background_bash_task_list_returns_recent_tasks(tmp_path: Path):
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+def test_background_shell_task_list_returns_recent_tasks(tmp_path: Path):
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     one = manager._make_record(
         task_id="one",
         command="echo one",

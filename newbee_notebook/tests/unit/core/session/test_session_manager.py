@@ -38,6 +38,9 @@ class RecordingLoop:
         mode_config,
         llm_retry_attempts=1,
         tool_argument_defaults=None,
+        permission_required=None,
+        permission_meta=None,
+        permission_request_gateway=None,
         confirmation_required=None,
         confirmation_meta=None,
         confirmation_gateway=None,
@@ -54,6 +57,9 @@ class RecordingLoop:
         self.mode_config = mode_config
         self.llm_retry_attempts = llm_retry_attempts
         self.tool_argument_defaults = tool_argument_defaults
+        self.permission_required = permission_required
+        self.permission_meta = permission_meta
+        self.permission_request_gateway = permission_request_gateway
         self.confirmation_required = confirmation_required
         self.confirmation_meta = confirmation_meta
         self.confirmation_gateway = confirmation_gateway
@@ -464,7 +470,7 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
         parameters={"type": "object", "properties": {}},
         execute=_noop,
     )
-    confirmation_gateway = object()
+    permission_request_gateway = object()
     manager = SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,
@@ -482,16 +488,16 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
         mode_type=ModeType.AGENT,
         external_tools=[external_tool],
         system_prompt_addition="skill prompt",
-        confirmation_required=frozenset({"update_note"}),
-        confirmation_gateway=confirmation_gateway,
+        permission_required=frozenset({"update_note"}),
+        permission_request_gateway=permission_request_gateway,
     )
 
     loop = RecordingLoop.instances[-1]
     call = loop.calls[-1]
     assert call.chat_history[0] == {"role": "system", "content": "prompt:agent\n\nskill prompt"}
     assert [tool.name for tool in loop.tools] == ["list_notes"]
-    assert loop.confirmation_required == frozenset({"update_note"})
-    assert loop.confirmation_gateway is confirmation_gateway
+    assert loop.permission_required == frozenset({"update_note"})
+    assert loop.permission_request_gateway is permission_request_gateway
     assert isinstance(loop.policy_decider, PolicyDecider)
     assert loop.session_id == "s1"
 

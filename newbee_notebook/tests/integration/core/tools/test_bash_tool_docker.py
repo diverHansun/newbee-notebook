@@ -10,11 +10,11 @@ import pytest
 from newbee_notebook.core.sandbox.docker_config import DockerRunConfig
 from newbee_notebook.core.sandbox.docker_executor import DockerSandboxExecutor
 from newbee_notebook.core.sandbox.docker_session import DockerSandboxSessionRegistry
-from newbee_notebook.core.shell import BackgroundBashTaskManager, ShellEnvironment
-from newbee_notebook.core.tools.bash import build_bash_tool
-from newbee_notebook.core.tools.bash_tasks import (
-    build_bash_task_output_tool,
-    build_bash_task_stop_tool,
+from newbee_notebook.core.shell import BackgroundShellTaskManager, ShellEnvironment
+from newbee_notebook.core.tools.shell import build_shell_tool
+from newbee_notebook.core.tools.shell_tasks import (
+    build_shell_task_output_tool,
+    build_shell_task_stop_tool,
 )
 from newbee_notebook.core.tools.filesystem import build_filesystem_tools
 
@@ -51,7 +51,7 @@ async def test_bash_tool_executes_inside_docker_sandbox(tmp_path: Path):
             container_prefix="newbee-sandbox-tool-test",
         )
     )
-    tool = build_bash_tool(
+    tool = build_shell_tool(
         ShellEnvironment(
             cwd=tmp_path,
             workspace_roots=(tmp_path,),
@@ -84,7 +84,7 @@ async def test_bash_tool_reuses_warm_container_with_shared_work_dir(tmp_path: Pa
     )
     registry = DockerSandboxSessionRegistry(config=config)
     sandbox = DockerSandboxExecutor(config=config, session_registry=registry)
-    tool = build_bash_tool(
+    tool = build_shell_tool(
         ShellEnvironment(
             cwd=workspace,
             workspace_roots=(workspace,),
@@ -136,11 +136,11 @@ async def test_bash_and_filesystem_tools_share_notebook_work_view(tmp_path: Path
         allow_workspace_write=False,
         timeout_seconds=10,
     )
-    bash = build_bash_tool(environment, sandbox_executor=sandbox)
+    shell = build_shell_tool(environment, sandbox_executor=sandbox)
     fs_tools = {tool.name: tool for tool in build_filesystem_tools(environment)}
 
     try:
-        created = await bash.execute(
+        created = await shell.execute(
             {
                 "command": "printf 'alpha needle\\n' > /work/from-bash.txt",
                 "timeout_seconds": 10,
@@ -168,7 +168,7 @@ async def test_bash_and_filesystem_tools_share_notebook_work_view(tmp_path: Path
         workspace_write = await fs_tools["write_file"].execute(
             {"path": "/workspace/host.md", "content": "mutated"}
         )
-        verify = await bash.execute(
+        verify = await shell.execute(
             {
                 "command": "cat /work/from-bash.txt /work/from-write.txt",
                 "timeout_seconds": 10,
@@ -218,16 +218,16 @@ async def test_bash_tool_background_task_runs_in_warm_container(tmp_path: Path):
         allow_workspace_write=False,
         timeout_seconds=10,
     )
-    manager = BackgroundBashTaskManager(tasks_root=work_dir / ".tasks")
-    bash = build_bash_tool(
+    manager = BackgroundShellTaskManager(tasks_root=work_dir / ".tasks")
+    shell = build_shell_tool(
         environment,
         sandbox_executor=sandbox,
         background_task_manager=manager,
     )
-    output_tool = build_bash_task_output_tool(manager)
+    output_tool = build_shell_task_output_tool(manager)
 
     try:
-        started = await bash.execute(
+        started = await shell.execute(
             {
                 "command": "sleep 1; echo bg-done > /work/bg.txt; echo bg-out",
                 "background": True,
@@ -238,7 +238,7 @@ async def test_bash_tool_background_task_runs_in_warm_container(tmp_path: Path):
         task_id = started.metadata["task_id"]
         completed = await manager.wait(task_id, timeout_seconds=15)
         output = await output_tool.execute({"task_id": task_id})
-        verify = await bash.execute({"command": "cat /work/bg.txt", "timeout_seconds": 10})
+        verify = await shell.execute({"command": "cat /work/bg.txt", "timeout_seconds": 10})
     finally:
         await registry.stop("notebook-bg")
 
@@ -275,15 +275,15 @@ async def test_bash_task_stop_cancels_warm_container_command(tmp_path: Path):
         allow_workspace_write=False,
         timeout_seconds=30,
     )
-    manager = BackgroundBashTaskManager(tasks_root=work_dir / ".tasks")
-    bash = build_bash_tool(
+    manager = BackgroundShellTaskManager(tasks_root=work_dir / ".tasks")
+    shell = build_shell_tool(
         environment,
         sandbox_executor=sandbox,
         background_task_manager=manager,
     )
-    stop_tool = build_bash_task_stop_tool(manager)
+    stop_tool = build_shell_task_stop_tool(manager)
 
-    started = await bash.execute(
+    started = await shell.execute(
         {
             "command": "sleep 30",
             "background": True,

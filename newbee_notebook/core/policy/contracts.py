@@ -16,7 +16,7 @@ class ToolClass(StrEnum):
     READ = "read"
     WRITE = "write"
     EDIT = "edit"
-    BASH = "bash"
+    SHELL = "shell"
     MCP = "mcp"
     CUSTOM = "custom"
 

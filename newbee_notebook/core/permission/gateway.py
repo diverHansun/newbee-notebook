@@ -10,12 +10,12 @@ from newbee_notebook.core.permission.contracts import (
     PermissionRequest,
     PermissionResponse,
 )
-from newbee_notebook.core.permission.dispatcher import ConfirmationDispatcher
+from newbee_notebook.core.permission.dispatcher import PermissionRequestDispatcher
 from newbee_notebook.core.permission.recorder import DecisionRecorder
 from newbee_notebook.core.permission.session_cache import SessionAllowCache
 
 if TYPE_CHECKING:
-    from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+    from newbee_notebook.core.permission.request_gateway import PermissionRequestGateway
 
 
 class PermissionGateway:
@@ -24,13 +24,15 @@ class PermissionGateway:
         *,
         allow_store: AllowStore,
         session_cache: SessionAllowCache | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
-        dispatcher: ConfirmationDispatcher | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
+        dispatcher: PermissionRequestDispatcher | None = None,
         recorder: DecisionRecorder | None = None,
     ) -> None:
         self._allow_store = allow_store
         self._session_cache = session_cache or SessionAllowCache()
-        self._dispatcher = dispatcher or ConfirmationDispatcher(confirmation_gateway)
+        gateway = permission_request_gateway or confirmation_gateway
+        self._dispatcher = dispatcher or PermissionRequestDispatcher(gateway)
         self._recorder = recorder or DecisionRecorder(
             allow_store=allow_store,
             session_cache=self._session_cache,
@@ -47,10 +49,13 @@ class PermissionGateway:
         except Exception:
             # DB read failures are treated as a miss, then the request enters ASK.
             pass
-        return PermissionResponse.needs_confirmation(reason="allow_not_found")
+        return PermissionResponse.needs_permission(reason="allow_not_found")
+
+    def create_request(self, request_id: str) -> bool:
+        return self._dispatcher.create(request_id)
 
     def create_confirmation(self, request_id: str) -> bool:
-        return self._dispatcher.create(request_id)
+        return self.create_request(request_id)
 
     async def wait_for_choice(
         self,

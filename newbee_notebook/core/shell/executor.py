@@ -1,4 +1,4 @@
-"""Shell adapter that turns bash requests into sandbox requests."""
+"""Shell adapter that turns shell requests into sandbox requests."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ShellExecutor:
         self._environment = environment
         self._sandbox_executor = sandbox_executor or UnavailableSandboxExecutor()
 
-    async def execute_bash(
+    async def execute_shell(
         self,
         command: str,
         *,
@@ -69,6 +69,14 @@ class ShellExecutor:
                 stderr=str(exc),
             )
         return ShellExecutionResult.from_sandbox(sandbox_result)
+
+    async def execute_bash(
+        self,
+        command: str,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ShellExecutionResult:
+        return await self.execute_shell(command, timeout_seconds=timeout_seconds)
 
     def _effective_timeout(self, timeout_seconds: float | None) -> float:
         default_timeout = float(self._environment.timeout_seconds)

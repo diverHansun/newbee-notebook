@@ -14,7 +14,7 @@ from newbee_notebook.api.routers.chat import router as chat_router
 from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.session_service import SessionService
 from newbee_notebook.core.engine.agent_loop import AgentLoop
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+from newbee_notebook.core.permission import PermissionRequestGateway
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.skills import SkillContext, SkillManifest
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
@@ -652,7 +652,7 @@ def test_stream_diagram_command_requires_operation_tool_before_done():
 @pytest.mark.integration
 def test_confirm_endpoint_resolves_pending_request_and_returns_404_after_consumed():
     session_id = "session-confirm-approve"
-    confirmation_gateway = ConfirmationGateway()
+    confirmation_gateway = PermissionRequestGateway()
     confirmation_gateway.create("req-approve")
 
     client, _, _, _, _, _ = _build_client(
@@ -683,7 +683,7 @@ def test_confirm_endpoint_resolves_pending_request_and_returns_404_after_consume
 def test_confirm_endpoint_returns_404_when_session_not_found():
     client, _, _, _, _, _ = _build_client(
         llm_client=_FakeLLMClient(chat_responses=[], stream_chunks=[]),
-        confirmation_gateway=ConfirmationGateway(),
+        confirmation_gateway=PermissionRequestGateway(),
     )
 
     response = client.post(
@@ -693,6 +693,3 @@ def test_confirm_endpoint_returns_404_when_session_not_found():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Session not found: missing-session"
-
-
-

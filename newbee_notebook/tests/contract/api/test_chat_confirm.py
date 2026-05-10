@@ -96,6 +96,40 @@ def test_confirm_endpoint_accepts_legacy_boolean_approval():
     )
 
 
+def test_permission_resolve_endpoint_accepts_response_choice():
+    chat_service = AsyncMock()
+    chat_service.resolve_permission_request = AsyncMock(return_value=True)
+    policy_service = _FakePolicyService()
+    client = _build_client(chat_service, policy_service)
+
+    response = client.post(
+        "/api/v1/chat/session-1/permission-requests/resolve",
+        json={"request_id": "req-1", "response": "always_session"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "resolved"
+    chat_service.resolve_permission_request.assert_awaited_once_with(
+        session_id="session-1",
+        request_id="req-1",
+        approved=None,
+        response="always_session",
+        suggestion=None,
+    )
+
+
+def test_permission_resolve_endpoint_uses_permission_response_schema():
+    chat_service = AsyncMock()
+    client = _build_client(chat_service)
+
+    response = client.get("/openapi.json")
+
+    schema_ref = response.json()["paths"][
+        "/api/v1/chat/{session_id}/permission-requests/resolve"
+    ]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    assert schema_ref.endswith("/PermissionResolveResponse")
+
+
 def test_confirm_endpoint_accepts_permission_response_choice():
     chat_service = AsyncMock()
     chat_service.confirm_action = AsyncMock(return_value=True)

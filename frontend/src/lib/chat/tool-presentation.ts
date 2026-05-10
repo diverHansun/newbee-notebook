@@ -2,6 +2,7 @@ import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 
 const TOOL_LABELS: Record<string, LocalizedString> = {
   bash: uiStrings.tools.shell,
+  shell: uiStrings.tools.shell,
   read_file: uiStrings.tools.readFile,
   grep_files: uiStrings.tools.grepFiles,
   glob_files: uiStrings.tools.globFiles,

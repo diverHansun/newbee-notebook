@@ -183,9 +183,10 @@ def test_note_skill_provider_builds_manifest_with_expected_tools(note_service, m
 
     assert manifest.name == "note"
     assert manifest.slash_command == "/note"
-    assert manifest.confirmation_required == frozenset(
+    assert manifest.permission_required == frozenset(
         {"update_note", "delete_note", "disassociate_note_document"}
     )
+    assert manifest.permission_meta["update_note"].action_type == "update"
     assert manifest.force_first_tool_call is True
     assert [tool.name for tool in manifest.tools] == [
         "list_notes",
@@ -199,4 +200,4 @@ def test_note_skill_provider_builds_manifest_with_expected_tools(note_service, m
     ]
     assert "use the available note and mark tools" in manifest.system_prompt_addition.lower()
     assert "do not ask the user to confirm in plain text" in manifest.system_prompt_addition.lower()
-    assert "runtime confirmation flow" in manifest.system_prompt_addition.lower()
+    assert "runtime permission request flow" in manifest.system_prompt_addition.lower()

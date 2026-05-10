@@ -14,7 +14,7 @@ const listSessionMessages = vi.fn();
 const createSession = vi.fn();
 const deleteSession = vi.fn();
 const chatOnce = vi.fn();
-const confirmChatAction = vi.fn();
+const resolvePermissionRequestApi = vi.fn();
 const getEffectivePolicy = vi.fn();
 const updatePolicyPreference = vi.fn();
 const startStream = vi.fn();
@@ -29,7 +29,7 @@ vi.mock("@/lib/api/sessions", () => ({
 
 vi.mock("@/lib/api/chat", () => ({
   chatOnce: (...args: unknown[]) => chatOnce(...args),
-  confirmChatAction: (...args: unknown[]) => confirmChatAction(...args),
+  resolvePermissionRequest: (...args: unknown[]) => resolvePermissionRequestApi(...args),
 }));
 
 vi.mock("@/lib/api/policy", () => ({
@@ -108,7 +108,7 @@ describe("useChatSession", () => {
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
-    confirmChatAction.mockReset();
+    resolvePermissionRequestApi.mockReset();
     getEffectivePolicy.mockReset();
     updatePolicyPreference.mockReset();
     cancelStream.mockReset();
@@ -126,7 +126,7 @@ describe("useChatSession", () => {
         source: update.policy === "yolo" ? update.scope : "default",
       })
     );
-    confirmChatAction.mockResolvedValue({ status: "resolved" });
+    resolvePermissionRequestApi.mockResolvedValue({ status: "resolved" });
     startStream.mockImplementation(
       async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
         callbacks?.onEvent?.({ type: "start", message_id: 123 });
@@ -161,6 +161,43 @@ describe("useChatSession", () => {
       const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
       expect(assistantMessage?.pendingPermissionRequest?.requestId).toBe("req-1");
       expect(assistantMessage?.pendingPermissionRequest?.argsSummary.note_id).toBe("note-1");
+      expect(assistantMessage?.pendingPermissionRequest?.status).toBe("pending");
+    });
+  });
+
+  it("stores pending permission request when the stream emits a permission request", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 124 });
+        callbacks?.onEvent?.({
+          type: "permission_request",
+          request_id: "req-permission",
+          tool_name: "shell",
+          action_type: "confirm",
+          target_type: "shell",
+          args_summary: { command: "echo ok" },
+          description: "Agent requested to run shell",
+        } as never);
+      }
+    );
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run a shell command", "agent");
+    });
+
+    await waitFor(() => {
+      const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
+      expect(assistantMessage?.pendingPermissionRequest?.requestId).toBe("req-permission");
+      expect(assistantMessage?.pendingPermissionRequest?.toolName).toBe("shell");
+      expect(assistantMessage?.pendingPermissionRequest?.argsSummary.command).toBe("echo ok");
       expect(assistantMessage?.pendingPermissionRequest?.status).toBe("pending");
     });
   });
@@ -374,7 +411,7 @@ describe("useChatSession", () => {
   });
 
   it("resolves always_session and updates session policy", async () => {
-    confirmChatAction.mockResolvedValueOnce({
+    resolvePermissionRequestApi.mockResolvedValueOnce({
       status: "resolved",
       effective_policy: {
         notebook_id: "nb-1",
@@ -399,7 +436,7 @@ describe("useChatSession", () => {
       await result.current.resolvePermissionRequest("req-1", "always_session");
     });
 
-    expect(confirmChatAction).toHaveBeenCalledWith("session-1", {
+    expect(resolvePermissionRequestApi).toHaveBeenCalledWith("session-1", {
       request_id: "req-1",
       response: "always_session",
     });

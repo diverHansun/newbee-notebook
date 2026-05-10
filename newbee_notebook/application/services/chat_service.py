@@ -36,12 +36,12 @@ from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.core.engine.stream_events import (
-    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
     ImageGeneratedEvent,
     IntermediateContentEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -51,6 +51,7 @@ from newbee_notebook.core.engine.stream_events import (
 )
 from newbee_notebook.core.skills import SkillContext, SkillRegistry
 from newbee_notebook.core.policy import SkillPolicyContext
+from newbee_notebook.core.permission import PermissionRequestGateway
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools.contracts import ToolDefinition
 from newbee_notebook.core.tools.image_generation import (
@@ -60,7 +61,6 @@ from newbee_notebook.core.tools.image_generation import (
 )
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
@@ -127,7 +127,8 @@ class ChatService:
         vector_index: Any = None,
         vector_index_loader: Callable[[], Awaitable[Any]] | None = None,
         skill_registry: SkillRegistry | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         chat_image_service: Any = None,
         vision_policy: VisionPolicy | None = None,
     ):
@@ -143,7 +144,10 @@ class ChatService:
         self._vector_index = vector_index
         self._vector_index_loader = vector_index_loader
         self._skill_registry = skill_registry
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_request_gateway = (
+            permission_request_gateway or confirmation_gateway
+        )
+        self._confirmation_gateway = self._permission_request_gateway
         self._chat_image_service = chat_image_service
         self._vision_policy = vision_policy or VisionPolicy()
 
@@ -396,8 +400,8 @@ class ChatService:
             runtime_mode_enum,
             external_tools,
             system_prompt_addition,
-            confirmation_required,
-            confirmation_meta,
+            permission_required,
+            permission_meta,
             force_first_tool_call,
             required_tool_call_before_response,
             skill_policy_context,
@@ -470,11 +474,11 @@ class ChatService:
             include_ec_context=effective_include_ec_context,
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
-            confirmation_required=confirmation_required,
-            confirmation_meta=confirmation_meta,
+            permission_required=permission_required,
+            permission_meta=permission_meta,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
-            confirmation_gateway=self._confirmation_gateway,
+            permission_request_gateway=self._permission_request_gateway,
             skill_context=skill_policy_context,
             lang=lang,
             image_contents=image_contents,
@@ -623,8 +627,8 @@ class ChatService:
             runtime_mode_enum,
             external_tools,
             system_prompt_addition,
-            confirmation_required,
-            confirmation_meta,
+            permission_required,
+            permission_meta,
             force_first_tool_call,
             required_tool_call_before_response,
             skill_policy_context,
@@ -703,12 +707,12 @@ class ChatService:
                 include_ec_context=effective_include_ec_context,
                 external_tools=external_tools,
                 system_prompt_addition=system_prompt_addition,
-                confirmation_required=confirmation_required,
-                confirmation_meta=confirmation_meta,
+                permission_required=permission_required,
+                permission_meta=permission_meta,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
                 skill_context=skill_policy_context,
-                confirmation_gateway=self._confirmation_gateway,
+                permission_request_gateway=self._permission_request_gateway,
                 lang=lang,
                 image_contents=image_contents,
                 model_override=model_override,
@@ -770,9 +774,9 @@ class ChatService:
                         "tool_name": event.tool_name,
                     }
                     continue
-                if isinstance(event, ConfirmationRequestEvent):
+                if isinstance(event, PermissionRequestEvent):
                     yield {
-                        "type": "confirmation_request",
+                        "type": "permission_request",
                         "request_id": event.request_id,
                         "tool_name": event.tool_name,
                         "action_type": event.action_type,
@@ -966,14 +970,14 @@ class ChatService:
             ModeType.AGENT,
             list(manifest.tools),
             manifest.system_prompt_addition,
-            manifest.confirmation_required,
-            manifest.confirmation_meta,
+            manifest.permission_required,
+            manifest.permission_meta,
             manifest.force_first_tool_call,
             manifest.required_tool_call_before_response,
             skill_policy_context,
         )
 
-    async def confirm_action(
+    async def resolve_permission_request(
         self,
         session_id: str,
         request_id: str,
@@ -984,11 +988,11 @@ class ChatService:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        if not self._confirmation_gateway:
+        if not self._permission_request_gateway:
             return False
         if response is not None:
             return bool(
-                self._confirmation_gateway.resolve_response(
+                self._permission_request_gateway.resolve_response(
                     request_id,
                     {
                         "response": response,
@@ -998,7 +1002,23 @@ class ChatService:
             )
         if approved is None:
             return False
-        return bool(self._confirmation_gateway.resolve(request_id, approved))
+        return bool(self._permission_request_gateway.resolve(request_id, approved))
+
+    async def confirm_action(
+        self,
+        session_id: str,
+        request_id: str,
+        approved: bool | None = None,
+        response: str | None = None,
+        suggestion: str | None = None,
+    ) -> bool:
+        return await self.resolve_permission_request(
+            session_id=session_id,
+            request_id=request_id,
+            approved=approved,
+            response=response,
+            suggestion=suggestion,
+        )
 
     async def prevalidate_mode_requirements(
         self,

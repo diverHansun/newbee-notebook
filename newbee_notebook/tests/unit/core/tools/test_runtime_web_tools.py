@@ -14,7 +14,10 @@ FILESYSTEM_TOOL_NAMES = [
     "grep_files",
     "edit_file",
     "write_file",
-    "bash",
+    "shell",
+    "shell_task_list",
+    "shell_task_output",
+    "shell_task_stop",
 ]
 
 

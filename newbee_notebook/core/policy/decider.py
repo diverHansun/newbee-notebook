@@ -25,8 +25,11 @@ def _coerce_agent_policy(value: AgentPolicy | str | None) -> AgentPolicy:
 
 
 def _coerce_tool_class(value: ToolClass | str) -> ToolClass:
+    raw = str(value).strip().lower()
+    if raw == "bash":
+        return ToolClass.SHELL
     try:
-        return ToolClass(str(value).strip().lower())
+        return ToolClass(raw)
     except ValueError:
         return ToolClass.CUSTOM
 
@@ -36,6 +39,11 @@ def _coerce_risk_level(value: RiskLevel | str) -> RiskLevel:
         return RiskLevel(str(value).strip().lower())
     except ValueError:
         return RiskLevel.MODERATE
+
+
+def _canonical_tool_name(tool_name: str) -> str:
+    raw = str(tool_name or "").strip()
+    return "shell" if raw.lower() == "bash" else raw
 
 
 class DangerousCommandMatcher:
@@ -75,7 +83,7 @@ class DecisionMatrix:
             return PolicyVerdict.ALLOW
         if tool_class == ToolClass.READ:
             return PolicyVerdict.ALLOW
-        if tool_class == ToolClass.BASH:
+        if tool_class == ToolClass.SHELL:
             return (
                 PolicyVerdict.ASK
                 if risk_level == RiskLevel.DANGEROUS
@@ -109,7 +117,9 @@ class PolicyDecider:
         tool_class = _coerce_tool_class(request.tool_class)
         risk_level = _coerce_risk_level(request.risk_level)
 
-        if agent_policy != AgentPolicy.YOLO and tool_class == ToolClass.BASH:
+        tool_name = _canonical_tool_name(request.tool_name)
+
+        if agent_policy != AgentPolicy.YOLO and tool_class == ToolClass.SHELL:
             command = str(request.tool_args.get("command") or "")
             risk_level = self._dangerous_command_matcher.maybe_upgrade(
                 command=command,
@@ -122,7 +132,7 @@ class PolicyDecider:
             risk_level=risk_level,
         )
         signature = self._signature_builder.build(
-            tool_name=request.tool_name,
+            tool_name=tool_name,
             tool_args=request.tool_args,
             skill_context=request.skill_context,
         )
@@ -150,8 +160,8 @@ class PolicyDecider:
     ) -> str:
         if agent_policy == AgentPolicy.YOLO:
             return "yolo policy allows tool execution"
-        if tool_class == ToolClass.BASH and risk_level == RiskLevel.DANGEROUS:
-            return "default policy requires approval for dangerous bash tools"
+        if tool_class == ToolClass.SHELL and risk_level == RiskLevel.DANGEROUS:
+            return "default policy requires approval for dangerous shell tools"
         if verdict == PolicyVerdict.ALLOW:
             return f"default policy allows {tool_class.value} tools"
         return f"default policy requires approval for {tool_class.value} tools"

@@ -1,16 +1,16 @@
-"""Agent-visible tools for background bash tasks."""
+"""Agent-visible tools for background shell tasks."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
-from newbee_notebook.core.shell import BackgroundBashTaskManager
+from newbee_notebook.core.shell import BackgroundShellTaskManager
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 
 
-def build_bash_task_output_tool(
-    manager: BackgroundBashTaskManager,
+def build_shell_task_output_tool(
+    manager: BackgroundShellTaskManager,
 ) -> ToolDefinition:
     async def _execute(args: dict[str, Any]) -> ToolCallResult:
         task_id = str(args.get("task_id") or "").strip()
@@ -32,8 +32,8 @@ def build_bash_task_output_tool(
         )
 
     return ToolDefinition(
-        name="bash_task_output",
-        description="Read the output log for a background bash task.",
+        name="shell_task_output",
+        description="Read the output log for a background shell task.",
         parameters={
             "type": "object",
             "properties": {
@@ -48,8 +48,8 @@ def build_bash_task_output_tool(
     )
 
 
-def build_bash_task_stop_tool(
-    manager: BackgroundBashTaskManager,
+def build_shell_task_stop_tool(
+    manager: BackgroundShellTaskManager,
 ) -> ToolDefinition:
     async def _execute(args: dict[str, Any]) -> ToolCallResult:
         task_id = str(args.get("task_id") or "").strip()
@@ -65,22 +65,22 @@ def build_bash_task_stop_tool(
         )
 
     return ToolDefinition(
-        name="bash_task_stop",
-        description="Stop a running background bash task.",
+        name="shell_task_stop",
+        description="Stop a running background shell task.",
         parameters={
             "type": "object",
             "properties": {"task_id": {"type": "string"}},
             "required": ["task_id"],
         },
         execute=_execute,
-        tool_class=ToolClass.BASH,
+        tool_class=ToolClass.SHELL,
         risk_level=RiskLevel.MODERATE,
         sandbox_required=True,
     )
 
 
-def build_bash_task_list_tool(
-    manager: BackgroundBashTaskManager,
+def build_shell_task_list_tool(
+    manager: BackgroundShellTaskManager,
 ) -> ToolDefinition:
     async def _execute(args: dict[str, Any]) -> ToolCallResult:
         try:
@@ -89,7 +89,7 @@ def build_bash_task_list_tool(
             return ToolCallResult(content="limit must be an integer", error="invalid_limit")
         records = manager.list_tasks(limit=limit)
         if not records:
-            return ToolCallResult(content="No background bash tasks.")
+            return ToolCallResult(content="No background shell tasks.")
         lines = [
             f"{record.task_id}\t{record.status}\texit={record.exit_code}\t{record.description}"
             for record in records
@@ -111,8 +111,8 @@ def build_bash_task_list_tool(
         )
 
     return ToolDefinition(
-        name="bash_task_list",
-        description="List recent background bash tasks.",
+        name="shell_task_list",
+        description="List recent background shell tasks.",
         parameters={
             "type": "object",
             "properties": {"limit": {"type": "integer", "default": 20}},

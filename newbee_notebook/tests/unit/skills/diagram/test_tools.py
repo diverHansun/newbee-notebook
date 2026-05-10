@@ -187,9 +187,10 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
             "read_diagram",
         }
     )
-    assert manifest.confirmation_required == frozenset(
+    assert manifest.permission_required == frozenset(
         {"confirm_diagram_type", "update_diagram", "delete_diagram"}
     )
+    assert manifest.permission_meta["update_diagram"].action_type == "update"
     assert "create_diagram" in manifest.system_prompt_addition
     assert "Mermaid" in manifest.system_prompt_addition
     assert "If notebook documents are unavailable" in manifest.system_prompt_addition

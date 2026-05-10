@@ -8,17 +8,23 @@ from newbee_notebook.core.permission.contracts import (
     PermissionResponseKind,
     RejectionWithSuggestion,
 )
-from newbee_notebook.core.permission.dispatcher import ConfirmationDispatcher
+from newbee_notebook.core.permission.dispatcher import PermissionRequestDispatcher
 from newbee_notebook.core.permission.gateway import PermissionGateway
 from newbee_notebook.core.permission.recorder import DecisionRecorder
+from newbee_notebook.core.permission.request_gateway import (
+    PendingPermissionRequest,
+    PermissionRequestGateway,
+)
 from newbee_notebook.core.permission.session_cache import SessionAllowCache
 
 __all__ = [
     "AllowStore",
-    "ConfirmationDispatcher",
     "DecisionRecorder",
+    "PendingPermissionRequest",
     "PermissionChoice",
     "PermissionGateway",
+    "PermissionRequestDispatcher",
+    "PermissionRequestGateway",
     "PermissionRequest",
     "PermissionResponse",
     "PermissionResponseKind",

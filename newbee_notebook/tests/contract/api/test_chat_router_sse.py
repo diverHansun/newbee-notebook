@@ -36,9 +36,9 @@ def test_sse_event_warning_formats_payload():
     )
 
 
-def test_sse_event_confirmation_request_formats_payload():
+def test_sse_event_permission_request_formats_payload():
     assert SSEEvent.format(
-        "confirmation_request",
+        "permission_request",
         {
             "request_id": "req-1",
             "tool_name": "delete_note",
@@ -46,7 +46,7 @@ def test_sse_event_confirmation_request_formats_payload():
             "description": "Agent requested to run delete_note",
         },
     ) == (
-        'data: {"type": "confirmation_request", "request_id": "req-1", '
+        'data: {"type": "permission_request", "request_id": "req-1", '
         '"tool_name": "delete_note", "args_summary": {"note_id": "n1"}, '
         '"description": "Agent requested to run delete_note"}\n\n'
     )

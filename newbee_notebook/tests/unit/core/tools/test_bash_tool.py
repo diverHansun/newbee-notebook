@@ -6,12 +6,12 @@ import pytest
 
 from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.sandbox import SandboxRequest, SandboxResult
-from newbee_notebook.core.shell import BackgroundBashTaskManager, ShellEnvironment
-from newbee_notebook.core.tools.bash import build_bash_tool
-from newbee_notebook.core.tools.bash_tasks import (
-    build_bash_task_list_tool,
-    build_bash_task_output_tool,
-    build_bash_task_stop_tool,
+from newbee_notebook.core.shell import BackgroundShellTaskManager, ShellEnvironment
+from newbee_notebook.core.tools.shell import build_shell_tool
+from newbee_notebook.core.tools.shell_tasks import (
+    build_shell_task_list_tool,
+    build_shell_task_output_tool,
+    build_shell_task_stop_tool,
 )
 
 pytestmark = pytest.mark.unit
@@ -33,16 +33,17 @@ class RecordingSandboxExecutor:
 
 
 @pytest.mark.anyio
-async def test_bash_tool_exposes_policy_metadata_and_delegates_to_sandbox(tmp_path: Path):
+async def test_shell_tool_exposes_policy_metadata_and_delegates_to_sandbox(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
-    tool = build_bash_tool(
+    tool = build_shell_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=sandbox,
     )
 
     result = await tool.execute({"command": "echo hello", "timeout_seconds": 3})
 
-    assert tool.tool_class == ToolClass.BASH
+    assert tool.name == "shell"
+    assert tool.tool_class == ToolClass.SHELL
     assert tool.risk_level == RiskLevel.DANGEROUS
     assert tool.sandbox_required is True
     assert result.error is None
@@ -53,8 +54,8 @@ async def test_bash_tool_exposes_policy_metadata_and_delegates_to_sandbox(tmp_pa
 
 
 @pytest.mark.anyio
-async def test_bash_tool_fails_closed_when_no_sandbox_executor_is_configured(tmp_path: Path):
-    tool = build_bash_tool(ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)))
+async def test_shell_tool_fails_closed_when_no_sandbox_executor_is_configured(tmp_path: Path):
+    tool = build_shell_tool(ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)))
 
     result = await tool.execute({"command": "echo hello"})
 
@@ -62,10 +63,10 @@ async def test_bash_tool_fails_closed_when_no_sandbox_executor_is_configured(tmp
 
 
 @pytest.mark.anyio
-async def test_bash_tool_starts_background_task_when_manager_is_configured(tmp_path: Path):
+async def test_shell_tool_starts_background_task_when_manager_is_configured(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
-    tool = build_bash_tool(
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
+    tool = build_shell_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=sandbox,
         background_task_manager=manager,
@@ -85,8 +86,8 @@ async def test_bash_tool_starts_background_task_when_manager_is_configured(tmp_p
     assert completed.status == "completed"
 
 
-def test_bash_tool_schema_requires_description_for_background_tasks(tmp_path: Path):
-    tool = build_bash_tool(
+def test_shell_tool_schema_requires_description_for_background_tasks(tmp_path: Path):
+    tool = build_shell_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=RecordingSandboxExecutor(),
     )
@@ -101,9 +102,9 @@ def test_bash_tool_schema_requires_description_for_background_tasks(tmp_path: Pa
 
 
 @pytest.mark.anyio
-async def test_bash_task_tools_list_output_and_stop(tmp_path: Path):
+async def test_shell_task_tools_list_output_and_stop(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
-    manager = BackgroundBashTaskManager(tasks_root=tmp_path / "tasks")
+    manager = BackgroundShellTaskManager(tasks_root=tmp_path / "tasks")
     environment = ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
     task = await manager.start(
         command="echo hello",
@@ -112,9 +113,9 @@ async def test_bash_task_tools_list_output_and_stop(tmp_path: Path):
         sandbox_executor=sandbox,
     )
     await manager.wait(task.task_id, timeout_seconds=2)
-    list_tool = build_bash_task_list_tool(manager)
-    output_tool = build_bash_task_output_tool(manager)
-    stop_tool = build_bash_task_stop_tool(manager)
+    list_tool = build_shell_task_list_tool(manager)
+    output_tool = build_shell_task_output_tool(manager)
+    stop_tool = build_shell_task_stop_tool(manager)
 
     listed = await list_tool.execute({})
     output = await output_tool.execute({"task_id": task.task_id})
@@ -129,14 +130,14 @@ async def test_bash_task_tools_list_output_and_stop(tmp_path: Path):
 
 
 @pytest.mark.anyio
-async def test_bash_tool_maps_timeout_and_nonzero_exit(tmp_path: Path):
-    timeout_tool = build_bash_tool(
+async def test_shell_tool_maps_timeout_and_nonzero_exit(tmp_path: Path):
+    timeout_tool = build_shell_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=RecordingSandboxExecutor(
             SandboxResult(exit_code=None, stdout="partial", timed_out=True)
         ),
     )
-    nonzero_tool = build_bash_tool(
+    nonzero_tool = build_shell_tool(
         ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=RecordingSandboxExecutor(
             SandboxResult(exit_code=2, stderr="bad command")

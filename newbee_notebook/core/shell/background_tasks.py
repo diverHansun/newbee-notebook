@@ -1,4 +1,4 @@
-"""In-process background bash task manager."""
+"""In-process background shell task manager."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from newbee_notebook.core.shell.executor import ShellExecutor
 
 
 @dataclass(frozen=True)
-class BackgroundBashTaskRecord:
+class BackgroundShellTaskRecord:
     task_id: str
     command: str
     description: str
@@ -28,7 +28,7 @@ class BackgroundBashTaskRecord:
 
 
 @dataclass(frozen=True)
-class BackgroundBashTaskOutput:
+class BackgroundShellTaskOutput:
     task_id: str
     status: str
     log_path: Path
@@ -36,8 +36,8 @@ class BackgroundBashTaskOutput:
     truncated: bool = False
 
 
-class BackgroundBashTaskManager:
-    """Manage notebook-scoped background bash tasks."""
+class BackgroundShellTaskManager:
+    """Manage notebook-scoped background shell tasks."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ class BackgroundBashTaskManager:
     ) -> None:
         self._tasks_root = Path(tasks_root).expanduser().resolve(strict=False)
         self._clock = clock
-        self._records: dict[str, BackgroundBashTaskRecord] = {}
+        self._records: dict[str, BackgroundShellTaskRecord] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
@@ -62,13 +62,13 @@ class BackgroundBashTaskManager:
         environment: ShellEnvironment,
         sandbox_executor: SandboxExecutor | None,
         timeout_seconds: float | None = None,
-    ) -> BackgroundBashTaskRecord:
+    ) -> BackgroundShellTaskRecord:
         normalized_command = str(command or "").strip()
         normalized_description = str(description or "").strip()
         if not normalized_command:
             raise ValueError("command is required")
         if not normalized_description:
-            raise ValueError("description is required for background bash tasks")
+            raise ValueError("description is required for background shell tasks")
 
         task_id = uuid.uuid4().hex
         record = self._make_record(
@@ -93,14 +93,14 @@ class BackgroundBashTaskManager:
         self._tasks[task_id] = task
         return record
 
-    def get(self, task_id: str) -> BackgroundBashTaskRecord:
+    def get(self, task_id: str) -> BackgroundShellTaskRecord:
         normalized = _normalize_task_id(task_id)
         try:
             return self._records[normalized]
         except KeyError as exc:
             raise KeyError(f"background task not found: {normalized}") from exc
 
-    def list_tasks(self, *, limit: int = 20) -> list[BackgroundBashTaskRecord]:
+    def list_tasks(self, *, limit: int = 20) -> list[BackgroundShellTaskRecord]:
         records = sorted(
             self._records.values(),
             key=lambda item: item.created_at,
@@ -113,13 +113,13 @@ class BackgroundBashTaskManager:
         task_id: str,
         *,
         max_bytes: int = 16_000,
-    ) -> BackgroundBashTaskOutput:
+    ) -> BackgroundShellTaskOutput:
         record = self.get(task_id)
         data = record.log_path.read_bytes() if record.log_path.exists() else b""
         truncated = len(data) > max_bytes
         if truncated:
             data = data[-max_bytes:]
-        return BackgroundBashTaskOutput(
+        return BackgroundShellTaskOutput(
             task_id=record.task_id,
             status=record.status,
             log_path=record.log_path,
@@ -127,7 +127,7 @@ class BackgroundBashTaskManager:
             truncated=truncated,
         )
 
-    async def stop(self, task_id: str) -> BackgroundBashTaskRecord:
+    async def stop(self, task_id: str) -> BackgroundShellTaskRecord:
         record = self.get(task_id)
         task = self._tasks.get(record.task_id)
         if task is None or task.done():
@@ -148,7 +148,7 @@ class BackgroundBashTaskManager:
         task_id: str,
         *,
         timeout_seconds: float | None = None,
-    ) -> BackgroundBashTaskRecord:
+    ) -> BackgroundShellTaskRecord:
         task = self._tasks.get(_normalize_task_id(task_id))
         if task is not None:
             try:
@@ -163,9 +163,9 @@ class BackgroundBashTaskManager:
         task_id: str,
         command: str,
         description: str,
-    ) -> BackgroundBashTaskRecord:
+    ) -> BackgroundShellTaskRecord:
         now = self._clock()
-        return BackgroundBashTaskRecord(
+        return BackgroundShellTaskRecord(
             task_id=task_id,
             command=command,
             description=description,
@@ -190,7 +190,7 @@ class BackgroundBashTaskManager:
             sandbox_executor=sandbox_executor,
         )
         try:
-            result = await executor.execute_bash(
+            result = await executor.execute_shell(
                 record.command,
                 timeout_seconds=timeout_seconds,
             )
@@ -209,13 +209,13 @@ class BackgroundBashTaskManager:
             timed_out=result.timed_out,
         )
 
-    def _append_log(self, record: BackgroundBashTaskRecord, text: str) -> None:
+    def _append_log(self, record: BackgroundShellTaskRecord, text: str) -> None:
         with record.log_path.open("a", encoding="utf-8", newline="") as handle:
             handle.write(text)
 
     def _set_record(
         self,
-        record: BackgroundBashTaskRecord,
+        record: BackgroundShellTaskRecord,
         *,
         status: str,
         exit_code: int | None = None,

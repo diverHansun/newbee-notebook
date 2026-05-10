@@ -7,16 +7,16 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 from newbee_notebook.core.shell import (
-    BackgroundBashTaskManager,
+    BackgroundShellTaskManager,
     ShellEnvironment,
     build_default_shell_environment,
 )
 from newbee_notebook.core.sandbox import SandboxExecutor
-from newbee_notebook.core.tools.bash import build_bash_tool
-from newbee_notebook.core.tools.bash_tasks import (
-    build_bash_task_list_tool,
-    build_bash_task_output_tool,
-    build_bash_task_stop_tool,
+from newbee_notebook.core.tools.shell import build_shell_tool
+from newbee_notebook.core.tools.shell_tasks import (
+    build_shell_task_list_tool,
+    build_shell_task_output_tool,
+    build_shell_task_stop_tool,
 )
 from newbee_notebook.core.tools.filesystem import build_filesystem_tools
 from newbee_notebook.core.tools.knowledge_base import build_knowledge_base_tool
@@ -48,8 +48,8 @@ class BuiltinToolProvider:
         filesystem_environment: ShellEnvironment | None = None,
         enable_filesystem_tools: bool = True,
         sandbox_executor: SandboxExecutor | None = None,
-        enable_bash_tool: bool = True,
-        background_task_manager: BackgroundBashTaskManager | None = None,
+        enable_shell_tool: bool = True,
+        background_task_manager: BackgroundShellTaskManager | None = None,
     ):
         self._hybrid_search = hybrid_search
         self._semantic_search = semantic_search
@@ -58,9 +58,9 @@ class BuiltinToolProvider:
         self._filesystem_environment = filesystem_environment
         self._enable_filesystem_tools = enable_filesystem_tools
         self._sandbox_executor = sandbox_executor
-        self._enable_bash_tool = enable_bash_tool
+        self._enable_shell_tool = enable_shell_tool
         self._background_task_manager = background_task_manager
-        self._background_task_managers: dict[str, BackgroundBashTaskManager] = {}
+        self._background_task_managers: dict[str, BackgroundShellTaskManager] = {}
 
     def _build_knowledge_base_tool(
         self,
@@ -118,15 +118,15 @@ class BuiltinToolProvider:
         environment = self._resolve_filesystem_environment(filesystem_environment)
         return build_filesystem_tools(environment)
 
-    def _build_agent_bash_tools(
+    def _build_agent_shell_tools(
         self,
         filesystem_environment: ShellEnvironment | None = None,
     ) -> list[ToolDefinition]:
-        if not self._enable_bash_tool:
+        if not self._enable_shell_tool:
             return []
         environment = self._resolve_filesystem_environment(filesystem_environment)
         return [
-            build_bash_tool(
+            build_shell_tool(
                 environment,
                 sandbox_executor=self._sandbox_executor,
                 background_task_manager=self._resolve_background_task_manager(environment),
@@ -137,27 +137,27 @@ class BuiltinToolProvider:
         self,
         filesystem_environment: ShellEnvironment | None = None,
     ) -> list[ToolDefinition]:
-        if not self._enable_bash_tool:
+        if not self._enable_shell_tool:
             return []
         environment = self._resolve_filesystem_environment(filesystem_environment)
         manager = self._resolve_background_task_manager(environment)
         return [
-            build_bash_task_list_tool(manager),
-            build_bash_task_output_tool(manager),
-            build_bash_task_stop_tool(manager),
+            build_shell_task_list_tool(manager),
+            build_shell_task_output_tool(manager),
+            build_shell_task_stop_tool(manager),
         ]
 
     def _resolve_background_task_manager(
         self,
         environment: ShellEnvironment,
-    ) -> BackgroundBashTaskManager:
+    ) -> BackgroundShellTaskManager:
         if self._background_task_manager is not None:
             return self._background_task_manager
         root = (environment.run_dir or environment.cwd) / ".newbee-background-tasks"
         key = str(root.resolve(strict=False)).casefold()
         manager = self._background_task_managers.get(key)
         if manager is None:
-            manager = BackgroundBashTaskManager(tasks_root=root)
+            manager = BackgroundShellTaskManager(tasks_root=root)
             self._background_task_managers[key] = manager
         return manager
 
@@ -191,7 +191,7 @@ class BuiltinToolProvider:
                 tools.extend(
                     self._build_agent_filesystem_tools(filesystem_environment)
                 )
-                tools.extend(self._build_agent_bash_tools(filesystem_environment))
+                tools.extend(self._build_agent_shell_tools(filesystem_environment))
                 tools.extend(
                     self._build_agent_background_task_tools(filesystem_environment)
                 )

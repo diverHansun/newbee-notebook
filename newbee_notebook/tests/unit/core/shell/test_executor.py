@@ -26,7 +26,7 @@ class RecordingSandboxExecutor:
 
 
 @pytest.mark.anyio
-async def test_shell_executor_translates_bash_command_to_sandbox_request(tmp_path: Path):
+async def test_shell_executor_translates_shell_command_to_sandbox_request(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
     environment = ShellEnvironment(
         cwd=tmp_path,
@@ -38,7 +38,7 @@ async def test_shell_executor_translates_bash_command_to_sandbox_request(tmp_pat
     )
     executor = ShellExecutor(environment=environment, sandbox_executor=sandbox)
 
-    result = await executor.execute_bash("echo hi", timeout_seconds=5)
+    result = await executor.execute_shell("echo hi", timeout_seconds=5)
 
     assert result.error_code is None
     assert result.stdout == "ok\n"
@@ -59,21 +59,35 @@ async def test_shell_executor_fails_closed_without_sandbox_executor(tmp_path: Pa
         environment=ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,))
     )
 
-    result = await executor.execute_bash("echo hi")
+    result = await executor.execute_shell("echo hi")
 
     assert result.error_code == "sandbox_unavailable"
     assert result.exit_code is None
 
 
 @pytest.mark.anyio
-async def test_shell_executor_rejects_empty_bash_command(tmp_path: Path):
+async def test_shell_executor_rejects_empty_shell_command(tmp_path: Path):
     sandbox = RecordingSandboxExecutor()
     executor = ShellExecutor(
         environment=ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
         sandbox_executor=sandbox,
     )
 
-    result = await executor.execute_bash("   ")
+    result = await executor.execute_shell("   ")
 
     assert result.error_code == "empty_command"
     assert sandbox.requests == []
+
+
+@pytest.mark.anyio
+async def test_shell_executor_keeps_execute_bash_as_compatibility_wrapper(tmp_path: Path):
+    sandbox = RecordingSandboxExecutor()
+    executor = ShellExecutor(
+        environment=ShellEnvironment(cwd=tmp_path, workspace_roots=(tmp_path,)),
+        sandbox_executor=sandbox,
+    )
+
+    result = await executor.execute_bash("echo hi")
+
+    assert result.error_code is None
+    assert sandbox.requests[0].argv == ("bash", "-lc", "echo hi")

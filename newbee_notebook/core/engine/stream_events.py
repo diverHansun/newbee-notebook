@@ -62,7 +62,7 @@ class ImageGeneratedEvent:
 
 
 @dataclass(frozen=True)
-class ConfirmationRequestEvent:
+class PermissionRequestEvent:
     request_id: str
     tool_name: str
     args_summary: dict
@@ -74,7 +74,8 @@ class ConfirmationRequestEvent:
     skill_name: str | None = None
     content_hash: str = ""
     response_options: list[str] = field(default_factory=list)
-    event: str = "confirmation_request"
+    event: str = "permission_request"
+
 
 
 @dataclass(frozen=True)
