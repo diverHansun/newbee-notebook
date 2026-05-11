@@ -4,7 +4,12 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 
 import { ChatImageAttachmentBar } from "@/components/chat/chat-image-attachment-bar";
 import { PolicySelector } from "@/components/chat/policy-selector";
-import { SlashCommandHint, shouldShowSlashCommandHint } from "@/components/chat/slash-command-hint";
+import {
+  SlashCommandHint,
+  isCompleteSlashCommand,
+  shouldShowSlashCommandHint,
+  useEnabledSkillCommands,
+} from "@/components/chat/slash-command-hint";
 import { SourceSelector } from "@/components/chat/source-selector";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type {
@@ -85,7 +90,9 @@ export function ChatInput({
     sessionId: currentSessionId,
     ensureSession: () => onEnsureSession(input.trim().slice(0, 30) || undefined),
   });
-  const showSlashCommandHint = shouldShowSlashCommandHint(input);
+  const slashInputActive = input.startsWith("/");
+  const skillCommands = useEnabledSkillCommands({ queryEnabled: slashInputActive });
+  const showSlashCommandHint = mode === "agent" && shouldShowSlashCommandHint(input);
   const effectivePolicy =
     policy ??
     ({
@@ -161,6 +168,10 @@ export function ChatInput({
   useEffect(() => {
     if (addBtnDisabled && addMenuOpen) setAddMenuOpen(false);
   }, [addBtnDisabled, addMenuOpen]);
+  useEffect(() => {
+    if (mode !== "ask" || !isCompleteSlashCommand(input, skillCommands)) return;
+    onModeChange("agent");
+  }, [input, mode, onModeChange, skillCommands]);
   const handlePolicyChange = useCallback(
     async (update: PolicyPreferenceUpdate) => {
       if (!onPolicyChange) return;

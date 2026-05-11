@@ -7,7 +7,7 @@ import { listSkills } from "@/lib/api/skills";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 
-type SlashCommand = {
+export type SlashCommand = {
   command: string;
   description: string;
   available: boolean;
@@ -18,17 +18,30 @@ type SlashCommandHintProps = {
   onSelect: (command: string) => void;
 };
 
+type UseEnabledSkillCommandsOptions = {
+  queryEnabled?: boolean;
+};
+
 export function shouldShowSlashCommandHint(input: string): boolean {
   return input.startsWith("/") && !input.includes(" ");
+}
+
+export function isCompleteSlashCommand(input: string, commands: SlashCommand[]): boolean {
+  const value = input.toLowerCase();
+  return commands.some((item) => {
+    const command = item.command.toLowerCase();
+    return value.startsWith(command) && /\s/.test(value.charAt(command.length));
+  });
 }
 
 function normalizeCommandQuery(input: string): string {
   return input.trim().toLowerCase();
 }
 
-export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
+export function useEnabledSkillCommands({
+  queryEnabled = true,
+}: UseEnabledSkillCommandsOptions = {}): SlashCommand[] {
   const { t } = useLang();
-  const [activeIndex, setActiveIndex] = useState(0);
 
   const builtinCommands = useMemo<SlashCommand[]>(
     () => [
@@ -54,6 +67,7 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
   const skillsQuery = useQuery({
     queryKey: ["skills"],
     queryFn: listSkills,
+    enabled: queryEnabled,
     staleTime: 10_000,
     retry: false,
   });
@@ -80,6 +94,14 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
 
     return fromCatalog.length > 0 ? fromCatalog : builtinCommands;
   }, [builtinCommands, skillsQuery.data?.skills]);
+
+  return commands;
+}
+
+export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
+  const { t } = useLang();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const commands = useEnabledSkillCommands();
 
   const query = normalizeCommandQuery(input);
   const filteredCommands = commands.filter((item) => item.command.startsWith(query));

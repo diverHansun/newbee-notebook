@@ -103,7 +103,7 @@ describe("ChatInput", () => {
     });
   });
 
-  it("shows slash command hint and completes the note command", async () => {
+  it("does not show slash command hints in ask mode", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
 
@@ -125,15 +125,11 @@ describe("ChatInput", () => {
     const input = screen.getByPlaceholderText("Ask a question (document search)...");
     await user.type(input, "/n");
 
-    expect(screen.getByRole("button", { name: /notes & marks management/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /notes & marks management/i }));
-
-    expect(input).toHaveValue("/note ");
-    expect(onModeChange).toHaveBeenCalledWith("agent");
+    expect(screen.queryByRole("button", { name: /notes & marks management/i })).toBeNull();
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 
-  it("shows diagram slash command and completes /diagram", async () => {
+  it("shows slash command hint and completes the note command in agent mode", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
 
@@ -141,7 +137,7 @@ describe("ChatInput", () => {
       <ChatInput
         notebookId="nb-1"
         currentSessionId="session-1"
-        mode="ask"
+        mode="agent"
         isStreaming={false}
         sourceDocIds={null}
         onSourceDocIdsChange={() => {}}
@@ -152,7 +148,37 @@ describe("ChatInput", () => {
       />
     );
 
-    const input = screen.getByPlaceholderText("Ask a question (document search)...");
+    const input = screen.getByPlaceholderText("Type a message, or / to call a skill...");
+    await user.type(input, "/n");
+
+    expect(screen.getByRole("button", { name: /notes & marks management/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /notes & marks management/i }));
+
+    expect(input).toHaveValue("/note ");
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("shows diagram slash command and completes /diagram", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId="session-1"
+        mode="agent"
+        isStreaming={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Type a message, or / to call a skill...");
     await user.type(input, "/d");
 
     expect(
@@ -164,10 +190,88 @@ describe("ChatInput", () => {
     );
 
     expect(input).toHaveValue("/diagram ");
-    expect(onModeChange).toHaveBeenCalledWith("agent");
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 
   it("shows video slash command and completes /video", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId="session-1"
+        mode="agent"
+        isStreaming={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Type a message, or / to call a skill...");
+    await user.type(input, "/v");
+
+    expect(screen.getByRole("button", { name: /summarize and manage video content/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /summarize and manage video content/i }));
+
+    expect(input).toHaveValue("/video ");
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("includes enabled installed skills in slash command hints in agent mode", async () => {
+    listSkills.mockResolvedValue({
+      skills: [
+        {
+          name: "brief",
+          command: "/brief",
+          description: "Prepare a concise notebook brief.",
+          enabled: true,
+          kind: "installed",
+          source: "local",
+          content_hash: "hash123",
+          path: "configs/skills/brief",
+          scopes: ["/brief"],
+          manageable: true,
+          deletable: true,
+          readonly_reason: null,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId="session-1"
+        mode="agent"
+        isStreaming={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Type a message, or / to call a skill...");
+    await user.type(input, "/br");
+
+    expect(await screen.findByRole("button", { name: /prepare a concise notebook brief/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /prepare a concise notebook brief/i }));
+
+    expect(input).toHaveValue("/brief ");
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("switches ask mode to agent mode when a complete builtin skill command is typed", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
 
@@ -187,17 +291,38 @@ describe("ChatInput", () => {
     );
 
     const input = screen.getByPlaceholderText("Ask a question (document search)...");
-    await user.type(input, "/v");
+    await user.type(input, "/note ");
 
-    expect(screen.getByRole("button", { name: /summarize and manage video content/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /summarize and manage video content/i }));
-
-    expect(input).toHaveValue("/video ");
+    expect(screen.queryByRole("button", { name: /notes & marks management/i })).toBeNull();
     expect(onModeChange).toHaveBeenCalledWith("agent");
   });
 
-  it("includes enabled installed skills in slash command hints", async () => {
+  it("keeps ask mode for slash text that only prefixes a skill command", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    renderWithLang(
+      <ChatInput
+        notebookId="nb-1"
+        currentSessionId="session-1"
+        mode="ask"
+        isStreaming={false}
+        sourceDocIds={null}
+        onSourceDocIdsChange={() => {}}
+        onModeChange={onModeChange}
+        onEnsureSession={async () => "session-1"}
+        onSend={() => {}}
+        onCancel={() => {}}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Ask a question (document search)...");
+    await user.type(input, "/notebook");
+
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("switches ask mode to agent mode when a complete installed skill command is typed", async () => {
     listSkills.mockResolvedValue({
       skills: [
         {
@@ -235,14 +360,12 @@ describe("ChatInput", () => {
     );
 
     const input = screen.getByPlaceholderText("Ask a question (document search)...");
-    await user.type(input, "/br");
+    await user.type(input, "/brief ");
 
-    expect(await screen.findByRole("button", { name: /prepare a concise notebook brief/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /prepare a concise notebook brief/i }));
-
-    expect(input).toHaveValue("/brief ");
-    expect(onModeChange).toHaveBeenCalledWith("agent");
+    expect(screen.queryByRole("button", { name: /prepare a concise notebook brief/i })).toBeNull();
+    await waitFor(() => {
+      expect(onModeChange).toHaveBeenCalledWith("agent");
+    });
   });
 
   it("uploads one selected image at a time and sends ready image ids with text", async () => {
