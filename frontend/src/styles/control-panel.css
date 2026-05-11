@@ -465,41 +465,36 @@
   gap: 8px;
 }
 
-.control-panel-skill-list {
+.control-panel-skill-rows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
-.control-panel-skill-item {
+.control-panel-skill-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  background: hsl(var(--accent) / 0.35);
-}
-
-.control-panel-skill-item-header {
-  display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
 }
 
-.control-panel-skill-title-block {
+.control-panel-skill-row:last-child {
+  border-bottom: none;
+}
+
+.control-panel-skill-row-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 5px;
+  gap: 2px;
 }
 
-.control-panel-skill-title-row {
+.control-panel-skill-row-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .control-panel-skill-command {
@@ -508,34 +503,33 @@
   color: hsl(var(--foreground));
 }
 
-.control-panel-skill-badge {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid hsl(var(--border));
-  border-radius: 999px;
-  padding: 1px 6px;
-  background: hsl(var(--card));
-  color: hsl(var(--muted-foreground));
-  font-size: 10px;
-  line-height: 1.5;
-}
-
 .control-panel-skill-description {
   font-size: 12px;
   line-height: 1.45;
   color: hsl(var(--muted-foreground));
 }
 
-.control-panel-skill-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.control-panel-skill-delete-btn {
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
-.control-panel-skill-path {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
+.control-panel-skill-delete-btn:hover:not(:disabled) {
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive) / 0.6);
+  background: hsl(var(--destructive) / 0.08);
+}
+
+.control-panel-skill-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 @keyframes control-panel-pop-in {
   from {

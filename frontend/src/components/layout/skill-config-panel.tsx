@@ -9,13 +9,23 @@ import {
   type SkillCatalogItem,
 } from "@/lib/api/skills";
 import { useLang } from "@/lib/hooks/useLang";
-import { uiStrings } from "@/lib/i18n/strings";
+import { builtinSkillDescriptions, uiStrings } from "@/lib/i18n/strings";
 
-function SkillBadge({ children }: { children: string }) {
-  return <span className="control-panel-skill-badge">{children}</span>;
+function BuiltinSkillRow({ skill }: { skill: SkillCatalogItem }) {
+  const { t } = useLang();
+  const localized = builtinSkillDescriptions[skill.name];
+  const description = localized ? t(localized) : skill.description;
+  return (
+    <div className="control-panel-skill-row">
+      <div className="control-panel-skill-row-text">
+        <span className="control-panel-skill-command">{skill.command}</span>
+        <span className="control-panel-skill-description">{description}</span>
+      </div>
+    </div>
+  );
 }
 
-function SkillCard({
+function InstalledSkillRow({
   skill,
   pending,
   onToggle,
@@ -27,26 +37,15 @@ function SkillCard({
   onDelete: (skill: SkillCatalogItem) => void;
 }) {
   const { t, ti } = useLang();
-  const isBuiltin = skill.kind === "builtin";
 
   return (
-    <div className="control-panel-skill-item">
-      <div className="control-panel-skill-item-header">
-        <div className="control-panel-skill-title-block">
-          <div className="control-panel-skill-title-row">
-            <span className="control-panel-skill-command">{skill.command}</span>
-            <SkillBadge>
-              {isBuiltin
-                ? t(uiStrings.controlPanel.skillBuiltinBadge)
-                : t(uiStrings.controlPanel.skillInstalledBadge)}
-            </SkillBadge>
-            {!skill.manageable ? (
-              <SkillBadge>{t(uiStrings.controlPanel.skillReadonlyBadge)}</SkillBadge>
-            ) : null}
-          </div>
-          <div className="control-panel-skill-description">{skill.description}</div>
-        </div>
+    <div className="control-panel-skill-row">
+      <div className="control-panel-skill-row-text">
+        <span className="control-panel-skill-command">{skill.command}</span>
+        <span className="control-panel-skill-description">{skill.description}</span>
+      </div>
 
+      <div className="control-panel-skill-row-actions">
         {skill.manageable ? (
           <button
             type="button"
@@ -60,42 +59,19 @@ function SkillCard({
             <span className="control-panel-switch-thumb" aria-hidden />
           </button>
         ) : null}
-      </div>
 
-      <div className="control-panel-skill-meta">
-        <div className="control-panel-readonly-row">
-          <span className="control-panel-readonly-label">
-            {t(uiStrings.controlPanel.skillSource)}
-          </span>
-          <span>{skill.source}</span>
-        </div>
-        {skill.path ? (
-          <div className="control-panel-readonly-row">
-            <span className="control-panel-readonly-label">
-              {t(uiStrings.controlPanel.skillPath)}
-            </span>
-            <span className="control-panel-skill-path">{skill.path}</span>
-          </div>
+        {skill.deletable ? (
+          <button
+            type="button"
+            className="control-panel-skill-delete-btn"
+            disabled={pending}
+            aria-label={ti(uiStrings.controlPanel.deleteSkill, { name: skill.name })}
+            onClick={() => onDelete(skill)}
+          >
+            {t(uiStrings.common.delete)}
+          </button>
         ) : null}
-        <div className="control-panel-readonly-row">
-          <span className="control-panel-readonly-label">
-            {t(uiStrings.controlPanel.skillStatus)}
-          </span>
-          <span>{skill.enabled ? t(uiStrings.controlPanel.enabled) : t(uiStrings.controlPanel.disabled)}</span>
-        </div>
       </div>
-
-      {skill.deletable ? (
-        <button
-          type="button"
-          className="control-panel-reset-btn control-panel-inline-btn"
-          disabled={pending}
-          aria-label={ti(uiStrings.controlPanel.deleteSkill, { name: skill.name })}
-          onClick={() => onDelete(skill)}
-        >
-          {t(uiStrings.common.delete)}
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -172,19 +148,10 @@ export function SkillConfigPanel() {
         <div className="control-panel-card-title">
           {t(uiStrings.controlPanel.skillStudioTitle)}
         </div>
-        <div className="control-panel-card-hint">
-          {t(uiStrings.controlPanel.skillStudioHint)}
-        </div>
         <div className="control-panel-card-body">
-          <div className="control-panel-skill-list">
+          <div className="control-panel-skill-rows">
             {builtinSkills.map((skill) => (
-              <SkillCard
-                key={skill.name}
-                skill={skill}
-                pending={pending}
-                onToggle={handleToggle}
-                onDelete={handleDelete}
-              />
+              <BuiltinSkillRow key={skill.name} skill={skill} />
             ))}
           </div>
         </div>
@@ -193,9 +160,6 @@ export function SkillConfigPanel() {
       <div className="control-panel-card">
         <div className="control-panel-card-title">
           {t(uiStrings.controlPanel.skillInstalledTitle)}
-        </div>
-        <div className="control-panel-card-hint">
-          {t(uiStrings.controlPanel.skillInstalledHint)}
         </div>
         <div className="control-panel-card-body control-panel-stack">
           <div className="control-panel-readonly-row">
@@ -210,9 +174,9 @@ export function SkillConfigPanel() {
               {t(uiStrings.controlPanel.skillInstalledEmpty)}
             </div>
           ) : (
-            <div className="control-panel-skill-list">
+            <div className="control-panel-skill-rows">
               {installedSkills.map((skill) => (
-                <SkillCard
+                <InstalledSkillRow
                   key={skill.name}
                   skill={skill}
                   pending={pending}

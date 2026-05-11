@@ -68,7 +68,10 @@ export const uiStrings = {
       zh: "该会话中的聊天记录将被删除。",
       en: "Chat history in this session will be deleted.",
     },
-    inputPlaceholderAgent: { zh: "输入消息（Agent + 工具调用）...", en: "Type a message (agent + tools)..." },
+    inputPlaceholderAgent: {
+      zh: "输入消息，或输入 / 调用技能...",
+      en: "Type a message, or / to call a skill...",
+    },
     inputPlaceholderAsk: { zh: "输入问题（基于文档检索）...", en: "Ask a question (document search)..." },
     stopGenerate: { zh: "停止生成", en: "Stop generating" },
     sendMessage: { zh: "发送消息", en: "Send message" },
@@ -301,26 +304,12 @@ export const uiStrings = {
     mcpStatusConnecting: { zh: "连接中", en: "Connecting" },
     mcpStatusDisabled: { zh: "已禁用", en: "Disabled" },
     mcpStatusError: { zh: "错误", en: "Error" },
-    skillStudioTitle: { zh: "Studio Skills", en: "Studio Skills" },
-    skillStudioHint: {
-      zh: "内置技能随 Studio 一起提供，当前为只读。",
-      en: "Builtin skills ship with Studio and are read-only.",
-    },
-    skillInstalledTitle: { zh: "Installed Skills", en: "Installed Skills" },
-    skillInstalledHint: {
-      zh: "安装技能从 configs/skills 热加载，可启用、停用或删除。",
-      en: "Installed skills hot-reload from configs/skills and can be enabled, disabled, or deleted.",
-    },
+    skillStudioTitle: { zh: "内置技能", en: "Studio Skills" },
+    skillInstalledTitle: { zh: "已安装技能", en: "Installed Skills" },
     skillInstalledEmpty: {
       zh: "configs/skills 中暂未发现已安装技能。",
       en: "No installed skills were found in configs/skills.",
     },
-    skillBuiltinBadge: { zh: "内置", en: "Built in" },
-    skillInstalledBadge: { zh: "已安装", en: "Installed" },
-    skillReadonlyBadge: { zh: "只读", en: "Read-only" },
-    skillSource: { zh: "来源", en: "Source" },
-    skillPath: { zh: "路径", en: "Path" },
-    skillStatus: { zh: "状态", en: "Status" },
     skillInstallDirectory: { zh: "安装目录", en: "Install directory" },
     toggleSkill: { zh: "切换 {name} skill", en: "Toggle {name} skill" },
     deleteSkill: { zh: "删除 {name} skill", en: "Delete {name} skill" },
@@ -357,7 +346,7 @@ export const uiStrings = {
     bookmark: { zh: "书签", en: "Bookmark" },
   },
   slashCommand: {
-    hint: { zh: "输入 / 查看可用命令", en: "Type / to see available commands" },
+    panelLabel: { zh: "可用技能命令", en: "Available skill commands" },
     noteDescription: { zh: "笔记和书签管理", en: "Notes & Marks management" },
     diagramDescription: {
       zh: "生成图表（思维导图/流程图/时序图）",
@@ -705,6 +694,12 @@ export const uiStrings = {
     dateFormatLocaleZh: { zh: "zh-CN", en: "en-US" },
   },
 } as const satisfies Record<string, unknown>;
+
+export const builtinSkillDescriptions: Record<string, LocalizedString> = {
+  note: { zh: "笔记与书签管理", en: "Note and mark management skill" },
+  diagram: { zh: "图表生成与管理", en: "Diagram generation and management skill" },
+  video: { zh: "视频元数据查询与摘要", en: "Video metadata lookup and summarization skill" },
+};
 
 export function zh(text: LocalizedString): string {
   return text.zh;

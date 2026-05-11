@@ -274,7 +274,7 @@ describe("ChatInput", () => {
       expect(screen.getByRole("img", { name: "Uploaded image preview" })).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText("Type a message (agent + tools)..."), "read this");
+    await user.type(screen.getByPlaceholderText("Type a message, or / to call a skill..."), "read this");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(onSend).toHaveBeenCalledWith("read this", "agent", ["img-1"]);

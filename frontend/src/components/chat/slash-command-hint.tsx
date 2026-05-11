@@ -89,8 +89,7 @@ export function SlashCommandHint({ input, onSelect }: SlashCommandHintProps) {
   }
 
   return (
-    <div className="slash-command-panel" aria-label={t(uiStrings.slashCommand.hint)}>
-      <div className="slash-command-panel-header">{t(uiStrings.slashCommand.hint)}</div>
+    <div className="slash-command-panel" aria-label={t(uiStrings.slashCommand.panelLabel)}>
       <div className="slash-command-panel-body">
         {filteredCommands.map((item, index) => {
           const isActive = index === activeIndex;

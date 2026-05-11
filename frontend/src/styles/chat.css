@@ -421,13 +421,6 @@
   z-index: 30;
 }
 
-.slash-command-panel-header {
-  padding: 8px 12px;
-  border-bottom: 1px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-}
-
 .slash-command-panel-body {
   display: flex;
   flex-direction: column;

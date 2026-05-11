@@ -85,17 +85,16 @@ describe("SkillConfigPanel", () => {
     expect(await screen.findByText("Studio Skills")).toBeInTheDocument();
     expect(screen.getByText("Installed Skills")).toBeInTheDocument();
 
-    const noteCard = screen.getByText("/note").closest(".control-panel-skill-item");
-    expect(noteCard).not.toBeNull();
-    expect(within(noteCard as HTMLElement).getByText("Built in")).toBeInTheDocument();
-    expect(within(noteCard as HTMLElement).getByText("Read-only")).toBeInTheDocument();
-    expect(within(noteCard as HTMLElement).queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+    const noteRow = screen.getByText("/note").closest(".control-panel-skill-row");
+    expect(noteRow).not.toBeNull();
+    expect(within(noteRow as HTMLElement).getByText("Note and mark management skill")).toBeInTheDocument();
+    expect(within(noteRow as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(noteRow as HTMLElement).queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
 
-    const demoCard = screen.getByText("/demo").closest(".control-panel-skill-item");
-    expect(demoCard).not.toBeNull();
-    expect(within(demoCard as HTMLElement).getByText("configs/skills/demo")).toBeInTheDocument();
-    expect(within(demoCard as HTMLElement).getByRole("switch", { name: "Toggle demo skill" })).toBeEnabled();
-    expect(within(demoCard as HTMLElement).getByRole("button", { name: "Delete demo skill" })).toBeEnabled();
+    const demoRow = screen.getByText("/demo").closest(".control-panel-skill-row");
+    expect(demoRow).not.toBeNull();
+    expect(within(demoRow as HTMLElement).getByRole("switch", { name: "Toggle demo skill" })).toBeEnabled();
+    expect(within(demoRow as HTMLElement).getByRole("button", { name: "Delete demo skill" })).toBeEnabled();
   });
 
   it("toggles and deletes installed skills", async () => {
