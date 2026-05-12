@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DocumentTypeBadge } from "@/app/library/components/document-type-badge";
+import { TypeFilterChips } from "@/app/library/components/type-filter-chips";
 import { uploadDocumentsToLibrary } from "@/lib/api/documents";
 import { deleteLibraryDocument, listLibraryDocuments } from "@/lib/api/library";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
-import { DocumentStatus, UploadFailure } from "@/lib/api/types";
+import { DocumentStatus, DocumentTypeGroup, UploadFailure } from "@/lib/api/types";
+import { expandGroupsToTypes } from "@/lib/library/document-type-groups";
 
 type StatusFilter = "all" | DocumentStatus;
 type PendingDeleteAction =
@@ -18,7 +21,7 @@ type PendingDeleteAction =
   | { kind: "batch"; documentIds: string[]; count: number };
 
 const DOCUMENT_UPLOAD_ACCEPT =
-  ".pdf,.txt,.md,.markdown,.csv,.xls,.xlsx,.doc,.docx,.pptx,.epub";
+  ".pdf,.txt,.md,.markdown,.csv,.xls,.xlsx,.doc,.docx,.ppt,.pptx,.epub";
 
 type UploadFeedback =
   | {
@@ -77,6 +80,7 @@ export default function LibraryPage() {
   const { lang, t, ti } = useLang();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [typeGroups, setTypeGroups] = useState<Set<DocumentTypeGroup>>(new Set());
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -90,14 +94,41 @@ export default function LibraryPage() {
     { value: "failed", label: t(uiStrings.libraryPage.tabsFailed) },
   ];
 
+  const contentTypes = useMemo(() => expandGroupsToTypes(typeGroups), [typeGroups]);
+  const contentTypeKey = useMemo(
+    () => [...contentTypes].sort().join(","),
+    [contentTypes]
+  );
+
   const libraryQuery = useQuery({
-    queryKey: ["library-documents", status],
+    queryKey: ["library-documents", status, contentTypeKey],
     queryFn: () =>
       listLibraryDocuments({
         fetchAll: true,
         status: status === "all" ? undefined : status,
+        contentTypes: contentTypes.length > 0 ? contentTypes : undefined,
       }),
   });
+
+  const handleStatusChange = (nextStatus: StatusFilter) => {
+    setStatus(nextStatus);
+    setSelectedIds(new Set<string>());
+  };
+
+  const toggleTypeGroup = (group: DocumentTypeGroup) => {
+    setSelectedIds(new Set<string>());
+    setTypeGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
+
+  const clearTypeGroups = () => {
+    setSelectedIds(new Set<string>());
+    setTypeGroups(new Set());
+  };
 
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => uploadDocumentsToLibrary(files),
@@ -265,12 +296,19 @@ export default function LibraryPage() {
               key={tab.value}
               className={`tab-item ${status === tab.value ? "active" : ""}`}
               type="button"
-              onClick={() => setStatus(tab.value)}
+              onClick={() => handleStatusChange(tab.value)}
             >
               {tab.label}
             </button>
           ))}
         </div>
+
+        {/* Type filter (Chip multi-select) */}
+        <TypeFilterChips
+          selected={typeGroups}
+          onToggle={toggleTypeGroup}
+          onClear={clearTypeGroups}
+        />
 
         {/* Data table */}
         <div className="panel" style={{ overflow: "hidden" }}>
@@ -287,79 +325,85 @@ export default function LibraryPage() {
               <span>{t(uiStrings.common.noDocuments)}</span>
             </div>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 40 }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === rows.length && rows.length > 0}
-                      onChange={toggleAll}
-                    />
-                  </th>
-                  <th>{t(uiStrings.libraryPage.tableTitle)}</th>
-                  <th style={{ width: 140 }}>{t(uiStrings.libraryPage.tableStatus)}</th>
-                  <th style={{ width: 100 }}>{t(uiStrings.libraryPage.tableUploadedAt)}</th>
-                  <th style={{ width: 120 }}>{t(uiStrings.libraryPage.tableActions)}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.document_id}>
-                    <td>
+            <div className="library-table-scroll">
+              <table className="data-table library-data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(row.document_id)}
-                        onChange={() => toggleSelect(row.document_id)}
+                        checked={selectedIds.size === rows.length && rows.length > 0}
+                        onChange={toggleAll}
                       />
-                    </td>
-                    <td>
-                      <strong style={{ fontSize: 13, fontWeight: 500 }}>{row.title}</strong>
-                    </td>
-                    <td>
-                      <span className={`badge ${statusBadgeClass(row.status)}`}>
-                        {statusLabel(row.status, row.processing_stage, t)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        {formatDate(row.created_at, lang)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="row">
-                        <button
-                          className="btn btn-ghost btn-danger-ghost btn-sm"
-                          type="button"
-                          onClick={() => {
-                            setPendingDeleteAction({
-                              kind: "soft",
-                              documentId: row.document_id,
-                              title: row.title,
-                            });
-                          }}
-                        >
-                          {t(uiStrings.common.delete)}
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-danger-ghost btn-sm"
-                          type="button"
-                          onClick={() => {
-                            setPendingDeleteAction({
-                              kind: "hard",
-                              documentId: row.document_id,
-                              title: row.title,
-                            });
-                          }}
-                        >
-                          {t(uiStrings.libraryPage.hardDeleteLabel)}
-                        </button>
-                      </div>
-                    </td>
+                    </th>
+                    <th>{t(uiStrings.libraryPage.tableTitle)}</th>
+                    <th style={{ width: 80 }}>{t(uiStrings.libraryPage.tableType)}</th>
+                    <th style={{ width: 140 }}>{t(uiStrings.libraryPage.tableStatus)}</th>
+                    <th style={{ width: 100 }}>{t(uiStrings.libraryPage.tableUploadedAt)}</th>
+                    <th style={{ width: 120 }}>{t(uiStrings.libraryPage.tableActions)}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.document_id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(row.document_id)}
+                          onChange={() => toggleSelect(row.document_id)}
+                        />
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 13, fontWeight: 500 }}>{row.title}</strong>
+                      </td>
+                      <td>
+                        <DocumentTypeBadge contentType={row.content_type} />
+                      </td>
+                      <td>
+                        <span className={`badge ${statusBadgeClass(row.status)}`}>
+                          {statusLabel(row.status, row.processing_stage, t)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          {formatDate(row.created_at, lang)}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="row">
+                          <button
+                            className="btn btn-ghost btn-danger-ghost btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setPendingDeleteAction({
+                                kind: "soft",
+                                documentId: row.document_id,
+                                title: row.title,
+                              });
+                            }}
+                          >
+                            {t(uiStrings.common.delete)}
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-danger-ghost btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setPendingDeleteAction({
+                                kind: "hard",
+                                documentId: row.document_id,
+                                title: row.title,
+                              });
+                            }}
+                          >
+                            {t(uiStrings.libraryPage.hardDeleteLabel)}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 

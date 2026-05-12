@@ -42,6 +42,28 @@ function renderLibraryPage() {
   );
 }
 
+function libraryDocument(overrides: Partial<{
+  document_id: string;
+  title: string;
+  content_type: string;
+  status: string;
+  created_at: string;
+}> = {}) {
+  return {
+    document_id: overrides.document_id ?? "d1",
+    title: overrides.title ?? "Sample Document",
+    content_type: overrides.content_type ?? "pdf",
+    status: overrides.status ?? "completed",
+    library_id: "lib",
+    notebook_id: null,
+    page_count: 1,
+    chunk_count: 1,
+    file_size: 100,
+    created_at: overrides.created_at ?? "2026-04-01T00:00:00Z",
+    updated_at: overrides.created_at ?? "2026-04-01T00:00:00Z",
+  };
+}
+
 describe("LibraryPage", () => {
   beforeEach(() => {
     mockListLibraryDocuments.mockResolvedValue({
@@ -58,15 +80,115 @@ describe("LibraryPage", () => {
     mockDeleteLibraryDocument.mockResolvedValue(undefined);
   });
 
-  it("exposes pptx and epub in the upload input and support hint", async () => {
+  it("exposes ppt, pptx and epub in the upload input and support hint", async () => {
     const { container } = renderLibraryPage();
 
     expect(await screen.findByText(/supports pdf, word, powerpoint, epub/i)).toBeInTheDocument();
 
     const input = container.querySelector('input[type="file"]');
     expect(input).not.toBeNull();
-    expect(input?.getAttribute("accept")).toContain(".pptx");
-    expect(input?.getAttribute("accept")).toContain(".epub");
+    const acceptedExtensions = input?.getAttribute("accept")?.split(",") ?? [];
+    expect(acceptedExtensions).toEqual(expect.arrayContaining([".ppt", ".pptx", ".epub"]));
+  });
+
+  it("renders the file type column with uppercase extension badge", async () => {
+    mockListLibraryDocuments.mockResolvedValue({
+      data: [
+        libraryDocument({
+          title: "Sample PPT",
+          content_type: "pptx",
+        }),
+      ],
+      pagination: { total: 1, limit: 100, offset: 0, has_next: false, has_prev: false },
+    });
+
+    renderLibraryPage();
+
+    expect(await screen.findByText("Sample PPT")).toBeInTheDocument();
+    expect(screen.getByText("PPTX")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^Type$/i })).toBeInTheDocument();
+  });
+
+  it("wraps the data table in a horizontal scroll region", async () => {
+    mockListLibraryDocuments.mockResolvedValue({
+      data: [libraryDocument({ title: "Wide table document" })],
+      pagination: { total: 1, limit: 100, offset: 0, has_next: false, has_prev: false },
+    });
+
+    renderLibraryPage();
+
+    expect(await screen.findByText("Wide table document")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table.parentElement).toHaveClass("library-table-scroll");
+    expect(table).toHaveClass("library-data-table");
+  });
+
+  it("passes selected type groups as contentTypes when a chip is toggled", async () => {
+    const user = userEvent.setup();
+    renderLibraryPage();
+
+    await screen.findByRole("button", { name: /Slides/i });
+
+    mockListLibraryDocuments.mockClear();
+    await user.click(screen.getByRole("button", { name: /Slides/i }));
+
+    await screen.findByRole("button", { name: /Clear filters/i });
+
+    const lastCall = mockListLibraryDocuments.mock.calls.at(-1);
+    expect(lastCall?.[0]).toMatchObject({
+      contentTypes: ["pptx"],
+    });
+  });
+
+  it("clears type filter via the Clear filters button", async () => {
+    const user = userEvent.setup();
+    renderLibraryPage();
+
+    await user.click(await screen.findByRole("button", { name: /Spreadsheet/i }));
+    await screen.findByText(/1 selected/i);
+
+    mockListLibraryDocuments.mockClear();
+    await user.click(screen.getByRole("button", { name: /Clear filters/i }));
+
+    expect(screen.queryByRole("button", { name: /Clear filters/i })).not.toBeInTheDocument();
+    const lastCall = mockListLibraryDocuments.mock.calls.at(-1);
+    expect(lastCall?.[0].contentTypes).toBeUndefined();
+  });
+
+  it("clears selected rows when the status filter changes", async () => {
+    const user = userEvent.setup();
+    mockListLibraryDocuments.mockResolvedValue({
+      data: [libraryDocument({ title: "Selected PDF" })],
+      pagination: { total: 1, limit: 100, offset: 0, has_next: false, has_prev: false },
+    });
+
+    renderLibraryPage();
+
+    expect(await screen.findByText("Selected PDF")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(screen.getByText(/1 selected/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Completed/i }));
+
+    expect(screen.queryByText(/1 selected/i)).not.toBeInTheDocument();
+  });
+
+  it("clears selected rows when the type filter changes", async () => {
+    const user = userEvent.setup();
+    mockListLibraryDocuments.mockResolvedValue({
+      data: [libraryDocument({ title: "Selected slide", content_type: "pptx" })],
+      pagination: { total: 1, limit: 100, offset: 0, has_next: false, has_prev: false },
+    });
+
+    renderLibraryPage();
+
+    expect(await screen.findByText("Selected slide")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(screen.getByText(/1 selected/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Slides/i }));
+
+    expect(screen.queryByRole("button", { name: /Batch delete/i })).not.toBeInTheDocument();
   });
 
   it("shows a visible failure message when the upload API reports rejected files", async () => {

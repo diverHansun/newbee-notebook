@@ -692,6 +692,17 @@ export const uiStrings = {
     statusCompleted: { zh: "已完成", en: "Completed" },
     statusFailed: { zh: "处理失败", en: "Failed" },
     dateFormatLocaleZh: { zh: "zh-CN", en: "en-US" },
+    typeFilterLabel: { zh: "文件类型", en: "File type" },
+    typeFilterClear: { zh: "清空筛选", en: "Clear filters" },
+    typeFilterActiveCount: { zh: "已选 {n} 类", en: "{n} selected" },
+    typeGroupDocument: { zh: "文档 (PDF)", en: "Document (PDF)" },
+    typeGroupWord: { zh: "Word", en: "Word" },
+    typeGroupSlides: { zh: "幻灯片", en: "Slides" },
+    typeGroupSheet: { zh: "表格", en: "Spreadsheet" },
+    typeGroupEbook: { zh: "电子书", en: "E-book" },
+    typeGroupText: { zh: "文本", en: "Text" },
+    tableType: { zh: "类型", en: "Type" },
+    typeBadgeAriaLabel: { zh: "文件类型：{type}", en: "File type: {type}" },
   },
 } as const satisfies Record<string, unknown>;
 

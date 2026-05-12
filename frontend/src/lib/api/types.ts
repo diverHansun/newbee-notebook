@@ -36,6 +36,24 @@ export type DocumentStatus =
   | "completed"
   | "failed";
 
+export type DocumentType =
+  | "pdf"
+  | "txt"
+  | "docx"
+  | "pptx"
+  | "epub"
+  | "md"
+  | "csv"
+  | "xlsx";
+
+export type DocumentTypeGroup =
+  | "document"
+  | "word"
+  | "slides"
+  | "sheet"
+  | "ebook"
+  | "text";
+
 export type ProcessingStage =
   | "queued"
   | "converting"
