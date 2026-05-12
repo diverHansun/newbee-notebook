@@ -5,7 +5,7 @@ Handles Library-related API endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 
 from newbee_notebook.api.models.responses import (
     LibraryResponse,
@@ -18,6 +18,7 @@ from newbee_notebook.api.dependencies import get_document_service
 from newbee_notebook.application.services.library_service import LibraryService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
+from newbee_notebook.domain.value_objects.document_type import DocumentType
 
 
 router = APIRouter(prefix="/library")
@@ -47,6 +48,25 @@ def _to_document_response(doc) -> DocumentResponse:
     )
 
 
+def _parse_content_type_filters(content_type: Optional[List[str]]) -> Optional[List[DocumentType]]:
+    if not content_type:
+        return None
+    if len(content_type) > 32:
+        raise HTTPException(status_code=400, detail="Too many content_type values")
+
+    parsed: List[DocumentType] = []
+    seen: set[DocumentType] = set()
+    for value in content_type:
+        try:
+            doc_type = DocumentType(value)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid content_type filter")
+        if doc_type not in seen:
+            parsed.append(doc_type)
+            seen.add(doc_type)
+    return parsed
+
+
 @router.get("", response_model=LibraryResponse)
 async def get_library(service: LibraryService = Depends(get_library_service)):
     """
@@ -70,6 +90,7 @@ async def list_library_documents(
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     status: Optional[str] = Query(None, description="Filter by status"),
+    content_type: Optional[List[str]] = Query(None, description="Filter by document type"),
     service: LibraryService = Depends(get_library_service),
 ):
     """
@@ -79,6 +100,7 @@ async def list_library_documents(
         limit: Maximum number of documents to return.
         offset: Number of documents to skip.
         status: Optional status filter (uploaded, pending, processing, converted, completed, failed).
+        content_type: Optional repeated content type filters.
         
     Returns:
         List of documents with pagination info.
@@ -90,8 +112,10 @@ async def list_library_documents(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid status filter")
 
+    content_types = _parse_content_type_filters(content_type)
+
     documents, total = await service.list_documents(
-        limit=limit, offset=offset, status=status_enum
+        limit=limit, offset=offset, status=status_enum, content_types=content_types
     )
 
     return DocumentListResponse(

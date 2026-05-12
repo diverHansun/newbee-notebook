@@ -13,6 +13,7 @@ from newbee_notebook.domain.repositories.library_repository import LibraryReposi
 from newbee_notebook.domain.repositories.document_repository import DocumentRepository
 from newbee_notebook.domain.repositories.reference_repository import NotebookDocumentRefRepository
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
+from newbee_notebook.domain.value_objects.document_type import DocumentType
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class LibraryService:
         limit: int = 50,
         offset: int = 0,
         status: Optional[DocumentStatus] = None,
+        content_types: Optional[List[DocumentType]] = None,
     ) -> Tuple[List[Document], int]:
         """
         List documents in the Library.
@@ -62,6 +64,7 @@ class LibraryService:
             limit: Maximum number of documents.
             offset: Number of documents to skip.
             status: Optional status filter.
+            content_types: Optional content type filters.
             
         Returns:
             Tuple of (documents, total_count).
@@ -70,8 +73,12 @@ class LibraryService:
             limit=limit,
             offset=offset,
             status=status,
+            content_types=content_types,
         )
-        total = await self.document_repo.count_by_library(status=status)
+        total = await self.document_repo.count_by_library(
+            status=status,
+            content_types=content_types,
+        )
         
         return documents, total
     
