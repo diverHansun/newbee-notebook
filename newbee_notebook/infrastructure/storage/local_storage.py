@@ -117,6 +117,7 @@ SUPPORTED_EXTENSIONS = {
     "xlsx",
     "doc",
     "docx",
+    "ppt",
     "pptx",
     "epub",
 }

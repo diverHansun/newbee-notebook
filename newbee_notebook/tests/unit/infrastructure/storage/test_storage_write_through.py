@@ -93,11 +93,12 @@ def test_save_markdown_syncs_markdown_and_assets_to_remote_storage(tmp_path: Pat
 @pytest.mark.parametrize(
     ("filename", "payload", "expected_content_type"),
     [
+        ("demo.ppt", b"\xd0\xcf\x11\xe0ppt", "application/vnd.ms-powerpoint"),
         ("demo.pptx", b"PK\x03\x04pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
         ("demo.epub", b"PK\x03\x04epub", "application/epub+zip"),
     ],
 )
-def test_upload_file_with_storage_accepts_pptx_and_epub(
+def test_upload_file_with_storage_accepts_powerpoint_and_epub(
     tmp_path: Path,
     monkeypatch,
     filename: str,
