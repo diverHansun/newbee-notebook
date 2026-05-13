@@ -586,7 +586,7 @@ class DiagramModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "format IN ('reactflow_json', 'mermaid')",
+            "format IN ('reactflow_json', 'mermaid', 'echarts_option')",
             name="ck_diagrams_format",
         ),
         Index("idx_diagrams_notebook_id", "notebook_id"),
