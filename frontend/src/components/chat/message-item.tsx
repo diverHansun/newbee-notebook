@@ -16,6 +16,14 @@ type MessageItemProps = {
   roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
   onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
+  /**
+   * Enable inline ECharts rendering for this message. Set to true only by the
+   * chat panel when the immediately preceding user message starts with
+   * `/diagram` (see goals-duty.md Design Goal #5).
+   */
+  enableInlineCharts?: boolean;
+  /** Notebook id required by InlineChartCard for the "save to Studio" action. */
+  notebookId?: string;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
@@ -145,6 +153,8 @@ export function MessageItem({
   roleTransition,
   onOpenDocument: _onOpenDocument,
   onResolvePermissionRequest,
+  enableInlineCharts = false,
+  notebookId,
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
@@ -262,7 +272,11 @@ export function MessageItem({
             {showFinalContent ? (
               <div className="assistant-message-body" data-testid="assistant-message-body">
                 <UploadedImageList imageIds={uploadedImageIds} />
-                <MarkdownViewer content={sanitizedAssistantContent} />
+                <MarkdownViewer
+                  content={sanitizedAssistantContent}
+                  enableInlineCharts={enableInlineCharts}
+                  inlineChartsNotebookId={notebookId}
+                />
               </div>
             ) : null}
 

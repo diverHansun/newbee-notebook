@@ -378,6 +378,11 @@ export function ChatPanel({
           messages.map((message, index) => {
             const prev = messages[index - 1];
             const roleTransition = prev !== undefined && prev.role !== message.role;
+            const enableInlineCharts =
+              message.role === "assistant" &&
+              prev !== undefined &&
+              prev.role === "user" &&
+              prev.content.trim().toLowerCase().startsWith("/diagram");
             return (
               <MessageItem
                 key={message.id}
@@ -385,6 +390,8 @@ export function ChatPanel({
                 roleTransition={roleTransition}
                 onOpenDocument={onOpenDocument}
                 onResolvePermissionRequest={onResolvePermissionRequest}
+                enableInlineCharts={enableInlineCharts}
+                notebookId={notebookId}
               />
             );
           })

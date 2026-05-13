@@ -8,12 +8,20 @@ import rehypeSlug from "rehype-slug";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
-import type { Root, Element } from "hast";
+import type { Root, Element, Text } from "hast";
 import type { Plugin } from "unified";
 import { visit } from "unist-util-visit";
 
+import {
+  INLINE_CHART_PAYLOAD_ID_ATTR,
+  INLINE_CHART_PLACEHOLDER_ATTR,
+  INLINE_CHART_TYPE_ATTR,
+  registerInlineChartPayload,
+} from "@/lib/diagram/inline-chart-registry";
+
 type RenderMarkdownOptions = {
   documentId?: string;
+  enableInlineCharts?: boolean;
 };
 
 type RehypeImgEnhanceOptions = {
@@ -145,6 +153,59 @@ function rehypeImgEnhance(options: RehypeImgEnhanceOptions = {}) {
   };
 }
 
+/**
+ * Replace `<pre><code class="language-echarts">…</code></pre>` blocks with a
+ * placeholder div whose raw content has been stashed in the inline-chart
+ * registry. MarkdownViewer uses the placeholder to render an InlineChartCard
+ * inside the existing React tree, preserving app context providers.
+ *
+ * Only activates when `enableInlineCharts` is true (typically the assistant
+ * reply to a `/diagram` user message).
+ */
+function rehypeInlineEchartsPlaceholder() {
+  return (tree: Root) => {
+    visit(tree, "element", (node: Element, index, parent) => {
+      if (node.tagName !== "pre") return;
+      const codeChild = (node.children || []).find(
+        (child): child is Element =>
+          child.type === "element" && (child as Element).tagName === "code"
+      );
+      if (!codeChild) return;
+
+      const className = (codeChild.properties?.className ?? []) as unknown;
+      const classes = Array.isArray(className)
+        ? className.map((c) => String(c))
+        : typeof className === "string"
+          ? [className]
+          : [];
+
+      if (!classes.includes("language-echarts")) return;
+
+      const rawContent = (codeChild.children || [])
+        .filter((child): child is Text => child.type === "text")
+        .map((child) => child.value)
+        .join("");
+
+      const placeholderId = registerInlineChartPayload(rawContent);
+      const placeholder: Element = {
+        type: "element",
+        tagName: "div",
+        properties: {
+          [INLINE_CHART_PLACEHOLDER_ATTR]: "",
+          [INLINE_CHART_TYPE_ATTR]: "echarts",
+          [INLINE_CHART_PAYLOAD_ID_ATTR]: placeholderId,
+          className: ["inline-chart-placeholder"],
+        },
+        children: [],
+      };
+
+      if (parent && typeof index === "number" && Array.isArray((parent as Element).children)) {
+        (parent as Element).children[index] = placeholder;
+      }
+    });
+  };
+}
+
 function _shouldEnableMath(content: string): boolean {
   if (content.includes("$$")) return true;
   return /(^|[^\\])\$[^$\n]+?\$/.test(content);
@@ -176,6 +237,10 @@ export function renderMarkdownToHtml(content: string, options: RenderMarkdownOpt
   }
   if (enableMath) {
     processor.use(rehypeKatex);
+  }
+
+  if (options.enableInlineCharts) {
+    processor.use(rehypeInlineEchartsPlaceholder);
   }
 
   processor

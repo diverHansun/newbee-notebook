@@ -7,7 +7,23 @@ import type { ChatMessage } from "@/stores/chat-store";
 import { renderWithLang } from "@/test/test-utils";
 
 vi.mock("@/components/reader/markdown-viewer", () => ({
-  MarkdownViewer: ({ content }: { content: string }) => <div>{content}</div>,
+  MarkdownViewer: ({
+    content,
+    enableInlineCharts,
+    inlineChartsNotebookId,
+  }: {
+    content: string;
+    enableInlineCharts?: boolean;
+    inlineChartsNotebookId?: string;
+  }) => (
+    <div
+      data-testid="markdown-viewer-mock"
+      data-enable-inline-charts={enableInlineCharts ? "true" : "false"}
+      data-inline-charts-notebook-id={inlineChartsNotebookId ?? ""}
+    >
+      {content}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/sources-card", () => ({
@@ -289,5 +305,43 @@ describe("MessageItem", () => {
     expect(thumbnails[0]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-1/thumbnail");
     expect(thumbnails[1]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-2/thumbnail");
     expect(screen.queryByTestId("generated-image-list")).toBeNull();
+  });
+
+  it("forwards enableInlineCharts=true and notebookId to MarkdownViewer when set", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "Here is the chart.",
+      pendingPermissionRequest: undefined,
+      toolSteps: [],
+      status: "done",
+    };
+
+    renderWithLang(
+      <MessageItem
+        message={message}
+        onOpenDocument={() => {}}
+        enableInlineCharts={true}
+        notebookId="nb-42"
+      />
+    );
+
+    const viewer = screen.getByTestId("markdown-viewer-mock");
+    expect(viewer.getAttribute("data-enable-inline-charts")).toBe("true");
+    expect(viewer.getAttribute("data-inline-charts-notebook-id")).toBe("nb-42");
+  });
+
+  it("defaults enableInlineCharts to false when not provided", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "Plain reply",
+      pendingPermissionRequest: undefined,
+      toolSteps: [],
+      status: "done",
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    const viewer = screen.getByTestId("markdown-viewer-mock");
+    expect(viewer.getAttribute("data-enable-inline-charts")).toBe("false");
   });
 });
