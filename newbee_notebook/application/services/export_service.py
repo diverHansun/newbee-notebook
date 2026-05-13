@@ -46,7 +46,7 @@ def _format_export_timestamp() -> str:
 
 
 def _diagram_extension(diagram_format: str) -> str:
-    return ".json" if diagram_format == "reactflow_json" else ".mmd"
+    return ".json" if diagram_format in {"reactflow_json", "echarts_option"} else ".mmd"
 
 
 class ExportService:

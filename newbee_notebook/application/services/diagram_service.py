@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from io import BytesIO
 from typing import Optional
 
@@ -12,6 +13,8 @@ from newbee_notebook.domain.repositories.reference_repository import (
 )
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
+
+logger = logging.getLogger(__name__)
 
 
 class DiagramNotFoundError(Exception):
@@ -36,7 +39,7 @@ def _build_diagram_content_key(notebook_id: str, diagram_id: str, extension: str
 
 
 def _content_type_for_format(output_format: str) -> str:
-    if output_format == "reactflow_json":
+    if output_format in {"reactflow_json", "echarts_option"}:
         return "application/json"
     return "text/plain; charset=utf-8"
 
@@ -65,8 +68,8 @@ class DiagramService:
         descriptor = self._get_descriptor(diagram_type)
         descriptor.validator(content)
 
-        resolved_document_ids = list(document_ids or [])
-        if not resolved_document_ids and self._ref_repo is not None:
+        resolved_document_ids = list(document_ids) if document_ids is not None else []
+        if document_ids is None and self._ref_repo is not None:
             refs = await self._ref_repo.list_by_notebook(notebook_id)
             resolved_document_ids = [ref.document_id for ref in refs]
         for document_id in resolved_document_ids:
@@ -90,7 +93,20 @@ class DiagramService:
             data=BytesIO(content.encode("utf-8")),
             content_type=_content_type_for_format(descriptor.output_format),
         )
-        return await self._diagram_repo.create(diagram)
+        try:
+            return await self._diagram_repo.create(diagram)
+        except Exception:
+            try:
+                await self._storage.delete_file(diagram.content_path)
+            except FileNotFoundError:
+                pass
+            except Exception as cleanup_exc:  # noqa: BLE001
+                logger.warning(
+                    "Failed to clean up diagram content after create failure: %s",
+                    cleanup_exc,
+                    exc_info=True,
+                )
+            raise
 
     async def get_diagram(self, diagram_id: str, notebook_id: Optional[str] = None) -> Diagram:
         diagram = await self._diagram_repo.get(diagram_id)

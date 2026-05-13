@@ -88,6 +88,99 @@ async def test_create_diagram_accepts_flowchart_type(service, diagram_repo, stor
 
 
 @pytest.mark.anyio
+async def test_create_echarts_diagram_uses_json_format_and_content_type(
+    service,
+    diagram_repo,
+    storage,
+):
+    async def _create(diagram: Diagram) -> Diagram:
+        return diagram
+
+    diagram_repo.create.side_effect = _create
+
+    diagram = await service.create_diagram(
+        notebook_id="nb-1",
+        title="Sales chart",
+        diagram_type="echarts",
+        content='{"series":[{"type":"bar","data":[1,2,3]}]}',
+        document_ids=["doc-1"],
+    )
+
+    assert diagram.diagram_type == "echarts"
+    assert diagram.format == "echarts_option"
+    assert diagram.content_path.endswith(".json")
+    assert storage.save_file.await_args.kwargs["content_type"] == "application/json"
+
+
+@pytest.mark.anyio
+async def test_update_echarts_diagram_content_uses_json_content_type(
+    service,
+    diagram_repo,
+    storage,
+):
+    diagram_repo.get.return_value = Diagram(
+        diagram_id="diag-1",
+        notebook_id="nb-1",
+        title="Chart",
+        diagram_type="echarts",
+        format="echarts_option",
+        content_path="diagrams/nb-1/diag-1.json",
+    )
+    diagram_repo.update.side_effect = lambda diagram: diagram
+
+    await service.update_diagram_content(
+        "diag-1",
+        '{"series":[{"type":"line","data":[1,2,3]}]}',
+        notebook_id="nb-1",
+    )
+
+    assert storage.save_file.await_args.kwargs["content_type"] == "application/json"
+
+
+@pytest.mark.anyio
+async def test_create_diagram_cleans_saved_content_when_repo_create_fails(
+    service,
+    diagram_repo,
+    storage,
+):
+    diagram_repo.create.side_effect = RuntimeError("db failed")
+
+    with pytest.raises(RuntimeError, match="db failed"):
+        await service.create_diagram(
+            notebook_id="nb-1",
+            title="Sales chart",
+            diagram_type="echarts",
+            content='{"series":[{"type":"bar","data":[1,2,3]}]}',
+            document_ids=["doc-1"],
+        )
+
+    saved_path = storage.save_file.await_args.kwargs["object_key"]
+    storage.delete_file.assert_awaited_once_with(saved_path)
+
+
+@pytest.mark.anyio
+async def test_create_diagram_preserves_repo_error_when_cleanup_fails(
+    service,
+    diagram_repo,
+    storage,
+):
+    diagram_repo.create.side_effect = RuntimeError("db failed")
+    storage.delete_file.side_effect = RuntimeError("cleanup failed")
+
+    with pytest.raises(RuntimeError, match="db failed"):
+        await service.create_diagram(
+            notebook_id="nb-1",
+            title="Sales chart",
+            diagram_type="echarts",
+            content='{"series":[{"type":"bar","data":[1,2,3]}]}',
+            document_ids=["doc-1"],
+        )
+
+    saved_path = storage.save_file.await_args.kwargs["object_key"]
+    storage.delete_file.assert_awaited_once_with(saved_path)
+
+
+@pytest.mark.anyio
 async def test_create_diagram_defaults_to_notebook_documents_when_document_ids_missing(
     service,
     diagram_repo,
@@ -111,6 +204,29 @@ async def test_create_diagram_defaults_to_notebook_documents_when_document_ids_m
 
     assert diagram.document_ids == ["doc-1", "doc-2"]
     ref_repo.list_by_notebook.assert_awaited_once_with("nb-1")
+
+
+@pytest.mark.anyio
+async def test_create_diagram_respects_explicit_empty_document_ids(
+    service,
+    diagram_repo,
+    ref_repo,
+):
+    async def _create(diagram: Diagram) -> Diagram:
+        return diagram
+
+    diagram_repo.create.side_effect = _create
+
+    diagram = await service.create_diagram(
+        notebook_id="nb-1",
+        title="Unbound chart",
+        diagram_type="echarts",
+        content='{"series":[{"type":"bar","data":[1]}]}',
+        document_ids=[],
+    )
+
+    assert diagram.document_ids == []
+    ref_repo.list_by_notebook.assert_not_awaited()
 
 
 @pytest.mark.anyio
