@@ -198,8 +198,16 @@ export type NoteUpdateInput = {
   content?: string;
 };
 
-export type DiagramFormat = "reactflow_json" | "mermaid";
-export type DiagramType = "mindmap" | "flowchart" | "sequence" | string;
+export type DiagramFormat = "reactflow_json" | "mermaid" | "echarts_option";
+export type DiagramType = "mindmap" | "flowchart" | "sequence" | "echarts" | string;
+
+export type CreateDiagramInput = {
+  notebook_id: string;
+  title: string;
+  diagram_type: DiagramType;
+  content: string;
+  document_ids?: string[];
+};
 
 export type Diagram = {
   diagram_id: string;

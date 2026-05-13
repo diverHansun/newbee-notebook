@@ -3,12 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  createDiagram,
   deleteDiagram,
   getDiagram,
   getDiagramContent,
   listDiagrams,
   updateDiagramPositions,
 } from "@/lib/api/diagrams";
+import type { CreateDiagramInput } from "@/lib/api/types";
 
 export const DIAGRAMS_QUERY_KEY = (
   notebookId: string,
@@ -46,6 +48,20 @@ export function useUpdateDiagramPositions(notebookId: string) {
   return useMutation({
     mutationFn: ({ diagramId, positions }: { diagramId: string; positions: Record<string, { x: number; y: number }> }) =>
       updateDiagramPositions(notebookId, diagramId, { positions }),
+    onSuccess: async (diagram) => {
+      await queryClient.invalidateQueries({
+        queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),
+      });
+      queryClient.setQueryData(["diagram", notebookId, diagram.diagram_id], diagram);
+    },
+  });
+}
+
+export function useCreateDiagram(notebookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Omit<CreateDiagramInput, "notebook_id">) =>
+      createDiagram({ ...input, notebook_id: notebookId }),
     onSuccess: async (diagram) => {
       await queryClient.invalidateQueries({
         queryKey: DIAGRAMS_QUERY_KEY(notebookId, null),

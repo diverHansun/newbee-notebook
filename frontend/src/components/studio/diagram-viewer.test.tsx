@@ -15,6 +15,12 @@ vi.mock("@/components/studio/mermaid-renderer", () => ({
   ),
 }));
 
+vi.mock("@/components/studio/echarts-renderer", () => ({
+  EChartsRenderer: ({ content }: { content: string }) => (
+    <div data-testid="diagram-echarts">{content}</div>
+  ),
+}));
+
 import { DiagramViewer } from "@/components/studio/diagram-viewer";
 
 const baseDiagram: Diagram = {
@@ -46,6 +52,23 @@ describe("DiagramViewer", () => {
 
     expect(screen.getByTestId("diagram-reactflow")).toBeInTheDocument();
     expect(screen.getByText("Course Diagram")).toBeInTheDocument();
+  });
+
+  it("renders echarts content with the EChartsRenderer", () => {
+    render(
+      <DiagramViewer
+        diagram={{
+          ...baseDiagram,
+          diagram_id: "diagram-3",
+          diagram_type: "echarts",
+          format: "echarts_option",
+        }}
+        content={'{"series":[{"type":"bar","data":[1,2,3]}]}'}
+      />
+    );
+
+    expect(screen.getByTestId("diagram-echarts")).toBeInTheDocument();
+    expect(screen.getByTestId("diagram-echarts")).toHaveTextContent(/"type":"bar"/);
   });
 
   it("renders mermaid content with the Mermaid renderer", () => {

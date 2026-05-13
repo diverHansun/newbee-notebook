@@ -3,6 +3,7 @@
 import { forwardRef, useImperativeHandle, useRef } from "react";
 
 import type { Diagram } from "@/lib/api/types";
+import { EChartsRenderer } from "@/components/studio/echarts-renderer";
 import { MermaidRenderer } from "@/components/studio/mermaid-renderer";
 import {
   ReactFlowRenderer,
@@ -29,6 +30,10 @@ export const DiagramViewer = forwardRef<DiagramExportHandle, DiagramViewerProps>
 
     if (diagram.format === "mermaid") {
       return <MermaidRenderer ref={innerRef} syntax={content} />;
+    }
+
+    if (diagram.format === "echarts_option") {
+      return <EChartsRenderer ref={innerRef} content={content} />;
     }
 
     return (

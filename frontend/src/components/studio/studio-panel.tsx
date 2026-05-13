@@ -72,6 +72,8 @@ function getDiagramTypeLabel(t: (value: { zh: string; en: string }) => string, d
       return t(uiStrings.studio.diagramTypeSequence);
     case "mindmap":
       return t(uiStrings.studio.diagramTypeMindmap);
+    case "echarts":
+      return t(uiStrings.studio.diagramTypeEcharts);
     default:
       return diagramType || t(uiStrings.studio.diagramTypeMindmap);
   }
