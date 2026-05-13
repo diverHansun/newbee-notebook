@@ -11,6 +11,7 @@ from newbee_notebook.skills.diagram.tools import (
     _build_create_diagram_tool,
     _build_delete_diagram_tool,
     _build_list_diagrams_tool,
+    _build_preview_diagram_inline_tool,
     _build_read_diagram_tool,
     _build_update_diagram_positions_tool,
     _build_update_diagram_tool,
@@ -27,6 +28,8 @@ DIAGRAM_OPERATION_TOOLS = frozenset(
         "read_diagram",
     }
 )
+
+DIAGRAM_REQUIRED_TOOLS = DIAGRAM_OPERATION_TOOLS | frozenset({"preview_diagram_inline"})
 
 
 class DiagramSkillProvider:
@@ -59,6 +62,7 @@ class DiagramSkillProvider:
                     notebook_id=context.notebook_id,
                 ),
                 _build_confirm_diagram_type_tool(),
+                _build_preview_diagram_inline_tool(),
                 _build_create_diagram_tool(
                     service=self._diagram_service,
                     notebook_id=context.notebook_id,
@@ -95,5 +99,5 @@ class DiagramSkillProvider:
                 ),
             },
             force_first_tool_call=True,
-            required_tool_call_before_response=DIAGRAM_OPERATION_TOOLS,
+            required_tool_call_before_response=DIAGRAM_REQUIRED_TOOLS,
         )

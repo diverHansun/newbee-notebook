@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from newbee_notebook.application.services.diagram_service import (
     DiagramTypeNotFoundError,
     DiagramValidationError,
 )
+from newbee_notebook.skills.diagram import registry as diagram_registry
 from newbee_notebook.skills.diagram.registry import (
     DIAGRAM_TYPE_REGISTRY,
     build_diagram_system_prompt,
@@ -127,6 +130,8 @@ def test_build_diagram_system_prompt_contains_each_type():
     assert "mindmap" in prompt
     assert "flowchart" in prompt
     assert "sequence" in prompt
+    assert "echarts" in prompt
+    assert "=== echarts rules ===" in prompt
     assert "mindmap JSON schema" in prompt
     assert "<tool_call>" in prompt
 
@@ -160,4 +165,98 @@ def test_infer_diagram_type_from_prompt():
     assert infer_diagram_type_from_prompt("Please generate a mind map for chapter 3") == "mindmap"
     assert infer_diagram_type_from_prompt("Please generate a flow chart for onboarding") == "flowchart"
     assert infer_diagram_type_from_prompt("Please generate a sequence diagram for login") == "sequence"
+    assert infer_diagram_type_from_prompt("画一个柱状图") == "echarts"
+    assert infer_diagram_type_from_prompt("Please draw a line chart") == "echarts"
     assert infer_diagram_type_from_prompt("Please visualize this chapter") is None
+
+
+def _echarts_option(series_type: str) -> str:
+    data_by_type = {
+        "sankey": {
+            "nodes": [{"name": "A"}, {"name": "B"}],
+            "links": [{"source": "A", "target": "B", "value": 1}],
+        },
+        "boxplot": [[1, 2, 3, 4, 5]],
+        "candlestick": [[20, 30, 10, 35]],
+    }
+    data = data_by_type.get(series_type, [1, 2, 3])
+    return json.dumps({"series": [{"type": series_type, "data": data}]}, ensure_ascii=False)
+
+
+def test_echarts_descriptor_registered_with_json_format():
+    descriptor = get_descriptor("echarts")
+
+    assert descriptor.output_format == "echarts_option"
+    assert descriptor.file_extension == ".json"
+    assert descriptor.validator is getattr(diagram_registry, "validate_echarts_option")
+
+
+def test_echarts_whitelist_and_examples_cover_same_subtypes():
+    whitelist = getattr(diagram_registry, "ECHARTS_SERIES_TYPE_WHITELIST")
+    examples = getattr(diagram_registry, "_ECHARTS_SUBTYPE_EXAMPLES")
+
+    assert whitelist == frozenset(examples.keys())
+    assert whitelist == frozenset(
+        {
+            "bar",
+            "line",
+            "pie",
+            "scatter",
+            "effectScatter",
+            "radar",
+            "heatmap",
+            "treemap",
+            "sunburst",
+            "sankey",
+            "gauge",
+            "funnel",
+            "candlestick",
+            "boxplot",
+        }
+    )
+
+
+def test_echarts_validator_accepts_each_whitelisted_series_type():
+    validate_echarts_option = getattr(diagram_registry, "validate_echarts_option")
+
+    for series_type in getattr(diagram_registry, "ECHARTS_SERIES_TYPE_WHITELIST"):
+        validate_echarts_option(_echarts_option(series_type))
+
+
+def test_echarts_validator_accepts_multi_series_when_all_types_allowed():
+    validate_echarts_option = getattr(diagram_registry, "validate_echarts_option")
+
+    validate_echarts_option(
+        json.dumps(
+            {
+                "title": {"text": "Mixed"},
+                "series": [
+                    {"type": "bar", "data": [1, 2]},
+                    {"type": "line", "data": [2, 3]},
+                    {"type": "pie", "data": [{"name": "A", "value": 1}]},
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "match"),
+    [
+        ("", "structure"),
+        ("```echarts\n{}\n```", "structure"),
+        ("not json", "structure"),
+        ("[]", "structure"),
+        (json.dumps({"title": {"text": "missing series"}}), "structure"),
+        (json.dumps({"series": []}), "structure"),
+        (json.dumps({"series": {"type": "bar"}}), "schema"),
+        (json.dumps({"series": ["bar"]}), "schema"),
+        (json.dumps({"series": [{"data": [1, 2]}]}), "schema"),
+        (json.dumps({"series": [{"type": "unknown_chart", "data": [1]}]}), "schema"),
+    ],
+)
+def test_echarts_validator_rejects_invalid_content(content, match):
+    validate_echarts_option = getattr(diagram_registry, "validate_echarts_option")
+
+    with pytest.raises(DiagramValidationError, match=match):
+        validate_echarts_option(content)

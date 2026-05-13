@@ -140,15 +140,75 @@ def _build_confirm_diagram_type_tool() -> ToolDefinition:
     )
 
 
+def _build_preview_diagram_inline_tool() -> ToolDefinition:
+    async def execute(args: dict[str, Any]) -> ToolCallResult:
+        diagram_type = str(args.get("diagram_type") or "")
+        content = str(args.get("content") or "")
+        if not diagram_type or not content:
+            return _safe_error_result(
+                "diagram_type and content are required for inline preview.",
+                "preview_diagram_inline_invalid_args",
+            )
+
+        if diagram_type != "echarts":
+            return _safe_error_result(
+                "Inline preview currently supports only diagram_type='echarts'. "
+                "Use create_diagram for mindmap, flowchart, or sequence diagrams.",
+                "preview_diagram_inline_invalid_type",
+            )
+
+        try:
+            from newbee_notebook.skills.diagram.registry import validate_echarts_option
+
+            validate_echarts_option(content)
+        except DiagramValidationError as exc:
+            return _safe_error_result(
+                f"Diagram validation failed: {exc}",
+                "diagram_validation_failed",
+            )
+
+        return ToolCallResult(
+            content="ECharts inline preview content validated.",
+            metadata={"diagram_type": "echarts"},
+        )
+
+    return ToolDefinition(
+        name="preview_diagram_inline",
+        description=(
+            "Validate an ECharts option before returning it inline in the current /diagram response. "
+            "Only accepts diagram_type='echarts' and does not persist anything."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "diagram_type": {
+                    "type": "string",
+                    "description": "Must be echarts.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "ECharts option JSON content to validate for inline rendering.",
+                },
+            },
+            "required": ["diagram_type", "content"],
+        },
+        execute=execute,
+        tool_class=ToolClass.READ,
+        risk_level=RiskLevel.SAFE,
+    )
+
+
 def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> ToolDefinition:
     async def execute(args: dict[str, Any]) -> ToolCallResult:
+        raw_document_ids = args.get("document_ids")
+        document_ids = list(raw_document_ids) if raw_document_ids is not None else None
         try:
             diagram = await service.create_diagram(
                 notebook_id=notebook_id,
                 title=str(args.get("title") or ""),
                 diagram_type=str(args.get("diagram_type") or ""),
                 content=str(args.get("content") or ""),
-                document_ids=list(args.get("document_ids") or []),
+                document_ids=document_ids,
             )
         except DiagramTypeNotFoundError as exc:
             return _safe_error_result(str(exc), "diagram_type_not_found")
@@ -171,7 +231,8 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
         name="create_diagram",
         description=(
             "Create a diagram with explicit diagram type and full content payload. "
-            "Use mindmap JSON schema for mindmap and raw Mermaid syntax for flowchart or sequence."
+            "Use mindmap JSON schema for mindmap, raw Mermaid syntax for flowchart or sequence, "
+            "and ECharts option JSON for echarts."
         ),
         parameters={
             "type": "object",
@@ -182,7 +243,7 @@ def _build_create_diagram_tool(service: DiagramService, notebook_id: str) -> Too
                     "type": "string",
                     "description": (
                         "Full diagram content. For mindmap use mindmap JSON schema with top-level nodes and edges. "
-                        "For flowchart or sequence use raw Mermaid syntax."
+                        "For flowchart or sequence use raw Mermaid syntax. For echarts use ECharts option JSON."
                     ),
                 },
                 "document_ids": {
@@ -326,6 +387,7 @@ __all__ = [
     "_build_list_diagrams_tool",
     "_build_read_diagram_tool",
     "_build_confirm_diagram_type_tool",
+    "_build_preview_diagram_inline_tool",
     "_build_create_diagram_tool",
     "_build_update_diagram_tool",
     "_build_delete_diagram_tool",
