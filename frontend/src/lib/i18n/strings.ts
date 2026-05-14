@@ -349,8 +349,8 @@ export const uiStrings = {
     panelLabel: { zh: "可用技能命令", en: "Available skill commands" },
     noteDescription: { zh: "笔记和书签管理", en: "Notes & Marks management" },
     diagramDescription: {
-      zh: "生成图表（思维导图/流程图/时序图）",
-      en: "Generate a diagram (mind map / flowchart / sequence)",
+      zh: "生成图表（思维导图 / 流程图 / 时序图 / 数据图表）",
+      en: "Generate diagrams (mind map / flowchart / sequence / data chart)",
     },
     videoDescription: {
       zh: "总结和管理视频内容",

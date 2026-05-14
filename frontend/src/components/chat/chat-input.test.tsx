@@ -182,11 +182,11 @@ describe("ChatInput", () => {
     await user.type(input, "/d");
 
     expect(
-      screen.getByRole("button", { name: /generate a diagram \(mind map \/ flowchart \/ sequence\)/i })
+      screen.getByRole("button", { name: /generate diagrams \(mind map \/ flowchart \/ sequence \/ data chart\)/i })
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: /generate a diagram \(mind map \/ flowchart \/ sequence\)/i })
+      screen.getByRole("button", { name: /generate diagrams \(mind map \/ flowchart \/ sequence \/ data chart\)/i })
     );
 
     expect(input).toHaveValue("/diagram ");

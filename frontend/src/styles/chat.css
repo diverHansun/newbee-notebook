@@ -432,12 +432,12 @@
   background: transparent;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
-  padding: 10px 12px;
+  padding: 9px 12px;
   cursor: pointer;
   transition: background 150ms ease-out;
+  min-width: 0;
 }
 
 .slash-command-row:hover,
@@ -450,22 +450,51 @@
   opacity: 0.72;
 }
 
-.slash-command-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.slash-command-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: hsl(var(--muted-foreground));
+}
+
+.slash-command-row:hover .slash-command-icon,
+.slash-command-row.is-active .slash-command-icon {
+  color: hsl(var(--foreground));
 }
 
 .slash-command-name {
   font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.slash-command-description,
+.slash-command-separator {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.slash-command-description {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .slash-command-status {
   color: hsl(var(--muted-foreground));
   font-size: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
 }
 
 .permission-request-card {
