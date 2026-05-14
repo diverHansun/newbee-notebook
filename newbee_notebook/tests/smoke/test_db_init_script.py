@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -104,7 +105,8 @@ def test_batch4_migration_sql_exists_with_diagrams_table():
     sql = migration_path.read_text(encoding="utf-8")
 
     assert "CREATE TABLE IF NOT EXISTS diagrams (" in sql
-    assert "format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option'))" in sql
+    assert "CONSTRAINT ck_diagrams_format" in sql
+    assert "format IN ('reactflow_json', 'mermaid', 'echarts_option')" in sql
     assert "CREATE INDEX IF NOT EXISTS idx_diagrams_notebook_id" in sql
     assert "CREATE INDEX IF NOT EXISTS idx_diagrams_document_ids" in sql
 
@@ -216,7 +218,8 @@ def test_runtime_schema_statements_backfill_batch3_tables():
     assert "CREATE TABLE IF NOT EXISTS note_document_tags (" in statements
     assert "CREATE TABLE IF NOT EXISTS note_mark_refs (" in statements
     assert "CREATE TABLE IF NOT EXISTS diagrams (" in statements
-    assert "format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option'))" in statements
+    assert "CONSTRAINT ck_diagrams_format" in statements
+    assert "format IN ('reactflow_json', 'mermaid', 'echarts_option')" in statements
     assert "CREATE INDEX IF NOT EXISTS idx_diagrams_notebook_id" in statements
     assert "CREATE INDEX IF NOT EXISTS idx_diagrams_document_ids" in statements
 
@@ -345,6 +348,38 @@ async def test_batch9_migration_executes_against_ephemeral_postgres():
                 """,
                 notebook_id,
             )
+
+        await conn.execute("DROP TABLE diagrams")
+        await conn.execute(
+            """
+            CREATE TABLE diagrams (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                diagram_type TEXT NOT NULL,
+                format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
+                content_path TEXT NOT NULL,
+                document_ids UUID[] NOT NULL DEFAULT '{}',
+                node_positions JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(migration_sql)
+        constraint_names = {
+            row["conname"]
+            for row in await conn.fetch(
+                """
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'public.diagrams'::regclass
+                  AND contype = 'c'
+                """
+            )
+        }
+        assert "ck_diagrams_format" in constraint_names
+        assert "diagrams_format_check" not in constraint_names
     finally:
         if conn is not None:
             await conn.close()
@@ -370,7 +405,47 @@ def test_init_postgres_declares_echarts_diagram_format():
 
     sql = sql_path.read_text(encoding="utf-8")
 
-    assert "format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option'))" in sql
+    assert "CONSTRAINT ck_diagrams_format" in sql
+    assert "format IN ('reactflow_json', 'mermaid', 'echarts_option')" in sql
+
+
+def test_init_postgres_declares_default_qwen_pgvector_table():
+    sql_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "init-postgres.sql"
+    )
+
+    sql = re.sub(r"/\*.*?\*/", "", sql_path.read_text(encoding="utf-8"), flags=re.S)
+
+    assert "CREATE TABLE IF NOT EXISTS data_documents_qwen3_embedding (" in sql
+    assert "embedding vector(1024)" in sql
+    assert "documents_qwen3_embedding_idx_1" in sql
+    assert "documents_qwen3_embedding_source_document_id_idx" in sql
+
+
+def test_init_postgres_matches_live_message_column_order_for_image_ids():
+    sql_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "db"
+        / "init-postgres.sql"
+    )
+
+    sql = sql_path.read_text(encoding="utf-8")
+    messages_block = sql.split("CREATE TABLE IF NOT EXISTS messages (", 1)[1].split(");", 1)[0]
+
+    assert messages_block.index("created_at TIMESTAMP NOT NULL DEFAULT NOW()") < messages_block.index(
+        "image_ids JSONB NOT NULL DEFAULT '[]'::jsonb"
+    )
+
+
+def test_runtime_schema_statements_backfill_pgvector_source_document_indexes():
+    statements = "\n".join(get_runtime_schema_statements())
+
+    assert "data_documents_qwen3_embedding" in statements
+    assert "documents_qwen3_embedding_source_document_id_idx" in statements
 
 
 def test_batch3_models_are_present_in_sqlalchemy_metadata():

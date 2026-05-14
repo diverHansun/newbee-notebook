@@ -11,6 +11,7 @@ BEGIN
         FROM pg_constraint
         WHERE conrelid = 'public.diagrams'::regclass
           AND contype = 'c'
+          AND conname = 'ck_diagrams_format'
           AND pg_get_constraintdef(oid) LIKE '%echarts_option%'
     ) THEN
         RETURN;
@@ -26,7 +27,6 @@ BEGIN
               OR (
                   pg_get_constraintdef(oid) LIKE '%reactflow_json%'
                   AND pg_get_constraintdef(oid) LIKE '%mermaid%'
-                  AND pg_get_constraintdef(oid) NOT LIKE '%echarts_option%'
               )
           )
     LOOP

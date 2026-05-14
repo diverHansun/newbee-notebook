@@ -163,7 +163,9 @@ def get_runtime_schema_statements() -> list[str]:
             notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             diagram_type TEXT NOT NULL,
-            format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
+            format TEXT NOT NULL,
+            CONSTRAINT ck_diagrams_format
+                CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
             content_path TEXT NOT NULL,
             document_ids UUID[] NOT NULL DEFAULT '{}',
             node_positions JSONB,
@@ -185,6 +187,7 @@ def get_runtime_schema_statements() -> list[str]:
                 FROM pg_constraint
                 WHERE conrelid = 'public.diagrams'::regclass
                   AND contype = 'c'
+                  AND conname = 'ck_diagrams_format'
                   AND pg_get_constraintdef(oid) LIKE '%echarts_option%'
             ) THEN
                 RETURN;
@@ -200,7 +203,6 @@ def get_runtime_schema_statements() -> list[str]:
                       OR (
                           pg_get_constraintdef(oid) LIKE '%reactflow_json%'
                           AND pg_get_constraintdef(oid) LIKE '%mermaid%'
-                          AND pg_get_constraintdef(oid) NOT LIKE '%echarts_option%'
                       )
                   )
             LOOP
@@ -325,6 +327,17 @@ def get_runtime_schema_statements() -> list[str]:
         """
         CREATE INDEX IF NOT EXISTS idx_chat_images_deleted_at
         ON chat_images(deleted_at)
+        """,
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'data_documents_qwen3_embedding') THEN
+                EXECUTE 'CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_source_document_id_idx ON data_documents_qwen3_embedding ((metadata_->>''source_document_id''))';
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'data_documents_zhipu') THEN
+                EXECUTE 'CREATE INDEX IF NOT EXISTS documents_zhipu_source_document_id_idx ON data_documents_zhipu ((metadata_->>''source_document_id''))';
+            END IF;
+        END $$
         """,
     ]
 

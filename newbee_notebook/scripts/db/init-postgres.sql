@@ -163,7 +163,9 @@ CREATE TABLE IF NOT EXISTS diagrams (
     notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     diagram_type TEXT NOT NULL,
-    format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
+    format TEXT NOT NULL,
+    CONSTRAINT ck_diagrams_format
+        CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
     content_path TEXT NOT NULL,
     document_ids UUID[] NOT NULL DEFAULT '{}',
     node_positions JSONB,
@@ -226,8 +228,8 @@ CREATE TABLE IF NOT EXISTS messages (
     role VARCHAR(20) NOT NULL CHECK (role IN ('user','assistant','system')),
     message_type VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (message_type IN ('normal','summary')),
     content TEXT NOT NULL,
-    image_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    image_ids JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
@@ -286,9 +288,7 @@ CREATE INDEX IF NOT EXISTS idx_generated_images_created_at ON generated_images(c
 -- - 'documents_zhipu' becomes 'data_documents_zhipu'
 
 -- Qwen3 embedding vector store table (1024 dimensions)
--- This table is auto-created by LlamaIndex during index building
--- Uncomment if you want to pre-create it manually:
-/*
+-- Pre-created so first deployment has the default vector schema immediately.
 CREATE TABLE IF NOT EXISTS data_documents_qwen3_embedding (
     id BIGSERIAL PRIMARY KEY,
     text VARCHAR NOT NULL,
@@ -300,7 +300,6 @@ CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_idx_1
     ON data_documents_qwen3_embedding ((metadata_->>'ref_doc_id'));
 CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_source_document_id_idx
     ON data_documents_qwen3_embedding ((metadata_->>'source_document_id'));
-*/
 
 -- ZhipuAI vector store table (1024 dimensions)
 -- This table is auto-created by LlamaIndex during index building
@@ -337,7 +336,5 @@ BEGIN
     RAISE NOTICE 'Core tables: library, notebooks, documents, notebook_document_refs, sessions, messages, references, app_settings, marks, notes, note_document_tags, note_mark_refs, diagrams, video_summaries, chat_images, generated_images';
     RAISE NOTICE 'Document model: library-first (library_id NOT NULL, notebook association via notebook_document_refs)';
     RAISE NOTICE 'Document statuses: uploaded -> pending -> processing -> converted -> completed | failed';
-    RAISE NOTICE 'Vector tables: Auto-created by LlamaIndex during index building';
-    RAISE NOTICE '  - data_documents_qwen3_embedding (1024 dims)';
-    RAISE NOTICE '  - data_documents_zhipu (1024 dims)';
+    RAISE NOTICE 'Vector tables: data_documents_qwen3_embedding pre-created (1024 dims); optional provider tables are auto-created by LlamaIndex';
 END $$;
