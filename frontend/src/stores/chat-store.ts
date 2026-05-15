@@ -69,13 +69,28 @@ export type ChatMessage = {
   toolSteps?: ToolStep[];
 };
 
+export type ExplainCardError = {
+  code: string;
+  message: string;
+  retryable: boolean;
+};
+
 export type ExplainCardState = {
   visible: boolean;
   mode: "explain" | "conclude";
   selectedText: string;
   content: string;
   isStreaming: boolean;
+  error: ExplainCardError | null;
+  lastInteractionKey: string;
 };
+
+export function buildExplainInteractionKey(
+  mode: "explain" | "conclude",
+  selectedText: string
+): string {
+  return `${mode}::${selectedText}`;
+}
 
 type ChatState = {
   currentSessionId: string | null;
@@ -100,6 +115,7 @@ type ChatState = {
     state: ExplainCardState | null | ((prev: ExplainCardState | null) => ExplainCardState | null)
   ) => void;
   appendExplainContent: (delta: string) => void;
+  clearExplainError: () => void;
 };
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -172,6 +188,13 @@ export const useChatStore = create<ChatState>((set) => ({
           ...state.explainCard,
           content: `${state.explainCard.content}${delta}`,
         },
+      };
+    }),
+  clearExplainError: () =>
+    set((state) => {
+      if (!state.explainCard) return {};
+      return {
+        explainCard: { ...state.explainCard, error: null },
       };
     }),
 }));

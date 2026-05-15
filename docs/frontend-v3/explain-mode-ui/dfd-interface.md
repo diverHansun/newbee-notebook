@@ -3,7 +3,7 @@
 ## 撰写前置确认
 
 - 模块职责边界已在 `goals-duty.md` 中确认。
-- 模块内部子组件已在 `architecture.md` 中描述（含 9 个子组件）。
+- 模块内部结构已在 `architecture.md` 中描述：`ExplainCard` 单文件宿主 + `useTypewriterBuffer` hook。
 - 核心数据类型 `ExplainCardState` / `ExplainCardError` / `TypewriterBufferState` 已在 `data-model.md` 中定义。
 
 ---
@@ -20,7 +20,7 @@
 | 上游输入 | 后端 `POST /notebooks/{id}/chat/stream` | SSE 流式事件源 |
 | 内部协调 | `useChatSession.ts` 的 explain 分支 | 事件消费 + 重发 + fallback |
 | 状态枢纽 | `chat-store.explainCard` | 单向数据流的中心 |
-| 下游消费 | `ExplainCard` 组件树 | 仅订阅 store，无反向调用 |
+| 下游消费 | `ExplainCard` 单文件宿主 | 接收 `explainCard` 与 `retryExplainCard`，渲染本地 UI 分支 |
 | 平级依赖 | `markdown-typewriter` util | 可见字符切片计算 |
 | 平级依赖 | `MarkdownViewer` 组件 | 内容最终渲染 |
 
@@ -107,7 +107,7 @@
      })
      │
      ▼
-[4] ExplainCardBody 的 React key 变化 → 卸载旧 body → 挂载新 body
+[4] ExplainCard body 容器的 React key 变化 → 卸载旧 body → 挂载新 body
      │
      ▼
 [5] CSS @keyframes fade-in 自动播放（150ms opacity 0→1）
@@ -125,8 +125,8 @@
 [2] flush buffer + setExplainError({code, message, retryable: true})
      │
      ▼
-[3] ExplainCardBody 检测 error !== null → 渲染 <ExplainCardError />
-     │ 该组件接收来自父级的 retry 回调
+[3] ExplainCard 检测 error !== null → 渲染本地 error block
+     │ error block 接收来自父级的 retry 回调
      ▼
 [4] 用户点击"重试"按钮
      │
@@ -200,9 +200,9 @@ size state 改变 → 卡片 width / height
 
 ```ts
 function useTypewriterBuffer(opts: {
-  onTick: (visibleSlice: string) => void;
-  stepMs?: number;            // 默认 24
-  charsPerTick?: number;      // 默认 3
+  onDelta: (visibleDelta: string) => void;
+  baseCharsPerSecond?: number;
+  drainCharsPerSecond?: number;
 }): {
   push: (delta: string) => void;
   flush: () => void;
@@ -210,8 +210,8 @@ function useTypewriterBuffer(opts: {
 };
 ```
 
-- 语义：消费方调用 `push(delta)` 累积；hook 内启动 rAF；按 `stepMs` 间隔以最多 `charsPerTick` 个可见字符的速度推进；通过 `onTick(visibleSlice)` 把当前应可见的完整切片回调给消费方。
-- 同步 vs 异步：`push` 同步；`onTick` 异步在 rAF 中。
+- 语义：消费方调用 `push(delta)` 累积；hook 内启动 rAF；按字符速率推进可见字符；通过 `onDelta(visibleDelta)` 把新增可见内容回调给消费方。
+- 同步 vs 异步：`push` 同步；`onDelta` 异步在 rAF 中（`flush` 除外）。
 - 终止：`flush()` 立即一次性 tick 到末尾；`reset()` 清空所有状态、停止 rAF。
 - **复用 `markdown-typewriter.buildMarkdownVisibleMap` / `sliceMarkdownByVisibleChars`**：不重写可见字符计算逻辑。
 
@@ -220,7 +220,7 @@ function useTypewriterBuffer(opts: {
 ```ts
 setExplainError(error: ExplainCardError | null): void;
 clearExplainError(): void;
-bumpExplainInteractionKey(): void;
+buildExplainInteractionKey(mode, selectedText): string;
 ```
 
 - 行为均为同步 setState；订阅方通过 `useChatStore` selector 接收。
@@ -239,32 +239,20 @@ sendMessage(
 
 本批次只改 explain / conclude 分支的**实现**，不改签名。
 
-### 4. ExplainCardError 组件 props
+### 4. ExplainCard retry 接口
 
 ```ts
-type ExplainCardErrorProps = {
-  error: ExplainCardError;
-  onRetry: () => void;
+type ExplainCardProps = {
+  card: ExplainCardState | null;
+  onRetry?: () => void;
 };
 ```
 
-- onRetry 来自 `ExplainCard` 持有的"上次请求重发"闭包；该闭包由 `useChatSession` 通过 ref 或 store action 提供。
+- onRetry 来自 `useChatSession.retryExplainCard`，由 `NotebookWorkspace` 透传给 `ExplainCard`。
 
-### 5. ExplainCardLoader 组件 props
+### 5. ExplainCard 本地渲染分支
 
-```ts
-type ExplainCardLoaderProps = Record<string, never>;
-```
-
-- 无 props；样式与动画完全靠 CSS。组件内部带 `aria-live="polite"` + 不可见的 i18n loading 文案以满足 a11y。
-
-### 6. ExplainCardBody 组件 props
-
-```ts
-type ExplainCardBodyProps = {
-  // 不传入 explainCard 数据——直接通过 useChatStore selector 订阅，避免父组件层层透传
-};
-```
+`ExplainCard` 内部根据 `(content, isStreaming, error)` 渲染 error / loader / empty / markdown content。分支不拆文件，因为它们没有复用方，生命周期也完全跟宿主一致。
 
 ---
 
@@ -275,9 +263,9 @@ type ExplainCardBodyProps = {
 | `explainCard` 对象 | `useChatSession` (首次 setExplainCard) | `useChatSession` / `useTypewriterBuffer` | 不主动销毁，新会话覆盖 | useChatSession 维护其生命周期 |
 | `explainCard.content` | `useTypewriterBuffer` 通过 `appendExplainContent` | 同上 | flush 后稳定 | typewriter buffer 是唯一写入者 |
 | `explainCard.error` | `useChatSession` SSE error / 网络异常 | `clearExplainError`（用户重试） | 重试或新会话清空 | useChatSession 是唯一写入者 |
-| `explainCard.lastInteractionKey` | `useChatSession` 在 mode / selectedText 变化时 | 仅 `bumpExplainInteractionKey` | 跟随 explainCard 整体销毁 | useChatSession 是唯一写入者 |
+| `explainCard.lastInteractionKey` | `useChatSession` 在 mode / selectedText 变化时 | 新 explain / conclude 请求覆盖 | 跟随 explainCard 整体销毁 | useChatSession 是唯一写入者 |
 | typewriter buffer 内部状态 | hook 本身 | hook push / tick / flush | hook reset / unmount | hook 完全自治，不暴露状态给外部 |
-| pill / 卡片的 collapsed 状态 | `ExplainCard` 组件 | 用户操作 | 组件卸载 | 局部 UI 状态，不入 store |
+| pill / 卡片的 collapsed 状态 | `ExplainCard` 宿主组件 | 用户操作 | 组件卸载 | 局部 UI 状态，不入 store |
 | pill / 卡片的 position / size | `useDraggable` / `useResizable` | 用户拖拽 | 组件卸载 / 重置 | 局部 UI 状态，不入 store（Non-Duty #4） |
 
 ### 关键责任边界
@@ -297,8 +285,8 @@ type ExplainCardBodyProps = {
 |---|---|
 | 流 1 | streaming 期间 content 单调增长；done 时 content === sum(deltas) |
 | 流 1 typewriter | content 增长速率 ≤ 后端 delta 速率（节流生效） |
-| 流 2 模式切换 | mode 变化时 ExplainCardBody 卸载重挂（key 不同） |
-| 流 3 错误 | error !== null 时 ExplainCardError 出现，content 保持不变 |
+| 流 2 模式切换 | mode 变化时 ExplainCard body 容器卸载重挂（key 不同） |
+| 流 3 错误 | error !== null 时 error block 出现，content 保持不变 |
 | 流 4 fallback | 网络异常 + 持久化命中时 explainCard.content 被注入，error === null |
 | 流 5 折叠 | setCollapsed(true) 后 explainCard 状态不变 |
 | 流 6 拖拽 | 折叠重展开后 position === {0, 0} |

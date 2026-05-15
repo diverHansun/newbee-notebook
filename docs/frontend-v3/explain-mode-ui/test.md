@@ -23,8 +23,8 @@
 
 - `useTypewriterBuffer` 的累积、节流、flush、reset 行为及其与 `markdown-typewriter` 的集成。
 - `useChatSession` explain / conclude 分支的 SSE 事件消费（content / done / error / 网络异常）。
-- `chat-store.explainCard` 的状态字段扩展与新 actions（`setExplainError` / `clearExplainError` / `bumpExplainInteractionKey`）。
-- `ExplainCard` 容器及 5 个 presentational 子组件的状态分支渲染。
+- `chat-store.explainCard` 的状态字段扩展与新 actions / helper（`setExplainError` / `clearExplainError` / `buildExplainInteractionKey`）。
+- `ExplainCard` 单文件宿主的状态分支渲染（empty / loading / streaming / done / error）。
 - 模式切换的 `lastInteractionKey` 变化与 fade-in 触发。
 - 错误状态下 content 保持不变的契约。
 - pill 与卡片均挂载于 `#main-panel-section` 内部的回归断言。
@@ -97,14 +97,14 @@
 - 用户再触发 sendMessage(mode="conclude", selectedText="A") → lastInteractionKey = K2 ≠ K1
 - 同一模式 + 同一文本再次触发不变更 key（断言 K === K1）
 
-### 4. ExplainCardBody 状态分支渲染
+### 4. ExplainCard 状态分支渲染
 
 | 状态 | 期望渲染 |
 |---|---|
-| `content="" && isStreaming=true && error=null` | `<ExplainCardLoader />` 出现，`role="status"` |
-| `content="" && isStreaming=false && error=null && explainCard=null` | `<ExplainCardEmptyState />` 出现，含 i18n emptyTitle |
+| `content="" && isStreaming=true && error=null` | loader 分支出现，`role="status"` |
+| `content="" && isStreaming=false && error=null && explainCard=null` | empty 分支出现，含 i18n emptyTitle |
 | `content="some text" && isStreaming=true && error=null` | `<MarkdownViewer />` 渲染 "some text"，loader 不出现 |
-| `error !== null`（无论其他字段） | `<ExplainCardError />` 出现，含 i18n error.retry 按钮；loader 不出现 |
+| `error !== null`（无论其他字段） | error block 出现，含 i18n error.retry 按钮；loader 不出现 |
 | `content="partial" && error !== null` | 错误块 + content 同时可见 |
 
 ### 5. 重试流程
@@ -123,7 +123,7 @@
 ### 7. 错误不污染 content
 
 - 不论触发什么 SSE error / 网络异常，`content` 字段中**不出现** `[E_*]` 字符串前缀。
-- 错误信息只在 `error.message` 字段，由 `ExplainCardError` 独立渲染。
+- 错误信息只在 `error.message` 字段，由 `ExplainCard` 的 error block 独立渲染。
 
 ### 8. 定位重构回归
 
@@ -149,8 +149,8 @@
 
 ### 3. 与 `chat-store` 集成
 
-- 新增 actions 单测：`setExplainError`、`clearExplainError`、`bumpExplainInteractionKey`。
-- 断言 `bumpExplainInteractionKey` 在相同 mode/selectedText 下幂等。
+- 新增 actions / helper 单测：`setExplainError`、`clearExplainError`、`buildExplainInteractionKey`。
+- 断言 `buildExplainInteractionKey` 在相同 mode/selectedText 下幂等。
 
 ### 4. 与 `notebook-workspace` 集成
 
@@ -185,8 +185,7 @@
 |---|---|---|
 | 纯单元 | `useTypewriterBuffer.test.ts` | 8-12 例 |
 | 纯单元 | `chat-store.test.ts`（新 actions） | 4-6 例 |
-| 组件单元 | `explain-card-loader.test.tsx` / `explain-card-error.test.tsx` / `explain-card-empty-state.test.tsx` / `explain-card-titlebar.test.tsx` / `explain-card-body.test.tsx` | 各 3-6 例 |
-| 组件集成 | `explain-card.test.tsx` | 6-10 例（状态分支、folding） |
+| 组件集成 | `explain-card.test.tsx` | 6-10 例（状态分支、folding、retry） |
 | Hook 集成 | `useChatSession.explain-session.test.tsx`（扩展） | 新增 6-8 例 |
 
 ### 4. 视觉验证（不在单测）

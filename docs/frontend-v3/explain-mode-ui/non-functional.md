@@ -57,10 +57,10 @@
 
 | 元素 | role | aria-live |
 |---|---|---|
-| `ExplainCardLoader` | `status` | `polite` |
-| `ExplainCardError` | `alert` | `assertive` |
-| `ExplainCardEmptyState` | （无） | （无） |
-| `ExplainCardBody` 内容区 | `region` + `aria-label` | `polite` |
+| `ExplainCard` loader 分支 | `status` | `polite` |
+| `ExplainCard` error block 分支 | `alert` | `assertive` |
+| `ExplainCard` empty 分支 | （无） | （无） |
+| `ExplainCard` 内容区 | `region` 或语义化容器 | `polite` |
 
 **理由**：
 
@@ -194,13 +194,13 @@
 
 ### 8.1 代码组织
 
-- 6 个新组件文件平均行数 < 80 行；单一职责。
-- `useTypewriterBuffer` < 100 行；纯函数 + rAF；100% 可单测。
+- 不拆多个仅服务此卡片的展示组件；`ExplainCard` 保持单文件宿主，本地 helper 只表达渲染分支。
+- `useTypewriterBuffer` 保持独立；纯逻辑 + rAF，可单测。
 
 ### 8.2 命名
 
 - 所有新 CSS class 以 `explain-card-*` 前缀避免与既有冲突。
-- CSS 变量名 `--explain-accent` 局部声明在 `.explain-card` 选择器下，**不进入 `:root`**。
+- CSS 变量名 `--explain-accent` 局部声明在 `.explain-card` / `.explain-card-pill` 选择器下，**不进入 `:root`**。
 
 ### 8.3 删除清单
 

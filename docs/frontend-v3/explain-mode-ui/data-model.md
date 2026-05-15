@@ -44,11 +44,12 @@ type ExplainCardError = {
 
 ```ts
 type TypewriterBufferState = {
-  rawAccumulated: string;       // 后端到达的全部 delta 拼接结果
-  visibleCharCount: number;     // 当前已暴露给消费方的可见字符数
+  rawContent: string;           // 后端到达的全部 delta 拼接结果
+  visibleChars: number;         // 当前已暴露给消费方的可见字符数
+  displayedRawIndex: number;    // 已回调给 onDelta 的原始字符串索引
   rafHandle: number | null;     // 当前 requestAnimationFrame 句柄
-  flushed: boolean;             // 是否已 flush（done / error 后置 true）
-  lastTickMs: number;           // 上一次 tick 的时间戳，用于节流
+  lastTickAt: number | null;    // 上一次 tick 的时间戳，用于节流
+  drainRequestedAt: number | null;
 };
 ```
 
@@ -69,7 +70,7 @@ type TypewriterBuffer = {
 ```ts
 setExplainError(error: ExplainCardError | null): void;
 clearExplainError(): void;                       // 等价于 setExplainError(null)
-bumpExplainInteractionKey(): void;               // 用 mode+selectedText 生成新 lastInteractionKey
+buildExplainInteractionKey(mode, selectedText): string;
 ```
 
 保留以下既有 actions（行为不变）：
@@ -106,7 +107,7 @@ bumpExplainInteractionKey(): void;               // 用 mode+selectedText 生成
 
 1. `content` 单调增长直至 `done`，**不会被错误覆盖**。错误期间 `content` 保留最后一次 buffer 输出的状态，用户仍可读已生成部分。
 2. `error !== null` 与 `isStreaming === true` 可以并存（中途出错但流未真正终止），优先级为：**error 渲染压过 loader**。
-3. `lastInteractionKey` 仅在用户主动切换模式或选中新文本时变化；同一会话内的多次 token append 不会改变它（否则会反复 fade-in）。
+3. `lastInteractionKey` 由 `buildExplainInteractionKey(mode, selectedText)` 生成，仅在用户主动切换模式或选中新文本时变化；同一会话内的多次 token append 不会改变它（否则会反复 fade-in）。
 
 ---
 

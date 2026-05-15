@@ -24,7 +24,7 @@
 
 7. **入口零回归**：右上角 pill 的视觉位置、文字、点击行为不变，本批次不动它（实现侧仅改挂载父节点，用户不可见）。
 
-8. **可逆性**：所有视觉变更收敛到一个局部 CSS 变量 `--explain-accent`（淡紫色）与本模块的 7 个组件文件；回滚成本仅限本目录，不影响 chat / ask / Reader / Studio。
+8. **可逆性**：所有视觉变更收敛到 `ExplainCard` 单文件宿主、一个 `useTypewriterBuffer` hook、`reader.css` 第 21 节与少量 store / i18n 字段；回滚成本仅限本模块，不影响 chat / ask / Reader / Studio。
 
 ---
 
@@ -52,14 +52,14 @@
 ### 3. 等待 UI 改为黑点呼吸
 
 - 删除现有 `.streaming-dot` 黄色脉冲 + "加载中…"文案的并排展示。
-- 新增 `ExplainCardLoader` 组件：单圆点，浅色模式 `hsl(220 10% 25%)`、深色模式 `hsl(220 5% 90%)`（具体值与理由见 `non-functional.md` §4.3）；`@keyframes` 控制 `transform: scale(0.55 → 1.0 → 0.55)` + `opacity: 0.35 → 1 → 0.35`，周期约 1.4s，`ease-in-out infinite`，居中独占 body 空间。
+- 在 `ExplainCard` 内部新增 loader 渲染分支：单圆点，浅色模式 `hsl(220 10% 25%)`、深色模式 `hsl(220 5% 90%)`（具体值与理由见 `non-functional.md` §4.3）；`@keyframes` 控制 `transform: scale(0.55 → 1.0 → 0.55)` + `opacity: 0.35 → 1 → 0.35`，周期约 1.4s，`ease-in-out infinite`，居中独占 body 空间。
 - 仅当 `isStreaming === true && content === "" && error === null` 时显示；首 token 到达即让位给打字机内容。
 
 ### 4. 错误状态独立块
 
 - 扩展 `ExplainCardState` 增加 `error: ExplainCardError | null` 字段。
 - explain 分支在 SSE `error` 或网络异常时不再 `appendExplainContent` 拼接错误码到 markdown，改为 `setExplainError({code, message, retryable})`。
-- body 在 `error !== null` 时渲染 `ExplainCardError` 块：淡红 1px 边框、错误图标 SVG、错误文案、"重试"按钮。
+- body 在 `error !== null` 时渲染独立错误块：淡红 1px 边框、错误文案、"重试"按钮；该块是 `ExplainCard` 内部本地分支，不另拆组件文件。
 - 点击"重试"→ 清空 `error`、重发上次请求；error 期间已生成的 `content` 不被覆盖（用户仍可读已生成部分）。
 
 ### 5. 模式切换淡入

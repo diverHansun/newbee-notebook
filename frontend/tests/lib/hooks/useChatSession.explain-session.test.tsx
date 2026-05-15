@@ -10,6 +10,8 @@ const listSessionMessages = vi.fn();
 const createSession = vi.fn();
 const deleteSession = vi.fn();
 const chatOnce = vi.fn();
+const getEffectivePolicy = vi.fn();
+const updatePolicyPreference = vi.fn();
 const startStream = vi.fn();
 const cancelStream = vi.fn();
 
@@ -22,6 +24,11 @@ vi.mock("@/lib/api/sessions", () => ({
 
 vi.mock("@/lib/api/chat", () => ({
   chatOnce: (...args: unknown[]) => chatOnce(...args),
+}));
+
+vi.mock("@/lib/api/policy", () => ({
+  getEffectivePolicy: (...args: unknown[]) => getEffectivePolicy(...args),
+  updatePolicyPreference: (...args: unknown[]) => updatePolicyPreference(...args),
 }));
 
 vi.mock("@/lib/hooks/useChatStream", () => ({
@@ -58,6 +65,8 @@ describe("useChatSession explain session creation", () => {
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
+    getEffectivePolicy.mockReset();
+    updatePolicyPreference.mockReset();
     startStream.mockReset();
     cancelStream.mockReset();
 
@@ -83,6 +92,20 @@ describe("useChatSession explain session creation", () => {
     });
     listSessionMessages.mockResolvedValue({ data: [] });
     createSession.mockResolvedValue(createdSession);
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-new",
+      policy: "default",
+      source: "default",
+    });
+    updatePolicyPreference.mockImplementation(
+      async (_notebookId: string, update: { policy: string; scope: string; session_id?: string }) => ({
+        notebook_id: "nb-1",
+        session_id: update.session_id ?? "session-new",
+        policy: update.policy,
+        source: "default",
+      })
+    );
     startStream.mockImplementation(
       async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void; onDone?: () => void }) => {
         callbacks?.onEvent?.({ type: "content", delta: "Explained." });
@@ -112,6 +135,8 @@ describe("useChatSession explain session creation", () => {
       expect(result.current.currentSessionId).toBe("session-new");
       expect(result.current.explainCard?.content).toBe("Explained.");
       expect(result.current.explainCard?.isStreaming).toBe(false);
+      expect(result.current.explainCard?.error).toBeNull();
+      expect(result.current.explainCard?.lastInteractionKey).toBe("explain::Selected text");
     });
 
     expect(startStream).toHaveBeenCalledTimes(1);
@@ -123,6 +148,94 @@ describe("useChatSession explain session creation", () => {
         document_id: "doc-1",
         selected_text: "Selected text",
       },
+    });
+  });
+
+  it("stores explain stream errors separately from markdown content", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "content", delta: "Partial answer" });
+        callbacks?.onEvent?.({
+          type: "error",
+          error_code: "E_EXPLAIN",
+          message: "Explain failed",
+        });
+      }
+    );
+
+    const wrapper = createHookWrapper("en");
+    const { result } = renderHook(() => useChatSession("nb-1"), { wrapper });
+
+    await waitFor(() => {
+      expect(listSessions).toHaveBeenCalledWith("nb-1", 50, 0);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Explain selection", "explain", {
+        document_id: "doc-1",
+        selected_text: "Selected text",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.explainCard?.content).toBe("Partial answer");
+      expect(result.current.explainCard?.content).not.toContain("[E_EXPLAIN]");
+      expect(result.current.explainCard?.error).toEqual({
+        code: "E_EXPLAIN",
+        message: "Explain failed",
+        retryable: true,
+      });
+      expect(result.current.explainCard?.isStreaming).toBe(false);
+    });
+  });
+
+  it("retries the most recent explain request after clearing the error", async () => {
+    startStream
+      .mockImplementationOnce(
+        async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+          callbacks?.onEvent?.({
+            type: "error",
+            error_code: "E_EXPLAIN",
+            message: "Explain failed",
+          });
+        }
+      )
+      .mockImplementationOnce(
+        async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void; onDone?: () => void }) => {
+          callbacks?.onEvent?.({ type: "content", delta: "Recovered." });
+          callbacks?.onEvent?.({ type: "done" });
+          callbacks?.onDone?.();
+        }
+      );
+
+    const wrapper = createHookWrapper("en");
+    const { result } = renderHook(() => useChatSession("nb-1"), { wrapper });
+
+    await waitFor(() => {
+      expect(listSessions).toHaveBeenCalledWith("nb-1", 50, 0);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Explain selection", "explain", {
+        document_id: "doc-1",
+        selected_text: "Selected text",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.explainCard?.error?.code).toBe("E_EXPLAIN");
+    });
+
+    await act(async () => {
+      await result.current.retryExplainCard();
+    });
+
+    await waitFor(() => {
+      expect(startStream).toHaveBeenCalledTimes(2);
+      expect(startStream.mock.calls[1]?.[1]).toMatchObject(startStream.mock.calls[0]?.[1]);
+      expect(result.current.explainCard?.content).toBe("Recovered.");
+      expect(result.current.explainCard?.error).toBeNull();
+      expect(result.current.explainCard?.isStreaming).toBe(false);
     });
   });
 });

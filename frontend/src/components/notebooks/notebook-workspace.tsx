@@ -105,7 +105,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
       }
       main={mainContent}
       right={<StudioPanel notebookId={notebookId} onOpenDocument={openDocument} />}
-      mainOverlay={<ExplainCard card={chat.explainCard} />}
+      mainOverlay={<ExplainCard card={chat.explainCard} onRetry={chat.retryExplainCard} />}
     />
   );
 }

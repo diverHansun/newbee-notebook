@@ -28,8 +28,14 @@ import { createSession, deleteSession, listSessionMessages, listSessions } from 
 import { getEffectivePolicy, updatePolicyPreference } from "@/lib/api/policy";
 import { useChatStream } from "@/lib/hooks/useChatStream";
 import { buildMarkdownVisibleMap, type MarkdownVisibleMap } from "@/lib/utils/markdown-typewriter";
+import { useTypewriterBuffer } from "@/lib/hooks/useTypewriterBuffer";
 import { normalizeSources } from "@/lib/utils/sources";
-import { ChatMessage, ToolStep, useChatStore } from "@/stores/chat-store";
+import {
+  buildExplainInteractionKey,
+  ChatMessage,
+  ToolStep,
+  useChatStore,
+} from "@/stores/chat-store";
 
 const SESSION_QUERY_KEY = (notebookId: string) => ["sessions", notebookId] as const;
 const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] as const;
@@ -76,6 +82,13 @@ type FinalTypewriterState = {
   lastTickAt: number | null;
   drainRequestedAt: number | null;
   onDrainComplete: (() => void) | null;
+};
+
+type LastExplainRequest = {
+  message: string;
+  mode: "explain" | "conclude";
+  context?: ChatContext;
+  sourceDocumentIds?: string[] | null;
 };
 
 function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
@@ -331,6 +344,7 @@ export function useChatSession(notebookId: string) {
   const pendingIntermediatePhaseRef = useRef(false);
   const finalTypewriterStateRef = useRef<FinalTypewriterState | null>(null);
   const finalTypewriterFrameRef = useRef<number | null>(null);
+  const lastExplainRequestRef = useRef<LastExplainRequest | null>(null);
 
   const {
     currentSessionId,
@@ -344,7 +358,14 @@ export function useChatSession(notebookId: string) {
     explainCard,
     setExplainCard,
     appendExplainContent,
+    clearExplainError,
   } = useChatStore();
+
+  const {
+    push: pushExplainTypewriterDelta,
+    flush: flushExplainTypewriter,
+    reset: resetExplainTypewriter,
+  } = useTypewriterBuffer({ onDelta: appendExplainContent });
 
   const replaceSessionMessages = useCallback(
     (sessionId: string, nextMessages: ChatMessage[]) => {
@@ -1317,12 +1338,50 @@ export function useChatSession(notebookId: string) {
         return;
       }
 
+      const selectedText = context?.selected_text || "";
+      const lastInteractionKey = buildExplainInteractionKey(explainMode, selectedText);
+      const buildExplainCard = (
+        content: string,
+        isStreaming: boolean,
+        error: { code: string; message: string; retryable: boolean } | null = null
+      ) => ({
+        visible: true,
+        mode: explainMode,
+        selectedText,
+        content,
+        isStreaming,
+        error,
+        lastInteractionKey,
+      });
+      const setExplainFailure = (code: string, fallbackMessage?: string) => {
+        const errorMessage = fallbackMessage || t(uiStrings.explainCard.errorGeneric);
+        setExplainCard((prev) =>
+          prev
+            ? {
+                ...prev,
+                isStreaming: false,
+                error: { code, message: errorMessage, retryable: true },
+              }
+            : buildExplainCard("", false, { code, message: errorMessage, retryable: true })
+        );
+        setStreaming(false, null);
+      };
+
+      lastExplainRequestRef.current = {
+        message,
+        mode: explainMode,
+        context,
+        sourceDocumentIds,
+      };
+      resetExplainTypewriter();
       setExplainCard({
         visible: true,
         mode: explainMode,
-        selectedText: context?.selected_text || "",
+        selectedText,
         content: "",
         isStreaming: true,
+        error: null,
+        lastInteractionKey,
       });
       setStreaming(true, null);
 
@@ -1338,43 +1397,33 @@ export function useChatSession(notebookId: string) {
         {
           onEvent: (event) => {
             if (event.type === "content") {
-              appendExplainContent(event.delta);
+              pushExplainTypewriterDelta(event.delta);
               return;
             }
             if (event.type === "done") {
               streamReceivedDone = true;
+              flushExplainTypewriter();
               setExplainCard((prev) =>
                 prev
                   ? {
                       ...prev,
                       isStreaming: false,
+                      error: null,
                     }
-                  : {
-                      visible: true,
-                      mode: explainMode,
-                      selectedText: context?.selected_text || "",
-                      content: "",
-                      isStreaming: false,
-                    }
+                  : buildExplainCard("", false)
               );
               setStreaming(false, null);
               return;
             }
             if (event.type === "error") {
+              if (streamReceivedDone) return;
               streamReceivedErrorEvent = true;
-              appendExplainContent(`\n\n[${event.error_code}] ${event.message}`);
-              setExplainCard((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      isStreaming: false,
-                    }
-                  : prev
-              );
-              setStreaming(false, null);
+              flushExplainTypewriter();
+              setExplainFailure(event.error_code || "E_STREAM", event.message);
             }
           },
           onError: (error) => {
+            flushExplainTypewriter();
             if (streamReceivedDone || streamReceivedErrorEvent) {
               setStreaming(false, null);
               setExplainCard((prev) => (prev ? { ...prev, isStreaming: false } : prev));
@@ -1383,16 +1432,8 @@ export function useChatSession(notebookId: string) {
 
             const err = error as ApiError;
             if (!shouldAttemptStreamFallback(error)) {
-              appendExplainContent(`\n\n[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`);
-              setExplainCard((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      isStreaming: false,
-                    }
-                  : prev
-              );
-              setStreaming(false, null);
+              streamReceivedErrorEvent = true;
+              setExplainFailure(err.errorCode || "E_STREAM", err.message);
               return;
             }
 
@@ -1414,14 +1455,9 @@ export function useChatSession(notebookId: string) {
                           ...prev,
                           content: persistedReply.content,
                           isStreaming: false,
+                          error: null,
                         }
-                      : {
-                          visible: true,
-                          mode: explainMode,
-                          selectedText: context?.selected_text || "",
-                          content: persistedReply.content,
-                          isStreaming: false,
-                        }
+                      : buildExplainCard(persistedReply.content, false)
                   );
                   return;
                 }
@@ -1441,29 +1477,15 @@ export function useChatSession(notebookId: string) {
                         ...prev,
                         content: fallback.content,
                         isStreaming: false,
+                        error: null,
                       }
-                    : {
-                        visible: true,
-                        mode: explainMode,
-                        selectedText: context?.selected_text || "",
-                        content: fallback.content,
-                        isStreaming: false,
-                      }
+                    : buildExplainCard(fallback.content, false)
                 );
               } catch (fallbackError) {
                 const fallbackApiError = fallbackError as ApiError;
-                appendExplainContent(
-                  `\n\n[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
-                    fallbackApiError.message || "Fallback error"
-                  }`
-                );
-                setExplainCard((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        isStreaming: false,
-                      }
-                    : prev
+                setExplainFailure(
+                  fallbackApiError.errorCode || "E_NETWORK",
+                  fallbackApiError.message || t(uiStrings.explainCard.errorGeneric)
                 );
               } finally {
                 setStreaming(false, null);
@@ -1491,7 +1513,7 @@ export function useChatSession(notebookId: string) {
     [
       addMessageToSession,
       addToolStepInSession,
-      appendExplainContent,
+      appendIntermediateContentInSession,
       clearIntermediateVisualStateInSession,
       clearPermissionRequestForMessage,
       clearFinalTypewriterState,
@@ -1499,11 +1521,15 @@ export function useChatSession(notebookId: string) {
       currentSessionId,
       enqueueFinalTypewriterDelta,
       ensureSession,
+      flushExplainTypewriter,
       isFinalTypewriterPending,
       mutateSessionMessages,
       notebookId,
+      pushExplainTypewriterDelta,
       queryClient,
       requestFinalTypewriterDrain,
+      resetExplainTypewriter,
+      rotateIntermediateContentInSession,
       sessions,
       stopFinalTypewriterForMessage,
       updateThinkingStageInSession,
@@ -1669,6 +1695,18 @@ export function useChatSession(notebookId: string) {
     [deleteSessionMutation]
   );
 
+  const retryExplainCard = useCallback(async () => {
+    const request = lastExplainRequestRef.current;
+    if (!request) return;
+    clearExplainError();
+    await sendMessage(
+      request.message,
+      request.mode,
+      request.context,
+      request.sourceDocumentIds
+    );
+  }, [clearExplainError, sendMessage]);
+
   return {
     sessions,
     currentSessionId,
@@ -1680,6 +1718,7 @@ export function useChatSession(notebookId: string) {
     setMode,
     ensureSession,
     sendMessage,
+    retryExplainCard,
     cancelStream,
     switchSession,
     createSession: createNewSession,

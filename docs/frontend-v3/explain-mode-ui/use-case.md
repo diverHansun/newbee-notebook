@@ -80,7 +80,7 @@ Duty 1（视觉重构）/ Duty 2（typewriter）/ Duty 3（黑点呼吸）/ Duty
 
 1. `useChatSession.sendMessage(mode="conclude", ...)` 被触发。
 2. `setExplainCard({...overwrite, content: "", error: null, lastInteractionKey: hash("conclude", newText)})`。
-3. `ExplainCardBody` 的 React `key` 变化 → 旧 body 卸载、新 body 挂载。
+3. `ExplainCard` body 容器的 React `key` 变化 → 旧 body 卸载、新 body 挂载。
 4. 新 body 容器执行 CSS `@keyframes fade-in`（150ms opacity 0→1）。
 5. body 内部立即进入 loading 态（黑点呼吸）。
 6. 后续步骤同 UC-1 [6]–[8]。
@@ -107,8 +107,8 @@ UC-1 / UC-2 进行中，SSE 收到 `event.type === "error"`，或 fetch 抛错�
 
 1. `useTypewriterBuffer.flush()` —— 把已累积但未暴露的字符立即吐出。
 2. `setExplainError({code, message, retryable: true})`。
-3. `ExplainCardBody` 检测到 `error !== null`：
-   - **优先渲染 `<ExplainCardError />`**，覆盖 loader（即使 isStreaming 残值为 true）。
+3. `ExplainCard` 检测到 `error !== null`：
+   - **优先渲染本地 error block**，覆盖 loader（即使 isStreaming 残值为 true）。
    - 已有 `content` 不被覆盖——错误块出现在 body 中上部，content 已生成部分在错误块下方仍可见。
 4. 错误块内含淡红 1px 边框、错误图标 SVG、文案、"重试"按钮。
 5. 用户点击"重试"：
@@ -200,7 +200,7 @@ pill 可见（含或不含上次结果），用户点击 pill。
 1. `setCollapsed(false)`。
 2. 卡片渲染：
    - 若 `explainCard !== null` → 渲染 body（含已有 content / loader / error）。
-   - 若 `explainCard === null` → 渲染**空态** `ExplainCardEmptyState`：SVG 图示 + "在文档中选中一段文字..."提示。
+   - 若 `explainCard === null` → 渲染**空态**：提示用户在文档中选中文本后再解释 / 总结。
 3. 不触发 fade-in（`lastInteractionKey` 未变）。
 
 ### 预期结果
@@ -235,8 +235,7 @@ pill 可见（含或不含上次结果），用户点击 pill。
 
 1. 用户点击 pill → `setCollapsed(false)`。
 2. 卡片打开。
-3. body 渲染 `ExplainCardEmptyState`：
-   - 上方一个轻量 SVG 图示（引用符号或简单线稿）。
+3. body 渲染空态：
    - 下方两行提示文字：
      - 主文案 "还没有内容"（i18n `emptyTitle`）。
      - 辅文案 "在文档中选中一段文字，然后点击解释或总结"（i18n `emptyHint`）。
