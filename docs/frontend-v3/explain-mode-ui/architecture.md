@@ -33,8 +33,10 @@ explain-mode-ui 是一个纯前端模块，跨三层但不引入独立组件目�
    - 不新增 `ExplainCardBody` / `ExplainCardLoader` / `ExplainCardError` 等独立文件；这些分支只服务此卡片，生命周期也完全跟宿主一致，抽文件会增加维护成本。
 
 5. **布局与样式：`reader.css` 第 21 节**
-   - pill 与展开卡片挂在 `#main-panel-section` 内部，使用 `position: absolute; top: 8px; right: 8px`。
-   - CSS 只做必要减法：去掉展开卡片黄色渐变和左黄边；保留 pill 的既有 badge 视觉；新增简单 quote / loader / error 样式。
+   - pill 挂在 `#main-panel-section` 内部，`position: absolute; top: 8px; right: 8px`（跟随 Main 面板布局）。
+   - 展开卡片同样挂在 `#main-panel-section` 的 React 树内（无 Portal），但 `position: fixed`。初始 `top` / `right` 由 `ExplainCard` 在展开瞬间读 `#main-panel-section.getBoundingClientRect()` 一次得出并以 inline style 写入，之后 `transform: translate(x,y)` 跟随拖拽。`window.resize` 时重算一次。
+   - 选择 fixed 是为了让卡片能跨越 Sources / Main / Studio 三栏拖拽——`<main>` 上的 `overflow: hidden` 会裁切 absolute 子节点，fixed 子节点的 containing block 是 viewport，可逃出。
+   - CSS 只做必要减法：去掉展开卡片黄色渐变和左黄边；保留 pill 的既有外壳轮廓（淡边框 + 圆角），但 pill 内部不再嵌 `badge-*` 黄色胶囊；新增简单 quote / loader / error / 模式文字色样式。
 
 ---
 
@@ -75,13 +77,17 @@ SelectionMenu
 
 本批次不建立新的视觉系统，不新增复杂 class family。样式只覆盖 explain card 第 21 节：
 
-- pill 基本保持原有 badge 结构与黄色小点。
-- 展开卡片改为中性边框、纯色标题栏、淡紫小点。
+- pill 保持淡边框 + 圆角外壳，但**移除内层 `badge-*` 黄色胶囊**；文字按 mode 上色（explain 淡紫、conclude 淡青、default 中性灰）。
+- 展开卡片改为中性边框、纯色标题栏、按 mode 上色的小点与文字。
 - error / loader / quote 使用最少必要样式。
 
-### 4. 不使用 Portal
+### 4. 不使用 Portal；展开卡片用 fixed 定位
 
-`ExplainCard` 直接作为 `#main-panel-section` 的 absolute 子节点渲染。这样无需 `ResizeObserver` / `MutationObserver` / rAF 同步 Main 面板矩形，布局由 CSS 自然处理。
+`ExplainCard` 直接作为 `#main-panel-section` 的子节点在 React 树中渲染，不走 `createPortal`。
+
+- pill：`position: absolute`，跟随 Main 面板布局变化，不需要 observer。
+- 展开卡片：`position: fixed`。这是有意的——`<main>` 元素带 `overflow: hidden`，absolute 子节点会被裁切（无法拖出 Main 面板），fixed 子节点的 containing block 是 viewport，可以拖到 Sources / Studio 任意位置。初始锚点 `top` / `right` 在卡片展开瞬间从 Main 面板 rect 读一次得出，并随 `window.resize` 重算；不需要 `ResizeObserver` / `MutationObserver` / rAF 三件套。
+- 用户拖拽时只动 `transform: translate(x, y)`，不动 inline 的 `top` / `right`——保持初始锚点稳定，重新展开时回到原位。
 
 ---
 

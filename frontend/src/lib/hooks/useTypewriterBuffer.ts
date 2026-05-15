@@ -15,7 +15,8 @@ type BufferState = {
   displayedRawIndex: number;
   fractionalCarry: number;
   lastTickAt: number | null;
-  drainRequestedAt: number | null;
+  drainPending: boolean;
+  drainStartedAt: number | null;
   rafHandle: number | null;
 };
 
@@ -28,6 +29,7 @@ export type UseTypewriterBufferOptions = {
 export type TypewriterBuffer = {
   push: (delta: string) => void;
   flush: () => void;
+  drain: () => void;
   reset: () => void;
 };
 
@@ -66,8 +68,11 @@ export function useTypewriterBuffer({
       state.lastTickAt = now;
 
       let cps = baseCharsPerSecond;
-      if (state.drainRequestedAt !== null) {
-        const ramp = Math.min(1, (now - state.drainRequestedAt) / DRAIN_RAMP_MS);
+      if (state.drainPending) {
+        if (state.drainStartedAt === null) {
+          state.drainStartedAt = now;
+        }
+        const ramp = Math.min(1, Math.max(0, (now - state.drainStartedAt) / DRAIN_RAMP_MS));
         cps = baseCharsPerSecond + (drainCharsPerSecond - baseCharsPerSecond) * ramp;
       }
 
@@ -92,19 +97,14 @@ export function useTypewriterBuffer({
       const reachedTarget =
         state.visibleChars >= state.visibleMap.totalVisibleChars &&
         state.displayedRawIndex >= state.rawContent.length;
-      const shouldContinue =
-        state.visibleChars < state.visibleMap.totalVisibleChars ||
-        state.displayedRawIndex < state.rawContent.length ||
-        state.drainRequestedAt !== null;
 
-      if (reachedTarget && state.drainRequestedAt !== null) {
-        state.drainRequestedAt = null;
+      if (reachedTarget) {
+        state.drainPending = false;
+        state.drainStartedAt = null;
         return;
       }
 
-      if (shouldContinue) {
-        state.rafHandle = window.requestAnimationFrame(runFrame);
-      }
+      state.rafHandle = window.requestAnimationFrame(runFrame);
     },
     [baseCharsPerSecond, drainCharsPerSecond, emitDelta]
   );
@@ -127,7 +127,8 @@ export function useTypewriterBuffer({
           displayedRawIndex: 0,
           fractionalCarry: 0,
           lastTickAt: null,
-          drainRequestedAt: null,
+          drainPending: false,
+          drainStartedAt: null,
           rafHandle: null,
         };
         stateRef.current = state;
@@ -155,7 +156,8 @@ export function useTypewriterBuffer({
     if (!state) return;
     state.visibleChars = state.visibleMap.totalVisibleChars;
     state.fractionalCarry = 0;
-    state.drainRequestedAt = null;
+    state.drainPending = false;
+    state.drainStartedAt = null;
     cancelFrame();
     if (state.rawContent.length > state.displayedRawIndex) {
       const remaining = state.rawContent.slice(state.displayedRawIndex);
@@ -163,6 +165,18 @@ export function useTypewriterBuffer({
       emitDelta(remaining);
     }
   }, [cancelFrame, emitDelta]);
+
+  const drain = useCallback(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    const hasRemaining =
+      state.visibleChars < state.visibleMap.totalVisibleChars ||
+      state.displayedRawIndex < state.rawContent.length;
+    if (!hasRemaining) return;
+    state.drainPending = true;
+    state.drainStartedAt = null;
+    ensureRunning();
+  }, [ensureRunning]);
 
   const reset = useCallback(() => {
     cancelFrame();
@@ -176,5 +190,5 @@ export function useTypewriterBuffer({
     };
   }, [cancelFrame]);
 
-  return { push, flush, reset };
+  return { push, flush, drain, reset };
 }

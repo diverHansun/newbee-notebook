@@ -364,6 +364,7 @@ export function useChatSession(notebookId: string) {
   const {
     push: pushExplainTypewriterDelta,
     flush: flushExplainTypewriter,
+    drain: drainExplainTypewriter,
     reset: resetExplainTypewriter,
   } = useTypewriterBuffer({ onDelta: appendExplainContent });
 
@@ -1402,7 +1403,7 @@ export function useChatSession(notebookId: string) {
             }
             if (event.type === "done") {
               streamReceivedDone = true;
-              flushExplainTypewriter();
+              drainExplainTypewriter();
               setExplainCard((prev) =>
                 prev
                   ? {

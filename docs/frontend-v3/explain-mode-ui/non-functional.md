@@ -39,7 +39,8 @@
 
 ### 1.4 浮卡定位重构后的性能收益
 
-- 删除 `ResizeObserver` / `MutationObserver` / rAF 三套监听后，**每次 Main 面板宽高变化不再触发 30 行 JS**——交由浏览器布局引擎一次性处理。
+- 删除 `ResizeObserver` / `MutationObserver` / `rAF` 持续同步三件套；只保留：(a) 展开瞬间一次 `getBoundingClientRect()` 读取，(b) 一个 `window.resize` listener。
+- Main 面板拖动 / 三栏 resize 时不再触发 explain 卡片重定位 JS——pill 走 CSS 自然布局，展开卡片用户已主动拖拽过则保持当前位置。
 - 浮卡 visibility 切换（折叠/展开）不再涉及 `createPortal` 的 detach/attach；React 树更小巧，devtools 中可读性提升。
 
 ### 1.5 内存
@@ -206,10 +207,15 @@
 
 实施后必须显式删除：
 
-- `explain-card.tsx` 中的 `anchorRect` state、`updateAnchor` 函数、`ResizeObserver`、`MutationObserver`、`window.addEventListener("resize", ...)` 五处。
+- `explain-card.tsx` 中的 `ResizeObserver`、`MutationObserver`、`updateAnchor` rAF 循环（三件套）。
 - `reader.css` 第 21 节中**展开卡片**的黄色 `border-left`、`linear-gradient` 黄色渐变（替换为新样式）。
-- 展开卡片标题栏中的 `badge-explain` / `badge-conclude` 颜色类引用（改为"小圆点 + 文字"组合）。
-- **不删除**：pill 上的 `badge-bee` 与现有 pill 样式（Non-Duty #8：pill 不动）。
+- pill 与展开卡片标题栏中的 `badge-explain` / `badge-conclude` / `badge-bee` 颜色类引用（改为"按 mode 上色的纯文字 / 小圆点"组合）。
+- pill 内的 `.streaming-dot` 黄色脉冲样式（改为 `.explain-card-pill-dot` 黑点呼吸）。
+
+实施后**保留**：
+
+- 一个轻量 `window.addEventListener("resize", recomputeAnchor)`——仅在卡片展开期间存活，用于重算 fixed 定位的初始 `top` / `right`。
+- pill 的外壳（淡边框 + 圆角），仅去掉内部 `badge-*` 黄胶囊。
 
 ### 8.4 文档同步
 

@@ -2,7 +2,7 @@
 
 ## 模块定位（一句话）
 
-重塑文档阅读器中"解释 / 总结"浮卡的视觉、流式与等待体验：去除黄色品牌色与"卡片嵌套"观感，让容器隐形而内容主导；同时把 `fixed + ResizeObserver + MutationObserver + rAF` 这套定位追踪改为 `position: absolute` 子节点，删除约 30 行同步代码。
+重塑文档阅读器中"解释 / 总结"浮卡的视觉、流式与等待体验：去除黄色品牌色与"卡片嵌套"观感，让容器隐形而内容主导；同时把 `ResizeObserver + MutationObserver + rAF` 这套定位追踪精简为"展开时一次性读取 Main 面板矩形 + 单 `window.resize` 监听"，展开卡片改用 `position: fixed` 以跨越 Sources / Main / Studio 三栏拖拽，删除约 30 行同步代码。
 
 本批次**不重写**入口 pill、不接入引用来源、不实现对话记录式回溯——这些划入未来批次。
 
@@ -20,7 +20,7 @@
 
 5. **模式切换的连续性**：同一张卡片上从"解释 A 段"切到"总结 B 段"，应有 150ms opacity 过渡，避免内容硬切。
 
-6. **定位机制收敛**：浮卡不再通过 fixed + ResizeObserver + MutationObserver + rAF 追踪 Main 面板矩形，改为 Main 面板的 positioned 子节点（`position: absolute`），布局变化由 CSS 自然承担。
+6. **定位机制收敛 + 全视口拖拽**：浮卡不再通过 ResizeObserver + MutationObserver + rAF 三套同步追踪 Main 面板矩形；展开卡片改用 `position: fixed`（escape 外层 `<main>` 的 `overflow: hidden`，允许用户拖到 Sources / Studio 区域），初始锚点在展开瞬间从 Main 面板 rect 一次读出，仅靠一个 `window.resize` listener 重算。pill 仍 `position: absolute` 挂在 Main 面板内。
 
 7. **入口零回归**：右上角 pill 的视觉位置、文字、点击行为不变，本批次不动它（实现侧仅改挂载父节点，用户不可见）。
 
@@ -69,11 +69,15 @@
 
 ### 6. 浮卡定位重构
 
-- 删除 `explain-card.tsx` 中的 `anchorRect` state、`updateAnchor` rAF 逻辑、`ResizeObserver`、`MutationObserver`、`window.addEventListener("resize", ...)` 五处（约 33 行）。
-- 把 `ExplainCard` 从 `createPortal(document.body)` 改为渲染在 `#main-panel-section` 内部。
+- 删除 `explain-card.tsx` 中的 `ResizeObserver`、`MutationObserver`、`updateAnchor` rAF 循环三件套（约 30 行）；保留一个轻量的 `window.addEventListener("resize", ...)`（重算锚点用）。
+- 把 `ExplainCard` 从 `createPortal(document.body)` 改为渲染在 `#main-panel-section` 内部（pill 与卡片均不走 Portal）。
 - 给 `#main-panel-section` 加 `position: relative`（已是布局子项，加这一条不影响外部）。
-- pill 与卡片均用 `position: absolute; top: 8px; right: 8px;`；用户拖拽时只动 `transform: translate(x,y)`，不动 `top` / `right`。
-- pill 的 `z-index` 略低于卡片（pill `1` / 卡片 `2`），同时仍高于 Main 面板内的滚动内容。
+- **pill**：`position: absolute; top: 8px; right: 8px`，挂在 Main 面板内，跟随 Main 面板布局变化；用户不可拖动。
+- **展开卡片**：`position: fixed`。原因：`<main>` 元素有 `overflow: hidden`，`position: absolute` 子节点会被它的 clip 框裁切，导致拖拽出 Main 面板范围的部分被裁掉；`position: fixed` 的子节点 containing block 是 viewport，能完整跨越 Sources / Main / Studio 三栏。
+- **展开卡片的初始锚点**：在 `collapsed` 由 true 变 false 的瞬间，读一次 `document.getElementById("main-panel-section")?.getBoundingClientRect()`，计算 `top: rect.top + 8`、`right: window.innerWidth - rect.right + 8`，写入组件 state；之后由用户的 `transform: translate(x,y)` 控制。
+- **响应窗口尺寸**：监听 `window.resize`，在卡片展开期间重算锚点（不在收起态做无用功）。这是一个单一事件 listener，不是 observer 链。
+- **拖拽行为**：`useDraggable` 已经按视口边界（`vw - 80` / `vh - 40`）约束 transform 偏移；改 fixed 后这条 JS 边界才真正生效（之前被 CSS clip 抢先裁掉）。
+- pill 的 `z-index` 略低于卡片（pill `1` / 卡片 `2`），保证用户从 pill 展开瞬间卡片在最上层。
 
 ### 7. i18n 完备（zh + en）
 

@@ -68,9 +68,30 @@ function ErrorBlock({
   );
 }
 
+const DEFAULT_ANCHOR_TOP = 60;
+const DEFAULT_ANCHOR_RIGHT = 8;
+const ANCHOR_MARGIN = 8;
+
+function readMainPanelAnchor(): { top: number; right: number } {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return { top: DEFAULT_ANCHOR_TOP, right: DEFAULT_ANCHOR_RIGHT };
+  }
+  const el = document.getElementById("main-panel-section");
+  if (!el) return { top: DEFAULT_ANCHOR_TOP, right: DEFAULT_ANCHOR_RIGHT };
+  const rect = el.getBoundingClientRect();
+  return {
+    top: rect.top + ANCHOR_MARGIN,
+    right: Math.max(ANCHOR_MARGIN, window.innerWidth - rect.right + ANCHOR_MARGIN),
+  };
+}
+
 export function ExplainCard({ card, onRetry }: ExplainCardProps) {
   const { t } = useLang();
   const [collapsed, setCollapsed] = useState(true);
+  const [anchor, setAnchor] = useState<{ top: number; right: number }>({
+    top: DEFAULT_ANCHOR_TOP,
+    right: DEFAULT_ANCHOR_RIGHT,
+  });
   const prevCardKeyRef = useRef<string | null>(null);
 
   const { position, onPointerDown, isDragging, resetPosition } = useDraggable({
@@ -90,8 +111,17 @@ export function ExplainCard({ card, onRetry }: ExplainCardProps) {
       prevCardKeyRef.current = key;
       setCollapsed(false);
       resetPosition({ x: 0, y: 0 });
+      setAnchor(readMainPanelAnchor());
     }
   }, [card?.visible, card?.lastInteractionKey, card?.mode, card?.selectedText, resetPosition]);
+
+  useEffect(() => {
+    if (collapsed) return;
+    setAnchor(readMainPanelAnchor());
+    const onResize = () => setAnchor(readMainPanelAnchor());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [collapsed]);
 
   const modeLabel =
     card?.mode === "explain"
@@ -99,12 +129,7 @@ export function ExplainCard({ card, onRetry }: ExplainCardProps) {
       : card?.mode === "conclude"
         ? t(uiStrings.explainCard.titleConclude)
         : t(uiStrings.explainCard.titleDefault);
-  const badgeClass =
-    card?.mode === "explain"
-      ? "badge-explain"
-      : card?.mode === "conclude"
-        ? "badge-conclude"
-        : "badge-bee";
+  const pillMode = card?.mode ?? "default";
   const hasContent = card?.visible && (card.content || card.isStreaming || card.error);
   const interactionKey = card?.lastInteractionKey ?? "empty";
 
@@ -185,7 +210,7 @@ export function ExplainCard({ card, onRetry }: ExplainCardProps) {
           }
         }}
       >
-        <span className={`badge ${badgeClass}`} style={{ fontSize: 11 }}>
+        <span className="explain-card-pill-label" data-mode={pillMode}>
           {modeLabel}
         </span>
         {hasContent && (
@@ -195,7 +220,7 @@ export function ExplainCard({ card, onRetry }: ExplainCardProps) {
               : t(uiStrings.explainCard.clickToExpand)}
           </span>
         )}
-        {card?.isStreaming && <span className="streaming-dot" />}
+        {card?.isStreaming && <span className="explain-card-pill-dot" aria-hidden="true" />}
       </div>
     );
   }
@@ -204,17 +229,21 @@ export function ExplainCard({ card, onRetry }: ExplainCardProps) {
     <aside
       className="explain-card"
       style={{
+        top: anchor.top,
+        right: anchor.right,
         width: size.width,
         height: size.height,
+        maxWidth: `calc(100vw - ${anchor.right + 8}px)`,
+        maxHeight: `calc(100vh - ${anchor.top + 8}px)`,
         transform: `translate(${position.x}px, ${position.y}px)`,
         transition: isDragging || isResizing ? "none" : "box-shadow 200ms ease-out",
       }}
       aria-label={modeLabel}
     >
       <div className="explain-card-titlebar" onPointerDown={onPointerDown}>
-        <div className="explain-card-title">
+        <div className="explain-card-title" data-mode={pillMode}>
           <span className="explain-card-mode-dot" aria-hidden="true" />
-          <span>{modeLabel}</span>
+          <span className="explain-card-mode-text">{modeLabel}</span>
         </div>
         <button
           className="btn btn-ghost btn-icon btn-sm"

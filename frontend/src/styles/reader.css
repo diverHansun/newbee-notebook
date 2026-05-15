@@ -151,6 +151,9 @@
 .explain-card-pill,
 .explain-card {
   --explain-accent: hsl(270 60% 70%);
+  --explain-color-explain: hsl(265 45% 48%);
+  --explain-color-conclude: hsl(195 55% 38%);
+  --explain-color-default: hsl(var(--muted-foreground));
   --explain-loader-dot: hsl(220 10% 25%);
   --explain-error-border: hsl(0 70% 60% / 0.45);
   --explain-error-bg: hsl(0 70% 97%);
@@ -160,6 +163,9 @@
 .dark .explain-card-pill,
 .dark .explain-card {
   --explain-accent: hsl(270 35% 60%);
+  --explain-color-explain: hsl(270 45% 75%);
+  --explain-color-conclude: hsl(195 45% 70%);
+  --explain-color-default: hsl(var(--muted-foreground));
   --explain-loader-dot: hsl(220 5% 90%);
   --explain-error-border: hsl(0 50% 50% / 0.5);
   --explain-error-bg: hsl(0 30% 18%);
@@ -201,33 +207,43 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
+.explain-card-pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--explain-color-default);
+}
+
+.explain-card-pill-label[data-mode="explain"] {
+  color: var(--explain-color-explain);
+}
+
+.explain-card-pill-label[data-mode="conclude"] {
+  color: var(--explain-color-conclude);
+}
+
 .explain-card-pill-hint {
   font-size: 11px;
   color: hsl(var(--muted-foreground));
 }
 
-.explain-card-pill .streaming-dot {
+.explain-card-pill-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
   display: inline-block;
-  background: hsl(var(--bee-yellow));
-  animation: bee-pulse 1.2s ease-in-out infinite;
+  background: var(--explain-loader-dot);
+  animation: explain-breathing 1.4s ease-in-out infinite;
 }
 
 .explain-card {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
+  position: fixed;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   border: 1px solid hsl(var(--border) / 0.6);
   border-radius: var(--radius);
   background: hsl(var(--card));
   box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12);
-  max-width: calc(100% - 16px);
-  max-height: calc(100% - 16px);
   overflow: hidden;
   user-select: none;
 }
@@ -262,7 +278,28 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--explain-accent);
+  background: var(--explain-color-default);
+}
+
+.explain-card-mode-text {
+  color: var(--explain-color-default);
+  font-weight: 500;
+}
+
+.explain-card-title[data-mode="explain"] .explain-card-mode-dot {
+  background: var(--explain-color-explain);
+}
+
+.explain-card-title[data-mode="explain"] .explain-card-mode-text {
+  color: var(--explain-color-explain);
+}
+
+.explain-card-title[data-mode="conclude"] .explain-card-mode-dot {
+  background: var(--explain-color-conclude);
+}
+
+.explain-card-title[data-mode="conclude"] .explain-card-mode-text {
+  color: var(--explain-color-conclude);
 }
 
 .explain-card-body {
@@ -313,16 +350,16 @@
 }
 
 .explain-card-loader {
-  flex: 1;
-  min-height: 96px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  min-height: 22px;
+  padding: 2px 0;
 }
 
 .explain-card-loader-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--explain-loader-dot);
   animation: explain-breathing 1.4s ease-in-out infinite;
