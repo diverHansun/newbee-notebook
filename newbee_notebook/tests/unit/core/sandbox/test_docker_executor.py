@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from newbee_notebook.core.sandbox.docker_config import DockerRunConfig
 from newbee_notebook.core.sandbox.docker_executor import (
     DockerProcessResult,
     DockerSandboxExecutor,
+    DockerSubprocessRunner,
     LimitedOutputBuffer,
 )
 
@@ -265,3 +267,73 @@ def test_limited_output_buffer_marks_truncation_without_growing_unbounded():
 
     assert buffer.text == "hello"
     assert buffer.truncated is True
+
+
+@pytest.mark.anyio
+async def test_subprocess_runner_falls_back_when_async_subprocess_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def unavailable_async_subprocess(*args, **kwargs):
+        del args, kwargs
+        raise NotImplementedError
+
+    calls: list[tuple[tuple[str, ...], bytes | None, float]] = []
+
+    def fake_run(
+        argv,
+        *,
+        input,
+        stdout,
+        stderr,
+        timeout,
+        check,
+    ):
+        del stdout, stderr, check
+        calls.append((tuple(argv), input, timeout))
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=0,
+            stdout=b"ok\n",
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unavailable_async_subprocess)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = await DockerSubprocessRunner().run(
+        ("docker", "version"),
+        stdin="payload",
+        timeout_seconds=3,
+        max_output_bytes=100,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "ok\n"
+    assert result.stderr == ""
+    assert calls == [(("docker", "version"), b"payload", 3)]
+
+
+@pytest.mark.anyio
+async def test_subprocess_runner_cleanup_falls_back_when_async_subprocess_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def unavailable_async_subprocess(*args, **kwargs):
+        del args, kwargs
+        raise NotImplementedError
+
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(argv, *, stdout, stderr, timeout, check):
+        del stdout, stderr, timeout, check
+        calls.append(tuple(argv))
+        return subprocess.CompletedProcess(args=argv, returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unavailable_async_subprocess)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    await DockerSubprocessRunner().cleanup(
+        docker_bin="docker",
+        container_name="newbee-sandbox-test",
+    )
+
+    assert calls == [("docker", "rm", "-f", "newbee-sandbox-test")]

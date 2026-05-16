@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import subprocess
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -108,6 +109,14 @@ class DockerSubprocessRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+        except NotImplementedError:
+            return await asyncio.to_thread(
+                _run_sync_subprocess,
+                argv,
+                stdin=stdin,
+                timeout_seconds=timeout_seconds,
+                max_output_bytes=max_output_bytes,
+            )
         except FileNotFoundError as exc:
             raise SandboxUnavailableError(f"Docker CLI not found: {argv[0]}") from exc
         except OSError as exc:
@@ -162,7 +171,7 @@ class DockerSubprocessRunner:
             raise
 
     async def cleanup(self, *, docker_bin: str, container_name: str) -> None:
-        with contextlib.suppress(Exception):
+        try:
             process = await asyncio.create_subprocess_exec(
                 docker_bin,
                 "rm",
@@ -172,6 +181,14 @@ class DockerSubprocessRunner:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             await asyncio.wait_for(process.wait(), timeout=10)
+        except NotImplementedError:
+            await asyncio.to_thread(
+                _cleanup_sync_subprocess,
+                docker_bin=docker_bin,
+                container_name=container_name,
+            )
+        except Exception:
+            pass
 
 
 class DockerSandboxExecutor:
@@ -269,6 +286,88 @@ def _looks_like_docker_unavailable(result: DockerProcessResult) -> bool:
         or "error during connect" in stderr
         or "is the docker daemon running" in stderr
     )
+
+
+def _run_sync_subprocess(
+    argv: tuple[str, ...],
+    *,
+    stdin: str | None,
+    timeout_seconds: float,
+    max_output_bytes: int,
+) -> DockerProcessResult:
+    input_bytes = stdin.encode("utf-8") if stdin is not None else None
+    try:
+        completed = subprocess.run(
+            argv,
+            input=input_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise SandboxUnavailableError(f"Docker CLI not found: {argv[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        stdout, stderr, truncated = _bounded_output_text(
+            exc.stdout,
+            exc.stderr,
+            max_output_bytes=max_output_bytes,
+        )
+        return DockerProcessResult(
+            exit_code=None,
+            stdout=stdout,
+            stderr=stderr,
+            timed_out=True,
+            truncated=truncated,
+            error_code="timeout",
+        )
+    except OSError as exc:
+        raise SandboxExecutionError(f"Failed to start Docker CLI: {exc}") from exc
+
+    stdout, stderr, truncated = _bounded_output_text(
+        completed.stdout,
+        completed.stderr,
+        max_output_bytes=max_output_bytes,
+    )
+    return DockerProcessResult(
+        exit_code=completed.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        truncated=truncated,
+    )
+
+
+def _cleanup_sync_subprocess(*, docker_bin: str, container_name: str) -> None:
+    with contextlib.suppress(Exception):
+        subprocess.run(
+            (docker_bin, "rm", "-f", container_name),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+
+
+def _bounded_output_text(
+    stdout: bytes | str | None,
+    stderr: bytes | str | None,
+    *,
+    max_output_bytes: int,
+) -> tuple[str, str, bool]:
+    budget = _SharedOutputBudget(max_output_bytes)
+    stdout_buffer = LimitedOutputBuffer(max_output_bytes, budget=budget)
+    stderr_buffer = LimitedOutputBuffer(max_output_bytes, budget=budget)
+    stdout_buffer.append(_output_bytes(stdout))
+    stderr_buffer.append(_output_bytes(stderr))
+    return stdout_buffer.text, stderr_buffer.text, budget.truncated
+
+
+def _output_bytes(value: bytes | str | None) -> bytes:
+    if value is None:
+        return b""
+    if isinstance(value, bytes):
+        return value
+    return value.encode("utf-8", errors="replace")
 
 
 def _sandbox_result_from_process(process_result: DockerProcessResult) -> SandboxResult:
