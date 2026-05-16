@@ -56,7 +56,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 <div align="center">
   <img src="assets/screenshots/video-summary.png" alt="Bilibili Video Summarization" width="480">
-  <p><em>Bilibili Video Summarization — Video transcription and structured summaries</em></p>
+  <p><em>YouTube + Bilibili Video Summarization — Video transcription and structured summaries</em></p>
 </div>
 
 </details>
@@ -197,9 +197,8 @@ If you're using an NVIDIA GPU, avoid changing `torch==x.y.z` directly; instead s
 
 ## Roadmap
 
-- [ ] Skill mechanism extensions
-- [ ] Add ECharts chart support
 - [ ] New features for the Studio module
+- [ ] Improve Docker Launcher startup configuration
 
 Have an idea? Feel free to share it via [Issues](https://github.com/diverHansun/newbee-notebook/issues).
 

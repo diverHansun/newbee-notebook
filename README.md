@@ -56,7 +56,7 @@ Read, search, and interact with your documents through AI agents — self-hosted
 
 <div align="center">
   <img src="assets/screenshots/video-summary.png" alt="Bilibili 视频总结" width="480">
-  <p><em>Bilibili 视频总结 — 视频转录与结构化摘要</em></p>
+  <p><em>YouTube + Bilibili 视频总结 — 视频转录与结构化摘要</em></p>
 </div>
 
 </details>
@@ -196,10 +196,8 @@ docker compose up -d
 ---
 
 ## 近期计划
-
-- [ ] skill机制扩展
-- [ ] 新增echarts图表功能
 - [ ] studio模块新增功能
+- [ ] docker Launcher 启动配置完善
 
 有想法？欢迎通过 [Issues](https://github.com/diverHansun/newbee-notebook/issues) 告诉我。
 
