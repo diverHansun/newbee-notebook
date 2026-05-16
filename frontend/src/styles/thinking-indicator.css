@@ -166,6 +166,26 @@
   color: hsl(var(--muted-foreground) / 0.6);
 }
 
+.tool-step--warning .tool-step-icon {
+  background: hsl(var(--bee-amber) / 0.16);
+}
+
+.tool-step--warning .tool-step-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 3px;
+  width: 2px;
+  height: 6px;
+  border-radius: 999px;
+  background: hsl(var(--bee-amber));
+  box-shadow: 0 8px 0 hsl(var(--bee-amber));
+}
+
+.tool-step--warning .tool-step-label {
+  color: hsl(var(--bee-amber));
+}
+
 /* error: red cross */
 .tool-step--error .tool-step-icon {
   background: hsl(0 70% 50% / 0.2);

@@ -8,6 +8,19 @@ from newbee_notebook.core.tools.tavily_tools import build_tavily_search_runtime_
 from newbee_notebook.core.tools.zhipu_tools import build_zhipu_web_search_runtime_tool, build_zhipu_web_crawl_runtime_tool
 
 
+FILESYSTEM_TOOL_NAMES = [
+    "read_file",
+    "glob_files",
+    "grep_files",
+    "edit_file",
+    "write_file",
+    "shell",
+    "shell_task_list",
+    "shell_task_output",
+    "shell_task_stop",
+]
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -28,6 +41,7 @@ def test_builtin_tool_provider_adds_web_tools_to_agent_when_api_keys_are_present
         "tavily_crawl",
         "zhipu_web_search",
         "zhipu_web_crawl",
+        *FILESYSTEM_TOOL_NAMES,
     ]
 
 
@@ -55,6 +69,7 @@ def test_builtin_tool_provider_only_injects_web_tools_with_available_credentials
         "time",
         "zhipu_web_search",
         "zhipu_web_crawl",
+        *FILESYSTEM_TOOL_NAMES,
     ]
 
 

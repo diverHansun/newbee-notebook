@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     CheckConstraint,
     Index,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -201,6 +202,11 @@ class SessionModel(Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    chat_images = relationship(
+        "ChatImageModel",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
 
 class NotebookDocumentRefModel(Base):
@@ -279,11 +285,55 @@ class MessageModel(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     message_type: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    image_ids: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     generated_images = relationship(
         "GeneratedImageModel",
         back_populates="message",
         cascade="save-update, merge",
+    )
+
+
+class ChatImageModel(Base):
+    """Uploaded chat image metadata table."""
+
+    __tablename__ = "chat_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    session = relationship("SessionModel", back_populates="chat_images")
+
+    __table_args__ = (
+        Index("idx_chat_images_session_id", "session_id"),
+        Index("idx_chat_images_created_at", "created_at"),
+        Index("idx_chat_images_deleted_at", "deleted_at"),
     )
 
 
@@ -536,7 +586,7 @@ class DiagramModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "format IN ('reactflow_json', 'mermaid')",
+            "format IN ('reactflow_json', 'mermaid', 'echarts_option')",
             name="ck_diagrams_format",
         ),
         Index("idx_diagrams_notebook_id", "notebook_id"),

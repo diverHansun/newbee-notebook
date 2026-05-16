@@ -15,6 +15,7 @@ from newbee_notebook.domain.repositories.diagram_repository import DiagramReposi
 from newbee_notebook.domain.repositories.generated_image_repository import (
     GeneratedImageRepository,
 )
+from newbee_notebook.domain.repositories.chat_image_repository import ChatImageRepository
 
 __all__ = [
     "LibraryRepository",
@@ -26,6 +27,7 @@ __all__ = [
     "MessageRepository",
     "DiagramRepository",
     "GeneratedImageRepository",
+    "ChatImageRepository",
 ]
 
 

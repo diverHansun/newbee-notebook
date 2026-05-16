@@ -9,16 +9,22 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 from uuid import uuid4
 
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
-from newbee_notebook.core.skills.contracts import ConfirmationMeta
+from newbee_notebook.core.permission import (
+    PermissionGateway,
+    PermissionRequest,
+    PermissionRequestGateway,
+    PermissionResponse,
+    PermissionResponseKind,
+)
+from newbee_notebook.core.skills.contracts import PermissionMeta
 from newbee_notebook.core.engine.mode_config import ModeConfig
 from newbee_notebook.core.engine.stream_events import (
-    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
     ImageGeneratedEvent,
     IntermediateContentEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -26,7 +32,18 @@ from newbee_notebook.core.engine.stream_events import (
     ToolResultEvent,
     WarningEvent,
 )
+from newbee_notebook.core.policy import (
+    AgentPolicy,
+    DecideRequest,
+    Decision,
+    PolicyDecider,
+    PolicyVerdict,
+    SkillPolicyContext,
+)
 from newbee_notebook.core.tools.contracts import SourceItem, ToolCallResult, ToolDefinition
+
+# Accept legacy model/tool-call text after the public tool name moved to shell.
+LEGACY_TOOL_ALIASES = {"bash": "shell"}
 
 
 @dataclass(frozen=True)
@@ -88,11 +105,20 @@ class AgentLoop:
         mode_config: ModeConfig,
         llm_retry_attempts: int = 1,
         tool_argument_defaults: dict[str, dict[str, Any]] | None = None,
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict[str, PermissionMeta] | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
-        confirmation_meta: dict[str, ConfirmationMeta] | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_meta: dict[str, PermissionMeta] | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
+        permission_gateway: PermissionGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        policy_decider: PolicyDecider | None = None,
+        agent_policy: AgentPolicy | str | None = None,
+        session_id: str | None = None,
+        skill_context: SkillPolicyContext | Any | None = None,
+        model_override: str | None = None,
     ):
         self._llm_client = llm_client
         self._tools = {tool.name: tool for tool in tools}
@@ -102,12 +128,31 @@ class AgentLoop:
             str(name): dict(values)
             for name, values in (tool_argument_defaults or {}).items()
         }
-        self._confirmation_required = confirmation_required or frozenset()
-        self._confirmation_meta = confirmation_meta or {}
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_required = (
+            permission_required
+            if permission_required is not None
+            else (confirmation_required or frozenset())
+        )
+        self._permission_meta = (
+            permission_meta
+            if permission_meta is not None
+            else (confirmation_meta or {})
+        )
+        self._permission_request_gateway = permission_request_gateway or confirmation_gateway
+        self._permission_gateway = permission_gateway
         self._force_first_tool_call = force_first_tool_call
         self._required_tool_call_before_response = required_tool_call_before_response
+        self._policy_decider = policy_decider
+        self._agent_policy = agent_policy
+        self._session_id = str(session_id or "")
+        self._skill_context = SkillPolicyContext.from_any(skill_context)
+        self._model_override = str(model_override or "").strip() or None
         self._cancelled = False
+
+    @staticmethod
+    def _canonical_tool_name(tool_name: str) -> str:
+        normalized = str(tool_name or "").strip()
+        return LEGACY_TOOL_ALIASES.get(normalized, normalized)
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -130,7 +175,7 @@ class AgentLoop:
     def _extract_choice(response: Any) -> dict[str, Any]:
         if isinstance(response, dict):
             return (response.get("choices") or [{}])[0]
-        return getattr(response, "choices", [{}])[0]
+        return (getattr(response, "choices", None) or [{}])[0]
 
     @classmethod
     def _extract_message(cls, response: Any) -> dict[str, Any]:
@@ -350,12 +395,32 @@ class AgentLoop:
         assert last_error is not None
         raise last_error
 
-    @staticmethod
+    def _canonical_tool_calls(
+        self,
+        tool_calls: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        canonical_calls: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            item = dict(tool_call)
+            function_payload = dict(item.get("function") or {})
+            if function_payload:
+                function_payload["name"] = self._canonical_tool_name(
+                    function_payload.get("name") or ""
+                )
+                item["function"] = function_payload
+            canonical_calls.append(item)
+        return canonical_calls
+
     def _assistant_tool_message(
+        self,
         tool_calls: list[dict[str, Any]],
         content: str | None = None,
     ) -> dict[str, Any]:
-        return {"role": "assistant", "content": content or None, "tool_calls": tool_calls}
+        return {
+            "role": "assistant",
+            "content": content or None,
+            "tool_calls": self._canonical_tool_calls(tool_calls),
+        }
 
     @staticmethod
     def _tool_result_message(tool_call_id: str, result: ToolCallResult) -> dict[str, Any]:
@@ -426,8 +491,93 @@ class AgentLoop:
         }
 
     @staticmethod
-    def _confirmation_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
+    def _permission_args_summary(arguments: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in arguments.items() if key != "content"}
+
+    def _decide_tool_execution(
+        self,
+        *,
+        tool: ToolDefinition,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Decision | None:
+        if self._policy_decider is None:
+            return None
+        return self._policy_decider.decide(
+            DecideRequest(
+                session_id=self._session_id,
+                agent_policy=self._agent_policy,
+                tool_name=tool_name,
+                tool_args=arguments,
+                tool_class=tool.tool_class,
+                risk_level=tool.risk_level,
+                skill_context=self._skill_context,
+            )
+        )
+
+    def _create_permission_request_event(
+        self,
+        *,
+        request_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        decision: Decision | None = None,
+    ) -> PermissionRequestEvent:
+        meta = self._permission_meta.get(tool_name)
+        skill_name = self._skill_context.name if self._skill_context else None
+        content_hash = self._skill_context.content_hash if self._skill_context else ""
+        return PermissionRequestEvent(
+            request_id=request_id,
+            tool_name=tool_name,
+            args_summary=self._permission_args_summary(arguments),
+            description=f"Agent requested to run {tool_name}",
+            action_type=meta.action_type if meta else "confirm",
+            target_type=meta.target_type if meta else "unknown",
+            capability_signature=decision.capability_signature if decision else "",
+            risk_level=decision.risk_level if decision else "",
+            skill_name=skill_name,
+            content_hash=content_hash,
+            response_options=["once", "always_session", "always_persist", "reject"],
+        )
+
+    def _rejection_result(self, permission_response: PermissionResponse | None = None) -> ToolCallResult:
+        metadata: dict[str, Any] = {}
+        error = "user_rejected"
+        if permission_response is not None:
+            error = permission_response.reason or error
+            if permission_response.rejection is not None:
+                metadata["rejection"] = {
+                    "capability_signature": permission_response.rejection.capability_signature,
+                    "suggestion": permission_response.rejection.suggestion,
+                }
+        return ToolCallResult(
+            content="The user did not approve this action. The tool call was cancelled.",
+            metadata=metadata,
+            error=error,
+        )
+
+    def _create_permission_request(
+        self,
+        *,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        decision: Decision,
+        assistant_turn_id: str,
+    ) -> PermissionRequest:
+        skill_name = self._skill_context.name if self._skill_context else None
+        content_hash = self._skill_context.content_hash if self._skill_context else ""
+        return PermissionRequest(
+            session_id=self._session_id,
+            assistant_turn_id=assistant_turn_id,
+            tool_call_id=tool_call_id,
+            capability_signature=decision.capability_signature,
+            tool_name=tool_name,
+            args_summary=self._permission_args_summary(arguments),
+            risk_level=str(getattr(decision.risk_level, "value", decision.risk_level) or ""),
+            skill_name=skill_name,
+            content_hash=content_hash,
+        )
 
     def _first_turn_tool_repair_message(self) -> dict[str, str]:
         tool_name = self._mode_config.loop_policy.first_turn_tool_repair_name or "the relevant tool"
@@ -487,6 +637,7 @@ class AgentLoop:
                         tools=tool_specs,
                         tool_choice=tool_choice,
                         disable_thinking=True,
+                        **({"model": self._model_override} if self._model_override else {}),
                     )
                 )
 
@@ -534,14 +685,14 @@ class AgentLoop:
     async def stream(
         self,
         *,
-        message: str,
+        message: Any,
         chat_history: list[dict[str, Any]],
     ) -> AsyncGenerator[
         StartEvent
         | WarningEvent
         | PhaseEvent
         | IntermediateContentEvent
-        | ConfirmationRequestEvent
+        | PermissionRequestEvent
         | ToolCallEvent
         | ToolResultEvent
         | SourceEvent
@@ -561,6 +712,7 @@ class AgentLoop:
         first_turn_repair_attempts = 0
         force_first_tool_repair_attempts = 0
         force_synthesis = False
+        assistant_turn_id = str(uuid4())
         self._last_iterations = 0
         forced_tool_choice: dict[str, Any] | str | None = (
             "required" if self._force_first_tool_call and tool_specs else None
@@ -670,7 +822,7 @@ class AgentLoop:
 
                 for tool_call in tool_calls:
                     function_payload = tool_call.get("function") or {}
-                    tool_name = str(function_payload.get("name") or "")
+                    tool_name = self._canonical_tool_name(function_payload.get("name") or "")
                     if (
                         self._mode_config.loop_policy.require_tool_every_iteration
                         and tool_name != self._mode_config.loop_policy.required_tool_name
@@ -694,24 +846,53 @@ class AgentLoop:
                     effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
                     tool = self._tools[tool_name]
 
-                    if tool_name in self._confirmation_required and self._confirmation_gateway:
-                        request_id = str(uuid4())
-                        self._confirmation_gateway.create(request_id)
-                        meta = self._confirmation_meta.get(tool_name)
-                        yield ConfirmationRequestEvent(
-                            request_id=request_id,
+                    policy_decision = self._decide_tool_execution(
+                        tool=tool,
+                        tool_name=tool_name,
+                        arguments=effective_arguments,
+                    )
+                    permission_decision = (
+                        policy_decision
+                        if policy_decision
+                        and policy_decision.verdict == PolicyVerdict.ASK
+                        else None
+                    )
+                    legacy_permission_required = (
+                        permission_decision is None
+                        and tool_name in self._permission_required
+                    )
+                    if permission_decision and self._permission_gateway is not None:
+                        permission_request = self._create_permission_request(
+                            tool_call_id=str(tool_call.get("id") or ""),
                             tool_name=tool_name,
-                            args_summary=self._confirmation_args_summary(effective_arguments),
-                            description=f"Agent requested to run {tool_name}",
-                            action_type=meta.action_type if meta else "confirm",
-                            target_type=meta.target_type if meta else "unknown",
+                            arguments=effective_arguments,
+                            decision=permission_decision,
+                            assistant_turn_id=assistant_turn_id,
                         )
-                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
-                        if not approved:
-                            rejection_result = ToolCallResult(
-                                content="The user did not approve this action. The tool call was cancelled.",
-                                error="user_rejected",
-                            )
+                        permission_response = await self._permission_gateway.check(permission_request)
+                        if permission_response.kind is PermissionResponseKind.NEEDS_PERMISSION:
+                            request_id = str(uuid4())
+                            if not self._permission_gateway.create_request(request_id):
+                                permission_response = PermissionResponse.deny(
+                                    reason="permission_request_gateway_unavailable"
+                                )
+                            else:
+                                yield self._create_permission_request_event(
+                                    request_id=request_id,
+                                    tool_name=tool_name,
+                                    arguments=effective_arguments,
+                                    decision=permission_decision,
+                                )
+                                permission_choice = await self._permission_gateway.wait_for_choice(
+                                    request_id,
+                                    timeout=180.0,
+                                )
+                                permission_response = await self._permission_gateway.record_choice(
+                                    permission_request,
+                                    permission_choice,
+                                )
+                        if not permission_response.allowed:
+                            rejection_result = self._rejection_result(permission_response)
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
                             )
@@ -720,6 +901,48 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
+                                quality_meta=None,
+                            )
+                            continue
+                    elif permission_decision or legacy_permission_required:
+                        if not self._permission_request_gateway:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
+                                quality_meta=None,
+                            )
+                            continue
+                        request_id = str(uuid4())
+                        self._permission_request_gateway.create(request_id)
+                        yield self._create_permission_request_event(
+                            request_id=request_id,
+                            tool_name=tool_name,
+                            arguments=effective_arguments,
+                            decision=permission_decision,
+                        )
+                        approved = await self._permission_request_gateway.wait(request_id, timeout=180.0)
+                        if not approved:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -738,6 +961,8 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
                         content_preview=self._tool_result_preview(result),
+                        error_code=result.error,
+                        metadata=result.metadata,
                         quality_meta=result.quality_meta,
                     )
                     if result.images:
@@ -791,6 +1016,7 @@ class AgentLoop:
                     tools=None,
                     tool_choice=None,
                     disable_thinking=True,
+                    **({"model": self._model_override} if self._model_override else {}),
                 )
             )
             synthesis_chunks: list[str] = []
@@ -807,7 +1033,7 @@ class AgentLoop:
 
                 for tool_call in synthesis_tool_calls:
                     function_payload = tool_call.get("function") or {}
-                    tool_name = str(function_payload.get("name") or "")
+                    tool_name = self._canonical_tool_name(function_payload.get("name") or "")
                     raw_arguments = function_payload.get("arguments") or "{}"
                     try:
                         parsed_arguments = json.loads(raw_arguments)
@@ -816,24 +1042,53 @@ class AgentLoop:
                     effective_arguments = self._resolve_tool_arguments(tool_name, parsed_arguments)
                     tool = self._tools[tool_name]
 
-                    if tool_name in self._confirmation_required and self._confirmation_gateway:
-                        request_id = str(uuid4())
-                        self._confirmation_gateway.create(request_id)
-                        meta = self._confirmation_meta.get(tool_name)
-                        yield ConfirmationRequestEvent(
-                            request_id=request_id,
+                    policy_decision = self._decide_tool_execution(
+                        tool=tool,
+                        tool_name=tool_name,
+                        arguments=effective_arguments,
+                    )
+                    permission_decision = (
+                        policy_decision
+                        if policy_decision
+                        and policy_decision.verdict == PolicyVerdict.ASK
+                        else None
+                    )
+                    legacy_permission_required = (
+                        permission_decision is None
+                        and tool_name in self._permission_required
+                    )
+                    if permission_decision and self._permission_gateway is not None:
+                        permission_request = self._create_permission_request(
+                            tool_call_id=str(tool_call.get("id") or ""),
                             tool_name=tool_name,
-                            args_summary=self._confirmation_args_summary(effective_arguments),
-                            description=f"Agent requested to run {tool_name}",
-                            action_type=meta.action_type if meta else "confirm",
-                            target_type=meta.target_type if meta else "unknown",
+                            arguments=effective_arguments,
+                            decision=permission_decision,
+                            assistant_turn_id=assistant_turn_id,
                         )
-                        approved = await self._confirmation_gateway.wait(request_id, timeout=180.0)
-                        if not approved:
-                            rejection_result = ToolCallResult(
-                                content="The user did not approve this action. The tool call was cancelled.",
-                                error="user_rejected",
-                            )
+                        permission_response = await self._permission_gateway.check(permission_request)
+                        if permission_response.kind is PermissionResponseKind.NEEDS_PERMISSION:
+                            request_id = str(uuid4())
+                            if not self._permission_gateway.create_request(request_id):
+                                permission_response = PermissionResponse.deny(
+                                    reason="permission_request_gateway_unavailable"
+                                )
+                            else:
+                                yield self._create_permission_request_event(
+                                    request_id=request_id,
+                                    tool_name=tool_name,
+                                    arguments=effective_arguments,
+                                    decision=permission_decision,
+                                )
+                                permission_choice = await self._permission_gateway.wait_for_choice(
+                                    request_id,
+                                    timeout=180.0,
+                                )
+                                permission_response = await self._permission_gateway.record_choice(
+                                    permission_request,
+                                    permission_choice,
+                                )
+                        if not permission_response.allowed:
+                            rejection_result = self._rejection_result(permission_response)
                             messages.append(
                                 self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
                             )
@@ -842,6 +1097,48 @@ class AgentLoop:
                                 tool_call_id=str(tool_call.get("id") or ""),
                                 success=False,
                                 content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
+                                quality_meta=None,
+                            )
+                            continue
+                    elif permission_decision or legacy_permission_required:
+                        if not self._permission_request_gateway:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
+                                quality_meta=None,
+                            )
+                            continue
+                        request_id = str(uuid4())
+                        self._permission_request_gateway.create(request_id)
+                        yield self._create_permission_request_event(
+                            request_id=request_id,
+                            tool_name=tool_name,
+                            arguments=effective_arguments,
+                            decision=permission_decision,
+                        )
+                        approved = await self._permission_request_gateway.wait(request_id, timeout=180.0)
+                        if not approved:
+                            rejection_result = self._rejection_result()
+                            messages.append(
+                                self._tool_result_message(str(tool_call.get("id") or ""), rejection_result)
+                            )
+                            yield ToolResultEvent(
+                                tool_name=tool_name,
+                                tool_call_id=str(tool_call.get("id") or ""),
+                                success=False,
+                                content_preview=rejection_result.content[:200],
+                                error_code=rejection_result.error,
+                                metadata=rejection_result.metadata,
                                 quality_meta=None,
                             )
                             continue
@@ -860,6 +1157,8 @@ class AgentLoop:
                         tool_call_id=str(tool_call.get("id") or ""),
                         success=result.error is None,
                         content_preview=self._tool_result_preview(result),
+                        error_code=result.error,
+                        metadata=result.metadata,
                         quality_meta=result.quality_meta,
                     )
                     if result.images:
@@ -918,7 +1217,7 @@ class AgentLoop:
     async def run(
         self,
         *,
-        message: str,
+        message: Any,
         chat_history: list[dict[str, Any]],
     ) -> AgentResult:
         response_chunks: list[str] = []

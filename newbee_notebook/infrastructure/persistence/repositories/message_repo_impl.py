@@ -24,6 +24,7 @@ class MessageRepositoryImpl(MessageRepository):
             role=MessageRole(model.role),
             message_type=MessageType(model.message_type),
             content=model.content,
+            image_ids=list(getattr(model, "image_ids", None) or []),
             created_at=model.created_at,
         )
 
@@ -38,6 +39,7 @@ class MessageRepositoryImpl(MessageRepository):
                 else str(message.message_type)
             ),
             content=message.content,
+            image_ids=list(getattr(message, "image_ids", None) or []),
             created_at=message.created_at,
         )
         self._session.add(model)

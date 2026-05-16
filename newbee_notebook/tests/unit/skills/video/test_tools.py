@@ -136,9 +136,10 @@ def test_video_skill_provider_builds_manifest(video_service):
     assert manifest.name == "video"
     assert manifest.slash_command == "/video"
     assert manifest.force_first_tool_call is True
-    assert manifest.confirmation_required == frozenset(
+    assert manifest.permission_required == frozenset(
         {"delete_summary", "disassociate_notebook", "update_summary"}
     )
+    assert manifest.permission_meta["update_summary"].action_type == "update"
     assert "discover_videos" in manifest.system_prompt_addition
     assert "get_video_content" in manifest.system_prompt_addition
     assert [tool.name for tool in manifest.tools] == [

@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from newbee_notebook.core.llm import config as llm_config_module
+
+pytestmark = pytest.mark.unit
 
 
 def test_resolve_llm_runtime_config_uses_db_model_and_provider_specific_env(monkeypatch):
@@ -52,3 +56,23 @@ def test_resolve_llm_runtime_config_uses_provider_specific_base_url_override(mon
     assert config.model == "glm-4.7"
     assert config.api_key == "zhipu-key"
     assert config.base_url == "https://example.zhipu.test/v4"
+
+
+def test_resolve_llm_runtime_config_uses_glm_5v_turbo_as_zhipu_default(monkeypatch):
+    async def _fake_get_llm_config_async(_session):
+        return {
+            "provider": "zhipu",
+            "model": "glm-5v-turbo",
+            "temperature": 0.7,
+            "max_tokens": 32768,
+            "top_p": 0.8,
+            "source": "default",
+        }
+
+    monkeypatch.setattr(llm_config_module, "get_llm_config_async", _fake_get_llm_config_async)
+    monkeypatch.setenv("ZHIPU_API_KEY", "zhipu-key")
+
+    config = asyncio.run(llm_config_module.resolve_llm_runtime_config(SimpleNamespace()))
+
+    assert config.provider == "zhipu"
+    assert config.model == "glm-5v-turbo"

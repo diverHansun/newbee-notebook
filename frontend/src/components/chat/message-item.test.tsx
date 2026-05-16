@@ -7,7 +7,23 @@ import type { ChatMessage } from "@/stores/chat-store";
 import { renderWithLang } from "@/test/test-utils";
 
 vi.mock("@/components/reader/markdown-viewer", () => ({
-  MarkdownViewer: ({ content }: { content: string }) => <div>{content}</div>,
+  MarkdownViewer: ({
+    content,
+    enableInlineCharts,
+    inlineChartsNotebookId,
+  }: {
+    content: string;
+    enableInlineCharts?: boolean;
+    inlineChartsNotebookId?: string;
+  }) => (
+    <div
+      data-testid="markdown-viewer-mock"
+      data-enable-inline-charts={enableInlineCharts ? "true" : "false"}
+      data-inline-charts-notebook-id={inlineChartsNotebookId ?? ""}
+    >
+      {content}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/sources-card", () => ({
@@ -21,7 +37,7 @@ const assistantMessage: ChatMessage = {
   content: "Working on it.",
   status: "streaming",
   createdAt: "2026-03-19T00:00:00.000Z",
-  pendingConfirmation: {
+  pendingPermissionRequest: {
     requestId: "req-1",
     toolName: "update_note",
     actionType: "update",
@@ -36,26 +52,107 @@ const assistantMessage: ChatMessage = {
 };
 
 describe("MessageItem", () => {
-  it("renders inline confirmation actions for assistant messages", async () => {
+  it("renders inline permission request actions for assistant messages", async () => {
     const user = userEvent.setup();
-    const onResolveConfirmation = vi.fn();
+    const onResolvePermissionRequest = vi.fn();
 
     renderWithLang(
       <MessageItem
         message={assistantMessage}
         onOpenDocument={() => {}}
-        onResolveConfirmation={onResolveConfirmation}
+        onResolvePermissionRequest={onResolvePermissionRequest}
       />
     );
 
     expect(screen.getByText("Working on it.")).toBeInTheDocument();
-    expect(screen.getByText("Update note")).toBeInTheDocument();
+    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Allow once" }));
     await user.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(1, "req-1", true);
-    expect(onResolveConfirmation).toHaveBeenNthCalledWith(2, "req-1", false);
+    expect(onResolvePermissionRequest).toHaveBeenNthCalledWith(1, "req-1", "once");
+    expect(onResolvePermissionRequest).toHaveBeenNthCalledWith(2, "req-1", "reject");
+  });
+
+  it("shows permission request instead of a running tool row while waiting for approval", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "running",
+        },
+      ],
+      thinkingStage: "retrieving",
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Update note metadata.")).toBeInTheDocument();
+    expect(screen.queryByText("Run shell...")).toBeNull();
+    expect(screen.queryByText("Retrieving knowledge base...")).toBeNull();
+  });
+
+  it("hides collapsed confirmed permission status after approval", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      pendingPermissionRequest: {
+        ...assistantMessage.pendingPermissionRequest!,
+        status: "collapsed",
+        resolvedFrom: "confirmed",
+      },
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.queryByText(/Confirmed/i)).toBeNull();
+    expect(screen.queryByText(/Confirm action/i)).toBeNull();
+  });
+
+  it("renders bash tool progress as shell for users", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingPermissionRequest: undefined,
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "running",
+        },
+      ],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Run shell...")).toBeInTheDocument();
+    expect(screen.queryByText("Run bash...")).toBeNull();
+  });
+
+  it("renders bash nonzero exits as shell warnings instead of failed tool calls", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "",
+      pendingPermissionRequest: undefined,
+      toolSteps: [
+        {
+          id: "tool-bash",
+          toolName: "bash",
+          status: "warning",
+          errorCode: "nonzero_exit",
+          exitCode: 1,
+        },
+      ],
+      thinkingStage: null,
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    expect(screen.getByText("Shell exited 1")).toBeInTheDocument();
+    expect(screen.queryByText("Error")).toBeNull();
   });
 
   it("keeps intermediate block hidden once final content stream has started", () => {
@@ -64,7 +161,7 @@ describe("MessageItem", () => {
       content: "",
       finalContentStarted: true,
       intermediateContent: "thinking...",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
     };
 
@@ -80,7 +177,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "Partial reply",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       thinkingStage: null,
     };
@@ -94,7 +191,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-1",
@@ -116,7 +213,7 @@ describe("MessageItem", () => {
     const message: ChatMessage = {
       ...assistantMessage,
       content: "",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [
         {
           id: "tool-pending",
@@ -140,7 +237,7 @@ describe("MessageItem", () => {
       ...assistantMessage,
       content: " \n",
       finalContentStarted: true,
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       thinkingStage: "retrieving",
     };
@@ -158,7 +255,7 @@ describe("MessageItem", () => {
       content:
         "已为您生成一张软萌小猫插画：\n\n![软萌小猫插画](generated_image_url)\n\n这只小猫有着圆润可爱的外形。",
       status: "done",
-      pendingConfirmation: undefined,
+      pendingPermissionRequest: undefined,
       toolSteps: [],
       images: [
         {
@@ -186,5 +283,65 @@ describe("MessageItem", () => {
       })
     ).toBeInTheDocument();
     expect(screen.queryByText(/generated_image_url/i)).toBeNull();
+  });
+
+  it("renders uploaded user image thumbnails separately from generated image cards", () => {
+    const message: ChatMessage = {
+      id: "user-1",
+      role: "user",
+      mode: "ask",
+      content: "看看这张图",
+      status: "done",
+      createdAt: "2026-03-19T00:00:00.000Z",
+      imageIds: ["img-upload-1", "img-upload-2"],
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />, {
+      lang: "zh",
+    });
+
+    const thumbnails = screen.getAllByRole("img", { name: "上传图片缩略图" });
+    expect(thumbnails).toHaveLength(2);
+    expect(thumbnails[0]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-1/thumbnail");
+    expect(thumbnails[1]).toHaveAttribute("src", "/api/v1/chat/images/img-upload-2/thumbnail");
+    expect(screen.queryByTestId("generated-image-list")).toBeNull();
+  });
+
+  it("forwards enableInlineCharts=true and notebookId to MarkdownViewer when set", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "Here is the chart.",
+      pendingPermissionRequest: undefined,
+      toolSteps: [],
+      status: "done",
+    };
+
+    renderWithLang(
+      <MessageItem
+        message={message}
+        onOpenDocument={() => {}}
+        enableInlineCharts={true}
+        notebookId="nb-42"
+      />
+    );
+
+    const viewer = screen.getByTestId("markdown-viewer-mock");
+    expect(viewer.getAttribute("data-enable-inline-charts")).toBe("true");
+    expect(viewer.getAttribute("data-inline-charts-notebook-id")).toBe("nb-42");
+  });
+
+  it("defaults enableInlineCharts to false when not provided", () => {
+    const message: ChatMessage = {
+      ...assistantMessage,
+      content: "Plain reply",
+      pendingPermissionRequest: undefined,
+      toolSteps: [],
+      status: "done",
+    };
+
+    renderWithLang(<MessageItem message={message} onOpenDocument={() => {}} />);
+
+    const viewer = screen.getByTestId("markdown-viewer-mock");
+    expect(viewer.getAttribute("data-enable-inline-charts")).toBe("false");
   });
 });

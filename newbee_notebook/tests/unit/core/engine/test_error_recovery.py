@@ -21,16 +21,41 @@ class _FakeLLMClient:
         self.chat_exceptions = list(chat_exceptions or [])
         self.chat_calls: list[dict] = []
 
-    async def chat(self, **kwargs):
-        self.chat_calls.append(kwargs)
+    @staticmethod
+    def _response_to_stream_batch(response: dict) -> list[dict]:
+        message = (response.get("choices") or [{}])[0].get("message") or {}
+        delta: dict[str, object] = {}
+        if message.get("content"):
+            delta["content"] = message.get("content")
+        if message.get("tool_calls"):
+            delta["tool_calls"] = [
+                {"index": index, **tool_call}
+                for index, tool_call in enumerate(message["tool_calls"])
+            ]
+        if not delta:
+            return []
+        return [{"choices": [{"delta": delta}]}]
+
+    def _raise_chat_exception_if_needed(self) -> None:
         if self.chat_exceptions:
             exc = self.chat_exceptions.pop(0)
             if exc is not None:
                 raise exc
+
+    async def chat(self, **kwargs):
+        self.chat_calls.append(kwargs)
+        self._raise_chat_exception_if_needed()
         return self.chat_responses.pop(0)
 
     async def chat_stream(self, **kwargs):
-        for chunk in self.stream_chunks:
+        if self.chat_responses or self.chat_exceptions:
+            self.chat_calls.append(kwargs)
+            self._raise_chat_exception_if_needed()
+            chunks = self._response_to_stream_batch(self.chat_responses.pop(0))
+        else:
+            chunks = list(self.stream_chunks)
+            self.stream_chunks = []
+        for chunk in chunks:
             yield chunk
 
 

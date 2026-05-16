@@ -2,7 +2,12 @@
 
 import { memo, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { InlineChartCard } from "@/components/chat/inline-chart-card";
 import { renderMarkdownToHtml } from "@/components/reader/markdown-pipeline";
+import {
+  disposeInlineChartPayload,
+  getInlineChartPayload,
+} from "@/lib/diagram/inline-chart-registry";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import {
@@ -73,7 +78,63 @@ type MarkdownViewerProps = {
   freezeLazyLoad?: boolean;
   visibleChunkCount?: number;
   onVisibleChunkCountChange?: (count: number) => void;
+  /**
+   * Opt-in flag enabled only for the assistant reply to a `/diagram` user
+   * message. When true, ```echarts``` fences are rendered as interactive
+   * `InlineChartCard` components instead of plain code blocks.
+   */
+  enableInlineCharts?: boolean;
+  /** Required when `enableInlineCharts` is true so cards can save to Studio. */
+  inlineChartsNotebookId?: string;
 };
+
+type InlineChartHtmlPart =
+  | { kind: "html"; html: string }
+  | { kind: "chart"; payloadId: string; rawContent: string };
+
+type RenderedChunk = {
+  html: string;
+  parts: InlineChartHtmlPart[] | null;
+};
+
+type InlineChartMatch = {
+  payloadId: string;
+  index: number;
+  length: number;
+};
+
+const INLINE_ECHARTS_PLACEHOLDER_HTML_PATTERN =
+  /<div(?=[^>]*\bdata-chart-placeholder(?:=(?:""|''))?)(?=[^>]*\bdata-chart-type="echarts")(?=[^>]*\bdata-payload-id="([^"]+)")[^>]*><\/div>/g;
+
+function splitInlineChartHtml(html: string): InlineChartHtmlPart[] | null {
+  const matches: InlineChartMatch[] = [];
+  for (const match of html.matchAll(INLINE_ECHARTS_PLACEHOLDER_HTML_PATTERN)) {
+    const payloadId = match[1];
+    if (!payloadId || match.index === undefined) continue;
+    matches.push({ payloadId, index: match.index, length: match[0].length });
+  }
+
+  if (matches.length === 0) return null;
+
+  const parts: InlineChartHtmlPart[] = [];
+  let cursor = 0;
+  for (const match of matches) {
+    if (match.index > cursor) {
+      parts.push({ kind: "html", html: html.slice(cursor, match.index) });
+    }
+    const rawContent = getInlineChartPayload(match.payloadId);
+    if (rawContent == null) {
+      parts.push({ kind: "html", html: html.slice(match.index, match.index + match.length) });
+    } else {
+      parts.push({ kind: "chart", payloadId: match.payloadId, rawContent });
+    }
+    cursor = match.index + match.length;
+  }
+  if (cursor < html.length) {
+    parts.push({ kind: "html", html: html.slice(cursor) });
+  }
+  return parts;
+}
 
 function getDynamicRootMargin(contentChars: number, totalChunks: number): string {
   if (contentChars <= LARGE_DOC_THRESHOLD_CHARS || totalChunks <= 1) {
@@ -103,6 +164,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   freezeLazyLoad = false,
   visibleChunkCount,
   onVisibleChunkCountChange,
+  enableInlineCharts = false,
+  inlineChartsNotebookId,
 }: MarkdownViewerProps) {
   const { t } = useLang();
   const fallbackRef = useRef<HTMLDivElement>(null);
@@ -152,7 +215,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     } else {
       setInternalVisibleChunkCount(initialVisibleChunkCount);
     }
-  }, [chunks.length, content, documentId, isControlledVisibleChunkCount, onVisibleChunkCountChange]);
+  }, [chunks.length, content, documentId, enableInlineCharts, isControlledVisibleChunkCount, onVisibleChunkCountChange]);
 
   const hasMoreChunks = resolvedVisibleChunkCount < chunks.length;
 
@@ -176,7 +239,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
       prefetchTaskRef.current = null;
       for (let idx = start; idx < end; idx += 1) {
         if (cache.has(idx)) continue;
-        cache.set(idx, renderMarkdownToHtml(chunks[idx] || "", { documentId }));
+        cache.set(idx, renderMarkdownToHtml(chunks[idx] || "", { documentId, enableInlineCharts }));
       }
     });
 
@@ -184,7 +247,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
       cancelDeferredTask(prefetchTaskRef.current);
       prefetchTaskRef.current = null;
     };
-  }, [chunks, documentId, hasMoreChunks, resolvedVisibleChunkCount]);
+  }, [chunks, documentId, enableInlineCharts, hasMoreChunks, resolvedVisibleChunkCount]);
 
   useEffect(() => {
     if (!hasMoreChunks) return;
@@ -224,23 +287,68 @@ export const MarkdownViewer = memo(function MarkdownViewer({
       const chunk = chunks[idx] || "";
       let html = cache.get(idx);
       if (!html) {
-        html = renderMarkdownToHtml(chunk, { documentId });
+        html = renderMarkdownToHtml(chunk, { documentId, enableInlineCharts });
         cache.set(idx, html);
       }
       output.push(html);
     }
     return output;
-  }, [chunks, documentId, resolvedVisibleChunkCount]);
+  }, [chunks, documentId, enableInlineCharts, resolvedVisibleChunkCount]);
+
+  const renderedChunks = useMemo<RenderedChunk[]>(() => {
+    if (!enableInlineCharts || !inlineChartsNotebookId) {
+      return htmlChunks.map((html) => ({ html, parts: null }));
+    }
+    return htmlChunks.map((html) => ({
+      html,
+      parts: splitInlineChartHtml(html),
+    }));
+  }, [enableInlineCharts, htmlChunks, inlineChartsNotebookId]);
+
+  const inlinePayloadIds = useMemo(
+    () =>
+      renderedChunks.flatMap((chunk) =>
+        (chunk.parts || [])
+          .filter((part): part is Extract<InlineChartHtmlPart, { kind: "chart" }> => part.kind === "chart")
+          .map((part) => part.payloadId)
+      ),
+    [renderedChunks]
+  );
+
+  useEffect(() => {
+    return () => {
+      inlinePayloadIds.forEach((payloadId) => disposeInlineChartPayload(payloadId));
+    };
+  }, [inlinePayloadIds]);
 
   return (
     <div ref={ref} className={`markdown-content ${className || ""}`}>
-      {htmlChunks.map((html, idx) => (
+      {renderedChunks.map((chunk, idx) => (
         <section
           key={`chunk-${documentId ?? "doc"}-${idx}`}
           className="markdown-chunk"
           data-chunk-index={idx}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+          {...(chunk.parts == null ? { dangerouslySetInnerHTML: { __html: chunk.html } } : {})}
+        >
+          {chunk.parts?.map((part, partIndex) => {
+            if (part.kind === "html") {
+              return (
+                <div
+                  key={`html-${partIndex}`}
+                  style={{ display: "contents" }}
+                  dangerouslySetInnerHTML={{ __html: part.html }}
+                />
+              );
+            }
+            return (
+              <InlineChartCard
+                key={part.payloadId}
+                rawContent={part.rawContent}
+                notebookId={inlineChartsNotebookId!}
+              />
+            );
+          })}
+        </section>
       ))}
       {hasMoreChunks ? (
         <div ref={sentinelRef} className="markdown-load-more">

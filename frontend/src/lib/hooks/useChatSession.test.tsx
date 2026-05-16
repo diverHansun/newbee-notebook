@@ -14,6 +14,9 @@ const listSessionMessages = vi.fn();
 const createSession = vi.fn();
 const deleteSession = vi.fn();
 const chatOnce = vi.fn();
+const resolvePermissionRequestApi = vi.fn();
+const getEffectivePolicy = vi.fn();
+const updatePolicyPreference = vi.fn();
 const startStream = vi.fn();
 const cancelStream = vi.fn();
 
@@ -26,6 +29,12 @@ vi.mock("@/lib/api/sessions", () => ({
 
 vi.mock("@/lib/api/chat", () => ({
   chatOnce: (...args: unknown[]) => chatOnce(...args),
+  resolvePermissionRequest: (...args: unknown[]) => resolvePermissionRequestApi(...args),
+}));
+
+vi.mock("@/lib/api/policy", () => ({
+  getEffectivePolicy: (...args: unknown[]) => getEffectivePolicy(...args),
+  updatePolicyPreference: (...args: unknown[]) => updatePolicyPreference(...args),
 }));
 
 vi.mock("@/lib/hooks/useChatStream", () => ({
@@ -99,7 +108,25 @@ describe("useChatSession", () => {
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
+    resolvePermissionRequestApi.mockReset();
+    getEffectivePolicy.mockReset();
+    updatePolicyPreference.mockReset();
     cancelStream.mockReset();
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "default",
+      source: "default",
+    });
+    updatePolicyPreference.mockImplementation(
+      async (_notebookId: string, update: { policy: string; scope: string; session_id?: string }) => ({
+        notebook_id: "nb-1",
+        session_id: update.session_id ?? "session-1",
+        policy: update.policy,
+        source: update.policy === "yolo" ? update.scope : "default",
+      })
+    );
+    resolvePermissionRequestApi.mockResolvedValue({ status: "resolved" });
     startStream.mockImplementation(
       async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
         callbacks?.onEvent?.({ type: "start", message_id: 123 });
@@ -116,7 +143,7 @@ describe("useChatSession", () => {
     );
   });
 
-  it("stores pending confirmation when the stream emits a confirmation request", async () => {
+  it("stores pending permission request when the stream emits a confirmation request", async () => {
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useChatSession("nb-1"), {
       wrapper,
@@ -132,9 +159,46 @@ describe("useChatSession", () => {
 
     await waitFor(() => {
       const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
-      expect(assistantMessage?.pendingConfirmation?.requestId).toBe("req-1");
-      expect(assistantMessage?.pendingConfirmation?.argsSummary.note_id).toBe("note-1");
-      expect(assistantMessage?.pendingConfirmation?.status).toBe("pending");
+      expect(assistantMessage?.pendingPermissionRequest?.requestId).toBe("req-1");
+      expect(assistantMessage?.pendingPermissionRequest?.argsSummary.note_id).toBe("note-1");
+      expect(assistantMessage?.pendingPermissionRequest?.status).toBe("pending");
+    });
+  });
+
+  it("stores pending permission request when the stream emits a permission request", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 124 });
+        callbacks?.onEvent?.({
+          type: "permission_request",
+          request_id: "req-permission",
+          tool_name: "shell",
+          action_type: "confirm",
+          target_type: "shell",
+          args_summary: { command: "echo ok" },
+          description: "Agent requested to run shell",
+        } as never);
+      }
+    );
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run a shell command", "agent");
+    });
+
+    await waitFor(() => {
+      const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
+      expect(assistantMessage?.pendingPermissionRequest?.requestId).toBe("req-permission");
+      expect(assistantMessage?.pendingPermissionRequest?.toolName).toBe("shell");
+      expect(assistantMessage?.pendingPermissionRequest?.argsSummary.command).toBe("echo ok");
+      expect(assistantMessage?.pendingPermissionRequest?.status).toBe("pending");
     });
   });
 
@@ -285,5 +349,144 @@ describe("useChatSession", () => {
     expect(assistantDone?.finalContentStarted).toBe(false);
 
     vi.useRealTimers();
+  });
+
+  it("passes uploaded image ids to the stream request and local user message", async () => {
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Please inspect this image", "ask", undefined, null, [
+        "img-upload-1",
+        "img-upload-2",
+      ]);
+    });
+
+    expect(startStream).toHaveBeenCalledWith(
+      "nb-1",
+      expect.objectContaining({
+        image_ids: ["img-upload-1", "img-upload-2"],
+      }),
+      expect.any(Object)
+    );
+    expect(result.current.messages[0]).toEqual(
+      expect.objectContaining({
+        role: "user",
+        imageIds: ["img-upload-1", "img-upload-2"],
+      })
+    );
+  });
+
+  it("sends current agent policy with chat stream requests", async () => {
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "yolo",
+      source: "session",
+    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.policy.policy).toBe("yolo");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run checks", "agent");
+    });
+
+    expect(startStream).toHaveBeenCalledWith(
+      "nb-1",
+      expect.objectContaining({ agent_policy: "yolo" }),
+      expect.any(Object)
+    );
+  });
+
+  it("resolves always_session and updates session policy", async () => {
+    resolvePermissionRequestApi.mockResolvedValueOnce({
+      status: "resolved",
+      effective_policy: {
+        notebook_id: "nb-1",
+        session_id: "session-1",
+        policy: "yolo",
+        source: "session",
+      },
+    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Update note", "agent");
+    });
+    await act(async () => {
+      await result.current.resolvePermissionRequest("req-1", "always_session");
+    });
+
+    expect(resolvePermissionRequestApi).toHaveBeenCalledWith("session-1", {
+      request_id: "req-1",
+      response: "always_session",
+    });
+    expect(result.current.policy.policy).toBe("yolo");
+    expect(result.current.policy.source).toBe("session");
+  });
+
+  it("maps bash nonzero exit results to warning tool status", async () => {
+    startStream.mockImplementationOnce(
+      async (_notebookId: string, _request: unknown, callbacks?: { onEvent?: (event: unknown) => void }) => {
+        callbacks?.onEvent?.({ type: "start", message_id: 987 });
+        callbacks?.onEvent?.({
+          type: "tool_call",
+          tool_call_id: "tool-bash",
+          tool_name: "bash",
+          tool_input: { command: "test -d /work/missing" },
+        });
+        callbacks?.onEvent?.({
+          type: "tool_result",
+          tool_call_id: "tool-bash",
+          tool_name: "bash",
+          success: false,
+          error_code: "nonzero_exit",
+          metadata: { exit_code: 1 },
+          content_preview: "Exit code: 1",
+          quality_meta: null,
+        });
+      }
+    );
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useChatSession("nb-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentSessionId).toBe("session-1");
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Run boundary check", "agent");
+    });
+
+    const assistantMessage = result.current.messages.find((item) => item.role === "assistant");
+    expect(assistantMessage?.toolSteps?.[0]).toEqual(
+      expect.objectContaining({
+        toolName: "bash",
+        status: "warning",
+        errorCode: "nonzero_exit",
+        exitCode: 1,
+      })
+    );
   });
 });

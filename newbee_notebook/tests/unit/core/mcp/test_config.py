@@ -6,8 +6,12 @@ from pathlib import Path
 import pytest
 
 from newbee_notebook.api import dependencies
-from newbee_notebook.core.common.project_paths import get_configs_directory
 from newbee_notebook.core.mcp.config import load_mcp_config
+from newbee_notebook.core.mcp.paths import (
+    get_mcp_config_directory,
+    get_mcp_config_path,
+    get_mcp_example_config_path,
+)
 
 
 def test_load_mcp_config_supports_stdio_and_streamable_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -88,15 +92,24 @@ def test_load_mcp_config_rejects_unsupported_transport(tmp_path: Path):
         load_mcp_config(config_path)
 
 
-def test_runtime_mcp_singleton_uses_repo_level_configs_path(monkeypatch: pytest.MonkeyPatch):
+def test_mcp_paths_live_under_configs_mcp_directory():
+    config_dir = get_mcp_config_directory()
+
+    assert config_dir.name == "mcp"
+    assert config_dir.parent.name == "configs"
+    assert get_mcp_config_path() == config_dir / "mcp.json"
+    assert get_mcp_example_config_path() == config_dir / "mcp.example.json"
+
+
+def test_runtime_mcp_singleton_uses_repo_level_configs_mcp_path(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(dependencies, "_mcp_client_manager", None)
 
     manager = dependencies.get_mcp_client_manager_singleton()
 
     try:
-        expected = get_configs_directory() / "mcp.json"
+        expected = get_mcp_config_path()
         assert manager._config_path == expected
         assert manager._config_path.name == "mcp.json"
-        assert manager._config_path.parent.name == "configs"
+        assert manager._config_path.parent.name == "mcp"
     finally:
         monkeypatch.setattr(dependencies, "_mcp_client_manager", None)

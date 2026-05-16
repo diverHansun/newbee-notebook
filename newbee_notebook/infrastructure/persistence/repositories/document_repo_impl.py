@@ -90,6 +90,14 @@ class DocumentRepositoryImpl(DocumentRepository):
             query = query.where(DocumentModel.status == status.value)
         return query
 
+    def _content_type_filter(self, query, content_types: Optional[List[DocumentType]]):
+        """Apply content type filter if provided."""
+        if content_types:
+            query = query.where(
+                DocumentModel.content_type.in_([doc_type.value for doc_type in content_types])
+            )
+        return query
+
     # ------------------------------------------------------------------ #
     # CRUD
     # ------------------------------------------------------------------ #
@@ -111,7 +119,11 @@ class DocumentRepositoryImpl(DocumentRepository):
         return [self._to_entity(m) for m in models]
 
     async def list_by_library(
-        self, limit: int = 50, offset: int = 0, status: Optional[DocumentStatus] = None
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        status: Optional[DocumentStatus] = None,
+        content_types: Optional[List[DocumentType]] = None,
     ) -> List[Document]:
         query = (
             select(DocumentModel)
@@ -121,6 +133,7 @@ class DocumentRepositoryImpl(DocumentRepository):
             .offset(offset)
         )
         query = self._status_filter(query, status)
+        query = self._content_type_filter(query, content_types)
         result = await self._session.execute(query)
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
@@ -141,11 +154,16 @@ class DocumentRepositoryImpl(DocumentRepository):
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
 
-    async def count_by_library(self, status: Optional[DocumentStatus] = None) -> int:
+    async def count_by_library(
+        self,
+        status: Optional[DocumentStatus] = None,
+        content_types: Optional[List[DocumentType]] = None,
+    ) -> int:
         query = select(func.count(DocumentModel.id)).where(
             DocumentModel.library_id.is_not(None)
         )
         query = self._status_filter(query, status)
+        query = self._content_type_filter(query, content_types)
         result = await self._session.execute(query)
         return result.scalar() or 0
 

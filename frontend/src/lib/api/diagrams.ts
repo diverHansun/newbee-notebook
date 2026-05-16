@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 import {
+  CreateDiagramInput,
   Diagram,
   DiagramListResponse,
   DiagramUpdatePositionsInput,
@@ -14,6 +15,13 @@ export function listDiagrams(
     search.set("document_id", params.document_id);
   }
   return apiFetch<DiagramListResponse>(`/diagrams?${search.toString()}`);
+}
+
+export function createDiagram(input: CreateDiagramInput) {
+  return apiFetch<Diagram>("/diagrams", {
+    method: "POST",
+    body: input,
+  });
 }
 
 export function getDiagram(notebookId: string, diagramId: string) {

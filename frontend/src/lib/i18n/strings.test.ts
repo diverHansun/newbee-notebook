@@ -8,3 +8,28 @@ describe("uiStrings.chat.sessionCount", () => {
     expect(uiStrings.chat.sessionCount.en).toBe("{n} / 50 sessions");
   });
 });
+
+describe("uiStrings.libraryPage type filter strings", () => {
+  const requiredKeys = [
+    "typeFilterLabel",
+    "typeFilterClear",
+    "typeFilterActiveCount",
+    "typeGroupDocument",
+    "typeGroupWord",
+    "typeGroupSlides",
+    "typeGroupWeb",
+    "typeGroupImage",
+    "typeGroupSheet",
+    "typeGroupEbook",
+    "typeGroupText",
+    "tableType",
+    "typeBadgeAriaLabel",
+  ] as const;
+
+  it.each(requiredKeys)("has non-empty zh and en for %s", (key) => {
+    const entry = uiStrings.libraryPage[key];
+    expect(entry).toBeDefined();
+    expect(entry.zh.length).toBeGreaterThan(0);
+    expect(entry.en.length).toBeGreaterThan(0);
+  });
+});

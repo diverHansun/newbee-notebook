@@ -54,6 +54,7 @@ type MinerUDraft = {
   source: string;
   local_enabled: boolean;
   api_key_set: boolean | null;
+  title_aided_enabled: boolean;
 };
 
 function formatFloat(value: number): string {
@@ -131,6 +132,7 @@ function toMinerUDraft(config: MinerUConfig): MinerUDraft {
     source: config.source,
     local_enabled: config.local_enabled,
     api_key_set: config.api_key_set,
+    title_aided_enabled: Boolean(config.title_aided_enabled),
   };
 }
 
@@ -356,6 +358,24 @@ export function ModelConfigPanel() {
     mineruMutation.mutate({
       mode: next.mode,
     });
+  };
+
+  const toggleMinerUTitleAided = () => {
+    if (!mineruDraft) return;
+    const previous = mineruDraft;
+    const nextEnabled = !mineruDraft.title_aided_enabled;
+    setMineruDraft({
+      ...mineruDraft,
+      title_aided_enabled: nextEnabled,
+    });
+    mineruMutation.mutate(
+      {
+        title_aided_enabled: nextEnabled,
+      },
+      {
+        onError: () => setMineruDraft(previous),
+      }
+    );
   };
 
   if (disabledByFeatureFlag) {
@@ -792,6 +812,40 @@ export function ModelConfigPanel() {
           ) : (
             <div className="control-panel-warning">{t(uiStrings.controlPanel.mineruLocalDisabledHint)}</div>
           )}
+
+          {mineruDraft.local_enabled && mineruDraft.mode === "local" ? (
+            <div className="control-panel-switch-field">
+              <div className="control-panel-switch-copy">
+                <div id="mineru-title-aided-label" className="control-panel-field-label">
+                  {t(uiStrings.controlPanel.mineruTitleAidedLabel)}
+                </div>
+                <div id="mineru-title-aided-description" className="control-panel-field-note">
+                  {t(uiStrings.controlPanel.mineruTitleAidedDescription)}
+                </div>
+                {mineruDraft.title_aided_enabled && configQuery.data?.llm.api_key_set === false ? (
+                  <div id="mineru-title-aided-key-hint" className="control-panel-field-note is-warning">
+                    {t(uiStrings.controlPanel.mineruTitleAidedRequiresLLMKey)}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={mineruDraft.title_aided_enabled}
+                aria-labelledby="mineru-title-aided-label"
+                aria-describedby={
+                  mineruDraft.title_aided_enabled && configQuery.data?.llm.api_key_set === false
+                    ? "mineru-title-aided-description mineru-title-aided-key-hint"
+                    : "mineru-title-aided-description"
+                }
+                className={`control-panel-switch${mineruDraft.title_aided_enabled ? " is-on" : ""}`}
+                onClick={toggleMinerUTitleAided}
+                disabled={mineruMutation.isPending}
+              >
+                <span className="control-panel-switch-thumb" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
 
           {mineruDraft.api_key_set !== null ? (
             <div className="control-panel-readonly-row">

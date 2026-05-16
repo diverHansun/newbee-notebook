@@ -42,9 +42,10 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
     text: string,
     mode: MessageMode,
     context?: { document_id: string; selected_text: string },
-    sourceDocIds?: string[] | null
+    sourceDocIds?: string[] | null,
+    imageIds?: string[]
   ) => {
-    await chat.sendMessage(text, mode, context, sourceDocIds);
+    await chat.sendMessage(text, mode, context, sourceDocIds, imageIds);
   };
 
   const mainContent =
@@ -76,14 +77,21 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
         messages={chat.messages}
         mode={chat.currentMode}
         isStreaming={chat.isStreaming}
+        policy={chat.policy}
         onModeChange={chat.setMode}
-        onSendMessage={(text, mode, sourceDocIds) => sendByMode(text, mode, undefined, sourceDocIds)}
+        onPolicyChange={async (update) => {
+          await chat.updatePolicy(update);
+        }}
+        onEnsureSession={chat.ensureSession}
+        onSendMessage={(text, mode, sourceDocIds, imageIds) =>
+          sendByMode(text, mode, undefined, sourceDocIds, imageIds)
+        }
         onCancel={chat.cancelStream}
         onSwitchSession={chat.switchSession}
         onCreateSession={chat.createSession}
         onDeleteSession={chat.deleteSession}
         onOpenDocument={openDocument}
-        onResolveConfirmation={chat.resolveConfirmation}
+        onResolvePermissionRequest={chat.resolvePermissionRequest}
       />
     );
 
@@ -97,7 +105,7 @@ export function NotebookWorkspace({ notebookId }: NotebookWorkspaceProps) {
       }
       main={mainContent}
       right={<StudioPanel notebookId={notebookId} onOpenDocument={openDocument} />}
-      mainOverlay={<ExplainCard card={chat.explainCard} />}
+      mainOverlay={<ExplainCard card={chat.explainCard} onRetry={chat.retryExplainCard} />}
     />
   );
 }

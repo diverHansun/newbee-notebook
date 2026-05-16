@@ -296,6 +296,15 @@ def test_processor_cloud_mode_images_use_mineru_only(ext: str):
     assert isinstance(converters[0], MinerUCloudConverter)
 
 
+def test_processor_cloud_mode_ppt_uses_markitdown_only():
+    cfg = _base_config()
+    processor = DocumentProcessor(config=cfg)
+
+    converters = processor._get_converters_for_ext(".ppt")
+    assert len(converters) == 1
+    assert isinstance(converters[0], MarkItDownConverter)
+
+
 def test_processor_cloud_mode_epub_uses_markitdown_only():
     cfg = _base_config()
     processor = DocumentProcessor(config=cfg)

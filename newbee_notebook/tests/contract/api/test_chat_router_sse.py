@@ -1,11 +1,15 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from newbee_notebook.api.dependencies import get_chat_service, get_session_service
+from newbee_notebook.api.dependencies import (
+    get_chat_service,
+    get_policy_preference_service,
+    get_session_service,
+)
 from newbee_notebook.api.routers import chat as chat_router
 from newbee_notebook.api.routers.chat import SSEEvent, heartbeat_generator
 from newbee_notebook.application.services.session_service import SessionLimitExceededError
@@ -32,9 +36,9 @@ def test_sse_event_warning_formats_payload():
     )
 
 
-def test_sse_event_confirmation_request_formats_payload():
+def test_sse_event_permission_request_formats_payload():
     assert SSEEvent.format(
-        "confirmation_request",
+        "permission_request",
         {
             "request_id": "req-1",
             "tool_name": "delete_note",
@@ -42,15 +46,45 @@ def test_sse_event_confirmation_request_formats_payload():
             "description": "Agent requested to run delete_note",
         },
     ) == (
-        'data: {"type": "confirmation_request", "request_id": "req-1", '
+        'data: {"type": "permission_request", "request_id": "req-1", '
         '"tool_name": "delete_note", "args_summary": {"note_id": "n1"}, '
         '"description": "Agent requested to run delete_note"}\n\n'
     )
 
 
-def _build_client(chat_service: AsyncMock, session_service: AsyncMock) -> TestClient:
+class _EffectivePolicy:
+    def __init__(self, policy: str = "default", source: str = "default") -> None:
+        self.notebook_id = "notebook-1"
+        self.session_id = "session-1"
+        self.policy = policy
+        self.source = source
+
+
+class _FakeSession:
+    def __init__(self, session_id: str = "session-1", notebook_id: str = "notebook-1") -> None:
+        self.session_id = session_id
+        self.notebook_id = notebook_id
+
+
+class _PolicyService:
+    def __init__(self, policy: str = "default", source: str = "default") -> None:
+        self.calls: list[dict[str, str | None]] = []
+        self.policy = policy
+        self.source = source
+
+    async def get_effective(self, *, notebook_id: str, session_id: str | None = None):
+        self.calls.append({"notebook_id": notebook_id, "session_id": session_id})
+        return _EffectivePolicy(self.policy, self.source)
+
+
+def _build_client(
+    chat_service: AsyncMock,
+    session_service: AsyncMock,
+    policy_service: _PolicyService | None = None,
+) -> TestClient:
     app = FastAPI()
     app.include_router(chat_router.router, prefix="/api/v1")
+    policy_service = policy_service or _PolicyService()
 
     async def _override_chat():
         return chat_service
@@ -60,6 +94,7 @@ def _build_client(chat_service: AsyncMock, session_service: AsyncMock) -> TestCl
 
     app.dependency_overrides[get_chat_service] = _override_chat
     app.dependency_overrides[get_session_service] = _override_session
+    app.dependency_overrides[get_policy_preference_service] = lambda: policy_service
     return TestClient(app)
 
 
@@ -71,7 +106,7 @@ def test_chat_endpoint_returns_409_for_document_processing_error():
         )
     )
     session_service = AsyncMock()
-    session_service.get_or_raise = AsyncMock(return_value=object())
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
 
     client = _build_client(chat_service, session_service)
     response = client.post(
@@ -93,7 +128,7 @@ def test_chat_stream_endpoint_returns_409_for_document_processing_error():
         )
     )
     session_service = AsyncMock()
-    session_service.get_or_raise = AsyncMock(return_value=object())
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
 
     client = _build_client(chat_service, session_service)
     response = client.post(
@@ -165,7 +200,7 @@ def test_chat_endpoint_accepts_agent_mode():
         )()
     )
     session_service = AsyncMock()
-    session_service.get_or_raise = AsyncMock(return_value=object())
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
 
     client = _build_client(chat_service, session_service)
     response = client.post(
@@ -175,6 +210,183 @@ def test_chat_endpoint_accepts_agent_mode():
 
     assert response.status_code == 200
     assert response.json()["mode"] == "agent"
+
+
+def test_chat_request_accepts_uploaded_image_ids():
+    request = chat_router.ChatRequest(
+        session_id="session-1",
+        message="Please describe this image.",
+        mode="agent",
+        image_ids=["img-1"],
+    )
+
+    assert request.image_ids == ["img-1"]
+
+
+def test_chat_request_rejects_image_only_payload_without_text():
+    chat_service = AsyncMock()
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={
+            "session_id": "session-1",
+            "message": "   ",
+            "mode": "agent",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 422
+    chat_service.chat.assert_not_awaited()
+
+
+def test_chat_endpoint_passes_uploaded_image_ids_to_service():
+    chat_service = AsyncMock()
+    chat_service.chat = AsyncMock(
+        return_value=type(
+            "_Result",
+            (),
+            {
+                "session_id": "session-1",
+                "message_id": 1,
+                "content": "hello",
+                "mode": type("_Mode", (), {"value": "agent"})(),
+                "sources": [],
+                "warnings": [],
+            },
+        )()
+    )
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
+
+    client = _build_client(chat_service, session_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={
+            "session_id": "session-1",
+            "message": "Please describe this image.",
+            "mode": "agent",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert chat_service.chat.await_args.kwargs["image_ids"] == ["img-1"]
+
+
+def test_chat_endpoint_uses_server_effective_policy_not_request_policy():
+    chat_service = AsyncMock()
+    chat_service.chat = AsyncMock(
+        return_value=type(
+            "_Result",
+            (),
+            {
+                "session_id": "session-1",
+                "message_id": 1,
+                "content": "hello",
+                "mode": type("_Mode", (), {"value": "agent"})(),
+                "sources": [],
+                "images": [],
+                "warnings": [],
+            },
+        )()
+    )
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
+    policy_service = _PolicyService(policy="default")
+
+    client = _build_client(chat_service, session_service, policy_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={
+            "session_id": "session-1",
+            "message": "hi",
+            "mode": "agent",
+            "agent_policy": "yolo",
+        },
+    )
+
+    assert response.status_code == 200
+    assert chat_service.chat.await_args.kwargs["agent_policy"] == "default"
+    assert policy_service.calls == [
+        {"notebook_id": "notebook-1", "session_id": "session-1"}
+    ]
+
+
+def test_chat_endpoint_rejects_session_from_another_notebook():
+    chat_service = AsyncMock()
+    chat_service.chat = AsyncMock()
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(
+        return_value=_FakeSession(session_id="session-1", notebook_id="other-notebook")
+    )
+    policy_service = _PolicyService(policy="yolo", source="notebook")
+
+    client = _build_client(chat_service, session_service, policy_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat",
+        json={"session_id": "session-1", "message": "hi", "mode": "agent"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Session does not belong to notebook"
+    chat_service.chat.assert_not_awaited()
+    assert policy_service.calls == []
+
+
+def test_chat_stream_endpoint_passes_uploaded_image_ids_to_service():
+    async def _stream():
+        yield {"type": "start", "message_id": 1}
+        yield {"type": "done"}
+
+    chat_service = AsyncMock()
+    chat_service.prevalidate_mode_requirements = AsyncMock(return_value=None)
+    chat_service.chat_stream = Mock(return_value=_stream())
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(return_value=_FakeSession())
+
+    policy_service = _PolicyService(policy="yolo", source="notebook")
+
+    client = _build_client(chat_service, session_service, policy_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat/stream",
+        json={
+            "session_id": "session-1",
+            "message": "Please describe this image.",
+            "mode": "ask",
+            "image_ids": ["img-1"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert chat_service.prevalidate_mode_requirements.await_args.kwargs["image_ids"] == ["img-1"]
+    assert chat_service.chat_stream.call_args.kwargs["agent_policy"] == "yolo"
+
+
+def test_chat_stream_endpoint_rejects_session_from_another_notebook():
+    chat_service = AsyncMock()
+    chat_service.prevalidate_mode_requirements = AsyncMock()
+    chat_service.chat_stream = Mock()
+    session_service = AsyncMock()
+    session_service.get_or_raise = AsyncMock(
+        return_value=_FakeSession(session_id="session-1", notebook_id="other-notebook")
+    )
+    policy_service = _PolicyService(policy="yolo", source="notebook")
+
+    client = _build_client(chat_service, session_service, policy_service)
+    response = client.post(
+        "/api/v1/chat/notebooks/notebook-1/chat/stream",
+        json={"session_id": "session-1", "message": "hi", "mode": "agent"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Session does not belong to notebook"
+    chat_service.prevalidate_mode_requirements.assert_not_awaited()
+    chat_service.chat_stream.assert_not_called()
+    assert policy_service.calls == []
 
 
 def test_confirm_endpoint_returns_200_when_request_is_resolved():

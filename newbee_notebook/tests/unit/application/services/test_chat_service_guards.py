@@ -11,6 +11,7 @@ from newbee_notebook.core.engine.stream_events import (
     ContentEvent,
     DoneEvent,
     ImageGeneratedEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
 )
@@ -132,7 +133,7 @@ class _DummySkillRegistry:
         return None
 
 
-class _DummyConfirmationGateway:
+class _DummyPermissionRequestGateway:
     def __init__(self, *, resolve_result: bool = True):
         self.calls: list[tuple[str, bool]] = []
         self.resolve_result = resolve_result
@@ -148,7 +149,7 @@ def _build_service(
     session_manager=None,
     vector_index_loader=None,
     skill_registry=None,
-    confirmation_gateway=None,
+    permission_request_gateway=None,
     generated_image_repo=None,
     storage=None,
 ):
@@ -164,7 +165,7 @@ def _build_service(
         storage=storage,
         vector_index_loader=vector_index_loader,
         skill_registry=skill_registry,
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 
 
@@ -534,6 +535,61 @@ def test_chat_stream_emits_thinking_events_for_phase_markers():
     assert any(event_type == "content" for event_type, _ in observed)
 
 
+def test_chat_stream_emits_permission_request_event_type():
+    class _PermissionRuntimeSessionManager:
+        async def start_session(self, session_id: str):
+            return None
+
+        async def chat_stream(self, **kwargs):
+            del kwargs
+            yield PermissionRequestEvent(
+                request_id="req-1",
+                tool_name="shell",
+                args_summary={"command": "echo ok"},
+                description="Agent requested to run shell",
+            )
+            yield DoneEvent()
+
+        def get_last_sources(self):
+            return []
+
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_PermissionRuntimeSessionManager(),
+    )
+
+    async def _collect():
+        events = []
+        async for event in service.chat_stream(session_id="session-1", message="hi", mode="chat"):
+            events.append(event)
+            if event["type"] == "done":
+                break
+        return events
+
+    events = asyncio.run(_collect())
+
+    assert events[1]["type"] == "permission_request"
+    assert events[1]["tool_name"] == "shell"
+    assert events[1]["args_summary"] == {"command": "echo ok"}
+
+
 def test_chat_stream_emits_warning_before_thinking_for_partial_documents():
     session_repo = AsyncMock()
     session_repo.get.return_value = SimpleNamespace(
@@ -882,7 +938,7 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
         parameters={"type": "object", "properties": {}},
         execute=_noop,
     )
-    confirmation_gateway = _DummyConfirmationGateway()
+    permission_request_gateway = _DummyPermissionRequestGateway()
     skill_registry = _DummySkillRegistry(
         _DummySkillProvider(
             manifest=SkillManifest(
@@ -891,7 +947,7 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
                 description="notes",
                 tools=[tool],
                 system_prompt_addition="note skill prompt",
-                confirmation_required=frozenset({"update_note"}),
+                permission_required=frozenset({"update_note"}),
                 force_first_tool_call=True,
             )
         )
@@ -906,7 +962,7 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
         message_repo=AsyncMock(),
         session_manager=runtime_manager,
         skill_registry=skill_registry,
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 
     result = asyncio.run(
@@ -923,15 +979,15 @@ def test_chat_routes_note_skill_messages_through_agent_runtime_with_manifest_ove
     assert runtime_manager.chat_kwargs["mode_type"] == ModeType.AGENT
     assert runtime_manager.chat_kwargs["external_tools"] == [tool]
     assert runtime_manager.chat_kwargs["system_prompt_addition"] == "note skill prompt"
-    assert runtime_manager.chat_kwargs["confirmation_required"] == frozenset({"update_note"})
+    assert runtime_manager.chat_kwargs["permission_required"] == frozenset({"update_note"})
     assert runtime_manager.chat_kwargs["force_first_tool_call"] is True
-    assert runtime_manager.chat_kwargs["confirmation_gateway"] is confirmation_gateway
+    assert runtime_manager.chat_kwargs["permission_request_gateway"] is permission_request_gateway
 
 
 def test_confirm_action_resolves_pending_confirmation_for_existing_session():
     session_repo = AsyncMock()
     session_repo.get.return_value = SimpleNamespace(session_id="session-1", notebook_id="nb-1")
-    confirmation_gateway = _DummyConfirmationGateway(resolve_result=True)
+    permission_request_gateway = _DummyPermissionRequestGateway(resolve_result=True)
     service = ChatService(
         session_repo=session_repo,
         notebook_repo=AsyncMock(),
@@ -940,13 +996,13 @@ def test_confirm_action_resolves_pending_confirmation_for_existing_session():
         ref_repo=AsyncMock(),
         message_repo=AsyncMock(),
         session_manager=_DummyRuntimeSessionManager(),
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 
     resolved = asyncio.run(service.confirm_action("session-1", "req-1", True))
 
     assert resolved is True
-    assert confirmation_gateway.calls == [("req-1", True)]
+    assert permission_request_gateway.calls == [("req-1", True)]
 
 
 def test_chat_stream_emits_image_generated_and_backfills_message_id():
@@ -1160,6 +1216,112 @@ def test_chat_non_stream_strips_generated_markdown_images_from_assistant_content
     assert "https://sfile.chatglm.cn/" not in result.content
     assert result.content == "Here is your image:\n\nWarm bee summary."
     assert assistant_message.content == "Here is your image:\n\nWarm bee summary."
+
+
+def test_chat_rejects_uploaded_images_outside_agent_and_ask_modes():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = [SimpleNamespace(document_id="doc-1")]
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = [
+        SimpleNamespace(document_id="doc-1", status=DocumentStatus.COMPLETED, title="Ready"),
+    ]
+    chat_image_service = AsyncMock()
+    chat_image_service.assert_belongs_to_session = AsyncMock()
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=AsyncMock(),
+        session_manager=_DummyRuntimeSessionManager(),
+        chat_image_service=chat_image_service,
+    )
+
+    with pytest.raises(ValueError, match="Image uploads"):
+        asyncio.run(
+            service.chat(
+                session_id="session-1",
+                message="explain this",
+                mode="explain",
+                context={"selected_text": "focus", "document_id": "doc-1"},
+                image_ids=["chat-img-1"],
+            )
+        )
+
+    chat_image_service.assert_belongs_to_session.assert_not_awaited()
+
+
+def test_chat_with_uploaded_images_uses_current_turn_multimodal_payload_and_persists_ids():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = SimpleNamespace(
+        session_id="session-1",
+        notebook_id="nb-1",
+        message_count=0,
+        include_ec_context=False,
+    )
+    ref_repo = AsyncMock()
+    ref_repo.list_by_notebook.return_value = []
+    document_repo = AsyncMock()
+    document_repo.get_batch.return_value = []
+    message_repo = AsyncMock()
+
+    async def _create_batch(messages):
+        messages[0].message_id = 501
+        messages[1].message_id = 502
+        return messages
+
+    message_repo.create_batch.side_effect = _create_batch
+    chat_image_service = AsyncMock()
+    chat_image_service.assert_belongs_to_session = AsyncMock(return_value=None)
+    chat_image_service.load_for_llm = AsyncMock(
+        return_value={
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,AAAA"},
+        }
+    )
+    runtime_manager = _DummyRuntimeSessionManager()
+    runtime_manager.runtime_config = SimpleNamespace(provider="zhipu", model="glm-5")
+    service = ChatService(
+        session_repo=session_repo,
+        notebook_repo=AsyncMock(),
+        reference_repo=AsyncMock(),
+        document_repo=document_repo,
+        ref_repo=ref_repo,
+        message_repo=message_repo,
+        session_manager=runtime_manager,
+        chat_image_service=chat_image_service,
+    )
+
+    result = asyncio.run(
+        service.chat(
+            session_id="session-1",
+            message="Please describe this image.",
+            mode="agent",
+            image_ids=["chat-img-1"],
+        )
+    )
+
+    assert result.content == "runtime answer"
+    chat_image_service.assert_belongs_to_session.assert_awaited_once_with(
+        session_id="session-1",
+        image_ids=["chat-img-1"],
+    )
+    chat_image_service.load_for_llm.assert_awaited_once_with("chat-img-1")
+    assert runtime_manager.chat_kwargs["image_contents"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+    ]
+    assert runtime_manager.chat_kwargs["model_override"] == "glm-5v-turbo"
+    persisted = message_repo.create_batch.await_args.args[0]
+    assert persisted[0].image_ids == ["chat-img-1"]
+    assert persisted[1].image_ids == []
 
 
 def test_chat_stream_persists_sanitized_assistant_content_when_tool_images_present():

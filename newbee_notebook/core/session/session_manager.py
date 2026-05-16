@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
 
 from newbee_notebook.core.context import (
@@ -15,7 +17,6 @@ from newbee_notebook.core.context import (
     StoredMessage,
     TokenCounter,
 )
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.core.engine.agent_loop import AgentLoop
 from newbee_notebook.core.engine.mode_config import ModeConfigFactory
 from newbee_notebook.core.engine.stream_events import (
@@ -26,6 +27,10 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.permission import PermissionGateway, PermissionRequestGateway
+from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
+from newbee_notebook.core.sandbox import NotebookSandboxWorkspace
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.llm.qwen import (
     DEFAULT_CONTEXT_WINDOW as QWEN_DEFAULT_CONTEXT_WINDOW,
     QWEN_CONTEXT_WINDOWS,
@@ -139,12 +144,17 @@ class SessionManager:
         lock_manager: SessionLockManager | None = None,
         agent_loop_cls: type[AgentLoop] = AgentLoop,
         system_prompt_provider: Callable[[ModeType], str] | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
+        permission_gateway: PermissionGateway | None = None,
+        policy_decider: PolicyDecider | None = None,
         runtime_config: LLMRuntimeConfig | None = None,
         token_counter: TokenCounter | None = None,
         compressor: Compressor | None = None,
         context_budget: ContextBudget | None = None,
         compaction_service: CompactionService | None = None,
+        sandbox_workspace: NotebookSandboxWorkspace | None = None,
+        tool_cwd: Path | str | None = None,
     ):
         self._session_repo = session_repo
         self._message_repo = message_repo
@@ -155,7 +165,12 @@ class SessionManager:
         self._system_prompt_provider = (
             system_prompt_provider or self._default_system_prompt
         )
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_request_gateway = (
+            permission_request_gateway or confirmation_gateway
+        )
+        self._confirmation_gateway = self._permission_request_gateway
+        self._permission_gateway = permission_gateway
+        self._policy_decider = policy_decider or PolicyDecider()
         self._runtime_config = runtime_config or getattr(
             llm_client, "runtime_config", None
         )
@@ -164,6 +179,8 @@ class SessionManager:
         self._context_budget = context_budget or _build_context_budget(
             self._runtime_config
         )
+        self._sandbox_workspace = sandbox_workspace
+        self._tool_cwd = Path(tool_cwd or Path.cwd()).expanduser().resolve(strict=False)
         self._current_session: Session | None = None
         self._current_mode: ModeType = ModeType.AGENT
         self._memory = SessionMemory()
@@ -339,17 +356,34 @@ class SessionManager:
         allowed_document_ids: list[str] | None,
         context: dict | None,
         external_tools: list[Any] | None = None,
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
+        model_override: str | None = None,
+        agent_policy: str | None = None,
     ):
-        effective_confirmation_gateway = (
-            confirmation_gateway or self._confirmation_gateway
+        effective_permission_required = (
+            permission_required
+            if permission_required is not None
+            else confirmation_required
         )
-        tools = await self._tool_registry.get_tools(
-            mode.value, external_tools=external_tools
+        effective_permission_meta = (
+            permission_meta if permission_meta is not None else confirmation_meta
+        )
+        effective_permission_request_gateway = (
+            permission_request_gateway
+            or confirmation_gateway
+            or self._permission_request_gateway
+        )
+        tools = await self._get_tools_for_loop(
+            mode=mode,
+            external_tools=external_tools,
         )
         mode_config = ModeConfigFactory.build(mode, tools)
         tool_argument_defaults = self._build_tool_argument_defaults(
@@ -363,17 +397,69 @@ class SessionManager:
             tools=tools,
             mode_config=mode_config,
             tool_argument_defaults=tool_argument_defaults,
-            confirmation_required=confirmation_required,
-            confirmation_meta=confirmation_meta,
-            confirmation_gateway=effective_confirmation_gateway,
+            permission_required=effective_permission_required,
+            permission_meta=effective_permission_meta,
+            permission_request_gateway=effective_permission_request_gateway,
+            policy_decider=self._policy_decider,
+            agent_policy=agent_policy,
+            session_id=self._current_session.session_id if self._current_session else "",
+            skill_context=skill_context,
         )
+        if self._permission_gateway is not None:
+            loop_kwargs["permission_gateway"] = self._permission_gateway
         if force_first_tool_call:
             loop_kwargs["force_first_tool_call"] = True
         if required_tool_call_before_response:
             loop_kwargs["required_tool_call_before_response"] = (
                 required_tool_call_before_response
             )
+        if model_override:
+            loop_kwargs["model_override"] = model_override
         return self._agent_loop_cls(**loop_kwargs)
+
+    @staticmethod
+    def _build_current_user_content(
+        message: str,
+        image_contents: list[dict[str, Any]] | None,
+    ) -> str | list[dict[str, Any]]:
+        if not image_contents:
+            return message
+        return [
+            {"type": "text", "text": message},
+            *[dict(item) for item in image_contents],
+        ]
+
+    def _build_tool_environment(self) -> ShellEnvironment | None:
+        if self._sandbox_workspace is None or self._current_session is None:
+            return None
+        notebook_id = str(self._current_session.notebook_id or "").strip()
+        if not notebook_id:
+            return None
+        workspace = self._sandbox_workspace.for_notebook(notebook_id)
+        return ShellEnvironment(
+            cwd=self._tool_cwd,
+            workspace_roots=(self._tool_cwd,),
+            run_dir=workspace.work_dir,
+            sandbox_session_key=notebook_id,
+            allow_workspace_write=False,
+        )
+
+    async def _get_tools_for_loop(
+        self,
+        *,
+        mode: ModeType,
+        external_tools: list[Any] | None,
+    ) -> list[Any]:
+        filesystem_environment = self._build_tool_environment()
+        get_tools = self._tool_registry.get_tools
+        parameters = inspect.signature(get_tools).parameters
+        if "filesystem_environment" in parameters:
+            return await get_tools(
+                mode.value,
+                external_tools=external_tools,
+                filesystem_environment=filesystem_environment,
+            )
+        return await get_tools(mode.value, external_tools=external_tools)
 
     async def chat_stream(
         self,
@@ -385,12 +471,19 @@ class SessionManager:
         include_ec_context: bool = False,
         external_tools: list[Any] | None = None,
         system_prompt_addition: str = "",
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
+        image_contents: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
+        agent_policy: str | None = None,
     ) -> AsyncGenerator[Any, None]:
         del include_ec_context
         if not self._current_session:
@@ -421,14 +514,24 @@ class SessionManager:
                 allowed_document_ids=allowed_document_ids,
                 context=context,
                 external_tools=external_tools,
+                permission_required=permission_required,
+                permission_meta=permission_meta,
+                permission_request_gateway=permission_request_gateway,
                 confirmation_required=confirmation_required,
                 confirmation_meta=confirmation_meta,
                 confirmation_gateway=confirmation_gateway,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
+                skill_context=skill_context,
+                model_override=model_override,
+                agent_policy=agent_policy,
+            )
+            current_user_content = self._build_current_user_content(
+                runtime_message,
+                image_contents,
             )
             async for event in loop.stream(
-                message=runtime_message, chat_history=chat_history
+                message=current_user_content, chat_history=chat_history
             ):
                 if isinstance(event, SourceEvent):
                     self._last_sources = list(event.sources)
@@ -444,12 +547,19 @@ class SessionManager:
         include_ec_context: bool = False,
         external_tools: list[Any] | None = None,
         system_prompt_addition: str = "",
+        permission_required: frozenset[str] | None = None,
+        permission_meta: dict | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
         confirmation_required: frozenset[str] | None = None,
         confirmation_meta: dict | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
         force_first_tool_call: bool = False,
         required_tool_call_before_response: str | frozenset[str] | None = None,
+        skill_context: SkillPolicyContext | None = None,
         lang: str = "en",
+        image_contents: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
+        agent_policy: str | None = None,
     ) -> SessionRunResult:
         content_parts: list[str] = []
         sources: list[SourceItem] = []
@@ -464,12 +574,19 @@ class SessionManager:
             include_ec_context=include_ec_context,
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
+            permission_required=permission_required,
+            permission_meta=permission_meta,
+            permission_request_gateway=permission_request_gateway,
             confirmation_required=confirmation_required,
             confirmation_meta=confirmation_meta,
             confirmation_gateway=confirmation_gateway,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
+            skill_context=skill_context,
             lang=lang,
+            image_contents=image_contents,
+            model_override=model_override,
+            agent_policy=agent_policy,
         ):
             if isinstance(event, ContentEvent):
                 content_parts.append(event.delta)

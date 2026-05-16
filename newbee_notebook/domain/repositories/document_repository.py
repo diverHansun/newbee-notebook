@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Any
 from newbee_notebook.domain.entities.document import Document
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
+from newbee_notebook.domain.value_objects.document_type import DocumentType
 
 _UNSET = object()
 
@@ -45,7 +46,8 @@ class DocumentRepository(ABC):
         self,
         limit: int = 50,
         offset: int = 0,
-        status: Optional[DocumentStatus] = None
+        status: Optional[DocumentStatus] = None,
+        content_types: Optional[List[DocumentType]] = None,
     ) -> List[Document]:
         """
         List Documents in Library.
@@ -54,6 +56,7 @@ class DocumentRepository(ABC):
             limit: Maximum number of results.
             offset: Number of results to skip.
             status: Optional status filter.
+            content_types: Optional content type filters.
             
         Returns:
             List of Document instances.
@@ -81,12 +84,17 @@ class DocumentRepository(ABC):
         pass
     
     @abstractmethod
-    async def count_by_library(self, status: Optional[DocumentStatus] = None) -> int:
+    async def count_by_library(
+        self,
+        status: Optional[DocumentStatus] = None,
+        content_types: Optional[List[DocumentType]] = None,
+    ) -> int:
         """
         Count Documents in Library.
         
         Args:
             status: Optional status filter.
+            content_types: Optional content type filters.
             
         Returns:
             Total count.

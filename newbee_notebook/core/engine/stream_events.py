@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from newbee_notebook.core.tools.contracts import ImageResult, SourceItem, ToolQualityMeta
 
@@ -46,6 +47,8 @@ class ToolResultEvent:
     tool_call_id: str
     success: bool
     content_preview: str
+    error_code: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     quality_meta: ToolQualityMeta | None = None
     event: str = "tool_result"
 
@@ -59,14 +62,20 @@ class ImageGeneratedEvent:
 
 
 @dataclass(frozen=True)
-class ConfirmationRequestEvent:
+class PermissionRequestEvent:
     request_id: str
     tool_name: str
     args_summary: dict
     description: str
     action_type: str = "confirm"
     target_type: str = "unknown"
-    event: str = "confirmation_request"
+    capability_signature: str = ""
+    risk_level: str = ""
+    skill_name: str | None = None
+    content_hash: str = ""
+    response_options: list[str] = field(default_factory=list)
+    event: str = "permission_request"
+
 
 
 @dataclass(frozen=True)

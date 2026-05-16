@@ -4,6 +4,8 @@ from newbee_notebook.infrastructure.storage.local_storage import SUPPORTED_EXTEN
 
 def test_document_type_recognizes_pptx_and_epub_extensions():
     assert DocumentType.from_extension("pptx") == DocumentType.PPTX
+    assert DocumentType.from_extension("ppt") == DocumentType.PPTX
+    assert DocumentType.from_extension(".PPT") == DocumentType.PPTX
     assert DocumentType.from_extension(".epub") == DocumentType.EPUB
 
 
@@ -20,8 +22,10 @@ def test_document_type_recognizes_html_and_common_image_extensions():
 def test_supported_extensions_include_pptx_and_epub():
     extensions = DocumentType.supported_extensions()
 
+    assert "ppt" in extensions
     assert "pptx" in extensions
     assert "epub" in extensions
+    assert "ppt" in SUPPORTED_EXTENSIONS
     assert "pptx" in SUPPORTED_EXTENSIONS
     assert "epub" in SUPPORTED_EXTENSIONS
 

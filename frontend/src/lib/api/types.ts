@@ -36,6 +36,28 @@ export type DocumentStatus =
   | "completed"
   | "failed";
 
+export type DocumentType =
+  | "pdf"
+  | "txt"
+  | "docx"
+  | "pptx"
+  | "epub"
+  | "md"
+  | "csv"
+  | "xlsx"
+  | "html"
+  | "image";
+
+export type DocumentTypeGroup =
+  | "document"
+  | "word"
+  | "slides"
+  | "web"
+  | "image"
+  | "sheet"
+  | "ebook"
+  | "text";
+
 export type ProcessingStage =
   | "queued"
   | "converting"
@@ -180,8 +202,16 @@ export type NoteUpdateInput = {
   content?: string;
 };
 
-export type DiagramFormat = "reactflow_json" | "mermaid";
-export type DiagramType = "mindmap" | "flowchart" | "sequence" | string;
+export type DiagramFormat = "reactflow_json" | "mermaid" | "echarts_option";
+export type DiagramType = "mindmap" | "flowchart" | "sequence" | "echarts" | string;
+
+export type CreateDiagramInput = {
+  notebook_id: string;
+  title: string;
+  diagram_type: DiagramType;
+  content: string;
+  document_ids?: string[];
+};
 
 export type Diagram = {
   diagram_id: string;
@@ -316,6 +346,27 @@ export type Session = {
 
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageMode = "agent" | "chat" | "ask" | "explain" | "conclude";
+export type AgentPolicy = "default" | "yolo";
+export type PolicyScope = "session" | "notebook";
+export type PolicySource = "default" | "session" | "notebook";
+export type PermissionResponseChoice =
+  | "once"
+  | "always_session"
+  | "always_persist"
+  | "reject";
+
+export type EffectivePolicy = {
+  notebook_id: string;
+  session_id: string | null;
+  policy: AgentPolicy;
+  source: PolicySource;
+};
+
+export type PolicyPreferenceUpdate = {
+  scope: PolicyScope;
+  policy: AgentPolicy;
+  session_id?: string | null;
+};
 
 export type ChatImageSse = {
   image_id: string;
@@ -344,6 +395,7 @@ export type SessionMessage = {
   role: MessageRole;
   content: string;
   images?: ChatImageSse[];
+  image_ids?: string[];
   created_at: string;
 };
 
@@ -380,6 +432,8 @@ export type ChatRequest = {
   context?: ChatContext | null;
   include_ec_context?: boolean | null;
   source_document_ids?: string[] | null;
+  image_ids?: string[];
+  agent_policy?: AgentPolicy;
   lang?: "en" | "zh";
 };
 
@@ -433,10 +487,19 @@ export type SseEventConfirmation = {
   type: "confirmation_request";
   request_id: string;
   tool_name: string;
-  action_type: "create" | "update" | "delete" | "confirm";
-  target_type: "note" | "diagram" | "document" | "video";
+  action_type: string;
+  target_type: string;
   args_summary: Record<string, unknown>;
   description: string;
+  capability_signature?: string;
+  risk_level?: string;
+  skill_name?: string | null;
+  content_hash?: string;
+  response_options?: PermissionResponseChoice[];
+};
+
+export type SseEventPermissionRequest = Omit<SseEventConfirmation, "type"> & {
+  type: "permission_request";
 };
 
 export type SseEventToolCall = {
@@ -452,6 +515,8 @@ export type SseEventToolResult = {
   tool_call_id: string;
   success: boolean;
   content_preview: string;
+  error_code?: string | null;
+  metadata?: Record<string, unknown> | null;
   quality_meta: Record<string, unknown> | null;
 };
 
@@ -473,6 +538,7 @@ export type SseEvent =
   | SseEventError
   | SseEventHeartbeat
   | SseEventConfirmation
+  | SseEventPermissionRequest
   | SseEventToolCall
   | SseEventToolResult
   | SseEventImageGenerated;

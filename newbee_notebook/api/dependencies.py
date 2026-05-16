@@ -7,6 +7,9 @@ FastAPI dependency injection configuration.
 import logging
 import os
 import tempfile
+import asyncio
+import contextlib
+from dataclasses import replace
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -26,6 +29,9 @@ from newbee_notebook.infrastructure.persistence.repositories.diagram_repo_impl i
 from newbee_notebook.infrastructure.persistence.repositories.generated_image_repo_impl import (
     GeneratedImageRepositoryImpl,
 )
+from newbee_notebook.infrastructure.persistence.repositories.chat_image_repo_impl import (
+    ChatImageRepositoryImpl,
+)
 from newbee_notebook.infrastructure.persistence.repositories.video_summary_repo_impl import (
     VideoSummaryRepositoryImpl,
 )
@@ -36,7 +42,11 @@ from newbee_notebook.application.services.chat_service import ChatService
 from newbee_notebook.application.services.document_service import DocumentService
 from newbee_notebook.application.services.notebook_document_service import NotebookDocumentService
 from newbee_notebook.application.services.generated_image_service import GeneratedImageService
+from newbee_notebook.application.services.chat_image_service import ChatImageService
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
+from newbee_notebook.application.services.policy_preference_service import (
+    PolicyPreferenceService,
+)
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.application.services.diagram_service import DiagramService
@@ -47,11 +57,24 @@ from newbee_notebook.application.services.video_concurrency import (
 from newbee_notebook.application.services.video_service import VideoService
 from newbee_notebook.core.llm import build_llm, LLMClientFactory
 from newbee_notebook.core.llm.config import resolve_llm_runtime_config
-from newbee_notebook.core.mcp import MCPClientManager
+from newbee_notebook.core.mcp import MCPClientManager, get_mcp_config_path
 from newbee_notebook.core.skills import SkillRegistry
+from newbee_notebook.core.skills.lifecycle import register_installed_config_skills
 from newbee_notebook.core.rag.embeddings import build_embedding
 from newbee_notebook.core.engine import load_pgvector_index, load_es_index
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
+from newbee_notebook.core.permission import (
+    AllowStore,
+    PermissionGateway,
+    PermissionRequestGateway,
+    SessionAllowCache,
+)
+from newbee_notebook.core.sandbox import (
+    DockerSandboxExecutor,
+    DockerSandboxSessionRegistry,
+    NotebookSandboxWorkspace,
+    SandboxExecutor,
+    build_docker_run_config_from_env,
+)
 from newbee_notebook.core.session import SessionLockManager as RuntimeSessionLockManager
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
@@ -163,9 +186,23 @@ async def get_generated_image_repo(
     return GeneratedImageRepositoryImpl(session)
 
 
+async def get_chat_image_repo(
+    session=Depends(get_db_session),
+) -> ChatImageRepositoryImpl:
+    """Get ChatImageRepository instance."""
+    return ChatImageRepositoryImpl(session)
+
+
 def get_app_settings_service(session=Depends(get_db_session)) -> AppSettingsService:
     """Get AppSettingsService instance."""
     return AppSettingsService(session)
+
+
+def get_policy_preference_service(
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
+) -> PolicyPreferenceService:
+    """Get frontend-facing agent policy preference service."""
+    return PolicyPreferenceService(settings_service)
 
 
 # =============================================================================
@@ -237,6 +274,16 @@ async def get_generated_image_service(
     )
 
 
+async def get_chat_image_service(
+    chat_image_repo: ChatImageRepositoryImpl = Depends(get_chat_image_repo),
+) -> ChatImageService:
+    """Get ChatImageService instance."""
+    return ChatImageService(
+        chat_image_repo=chat_image_repo,
+        storage=get_storage(),
+    )
+
+
 # =============================================================================
 # Core singletons (LLM, Embedding, Indexes, SessionManager)
 # =============================================================================
@@ -247,10 +294,15 @@ _embed_model = None
 _pgvector_index = None
 _es_index = None
 _runtime_builtin_tool_provider = None
+_runtime_sandbox_executor = None
+_runtime_docker_session_registry = None
+_runtime_docker_session_reaper_task = None
+_runtime_notebook_sandbox_workspace = None
 _runtime_tool_registry = None
 _runtime_session_lock_manager = None
 _mcp_client_manager = None
-_runtime_confirmation_gateway = None
+_runtime_permission_request_gateway = None
+_runtime_permission_session_cache = None
 _video_concurrency_controller = None
 
 
@@ -314,8 +366,136 @@ def get_runtime_builtin_tool_provider_singleton() -> BuiltinToolProvider:
             hybrid_search=_hybrid_search,
             semantic_search=_semantic_search,
             keyword_search=_keyword_search,
+            sandbox_executor=get_runtime_sandbox_executor_singleton(),
         )
     return _runtime_builtin_tool_provider
+
+
+def get_runtime_sandbox_executor_singleton() -> SandboxExecutor | None:
+    """Get the runtime sandbox executor for dangerous built-in tools."""
+
+    global _runtime_sandbox_executor
+    backend = (os.getenv("NEWBEE_SANDBOX_BACKEND") or "docker").strip().lower()
+    if backend in {"", "0", "false", "none", "off", "disabled"}:
+        return None
+    if backend != "docker":
+        logger.warning("Unsupported NEWBEE_SANDBOX_BACKEND=%s; sandbox disabled", backend)
+        return None
+    if _runtime_sandbox_executor is None:
+        config = build_docker_run_config_from_env()
+        config = replace(
+            config,
+            additional_run_roots=(
+                *config.additional_run_roots,
+                _resolve_sandbox_work_root(),
+            ),
+        )
+        _runtime_sandbox_executor = DockerSandboxExecutor(
+            config=config,
+            session_registry=get_runtime_docker_session_registry_singleton(config),
+        )
+    return _runtime_sandbox_executor
+
+
+def get_runtime_docker_session_registry_singleton(
+    config=None,
+) -> DockerSandboxSessionRegistry:
+    """Get the runtime notebook-scoped Docker session registry."""
+
+    global _runtime_docker_session_registry
+    if _runtime_docker_session_registry is None:
+        resolved_config = config or replace(
+            build_docker_run_config_from_env(),
+            additional_run_roots=(_resolve_sandbox_work_root(),),
+        )
+        ttl = os.getenv("NEWBEE_SANDBOX_SESSION_IDLE_TTL_SECONDS")
+        try:
+            idle_ttl_seconds = float(ttl) if ttl else 30 * 60
+        except ValueError:
+            idle_ttl_seconds = 30 * 60
+        _runtime_docker_session_registry = DockerSandboxSessionRegistry(
+            config=resolved_config,
+            idle_ttl_seconds=idle_ttl_seconds,
+        )
+    return _runtime_docker_session_registry
+
+
+async def reap_runtime_docker_sessions_once() -> list[str]:
+    """Reap idle Docker sandbox sessions when the registry is active."""
+
+    if _runtime_docker_session_registry is None:
+        return []
+    return await _runtime_docker_session_registry.reap_idle()
+
+
+def start_runtime_docker_session_reaper() -> None:
+    """Start the background idle-session reaper if it is not already running."""
+
+    global _runtime_docker_session_reaper_task
+    if _runtime_docker_session_reaper_task is not None:
+        return
+    _runtime_docker_session_reaper_task = asyncio.create_task(
+        _runtime_docker_session_reaper_loop()
+    )
+
+
+async def stop_runtime_docker_session_reaper() -> None:
+    """Stop the background Docker session reaper task."""
+
+    global _runtime_docker_session_reaper_task
+    task = _runtime_docker_session_reaper_task
+    _runtime_docker_session_reaper_task = None
+    if task is None:
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def stop_runtime_docker_sessions() -> None:
+    """Stop all active runtime Docker sandbox sessions."""
+
+    if _runtime_docker_session_registry is None:
+        return
+    await _runtime_docker_session_registry.stop_all()
+
+
+async def _runtime_docker_session_reaper_loop() -> None:
+    while True:
+        await asyncio.sleep(_runtime_docker_session_reap_interval_seconds())
+        try:
+            await reap_runtime_docker_sessions_once()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Docker sandbox idle reaper failed: %s", exc)
+
+
+def _runtime_docker_session_reap_interval_seconds() -> float:
+    value = os.getenv("NEWBEE_SANDBOX_SESSION_REAP_INTERVAL_SECONDS")
+    try:
+        interval = float(value) if value else 60.0
+    except ValueError:
+        interval = 60.0
+    return max(interval, 1.0)
+
+
+def _resolve_sandbox_work_root() -> Path:
+    root = os.getenv("NEWBEE_SANDBOX_WORK_ROOT")
+    return (
+        Path(root).expanduser().resolve(strict=False)
+        if root
+        else (Path.cwd() / ".tmp" / "sandbox-work").resolve(strict=False)
+    )
+
+
+def get_runtime_notebook_sandbox_workspace_singleton() -> NotebookSandboxWorkspace:
+    """Get the runtime notebook-scoped sandbox workspace manager."""
+
+    global _runtime_notebook_sandbox_workspace
+    if _runtime_notebook_sandbox_workspace is None:
+        _runtime_notebook_sandbox_workspace = NotebookSandboxWorkspace(
+            root=_resolve_sandbox_work_root(),
+        )
+    return _runtime_notebook_sandbox_workspace
 
 
 def get_runtime_tool_registry_singleton() -> ToolRegistry:
@@ -335,17 +515,32 @@ def get_runtime_session_lock_manager_singleton() -> RuntimeSessionLockManager:
     return _runtime_session_lock_manager
 
 
-def get_runtime_confirmation_gateway_singleton() -> ConfirmationGateway:
-    global _runtime_confirmation_gateway
-    if _runtime_confirmation_gateway is None:
-        _runtime_confirmation_gateway = ConfirmationGateway()
-    return _runtime_confirmation_gateway
+def get_runtime_permission_request_gateway_singleton() -> PermissionRequestGateway:
+    global _runtime_permission_request_gateway
+    if _runtime_permission_request_gateway is None:
+        _runtime_permission_request_gateway = PermissionRequestGateway()
+    return _runtime_permission_request_gateway
+
+
+def get_runtime_confirmation_gateway_singleton() -> PermissionRequestGateway:
+    return get_runtime_permission_request_gateway_singleton()
+
+
+def get_runtime_permission_session_cache_singleton() -> SessionAllowCache:
+    global _runtime_permission_session_cache
+    if _runtime_permission_session_cache is None:
+        _runtime_permission_session_cache = SessionAllowCache()
+    return _runtime_permission_session_cache
+
+
+def get_permission_session_cache_dep() -> SessionAllowCache:
+    return get_runtime_permission_session_cache_singleton()
 
 
 def get_mcp_client_manager_singleton() -> MCPClientManager:
     global _mcp_client_manager
     if _mcp_client_manager is None:
-        _mcp_client_manager = MCPClientManager(config_path=get_configs_directory() / "mcp.json")
+        _mcp_client_manager = MCPClientManager(config_path=get_mcp_config_path())
     return _mcp_client_manager
 
 
@@ -423,8 +618,24 @@ def get_runtime_tool_registry_dep() -> ToolRegistry:
     return get_runtime_tool_registry_singleton()
 
 
-def get_confirmation_gateway_dep() -> ConfirmationGateway:
+def get_permission_request_gateway_dep() -> PermissionRequestGateway:
+    return get_runtime_permission_request_gateway_singleton()
+
+
+def get_confirmation_gateway_dep() -> PermissionRequestGateway:
     return get_runtime_confirmation_gateway_singleton()
+
+
+def get_permission_gateway_dep(
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
+    session_cache: SessionAllowCache = Depends(get_permission_session_cache_dep),
+) -> PermissionGateway:
+    return PermissionGateway(
+        allow_store=AllowStore(settings_service),
+        session_cache=session_cache,
+        permission_request_gateway=permission_request_gateway,
+    )
 
 
 async def get_mcp_client_manager_dep(
@@ -447,7 +658,8 @@ async def get_runtime_session_manager_dep(
     llm_client=Depends(get_llm_client_dep),
     tool_registry: ToolRegistry = Depends(get_runtime_tool_registry_dep),
     mcp_manager: MCPClientManager = Depends(get_mcp_client_manager_dep),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
+    permission_gateway: PermissionGateway = Depends(get_permission_gateway_dep),
     session=Depends(get_db_session),
 ) -> SessionManager:
     """Get the request-scoped batch-2 runtime session manager."""
@@ -459,8 +671,10 @@ async def get_runtime_session_manager_dep(
         llm_client=llm_client,
         tool_registry=tool_registry,
         lock_manager=get_runtime_session_lock_manager_singleton(),
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
+        permission_gateway=permission_gateway,
         runtime_config=runtime_config,
+        sandbox_workspace=get_runtime_notebook_sandbox_workspace_singleton(),
     )
 
 
@@ -683,6 +897,7 @@ async def get_runtime_skill_registry_dep(
     mark_service: MarkService = Depends(get_mark_service),
     diagram_service: DiagramService = Depends(get_diagram_service),
     video_service: VideoService = Depends(get_video_service),
+    settings_service: AppSettingsService = Depends(get_app_settings_service),
 ) -> SkillRegistry:
     registry = SkillRegistry()
     registry.register(
@@ -701,6 +916,11 @@ async def get_runtime_skill_registry_dep(
             video_service=video_service,
         )
     )
+    await register_installed_config_skills(
+        skills_root=get_configs_directory() / "skills",
+        settings_service=settings_service,
+        registry=registry,
+    )
     return registry
 
 
@@ -712,9 +932,10 @@ async def get_chat_service(
     ref_repo: NotebookDocumentRefRepositoryImpl = Depends(get_ref_repo),
     message_repo: MessageRepositoryImpl = Depends(get_message_repo),
     generated_image_repo: GeneratedImageRepositoryImpl = Depends(get_generated_image_repo),
+    chat_image_service: ChatImageService = Depends(get_chat_image_service),
     session_manager: SessionManager = Depends(get_runtime_session_manager_dep),
     skill_registry: SkillRegistry = Depends(get_runtime_skill_registry_dep),
-    confirmation_gateway: ConfirmationGateway = Depends(get_confirmation_gateway_dep),
+    permission_request_gateway: PermissionRequestGateway = Depends(get_permission_request_gateway_dep),
 ) -> ChatService:
     """Get ChatService instance."""
     return ChatService(
@@ -726,9 +947,10 @@ async def get_chat_service(
         message_repo=message_repo,
         session_manager=session_manager,
         generated_image_repo=generated_image_repo,
+        chat_image_service=chat_image_service,
         storage=get_storage(),
         vector_index_loader=get_pg_index_singleton,
         skill_registry=skill_registry,
-        confirmation_gateway=confirmation_gateway,
+        permission_request_gateway=permission_request_gateway,
     )
 

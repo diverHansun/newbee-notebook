@@ -56,6 +56,7 @@ function buildProps(overrides: Partial<React.ComponentProps<typeof ChatPanel>> =
     mode: "agent" as const,
     isStreaming: false,
     onModeChange: vi.fn(),
+    onEnsureSession: vi.fn().mockResolvedValue("session-1"),
     onSendMessage: vi.fn(),
     onCancel: vi.fn(),
     onSwitchSession: vi.fn(),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DiagramResponse(BaseModel):
@@ -20,6 +20,18 @@ class DiagramResponse(BaseModel):
     node_positions: Optional[dict[str, dict[str, float]]] = None
     created_at: datetime
     updated_at: datetime
+
+
+class CreateDiagramRequest(BaseModel):
+    """Request body for creating a diagram."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    notebook_id: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    diagram_type: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    document_ids: list[str] = Field(default_factory=list)
 
 
 class DiagramListResponse(BaseModel):

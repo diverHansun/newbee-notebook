@@ -8,6 +8,7 @@ from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteNotFoundError, NoteService
 from newbee_notebook.domain.entities.mark import Mark
 from newbee_notebook.domain.entities.note import Note
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.tools.contracts import ToolCallResult, ToolDefinition
 
 
@@ -147,6 +148,8 @@ def build_create_note_tool(*, note_service: NoteService, notebook_id: str) -> To
             "required": ["title"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -178,6 +181,8 @@ def build_update_note_tool(*, note_service: NoteService) -> ToolDefinition:
             "required": ["note_id"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -205,6 +210,8 @@ def build_delete_note_tool(*, note_service: NoteService) -> ToolDefinition:
             "required": ["note_id"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.DANGEROUS,
     )
 
 
@@ -265,6 +272,8 @@ def build_associate_note_document_tool(*, note_service: NoteService) -> ToolDefi
             "required": ["note_id", "document_id"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )
 
 
@@ -299,4 +308,6 @@ def build_disassociate_note_document_tool(*, note_service: NoteService) -> ToolD
             "required": ["note_id", "document_id"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )

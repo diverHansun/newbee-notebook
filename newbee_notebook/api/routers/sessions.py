@@ -279,6 +279,7 @@ async def list_session_messages(
                         else str(getattr(msg, "message_type", "normal"))
                     ),
                     content=msg.content,
+                    image_ids=list(getattr(msg, "image_ids", None) or []),
                     images=images_by_message_id.get(int(msg.message_id or 0), []),
                     created_at=msg.created_at,
                 )

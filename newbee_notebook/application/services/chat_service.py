@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from dataclasses import asdict
 
 from newbee_notebook.core.common.config_db import resolve_llm_api_key
+from newbee_notebook.core.llm.vision_policy import VisionPolicy
 from newbee_notebook.domain.entities.session import Session
 from newbee_notebook.domain.value_objects.mode_type import (
     ModeType,
@@ -35,12 +36,12 @@ from newbee_notebook.domain.entities.reference import Reference
 from newbee_notebook.domain.entities.message import Message
 from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.core.engine.stream_events import (
-    ConfirmationRequestEvent,
     ContentEvent,
     DoneEvent,
     ErrorEvent,
     ImageGeneratedEvent,
     IntermediateContentEvent,
+    PermissionRequestEvent,
     PhaseEvent,
     SourceEvent,
     StartEvent,
@@ -49,6 +50,8 @@ from newbee_notebook.core.engine.stream_events import (
     WarningEvent,
 )
 from newbee_notebook.core.skills import SkillContext, SkillRegistry
+from newbee_notebook.core.policy import SkillPolicyContext
+from newbee_notebook.core.permission import PermissionRequestGateway
 from newbee_notebook.core.session import SessionManager
 from newbee_notebook.core.tools.contracts import ToolDefinition
 from newbee_notebook.core.tools.image_generation import (
@@ -58,7 +61,6 @@ from newbee_notebook.core.tools.image_generation import (
 )
 from newbee_notebook.core.common.node_utils import extract_document_id
 from newbee_notebook.exceptions import DocumentProcessingError
-from newbee_notebook.core.engine.confirmation import ConfirmationGateway
 from newbee_notebook.infrastructure.storage import get_runtime_storage_backend
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
@@ -125,7 +127,10 @@ class ChatService:
         vector_index: Any = None,
         vector_index_loader: Callable[[], Awaitable[Any]] | None = None,
         skill_registry: SkillRegistry | None = None,
-        confirmation_gateway: ConfirmationGateway | None = None,
+        permission_request_gateway: PermissionRequestGateway | None = None,
+        confirmation_gateway: PermissionRequestGateway | None = None,
+        chat_image_service: Any = None,
+        vision_policy: VisionPolicy | None = None,
     ):
         self._session_repo = session_repo
         self._notebook_repo = notebook_repo
@@ -139,7 +144,12 @@ class ChatService:
         self._vector_index = vector_index
         self._vector_index_loader = vector_index_loader
         self._skill_registry = skill_registry
-        self._confirmation_gateway = confirmation_gateway
+        self._permission_request_gateway = (
+            permission_request_gateway or confirmation_gateway
+        )
+        self._confirmation_gateway = self._permission_request_gateway
+        self._chat_image_service = chat_image_service
+        self._vision_policy = vision_policy or VisionPolicy()
 
     @staticmethod
     def _source_items_to_dicts(items: List[Any]) -> List[dict]:
@@ -306,6 +316,48 @@ class ChatService:
         self._vector_index = await self._vector_index_loader()
         return self._vector_index
 
+    @staticmethod
+    def _normalize_uploaded_image_ids(image_ids: Optional[List[str]]) -> List[str]:
+        normalized: List[str] = []
+        for image_id in image_ids or []:
+            cleaned = str(image_id or "").strip()
+            if cleaned and cleaned not in normalized:
+                normalized.append(cleaned)
+        return normalized
+
+    async def _prepare_uploaded_images_for_runtime(
+        self,
+        *,
+        session_id: str,
+        mode: ModeType,
+        image_ids: Optional[List[str]],
+    ) -> tuple[List[dict[str, Any]], str | None, List[str]]:
+        normalized_ids = self._normalize_uploaded_image_ids(image_ids)
+        if not normalized_ids:
+            return [], None, []
+        if len(normalized_ids) > 10:
+            raise ValueError("At most 10 uploaded images can be attached to one message.")
+        if mode not in {ModeType.AGENT, ModeType.ASK}:
+            raise ValueError("Image uploads are only supported in agent and ask modes.")
+        if self._chat_image_service is None:
+            raise RuntimeError("Chat image service is not configured.")
+
+        await self._chat_image_service.assert_belongs_to_session(
+            session_id=session_id,
+            image_ids=normalized_ids,
+        )
+        image_contents: List[dict[str, Any]] = []
+        for image_id in normalized_ids:
+            image_contents.append(await self._chat_image_service.load_for_llm(image_id))
+
+        runtime_config = getattr(self._session_manager, "runtime_config", None)
+        model_override: str | None = None
+        if runtime_config is not None:
+            decision = self._vision_policy.resolve(runtime_config)
+            if decision.used_fallback:
+                model_override = decision.model
+        return image_contents, model_override, normalized_ids
+
     async def chat(
         self,
         session_id: str,
@@ -315,6 +367,8 @@ class ChatService:
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
+        image_ids: Optional[List[str]] = None,
+        agent_policy: str = "default",
     ) -> ChatResult:
         """
         Send a message and get a complete response.
@@ -346,10 +400,11 @@ class ChatService:
             runtime_mode_enum,
             external_tools,
             system_prompt_addition,
-            confirmation_required,
-            confirmation_meta,
+            permission_required,
+            permission_meta,
             force_first_tool_call,
             required_tool_call_before_response,
+            skill_policy_context,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -357,6 +412,15 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        (
+            image_contents,
+            model_override,
+            uploaded_image_ids,
+        ) = await self._prepare_uploaded_images_for_runtime(
+            session_id=session_id,
+            mode=runtime_mode_enum,
+            image_ids=image_ids,
+        )
         external_tools = self._merge_external_tools_with_image_tool(
             mode=runtime_mode_enum,
             session_id=session_id,
@@ -410,12 +474,16 @@ class ChatService:
             include_ec_context=effective_include_ec_context,
             external_tools=external_tools,
             system_prompt_addition=system_prompt_addition,
-            confirmation_required=confirmation_required,
-            confirmation_meta=confirmation_meta,
+            permission_required=permission_required,
+            permission_meta=permission_meta,
             force_first_tool_call=force_first_tool_call,
             required_tool_call_before_response=required_tool_call_before_response,
-            confirmation_gateway=self._confirmation_gateway,
+            permission_request_gateway=self._permission_request_gateway,
+            skill_context=skill_policy_context,
             lang=lang,
+            image_contents=image_contents,
+            model_override=model_override,
+            agent_policy=agent_policy,
         )
         response_content = self._strip_generated_image_markup(
             runtime_result.content,
@@ -423,7 +491,7 @@ class ChatService:
         )
         sources = self._source_items_to_dicts(runtime_result.sources)
         images = self._image_items_to_dicts(runtime_result.images)
-        image_ids = list(dict.fromkeys(self._image_ids(runtime_result.images)))
+        generated_image_ids = list(dict.fromkeys(self._image_ids(runtime_result.images)))
         warnings.extend(runtime_result.warnings)
         message_id = session.message_count + 1
 
@@ -433,6 +501,7 @@ class ChatService:
             mode=runtime_mode_enum,
             role=MessageRole.USER,
             content=message,
+            image_ids=uploaded_image_ids,
         )
         assistant_msg = Message(
             session_id=session_id,
@@ -447,10 +516,10 @@ class ChatService:
             if isinstance(assistant_msg.message_id, int)
             else None
         )
-        if image_ids and assistant_message_id is not None:
+        if generated_image_ids and assistant_message_id is not None:
             try:
                 await self._backfill_generated_images_message_id(
-                    image_ids=image_ids,
+                    image_ids=generated_image_ids,
                     message_id=assistant_message_id,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -517,6 +586,8 @@ class ChatService:
         include_ec_context: Optional[bool] = None,
         source_document_ids: Optional[List[str]] = None,
         lang: str = "en",
+        image_ids: Optional[List[str]] = None,
+        agent_policy: str = "default",
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Send a message and stream the response.
@@ -556,10 +627,11 @@ class ChatService:
             runtime_mode_enum,
             external_tools,
             system_prompt_addition,
-            confirmation_required,
-            confirmation_meta,
+            permission_required,
+            permission_meta,
             force_first_tool_call,
             required_tool_call_before_response,
+            skill_policy_context,
         ) = self._resolve_skill_runtime(
             notebook_id=session.notebook_id,
             message=message,
@@ -567,6 +639,15 @@ class ChatService:
             source_document_ids=source_document_ids,
         )
         mode_enum = runtime_mode_enum
+        (
+            image_contents,
+            model_override,
+            uploaded_image_ids,
+        ) = await self._prepare_uploaded_images_for_runtime(
+            session_id=session_id,
+            mode=runtime_mode_enum,
+            image_ids=image_ids,
+        )
         external_tools = self._merge_external_tools_with_image_tool(
             mode=runtime_mode_enum,
             session_id=session_id,
@@ -626,12 +707,16 @@ class ChatService:
                 include_ec_context=effective_include_ec_context,
                 external_tools=external_tools,
                 system_prompt_addition=system_prompt_addition,
-                confirmation_required=confirmation_required,
-                confirmation_meta=confirmation_meta,
+                permission_required=permission_required,
+                permission_meta=permission_meta,
                 force_first_tool_call=force_first_tool_call,
                 required_tool_call_before_response=required_tool_call_before_response,
-                confirmation_gateway=self._confirmation_gateway,
+                skill_context=skill_policy_context,
+                permission_request_gateway=self._permission_request_gateway,
                 lang=lang,
+                image_contents=image_contents,
+                model_override=model_override,
+                agent_policy=agent_policy,
             )
             while True:
                 try:
@@ -672,6 +757,8 @@ class ChatService:
                         "tool_call_id": event.tool_call_id,
                         "success": event.success,
                         "content_preview": event.content_preview,
+                        "error_code": event.error_code,
+                        "metadata": event.metadata,
                         "quality_meta": asdict(event.quality_meta)
                         if event.quality_meta
                         else None,
@@ -687,15 +774,20 @@ class ChatService:
                         "tool_name": event.tool_name,
                     }
                     continue
-                if isinstance(event, ConfirmationRequestEvent):
+                if isinstance(event, PermissionRequestEvent):
                     yield {
-                        "type": "confirmation_request",
+                        "type": "permission_request",
                         "request_id": event.request_id,
                         "tool_name": event.tool_name,
                         "action_type": event.action_type,
                         "target_type": event.target_type,
                         "args_summary": event.args_summary,
                         "description": event.description,
+                        "capability_signature": event.capability_signature,
+                        "risk_level": str(event.risk_level or ""),
+                        "skill_name": event.skill_name,
+                        "content_hash": event.content_hash,
+                        "response_options": event.response_options,
                     }
                     continue
                 if isinstance(event, ContentEvent):
@@ -741,6 +833,7 @@ class ChatService:
                 mode=runtime_mode_enum,
                 role=MessageRole.USER,
                 content=message,
+                image_ids=uploaded_image_ids,
             )
             sanitized_full_response = self._strip_generated_image_markup(
                 full_response,
@@ -849,49 +942,90 @@ class ChatService:
         dict,
         bool,
         str | frozenset[str] | None,
+        SkillPolicyContext | None,
     ]:
         if not self._skill_registry:
-            return message, runtime_mode, None, "", frozenset(), {}, False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None, None
 
         matched = self._skill_registry.match_command(message)
         if not matched:
-            return message, runtime_mode, None, "", frozenset(), {}, False, None
+            return message, runtime_mode, None, "", frozenset(), {}, False, None, None
 
         provider, activated_command, cleaned_message = matched
-        manifest = provider.build_manifest(
-            SkillContext(
-                notebook_id=notebook_id,
-                activated_command=activated_command,
-                selected_document_ids=list(source_document_ids or []),
-                request_message=cleaned_message,
-            )
+        skill_context = SkillContext(
+            notebook_id=notebook_id,
+            activated_command=activated_command,
+            selected_document_ids=list(source_document_ids or []),
+            request_message=cleaned_message,
+            skill_name=str(getattr(provider, "skill_name", "") or "") or None,
+            content_hash=str(getattr(provider, "content_hash", "") or ""),
+            skill_dir=str(getattr(provider, "skill_dir", "") or ""),
+            scripts_dir=str(getattr(provider, "scripts_dir", "") or ""),
+            work_dir_mount=str(getattr(provider, "work_dir_mount", "/work") or "/work"),
         )
+        manifest = provider.build_manifest(skill_context)
+        skill_policy_context = SkillPolicyContext.from_any(skill_context)
         return (
             cleaned_message,
             ModeType.AGENT,
             list(manifest.tools),
             manifest.system_prompt_addition,
-            manifest.confirmation_required,
-            manifest.confirmation_meta,
+            manifest.permission_required,
+            manifest.permission_meta,
             manifest.force_first_tool_call,
             manifest.required_tool_call_before_response,
+            skill_policy_context,
         )
 
-    async def confirm_action(
-        self, session_id: str, request_id: str, approved: bool
+    async def resolve_permission_request(
+        self,
+        session_id: str,
+        request_id: str,
+        approved: bool | None = None,
+        response: str | None = None,
+        suggestion: str | None = None,
     ) -> bool:
         session = await self._session_repo.get(session_id)
         if not session:
             raise ValueError(f"Session not found: {session_id}")
-        if not self._confirmation_gateway:
+        if not self._permission_request_gateway:
             return False
-        return bool(self._confirmation_gateway.resolve(request_id, approved))
+        if response is not None:
+            return bool(
+                self._permission_request_gateway.resolve_response(
+                    request_id,
+                    {
+                        "response": response,
+                        "suggestion": suggestion,
+                    },
+                )
+            )
+        if approved is None:
+            return False
+        return bool(self._permission_request_gateway.resolve(request_id, approved))
+
+    async def confirm_action(
+        self,
+        session_id: str,
+        request_id: str,
+        approved: bool | None = None,
+        response: str | None = None,
+        suggestion: str | None = None,
+    ) -> bool:
+        return await self.resolve_permission_request(
+            session_id=session_id,
+            request_id=request_id,
+            approved=approved,
+            response=response,
+            suggestion=suggestion,
+        )
 
     async def prevalidate_mode_requirements(
         self,
         session_id: str,
         mode: str,
         context: Optional[dict] = None,
+        image_ids: Optional[List[str]] = None,
     ) -> None:
         """Validate requirements for conclude/explain before streaming responses."""
         session = await self._session_repo.get(session_id)
@@ -904,10 +1038,22 @@ class ChatService:
             _,
         ) = await self._get_notebook_scope(session.notebook_id)
         mode_enum = ModeType(mode)
-        if mode_enum in {ModeType.CHAT, ModeType.AGENT, ModeType.ASK}:
+        runtime_mode_enum = normalize_runtime_mode(mode_enum)
+        normalized_image_ids = self._normalize_uploaded_image_ids(image_ids)
+        if normalized_image_ids:
+            if runtime_mode_enum not in {ModeType.AGENT, ModeType.ASK}:
+                raise ValueError("Image uploads are only supported in agent and ask modes.")
+            if self._chat_image_service is None:
+                raise RuntimeError("Chat image service is not configured.")
+            await self._chat_image_service.assert_belongs_to_session(
+                session_id=session_id,
+                image_ids=normalized_image_ids,
+            )
+
+        if runtime_mode_enum in {ModeType.AGENT, ModeType.ASK}:
             return
         await self._validate_mode_guard(
-            mode_enum=mode_enum,
+            mode_enum=runtime_mode_enum,
             allowed_doc_ids=allowed_doc_ids,
             context=context,
             notebook_id=session.notebook_id,

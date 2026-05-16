@@ -34,12 +34,6 @@ dist/
 # Project data/cache
 # Ignore all runtime data by default.
 data/*
-# Keep base placeholders and docs.
-!data/.gitkeep
-!data/documents/
-data/documents/*
-!data/documents/README.md
-!data/documents/.gitkeep
 # Keep indexes/raw ignored explicitly for readability.
 data/indexes/
 data/raw/
@@ -58,6 +52,7 @@ checkpoints/
 .env.*.local
 configs/mcp.json
 configs/bilibili/
+configs/skills/
 
 # API keys and secrets (redundant but explicit)
 *_API_KEY
@@ -116,6 +111,9 @@ htmlcov/
 coding_guide.md
 
 MinerU/
+!docker/mineru/
+!docker/mineru/patches/
+!docker/mineru/patches/**
 
 # Local Postman assets (contain private endpoint mapping)
 postman_collection.json

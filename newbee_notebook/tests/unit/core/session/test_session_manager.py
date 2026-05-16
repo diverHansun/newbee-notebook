@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from newbee_notebook.core.llm.config import LLMRuntimeConfig
+from newbee_notebook.core.policy import PolicyDecider, SkillPolicyContext
 from newbee_notebook.core.prompts import load_prompt
+from newbee_notebook.core.sandbox import NotebookSandboxWorkspace
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.session import session_manager as session_manager_module
 from newbee_notebook.core.engine.stream_events import ContentEvent, SourceEvent, WarningEvent
 from newbee_notebook.core.session.session_manager import SessionManager
@@ -35,22 +38,38 @@ class RecordingLoop:
         mode_config,
         llm_retry_attempts=1,
         tool_argument_defaults=None,
+        permission_required=None,
+        permission_meta=None,
+        permission_request_gateway=None,
         confirmation_required=None,
         confirmation_meta=None,
         confirmation_gateway=None,
         force_first_tool_call=False,
         required_tool_call_before_response=None,
+        policy_decider=None,
+        agent_policy=None,
+        session_id=None,
+        skill_context=None,
+        model_override=None,
     ):
         self.llm_client = llm_client
         self.tools = tools
         self.mode_config = mode_config
         self.llm_retry_attempts = llm_retry_attempts
         self.tool_argument_defaults = tool_argument_defaults
+        self.permission_required = permission_required
+        self.permission_meta = permission_meta
+        self.permission_request_gateway = permission_request_gateway
         self.confirmation_required = confirmation_required
         self.confirmation_meta = confirmation_meta
         self.confirmation_gateway = confirmation_gateway
         self.force_first_tool_call = force_first_tool_call
         self.required_tool_call_before_response = required_tool_call_before_response
+        self.policy_decider = policy_decider
+        self.agent_policy = agent_policy
+        self.session_id = session_id
+        self.skill_context = skill_context
+        self.model_override = model_override
         self.calls: list[_LoopCall] = []
         self.__class__.instances.append(self)
 
@@ -72,6 +91,21 @@ class DummyToolRegistry:
 
     async def get_tools(self, mode, external_tools=None):
         self.calls.append(str(mode))
+        return []
+
+
+class CapturingToolRegistry:
+    def __init__(self):
+        self.calls: list[tuple[str, ShellEnvironment | None]] = []
+
+    async def get_tools(
+        self,
+        mode,
+        external_tools=None,
+        filesystem_environment: ShellEnvironment | None = None,
+    ):
+        del external_tools
+        self.calls.append((str(mode), filesystem_environment))
         return []
 
 
@@ -321,6 +355,41 @@ async def test_session_manager_awaits_async_tool_registry_for_agent_mode():
     assert registry.calls == ["awaited:agent"]
 
 
+@pytest.mark.anyio
+async def test_session_manager_passes_notebook_workspace_environment_to_tool_registry(
+    tmp_path,
+):
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    registry = CapturingToolRegistry()
+    workspace = NotebookSandboxWorkspace(root=tmp_path / "sandbox-work")
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=registry,
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+        sandbox_workspace=workspace,
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(message="hello", mode_type=ModeType.AGENT)
+
+    assert registry.calls[0][0] == "agent"
+    environment = registry.calls[0][1]
+    assert environment is not None
+    expected = workspace.for_notebook("nb1").work_dir
+    assert environment.run_dir == expected
+    assert environment.sandbox_session_key == "nb1"
+    assert expected.is_dir()
+
+
 def test_default_system_prompt_loads_mode_prompt_files(monkeypatch):
     loaded_files: list[str] = []
 
@@ -401,7 +470,7 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
         parameters={"type": "object", "properties": {}},
         execute=_noop,
     )
-    confirmation_gateway = object()
+    permission_request_gateway = object()
     manager = SessionManager(
         session_repo=session_repo,
         message_repo=message_repo,
@@ -419,16 +488,126 @@ async def test_session_manager_threads_skill_runtime_settings_into_loop():
         mode_type=ModeType.AGENT,
         external_tools=[external_tool],
         system_prompt_addition="skill prompt",
-        confirmation_required=frozenset({"update_note"}),
-        confirmation_gateway=confirmation_gateway,
+        permission_required=frozenset({"update_note"}),
+        permission_request_gateway=permission_request_gateway,
     )
 
     loop = RecordingLoop.instances[-1]
     call = loop.calls[-1]
     assert call.chat_history[0] == {"role": "system", "content": "prompt:agent\n\nskill prompt"}
     assert [tool.name for tool in loop.tools] == ["list_notes"]
-    assert loop.confirmation_required == frozenset({"update_note"})
-    assert loop.confirmation_gateway is confirmation_gateway
+    assert loop.permission_required == frozenset({"update_note"})
+    assert loop.permission_request_gateway is permission_request_gateway
+    assert isinstance(loop.policy_decider, PolicyDecider)
+    assert loop.session_id == "s1"
+
+
+@pytest.mark.anyio
+async def test_session_manager_threads_skill_policy_context_into_loop():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="run skill",
+        mode_type=ModeType.AGENT,
+        skill_context=SkillPolicyContext(name="demo", content_hash="hash123"),
+    )
+
+    loop = RecordingLoop.instances[-1]
+    assert loop.skill_context == SkillPolicyContext(name="demo", content_hash="hash123")
+
+
+@pytest.mark.anyio
+async def test_session_manager_threads_image_contents_to_current_user_turn_only():
+    session = Session(session_id="s1", notebook_id="nb1")
+    history = [
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.USER, content="older question"),
+        Message(session_id="s1", mode=ModeType.CHAT, role=MessageRole.ASSISTANT, content="older answer"),
+    ]
+    session_repo = AsyncMock()
+    session_repo.get.return_value = session
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = history
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+    image_contents = [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,AAAA"},
+        }
+    ]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="what is in this image?",
+        mode_type=ModeType.AGENT,
+        image_contents=image_contents,
+        model_override="glm-5v-turbo",
+    )
+
+    loop = RecordingLoop.instances[-1]
+    call = loop.calls[-1]
+    assert call.chat_history == [
+        {"role": "system", "content": "prompt:agent"},
+        {"role": "user", "content": "older question"},
+        {"role": "assistant", "content": "older answer"},
+    ]
+    assert call.message == [
+        {"type": "text", "text": "what is in this image?"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+    ]
+    assert loop.model_override == "glm-5v-turbo"
+
+
+@pytest.mark.anyio
+async def test_session_manager_passes_agent_policy_to_agent_loop():
+    session_repo = AsyncMock()
+    session_repo.get.return_value = Session(session_id="s1", notebook_id="nb1")
+    message_repo = AsyncMock()
+    message_repo.list_after_boundary.return_value = []
+    message_repo.list_by_session.return_value = []
+    manager = SessionManager(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        llm_client=DummyLLMClient(),
+        tool_registry=DummyToolRegistry(),
+        lock_manager=None,
+        agent_loop_cls=RecordingLoop,
+        system_prompt_provider=lambda mode: f"prompt:{mode.value}",
+    )
+    RecordingLoop.stream_events = [ContentEvent(delta="done")]
+
+    await manager.start_session(session_id="s1")
+    await manager.chat(
+        message="run without prompts",
+        mode_type=ModeType.AGENT,
+        agent_policy="yolo",
+    )
+
+    assert RecordingLoop.instances[-1].agent_policy == "yolo"
 
 
 def test_build_context_budget_uses_provider_specific_context_windows():

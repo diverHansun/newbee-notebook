@@ -16,6 +16,7 @@ from newbee_notebook.core.tools.contracts import (
     ToolCallResult,
     ToolDefinition,
 )
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.domain.entities.base import generate_uuid
 from newbee_notebook.infrastructure.storage.base import StorageBackend
 
@@ -550,4 +551,6 @@ def build_image_generation_tool(context: ImageToolContext) -> ToolDefinition:
             "required": ["prompt"],
         },
         execute=_execute,
+        tool_class=ToolClass.WRITE,
+        risk_level=RiskLevel.MODERATE,
     )

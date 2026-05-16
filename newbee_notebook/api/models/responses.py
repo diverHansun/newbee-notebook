@@ -98,6 +98,7 @@ class MessageResponse(BaseModel):
     role: str
     message_type: str = "normal"
     content: str
+    image_ids: List[str] = Field(default_factory=list)
     images: List[MessageImageResponse] = Field(default_factory=list)
     created_at: datetime
 

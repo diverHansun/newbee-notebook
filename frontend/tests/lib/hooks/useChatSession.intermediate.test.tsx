@@ -10,6 +10,8 @@ const listSessionMessages = vi.fn();
 const createSession = vi.fn();
 const deleteSession = vi.fn();
 const chatOnce = vi.fn();
+const getEffectivePolicy = vi.fn();
+const updatePolicyPreference = vi.fn();
 const startStream = vi.fn();
 const cancelStream = vi.fn();
 
@@ -22,6 +24,11 @@ vi.mock("@/lib/api/sessions", () => ({
 
 vi.mock("@/lib/api/chat", () => ({
   chatOnce: (...args: unknown[]) => chatOnce(...args),
+}));
+
+vi.mock("@/lib/api/policy", () => ({
+  getEffectivePolicy: (...args: unknown[]) => getEffectivePolicy(...args),
+  updatePolicyPreference: (...args: unknown[]) => updatePolicyPreference(...args),
 }));
 
 vi.mock("@/lib/hooks/useChatStream", () => ({
@@ -58,6 +65,8 @@ describe("useChatSession intermediate content flow", () => {
     createSession.mockReset();
     deleteSession.mockReset();
     chatOnce.mockReset();
+    getEffectivePolicy.mockReset();
+    updatePolicyPreference.mockReset();
     startStream.mockReset();
     cancelStream.mockReset();
 
@@ -73,6 +82,18 @@ describe("useChatSession intermediate content flow", () => {
     });
     listSessionMessages.mockResolvedValue({ data: [] });
     cancelStream.mockResolvedValue(undefined);
+    getEffectivePolicy.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "default",
+      source: "default",
+    });
+    updatePolicyPreference.mockResolvedValue({
+      notebook_id: "nb-1",
+      session_id: "session-1",
+      policy: "default",
+      source: "default",
+    });
   });
 
   it("rotates intermediate content across reasoning rounds and clears it when final content starts", async () => {
@@ -143,8 +164,10 @@ describe("useChatSession intermediate content flow", () => {
       callbacks?.onEvent?.({ type: "content", delta: "Here is the final answer." });
     });
 
-    assistantMessage = result.current.messages.find((message) => message.role === "assistant");
-    expect(assistantMessage?.content).toBe("Here is the final answer.");
+    await waitFor(() => {
+      assistantMessage = result.current.messages.find((message) => message.role === "assistant");
+      expect(assistantMessage?.content).toBe("Here is the final answer.");
+    });
     expect(assistantMessage?.intermediateContent).toBeUndefined();
     expect(assistantMessage?.exitingIntermediateContent).toBe("I will verify it once more.");
     expect(assistantMessage?.intermediateGeneration).toBe(2);

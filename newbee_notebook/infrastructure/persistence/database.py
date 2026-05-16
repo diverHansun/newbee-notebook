@@ -59,6 +59,10 @@ def get_runtime_schema_statements() -> list[str]:
         """,
         """
         ALTER TABLE IF EXISTS messages
+        ADD COLUMN IF NOT EXISTS image_ids JSONB NOT NULL DEFAULT '[]'::jsonb
+        """,
+        """
+        ALTER TABLE IF EXISTS messages
         DROP CONSTRAINT IF EXISTS messages_mode_check
         """,
         """
@@ -159,13 +163,63 @@ def get_runtime_schema_statements() -> list[str]:
             notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             diagram_type TEXT NOT NULL,
-            format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid')),
+            format TEXT NOT NULL,
+            CONSTRAINT ck_diagrams_format
+                CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
             content_path TEXT NOT NULL,
             document_ids UUID[] NOT NULL DEFAULT '{}',
             node_positions JSONB,
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
+        """,
+        """
+        DO $$
+        DECLARE
+            constraint_record RECORD;
+        BEGIN
+            IF to_regclass('public.diagrams') IS NULL THEN
+                RETURN;
+            END IF;
+
+            IF EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conrelid = 'public.diagrams'::regclass
+                  AND contype = 'c'
+                  AND conname = 'ck_diagrams_format'
+                  AND pg_get_constraintdef(oid) LIKE '%echarts_option%'
+            ) THEN
+                RETURN;
+            END IF;
+
+            FOR constraint_record IN
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'public.diagrams'::regclass
+                  AND contype = 'c'
+                  AND (
+                      conname IN ('ck_diagrams_format', 'diagrams_format_check')
+                      OR (
+                          pg_get_constraintdef(oid) LIKE '%reactflow_json%'
+                          AND pg_get_constraintdef(oid) LIKE '%mermaid%'
+                      )
+                  )
+            LOOP
+                EXECUTE format('ALTER TABLE diagrams DROP CONSTRAINT IF EXISTS %I', constraint_record.conname);
+            END LOOP;
+
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conrelid = 'public.diagrams'::regclass
+                  AND conname = 'ck_diagrams_format'
+            ) THEN
+                ALTER TABLE diagrams
+                    ADD CONSTRAINT ck_diagrams_format
+                    CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option'));
+            END IF;
+        END $$
         """,
         """
         CREATE INDEX IF NOT EXISTS idx_diagrams_notebook_id
@@ -246,6 +300,44 @@ def get_runtime_schema_statements() -> list[str]:
         """
         CREATE INDEX IF NOT EXISTS idx_generated_images_created_at
         ON generated_images(created_at)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS chat_images (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            storage_key TEXT NOT NULL UNIQUE,
+            mime_type VARCHAR(64) NOT NULL,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            width INTEGER,
+            height INTEGER,
+            sha256 VARCHAR(64) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            deleted_at TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_images_session_id
+        ON chat_images(session_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_images_created_at
+        ON chat_images(created_at)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_images_deleted_at
+        ON chat_images(deleted_at)
+        """,
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'data_documents_qwen3_embedding') THEN
+                EXECUTE 'CREATE INDEX IF NOT EXISTS documents_qwen3_embedding_source_document_id_idx ON data_documents_qwen3_embedding ((metadata_->>''source_document_id''))';
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'data_documents_zhipu') THEN
+                EXECUTE 'CREATE INDEX IF NOT EXISTS documents_zhipu_source_document_id_idx ON data_documents_zhipu ((metadata_->>''source_document_id''))';
+            END IF;
+        END $$
         """,
     ]
 

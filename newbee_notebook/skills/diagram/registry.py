@@ -41,6 +41,24 @@ _FLOWCHART_DIRECTION_WHITELIST = {"TD", "TB", "BT", "LR", "RL"}
 _MERMAID_SPECIAL_CHARS = frozenset({"(", ")", ":", ";", "\"", "'", "`", "|", "\\", "<", ">", "&", "#"})
 _MINDMAP_TOP_LEVEL_KEYS = frozenset({"nodes", "edges"})
 _MINDMAP_ID_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+ECHARTS_SERIES_TYPE_WHITELIST = frozenset(
+    {
+        "bar",
+        "line",
+        "pie",
+        "scatter",
+        "effectScatter",
+        "radar",
+        "heatmap",
+        "treemap",
+        "sunburst",
+        "sankey",
+        "gauge",
+        "funnel",
+        "candlestick",
+        "boxplot",
+    }
+)
 
 _FLOWCHART_HEADER_PATTERN = re.compile(r"^(flowchart|graph)\s+([A-Za-z]+)\s*$")
 _FLOWCHART_NODE_WITH_SHAPE_PATTERN = re.compile(
@@ -275,6 +293,103 @@ def validate_reactflow_schema(content: str) -> None:
                 f"edge.target '{target}' 未在 nodes 中声明",
                 f"{location}.target",
                 "先在 nodes 中定义该 id",
+            )
+
+
+def validate_echarts_option(content: str) -> None:
+    """Validate agent-generated ECharts option JSON with a shallow whitelist check."""
+
+    normalized = str(content or "").strip()
+    if not normalized:
+        _raise_validation_error(
+            "structure",
+            "content 不能为空",
+            "content",
+            "直接输出一个非空 ECharts option JSON 对象",
+        )
+
+    if "```" in normalized:
+        _raise_validation_error(
+            "structure",
+            "检测到 markdown 代码块围栏",
+            "content",
+            "去掉 ``` 围栏，仅输出 ECharts option JSON",
+        )
+
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        _raise_validation_error(
+            "structure",
+            f"JSON 解析失败: {exc.msg}",
+            f"第 {exc.lineno} 行",
+            "移除注释/尾随逗号并输出合法 JSON",
+        )
+
+    if not isinstance(parsed, dict):
+        _raise_validation_error(
+            "structure",
+            "顶层必须是 JSON 对象",
+            "content",
+            "将顶层改为包含 series 数组的对象",
+        )
+
+    if "series" not in parsed:
+        _raise_validation_error(
+            "structure",
+            "缺少顶层键: series",
+            "content",
+            "补齐 series 数组，并为每个 series 指定 type",
+        )
+
+    series = parsed["series"]
+    if not isinstance(series, list):
+        _raise_validation_error(
+            "schema",
+            "series 必须是数组",
+            "content.series",
+            "将 series 改为数组，例如 [{\"type\":\"bar\",\"data\":[1,2]}]",
+        )
+
+    if not series:
+        _raise_validation_error(
+            "structure",
+            "series 数组不能为空",
+            "content.series",
+            "至少提供一个 series",
+        )
+
+    for index, item in enumerate(series):
+        location = f"content.series[{index}]"
+        if not isinstance(item, dict):
+            _raise_validation_error(
+                "schema",
+                "series item 必须是对象",
+                location,
+                "将每个 series 写成包含 type 的对象",
+            )
+        if "type" not in item:
+            _raise_validation_error(
+                "schema",
+                "series.type 不能为空",
+                f"{location}.type",
+                "为每个 series 指定白名单内的 type",
+            )
+        series_type = item["type"]
+        if not isinstance(series_type, str) or not series_type.strip():
+            _raise_validation_error(
+                "schema",
+                "series.type 必须是非空字符串",
+                f"{location}.type",
+                "使用 bar / line / pie 等白名单类型",
+            )
+        if series_type not in ECHARTS_SERIES_TYPE_WHITELIST:
+            allowed = ", ".join(sorted(ECHARTS_SERIES_TYPE_WHITELIST))
+            _raise_validation_error(
+                "schema",
+                f"series.type '{series_type}' 不在白名单内",
+                f"{location}.type",
+                f"改为以下类型之一: {allowed}",
             )
 
 
@@ -591,6 +706,36 @@ class DiagramTypeDescriptor:
     positive_example: str
 
 
+_ECHARTS_SUBTYPE_EXAMPLES: dict[str, str] = {
+    "bar": '{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[3,5]}]}',
+    "line": '{"xAxis":{"type":"category","data":["Jan","Feb"]},"yAxis":{"type":"value"},"series":[{"type":"line","data":[12,18]}]}',
+    "pie": '{"series":[{"type":"pie","data":[{"name":"A","value":40},{"name":"B","value":60}]}]}',
+    "scatter": '{"xAxis":{},"yAxis":{},"series":[{"type":"scatter","data":[[1,2],[2,4]]}]}',
+    "effectScatter": '{"xAxis":{},"yAxis":{},"series":[{"type":"effectScatter","data":[[1,2],[2,4]]}]}',
+    "radar": '{"radar":{"indicator":[{"name":"A","max":10},{"name":"B","max":10}]},"series":[{"type":"radar","data":[{"value":[7,8],"name":"score"}]}]}',
+    "heatmap": '{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"category","data":["X","Y"]},"series":[{"type":"heatmap","data":[[0,0,5],[1,1,8]]}]}',
+    "treemap": '{"series":[{"type":"treemap","data":[{"name":"A","value":10},{"name":"B","value":6}]}]}',
+    "sunburst": '{"series":[{"type":"sunburst","data":[{"name":"A","children":[{"name":"A1","value":3}]}]}]}',
+    "sankey": '{"series":[{"type":"sankey","data":[{"name":"A"},{"name":"B"}],"links":[{"source":"A","target":"B","value":1}]}]}',
+    "gauge": '{"series":[{"type":"gauge","data":[{"value":72,"name":"完成率"}]}]}',
+    "funnel": '{"series":[{"type":"funnel","data":[{"name":"访问","value":100},{"name":"购买","value":35}]}]}',
+    "candlestick": '{"xAxis":{"type":"category","data":["Mon"]},"yAxis":{},"series":[{"type":"candlestick","data":[[20,30,10,35]]}]}',
+    "boxplot": '{"xAxis":{"type":"category","data":["A"]},"yAxis":{},"series":[{"type":"boxplot","data":[[1,2,3,4,5]]}]}',
+}
+
+
+def _render_echarts_section(descriptor: DiagramTypeDescriptor) -> str:
+    example_lines = ["Subtype examples:"]
+    for series_type in sorted(ECHARTS_SERIES_TYPE_WHITELIST):
+        example_lines.append(f"- {series_type}: {_ECHARTS_SUBTYPE_EXAMPLES[series_type]}")
+    return (
+        f"=== {descriptor.name} rules ===\n"
+        f"{descriptor.agent_system_prompt}\n\n"
+        f"{chr(10).join(example_lines)}\n\n"
+        f"Minimal valid example:\n{descriptor.positive_example}"
+    )
+
+
 DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
     "mindmap": DiagramTypeDescriptor(
         name="mindmap",
@@ -687,15 +832,83 @@ DIAGRAM_TYPE_REGISTRY: dict[str, DiagramTypeDescriptor] = {
             "    API-->>U: JSON 响应"
         ),
     ),
+    "echarts": DiagramTypeDescriptor(
+        name="echarts",
+        output_format="echarts_option",
+        file_extension=".json",
+        description="ECharts option",
+        agent_system_prompt=(
+            "Output format: ECharts option JSON.\n"
+            "- Top-level object must contain a non-empty series array.\n"
+            "- Every series item must be an object and must include type.\n"
+            "- Allowed series.type values: "
+            + ", ".join(sorted(ECHARTS_SERIES_TYPE_WHITELIST))
+            + ".\n"
+            "- Do not include markdown fences, comments, trailing commas, or explanatory prose in tool content.\n"
+            "- For inline preview only: call preview_diagram_inline with diagram_type='echarts' and content first; "
+            "only after that call succeeds may the final assistant response contain an ```echarts``` code fence.\n"
+            "- If preview_diagram_inline returns an error, fix the option and call it again or use create_diagram; "
+            "do not output an echarts fence after a failed preview.\n"
+            "Invalid examples:\n"
+            "1) {\"title\":{\"text\":\"Sales\"}}  # missing series\n"
+            "2) {\"series\":[{\"type\":\"unknown\",\"data\":[1]}]}  # type not allowed"
+        ),
+        intent_hints=(
+            "chart",
+            "bar chart",
+            "line chart",
+            "pie chart",
+            "scatter chart",
+            "radar chart",
+            "heatmap",
+            "treemap",
+            "sunburst",
+            "sankey",
+            "gauge",
+            "funnel",
+            "candlestick",
+            "boxplot",
+            "图表",
+            "数据图表",
+            "柱状图",
+            "柱形图",
+            "折线图",
+            "饼图",
+            "散点图",
+            "雷达图",
+            "热力图",
+            "树图",
+            "旭日图",
+            "桑基图",
+            "仪表盘",
+            "漏斗图",
+            "K线图",
+            "箱线图",
+        ),
+        validator=validate_echarts_option,
+        selection_guidance=(
+            "Use echarts when the user asks for statistical charts, numeric comparisons, distributions, "
+            "time series, or visual analysis of tabular data."
+        ),
+        positive_example=(
+            "{\n"
+            "  \"title\": {\"text\": \"月度销售额\"},\n"
+            "  \"tooltip\": {},\n"
+            "  \"xAxis\": {\"type\": \"category\", \"data\": [\"1月\", \"2月\", \"3月\"]},\n"
+            "  \"yAxis\": {\"type\": \"value\"},\n"
+            "  \"series\": [{\"type\": \"bar\", \"name\": \"销售额\", \"data\": [120, 200, 150]}]\n"
+            "}"
+        ),
+    ),
 }
 
-_PROMPT_ORDER = ("mindmap", "flowchart", "sequence")
+_PROMPT_ORDER = ("mindmap", "flowchart", "sequence", "echarts")
 
 _HEADER_PREAMBLE = (
     "---\n"
     "Active skill: /diagram\n"
     "You create or maintain diagrams for notebook content.\n"
-    "Before final response, call at least one real diagram operation tool (for example create_diagram).\n"
+    "Before final response, call at least one diagram tool (for example create_diagram or preview_diagram_inline).\n"
     "Do not output raw <tool_call>...</tool_call> markup in assistant text.\n"
     "Universal prohibitions:\n"
     "- content must not include markdown code fences (```).\n"
@@ -707,7 +920,8 @@ _OPERATIONAL_RULES = (
     "Operational rules:\n"
     "- If user intent is explicit, call create_diagram directly with the chosen diagram_type.\n"
     "- If user intent is ambiguous, call confirm_diagram_type first, then create_diagram after approval.\n"
-    "- For mindmap use mindmap JSON schema; for flowchart/sequence use Mermaid syntax.\n"
+    "- For mindmap use mindmap JSON schema; for flowchart/sequence use Mermaid syntax; for echarts use ECharts option JSON.\n"
+    "- Only echarts may be previewed inline with preview_diagram_inline; mermaid/reactflow diagrams must be created for Studio.\n"
     "- If notebook documents are available, ground node labels/messages in evidence.\n"
     "- If notebook documents are unavailable, still generate a useful diagram from user intent.\n"
     "- Do not ask user to open notebook pages and do not echo diagram_id unless explicitly requested.\n"
@@ -726,6 +940,7 @@ def _render_type_overview() -> str:
         "mindmap": "mindmap JSON schema",
         "flowchart": "Mermaid flowchart",
         "sequence": "Mermaid sequenceDiagram",
+        "echarts": "ECharts option JSON",
     }
 
     for diagram_type in _PROMPT_ORDER:
@@ -750,7 +965,11 @@ def build_diagram_system_prompt() -> str:
 
     sections = [_HEADER_PREAMBLE, _render_type_overview()]
     for diagram_type in _PROMPT_ORDER:
-        sections.append(_render_type_section(DIAGRAM_TYPE_REGISTRY[diagram_type]))
+        descriptor = DIAGRAM_TYPE_REGISTRY[diagram_type]
+        if diagram_type == "echarts":
+            sections.append(_render_echarts_section(descriptor))
+        else:
+            sections.append(_render_type_section(descriptor))
     sections.append(_OPERATIONAL_RULES)
     return "\n\n".join(sections)
 

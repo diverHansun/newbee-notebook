@@ -8,8 +8,10 @@ from newbee_notebook.application.services.diagram_service import (
     DiagramNotFoundError,
     DiagramValidationError,
 )
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.skills import SkillContext
 from newbee_notebook.domain.entities.diagram import Diagram
+from newbee_notebook.skills.diagram import tools as diagram_tools
 from newbee_notebook.skills.diagram.provider import DiagramSkillProvider
 from newbee_notebook.skills.diagram.tools import (
     _build_confirm_diagram_type_tool,
@@ -92,6 +94,28 @@ async def test_create_diagram_tool_returns_metadata_without_echoing_id(diagram_s
 
 
 @pytest.mark.anyio
+async def test_create_diagram_tool_omits_document_ids_as_none(diagram_service):
+    diagram_service.create_diagram.return_value = _make_diagram("diag-4")
+    tool = _build_create_diagram_tool(service=diagram_service, notebook_id="nb-1")
+
+    await tool.execute(
+        {
+            "title": "Chapter Map",
+            "diagram_type": "mindmap",
+            "content": '{"nodes":[{"id":"root","label":"Root"}],"edges":[]}',
+        }
+    )
+
+    diagram_service.create_diagram.assert_awaited_once_with(
+        notebook_id="nb-1",
+        title="Chapter Map",
+        diagram_type="mindmap",
+        content='{"nodes":[{"id":"root","label":"Root"}],"edges":[]}',
+        document_ids=None,
+    )
+
+
+@pytest.mark.anyio
 async def test_create_diagram_tool_handles_validation_error(diagram_service):
     diagram_service.create_diagram.side_effect = DiagramValidationError("missing nodes")
     tool = _build_create_diagram_tool(service=diagram_service, notebook_id="nb-1")
@@ -163,6 +187,53 @@ async def test_confirm_diagram_type_tool_returns_metadata():
     assert result.metadata["reason"].startswith("Prompt")
 
 
+@pytest.mark.anyio
+async def test_preview_diagram_inline_tool_validates_echarts_without_io():
+    tool = diagram_tools._build_preview_diagram_inline_tool()
+
+    result = await tool.execute(
+        {
+            "diagram_type": "echarts",
+            "content": '{"series":[{"type":"bar","data":[1,2,3]}]}',
+        }
+    )
+
+    assert result.error is None
+    assert result.metadata == {"diagram_type": "echarts"}
+    assert "validated" in result.content.lower()
+    assert tool.tool_class == ToolClass.READ
+    assert tool.risk_level == RiskLevel.SAFE
+
+
+@pytest.mark.anyio
+async def test_preview_diagram_inline_tool_rejects_non_echarts_type():
+    tool = diagram_tools._build_preview_diagram_inline_tool()
+
+    result = await tool.execute(
+        {
+            "diagram_type": "flowchart",
+            "content": "flowchart TD\nA --> B",
+        }
+    )
+
+    assert result.error == "preview_diagram_inline_invalid_type"
+
+
+@pytest.mark.anyio
+async def test_preview_diagram_inline_tool_returns_validation_error():
+    tool = diagram_tools._build_preview_diagram_inline_tool()
+
+    result = await tool.execute(
+        {
+            "diagram_type": "echarts",
+            "content": '{"series":[{"type":"unknown_chart","data":[1]}]}',
+        }
+    )
+
+    assert result.error == "diagram_validation_failed"
+    assert "unknown_chart" in result.content
+
+
 def test_diagram_skill_provider_builds_manifest(diagram_service):
     provider = DiagramSkillProvider(diagram_service=diagram_service)
 
@@ -185,21 +256,26 @@ def test_diagram_skill_provider_builds_manifest(diagram_service):
             "delete_diagram",
             "list_diagrams",
             "read_diagram",
+            "preview_diagram_inline",
         }
     )
-    assert manifest.confirmation_required == frozenset(
+    assert manifest.permission_required == frozenset(
         {"confirm_diagram_type", "update_diagram", "delete_diagram"}
     )
+    assert manifest.permission_meta["update_diagram"].action_type == "update"
     assert "create_diagram" in manifest.system_prompt_addition
     assert "Mermaid" in manifest.system_prompt_addition
     assert "If notebook documents are unavailable" in manifest.system_prompt_addition
     assert "Do not output raw <tool_call>" in manifest.system_prompt_addition
+    assert "preview_diagram_inline" in manifest.system_prompt_addition
+    assert "echarts" in manifest.system_prompt_addition
     assert "mindmap JSON schema" in manifest.system_prompt_addition
     assert "React Flow syntax" not in manifest.system_prompt_addition
     assert [tool.name for tool in manifest.tools] == [
         "list_diagrams",
         "read_diagram",
         "confirm_diagram_type",
+        "preview_diagram_inline",
         "create_diagram",
         "update_diagram",
         "update_diagram_positions",

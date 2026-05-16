@@ -4,37 +4,72 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { chatOnce, confirmChatAction } from "@/lib/api/chat";
+import { chatOnce, resolvePermissionRequest as resolvePermissionRequestApi } from "@/lib/api/chat";
 import {
   ApiListResponse,
   ChatImage,
   ChatImageSse,
   ChatContext,
+  EffectivePolicy,
   MessageMode,
+  PermissionResponseChoice,
+  PolicyPreferenceUpdate,
   Session,
   SessionMessage,
   SseEventConfirmation,
+  SseEventPermissionRequest,
+  SseEventToolResult,
 } from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { DIAGRAMS_QUERY_KEY } from "@/lib/hooks/use-diagrams";
 import { ALL_VIDEO_SUMMARIES_QUERY_KEY } from "@/lib/hooks/use-videos";
 import { uiStrings } from "@/lib/i18n/strings";
 import { createSession, deleteSession, listSessionMessages, listSessions } from "@/lib/api/sessions";
+import { getEffectivePolicy, updatePolicyPreference } from "@/lib/api/policy";
 import { useChatStream } from "@/lib/hooks/useChatStream";
 import { buildMarkdownVisibleMap, type MarkdownVisibleMap } from "@/lib/utils/markdown-typewriter";
+import { useTypewriterBuffer } from "@/lib/hooks/useTypewriterBuffer";
 import { normalizeSources } from "@/lib/utils/sources";
-import { ChatMessage, ToolStep, useChatStore } from "@/stores/chat-store";
+import {
+  buildExplainInteractionKey,
+  ChatMessage,
+  ToolStep,
+  useChatStore,
+} from "@/stores/chat-store";
 
 const SESSION_QUERY_KEY = (notebookId: string) => ["sessions", notebookId] as const;
 const MESSAGE_QUERY_KEY = (sessionId: string | null) => ["messages", sessionId] as const;
 const SESSION_PICKER_LIMIT = 50;
 const STREAM_FALLBACK_RECENT_WINDOW_MS = 30_000;
 const THINKING_STAGE_TIMEOUT_MS = 30_000;
-const CONFIRMATION_TIMEOUT_MS = 180_000;
+const PERMISSION_REQUEST_TIMEOUT_MS = 180_000;
 const LOCAL_MESSAGE_MATCH_WINDOW_MS = 120_000;
 const FINAL_TYPEWRITER_BASE_CPS = 60;
 const FINAL_TYPEWRITER_CATCHUP_CPS = 120;
 const FINAL_TYPEWRITER_CATCHUP_RAMP_MS = 280;
+
+function numberFromMetadata(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toolStepUpdateFromResult(event: SseEventToolResult): Partial<ToolStep> {
+  const exitCode = numberFromMetadata(event.metadata?.exit_code);
+  const isShellBoundaryResult =
+    (event.tool_name === "bash" || event.tool_name === "shell") &&
+    event.error_code === "nonzero_exit";
+
+  return {
+    status: event.success ? "done" : isShellBoundaryResult ? "warning" : "error",
+    errorCode: event.error_code ?? null,
+    exitCode,
+    contentPreview: event.content_preview,
+  };
+}
 
 type FinalTypewriterState = {
   sessionId: string;
@@ -47,6 +82,13 @@ type FinalTypewriterState = {
   lastTickAt: number | null;
   drainRequestedAt: number | null;
   onDrainComplete: (() => void) | null;
+};
+
+type LastExplainRequest = {
+  message: string;
+  mode: "explain" | "conclude";
+  context?: ChatContext;
+  sourceDocumentIds?: string[] | null;
 };
 
 function isDiagramCommandMessage(message: string, mode: MessageMode): boolean {
@@ -97,6 +139,26 @@ function mergeChatImages(
   return merged;
 }
 
+function normalizeImageIds(imageIds: string[] | null | undefined): string[] {
+  if (!imageIds || imageIds.length === 0) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const id of imageIds) {
+    const value = id.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+  }
+  return normalized;
+}
+
+function imageIdsEqual(left: string[] | undefined, right: string[] | undefined): boolean {
+  const leftIds = left || [];
+  const rightIds = right || [];
+  if (leftIds.length !== rightIds.length) return false;
+  return leftIds.every((id, index) => id === rightIds[index]);
+}
+
 function mapMessages(messages: SessionMessage[]): ChatMessage[] {
   return messages.map((msg) => ({
     id: `msg-${msg.message_id}`,
@@ -105,6 +167,7 @@ function mapMessages(messages: SessionMessage[]): ChatMessage[] {
     mode: msg.mode,
     content: msg.content,
     images: mapChatImages(msg.images),
+    imageIds: normalizeImageIds(msg.image_ids),
     status: "done",
     createdAt: msg.created_at,
   }));
@@ -142,6 +205,7 @@ function isSameRecentUserMessage(remote: ChatMessage, local: ChatMessage): boole
   if (remote.role !== "user" || local.role !== "user") return false;
   if (remote.mode !== local.mode) return false;
   if (remote.content.trim() !== local.content.trim()) return false;
+  if (!imageIdsEqual(remote.imageIds, local.imageIds)) return false;
 
   const remoteMs = Date.parse(remote.createdAt);
   const localMs = Date.parse(local.createdAt);
@@ -228,6 +292,7 @@ async function findRecentPersistedAssistantReply(
   sessionId: string,
   mode: MessageMode,
   userContent: string,
+  imageIds: string[],
   startedAtMs: number
 ): Promise<SessionMessage | null> {
   const response = await listSessionMessages(sessionId, {
@@ -245,6 +310,7 @@ async function findRecentPersistedAssistantReply(
     if (assistant.role !== "assistant" || user.role !== "user") continue;
     if (assistant.mode !== mode || user.mode !== mode) continue;
     if (user.content.trim() !== normalizedUserContent) continue;
+    if (!imageIdsEqual(normalizeImageIds(user.image_ids), imageIds)) continue;
 
     const assistantMs = Date.parse(assistant.created_at);
     if (Number.isFinite(assistantMs)) {
@@ -263,15 +329,22 @@ export function useChatSession(notebookId: string) {
   const queryClient = useQueryClient();
   const stream = useChatStream();
   const [isFinalTypewriterActive, setIsFinalTypewriterActive] = useState(false);
+  const [policy, setPolicy] = useState<EffectivePolicy>({
+    notebook_id: notebookId,
+    session_id: null,
+    policy: "default",
+    source: "default",
+  });
   const activeAssistantIdRef = useRef<string | null>(null);
   const activeStreamSessionIdRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
   const sessionMessagesRef = useRef<Record<string, ChatMessage[]>>({});
   const thinkingTimeoutRef = useRef<number | null>(null);
-  const confirmationTimersRef = useRef<Map<string, number>>(new Map());
+  const permissionRequestTimersRef = useRef<Map<string, number>>(new Map());
   const pendingIntermediatePhaseRef = useRef(false);
   const finalTypewriterStateRef = useRef<FinalTypewriterState | null>(null);
   const finalTypewriterFrameRef = useRef<number | null>(null);
+  const lastExplainRequestRef = useRef<LastExplainRequest | null>(null);
 
   const {
     currentSessionId,
@@ -285,7 +358,15 @@ export function useChatSession(notebookId: string) {
     explainCard,
     setExplainCard,
     appendExplainContent,
+    clearExplainError,
   } = useChatStore();
+
+  const {
+    push: pushExplainTypewriterDelta,
+    flush: flushExplainTypewriter,
+    drain: drainExplainTypewriter,
+    reset: resetExplainTypewriter,
+  } = useTypewriterBuffer({ onDelta: appendExplainContent });
 
   const replaceSessionMessages = useCallback(
     (sessionId: string, nextMessages: ChatMessage[]) => {
@@ -424,14 +505,14 @@ export function useChatSession(notebookId: string) {
   );
 
   const updateToolStepInSession = useCallback(
-    (sessionId: string, id: string, toolCallId: string, status: "running" | "done" | "error") => {
+    (sessionId: string, id: string, toolCallId: string, updates: Partial<ToolStep>) => {
       mutateSessionMessages(sessionId, (items) =>
         items.map((item) =>
           item.id === id
             ? {
                 ...item,
                 toolSteps: (item.toolSteps || []).map((step) =>
-                  step.id === toolCallId ? { ...step, status } : step
+                  step.id === toolCallId ? { ...step, ...updates } : step
                 ),
               }
             : item
@@ -609,19 +690,19 @@ export function useChatSession(notebookId: string) {
     }
   }, []);
 
-  const clearConfirmationTimer = useCallback((requestId: string) => {
-    const timerId = confirmationTimersRef.current.get(requestId);
+  const clearPermissionRequestTimer = useCallback((requestId: string) => {
+    const timerId = permissionRequestTimersRef.current.get(requestId);
     if (typeof timerId === "number") {
       window.clearTimeout(timerId);
-      confirmationTimersRef.current.delete(requestId);
+      permissionRequestTimersRef.current.delete(requestId);
     }
   }, []);
 
-  const clearAllConfirmationTimers = useCallback(() => {
-    confirmationTimersRef.current.forEach((timerId) => {
+  const clearAllPermissionRequestTimers = useCallback(() => {
+    permissionRequestTimersRef.current.forEach((timerId) => {
       window.clearTimeout(timerId);
     });
-    confirmationTimersRef.current.clear();
+    permissionRequestTimersRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -634,6 +715,25 @@ export function useChatSession(notebookId: string) {
   }, [currentSessionId, setMessages]);
 
   useEffect(() => {
+    let cancelled = false;
+    void getEffectivePolicy(notebookId, currentSessionId).then((nextPolicy) => {
+      if (!cancelled) setPolicy(nextPolicy);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSessionId, notebookId]);
+
+  const updatePolicy = useCallback(
+    async (update: PolicyPreferenceUpdate) => {
+      const nextPolicy = await updatePolicyPreference(notebookId, update);
+      setPolicy(nextPolicy);
+      return nextPolicy;
+    },
+    [notebookId]
+  );
+
+  useEffect(() => {
     sessionMessagesRef.current = {};
     activeAssistantIdRef.current = null;
     activeStreamSessionIdRef.current = null;
@@ -642,9 +742,9 @@ export function useChatSession(notebookId: string) {
     clearFinalTypewriterState();
   }, [clearFinalTypewriterState, notebookId]);
 
-  const findMessageByConfirmationRequest = useCallback((requestId: string) => {
+  const findMessageByPermissionRequest = useCallback((requestId: string) => {
     for (const [sessionId, items] of Object.entries(sessionMessagesRef.current)) {
-      const message = items.find((item) => item.pendingConfirmation?.requestId === requestId);
+      const message = items.find((item) => item.pendingPermissionRequest?.requestId === requestId);
       if (message) {
         return { sessionId, message };
       }
@@ -652,9 +752,9 @@ export function useChatSession(notebookId: string) {
     return null;
   }, []);
 
-  const trackPendingConfirmation = useCallback(
-    (sessionId: string, assistantLocalId: string, event: SseEventConfirmation) => {
-      const pendingConfirmation = {
+  const trackPermissionRequestFromEvent = useCallback(
+    (sessionId: string, assistantLocalId: string, event: SseEventConfirmation | SseEventPermissionRequest) => {
+      const pendingPermissionRequest = {
         requestId: event.request_id,
         toolName: event.tool_name,
         actionType: event.action_type,
@@ -662,58 +762,63 @@ export function useChatSession(notebookId: string) {
         argsSummary: event.args_summary,
         description: event.description,
         status: "pending" as const,
-        expiresAt: Date.now() + CONFIRMATION_TIMEOUT_MS,
+        expiresAt: Date.now() + PERMISSION_REQUEST_TIMEOUT_MS,
+        capabilitySignature: event.capability_signature,
+        riskLevel: event.risk_level,
+        skillName: event.skill_name,
+        contentHash: event.content_hash,
+        responseOptions: event.response_options,
       };
 
       updateMessageInSession(sessionId, assistantLocalId, {
-        pendingConfirmation,
+        pendingPermissionRequest,
       });
 
-      clearConfirmationTimer(event.request_id);
+      clearPermissionRequestTimer(event.request_id);
       const timerId = window.setTimeout(() => {
-        const resolved = findMessageByConfirmationRequest(event.request_id);
-        if (!resolved?.message.pendingConfirmation || resolved.message.pendingConfirmation.status !== "pending") {
-          confirmationTimersRef.current.delete(event.request_id);
+        const resolved = findMessageByPermissionRequest(event.request_id);
+        if (!resolved?.message.pendingPermissionRequest || resolved.message.pendingPermissionRequest.status !== "pending") {
+          permissionRequestTimersRef.current.delete(event.request_id);
           return;
         }
 
         updateMessageInSession(resolved.sessionId, resolved.message.id, {
-          pendingConfirmation: {
-            ...resolved.message.pendingConfirmation,
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
             status: "timeout",
           },
         });
-        confirmationTimersRef.current.delete(event.request_id);
+        permissionRequestTimersRef.current.delete(event.request_id);
 
         // Auto-collapse after 1.5s
         window.setTimeout(() => {
-          const resolvedMessage = findMessageByConfirmationRequest(event.request_id);
-          if (resolvedMessage?.message.pendingConfirmation && resolvedMessage.message.pendingConfirmation.status === "timeout") {
+          const resolvedMessage = findMessageByPermissionRequest(event.request_id);
+          if (resolvedMessage?.message.pendingPermissionRequest && resolvedMessage.message.pendingPermissionRequest.status === "timeout") {
             updateMessageInSession(resolvedMessage.sessionId, resolvedMessage.message.id, {
-              pendingConfirmation: {
-                ...resolvedMessage.message.pendingConfirmation,
+              pendingPermissionRequest: {
+                ...resolvedMessage.message.pendingPermissionRequest,
                 status: "collapsed",
                 resolvedFrom: "timeout",
               },
             });
           }
         }, 1500);
-      }, CONFIRMATION_TIMEOUT_MS);
-      confirmationTimersRef.current.set(event.request_id, timerId);
+      }, PERMISSION_REQUEST_TIMEOUT_MS);
+      permissionRequestTimersRef.current.set(event.request_id, timerId);
     },
-    [clearConfirmationTimer, findMessageByConfirmationRequest, updateMessageInSession]
+    [clearPermissionRequestTimer, findMessageByPermissionRequest, updateMessageInSession]
   );
 
-  const clearConfirmationForMessage = useCallback(
+  const clearPermissionRequestForMessage = useCallback(
     (sessionId: string | null, assistantLocalId: string | null) => {
       if (!sessionId || !assistantLocalId) return;
       const message = (sessionMessagesRef.current[sessionId] ?? []).find((item) => item.id === assistantLocalId);
-      const requestId = message?.pendingConfirmation?.requestId;
+      const requestId = message?.pendingPermissionRequest?.requestId;
       if (requestId) {
-        clearConfirmationTimer(requestId);
+        clearPermissionRequestTimer(requestId);
       }
     },
-    [clearConfirmationTimer]
+    [clearPermissionRequestTimer]
   );
 
   const scheduleThinkingTimeout = useCallback(
@@ -786,10 +891,10 @@ export function useChatSession(notebookId: string) {
   useEffect(() => {
     return () => {
       clearThinkingTimeout();
-      clearAllConfirmationTimers();
+      clearAllPermissionRequestTimers();
       clearFinalTypewriterState();
     };
-  }, [clearAllConfirmationTimers, clearFinalTypewriterState, clearThinkingTimeout]);
+  }, [clearAllPermissionRequestTimers, clearFinalTypewriterState, clearThinkingTimeout]);
 
   const createSessionMutation = useMutation({
     mutationFn: (title?: string) =>
@@ -869,7 +974,8 @@ export function useChatSession(notebookId: string) {
       message: string,
       mode: MessageMode,
       context?: ChatContext,
-      sourceDocumentIds?: string[] | null
+      sourceDocumentIds?: string[] | null,
+      imageIds?: string[]
     ) => {
       const isExplainOrConclude = mode === "explain" || mode === "conclude";
       const explainMode = mode as "explain" | "conclude";
@@ -899,6 +1005,7 @@ export function useChatSession(notebookId: string) {
       const isDiagramRequest = isDiagramCommandMessage(message, mode);
       const isNoteRequest = isNoteCommandMessage(message, mode);
       const isVideoRequest = isVideoCommandMessage(message, mode);
+      const requestImageIds = mode === "agent" || mode === "ask" ? normalizeImageIds(imageIds) : [];
       let streamReceivedDone = false;
       let streamReceivedErrorEvent = false;
 
@@ -908,6 +1015,7 @@ export function useChatSession(notebookId: string) {
           role: "user",
           mode,
           content: message,
+          imageIds: requestImageIds,
           status: "done",
           createdAt,
         });
@@ -937,6 +1045,7 @@ export function useChatSession(notebookId: string) {
                 sessionId,
                 mode,
                 message,
+                requestImageIds,
                 streamStartedAtMs
               );
 
@@ -962,6 +1071,8 @@ export function useChatSession(notebookId: string) {
                 session_id: sessionId,
                 context: context || null,
                 source_document_ids: sourceDocumentIds ?? null,
+                image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
+                agent_policy: policy.policy,
               });
 
               pendingIntermediatePhaseRef.current = false;
@@ -1022,6 +1133,8 @@ export function useChatSession(notebookId: string) {
             session_id: sessionId,
             context: context || null,
             source_document_ids: sourceDocumentIds ?? null,
+            image_ids: requestImageIds.length > 0 ? requestImageIds : undefined,
+            agent_policy: policy.policy,
           },
           {
             onEvent: (event) => {
@@ -1082,7 +1195,7 @@ export function useChatSession(notebookId: string) {
                     sessionId,
                     activeAssistantIdRef.current,
                     event.tool_call_id,
-                    event.success ? "done" : "error",
+                    toolStepUpdateFromResult(event),
                   );
                 }
                 return;
@@ -1112,9 +1225,9 @@ export function useChatSession(notebookId: string) {
                 }
                 return;
               }
-              if (event.type === "confirmation_request") {
+              if (event.type === "confirmation_request" || event.type === "permission_request") {
                 if (activeAssistantIdRef.current) {
-                  trackPendingConfirmation(sessionId, activeAssistantIdRef.current, event);
+                  trackPermissionRequestFromEvent(sessionId, activeAssistantIdRef.current, event);
                 }
                 return;
               }
@@ -1122,7 +1235,7 @@ export function useChatSession(notebookId: string) {
                 streamReceivedDone = true;
                 clearThinkingTimeout();
                 const assistantLocalId = activeAssistantIdRef.current;
-                clearConfirmationForMessage(sessionId, assistantLocalId);
+                clearPermissionRequestForMessage(sessionId, assistantLocalId);
 
                 const finalizeDone = () => {
                   if (assistantLocalId) {
@@ -1170,7 +1283,7 @@ export function useChatSession(notebookId: string) {
                 streamReceivedErrorEvent = true;
                 clearThinkingTimeout();
                 const assistantLocalId = activeAssistantIdRef.current;
-                clearConfirmationForMessage(sessionId, assistantLocalId);
+                clearPermissionRequestForMessage(sessionId, assistantLocalId);
                 if (assistantLocalId) {
                   stopFinalTypewriterForMessage(sessionId, assistantLocalId);
                   updateThinkingStageInSession(sessionId, assistantLocalId, null);
@@ -1199,7 +1312,7 @@ export function useChatSession(notebookId: string) {
               if (!assistantLocalId || !shouldAttemptStreamFallback(error)) {
                 if (assistantLocalId) {
                   stopFinalTypewriterForMessage(sessionId, assistantLocalId);
-                  clearConfirmationForMessage(sessionId, assistantLocalId);
+                  clearPermissionRequestForMessage(sessionId, assistantLocalId);
                   updateThinkingStageInSession(sessionId, assistantLocalId, null);
                   updateMessageInSession(sessionId, assistantLocalId, {
                     status: "error",
@@ -1226,12 +1339,50 @@ export function useChatSession(notebookId: string) {
         return;
       }
 
+      const selectedText = context?.selected_text || "";
+      const lastInteractionKey = buildExplainInteractionKey(explainMode, selectedText);
+      const buildExplainCard = (
+        content: string,
+        isStreaming: boolean,
+        error: { code: string; message: string; retryable: boolean } | null = null
+      ) => ({
+        visible: true,
+        mode: explainMode,
+        selectedText,
+        content,
+        isStreaming,
+        error,
+        lastInteractionKey,
+      });
+      const setExplainFailure = (code: string, fallbackMessage?: string) => {
+        const errorMessage = fallbackMessage || t(uiStrings.explainCard.errorGeneric);
+        setExplainCard((prev) =>
+          prev
+            ? {
+                ...prev,
+                isStreaming: false,
+                error: { code, message: errorMessage, retryable: true },
+              }
+            : buildExplainCard("", false, { code, message: errorMessage, retryable: true })
+        );
+        setStreaming(false, null);
+      };
+
+      lastExplainRequestRef.current = {
+        message,
+        mode: explainMode,
+        context,
+        sourceDocumentIds,
+      };
+      resetExplainTypewriter();
       setExplainCard({
         visible: true,
         mode: explainMode,
-        selectedText: context?.selected_text || "",
+        selectedText,
         content: "",
         isStreaming: true,
+        error: null,
+        lastInteractionKey,
       });
       setStreaming(true, null);
 
@@ -1247,43 +1398,33 @@ export function useChatSession(notebookId: string) {
         {
           onEvent: (event) => {
             if (event.type === "content") {
-              appendExplainContent(event.delta);
+              pushExplainTypewriterDelta(event.delta);
               return;
             }
             if (event.type === "done") {
               streamReceivedDone = true;
+              drainExplainTypewriter();
               setExplainCard((prev) =>
                 prev
                   ? {
                       ...prev,
                       isStreaming: false,
+                      error: null,
                     }
-                  : {
-                      visible: true,
-                      mode: explainMode,
-                      selectedText: context?.selected_text || "",
-                      content: "",
-                      isStreaming: false,
-                    }
+                  : buildExplainCard("", false)
               );
               setStreaming(false, null);
               return;
             }
             if (event.type === "error") {
+              if (streamReceivedDone) return;
               streamReceivedErrorEvent = true;
-              appendExplainContent(`\n\n[${event.error_code}] ${event.message}`);
-              setExplainCard((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      isStreaming: false,
-                    }
-                  : prev
-              );
-              setStreaming(false, null);
+              flushExplainTypewriter();
+              setExplainFailure(event.error_code || "E_STREAM", event.message);
             }
           },
           onError: (error) => {
+            flushExplainTypewriter();
             if (streamReceivedDone || streamReceivedErrorEvent) {
               setStreaming(false, null);
               setExplainCard((prev) => (prev ? { ...prev, isStreaming: false } : prev));
@@ -1292,16 +1433,8 @@ export function useChatSession(notebookId: string) {
 
             const err = error as ApiError;
             if (!shouldAttemptStreamFallback(error)) {
-              appendExplainContent(`\n\n[${err.errorCode || "E_STREAM"}] ${err.message || "Stream error"}`);
-              setExplainCard((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      isStreaming: false,
-                    }
-                  : prev
-              );
-              setStreaming(false, null);
+              streamReceivedErrorEvent = true;
+              setExplainFailure(err.errorCode || "E_STREAM", err.message);
               return;
             }
 
@@ -1312,6 +1445,7 @@ export function useChatSession(notebookId: string) {
                   sessionId,
                   mode,
                   message,
+                  [],
                   streamStartedAtMs
                 );
 
@@ -1322,14 +1456,9 @@ export function useChatSession(notebookId: string) {
                           ...prev,
                           content: persistedReply.content,
                           isStreaming: false,
+                          error: null,
                         }
-                      : {
-                          visible: true,
-                          mode: explainMode,
-                          selectedText: context?.selected_text || "",
-                          content: persistedReply.content,
-                          isStreaming: false,
-                        }
+                      : buildExplainCard(persistedReply.content, false)
                   );
                   return;
                 }
@@ -1340,6 +1469,7 @@ export function useChatSession(notebookId: string) {
                   session_id: sessionId,
                   context: context || null,
                   source_document_ids: sourceDocumentIds ?? null,
+                  agent_policy: policy.policy,
                 });
 
                 setExplainCard((prev) =>
@@ -1348,29 +1478,15 @@ export function useChatSession(notebookId: string) {
                         ...prev,
                         content: fallback.content,
                         isStreaming: false,
+                        error: null,
                       }
-                    : {
-                        visible: true,
-                        mode: explainMode,
-                        selectedText: context?.selected_text || "",
-                        content: fallback.content,
-                        isStreaming: false,
-                      }
+                    : buildExplainCard(fallback.content, false)
                 );
               } catch (fallbackError) {
                 const fallbackApiError = fallbackError as ApiError;
-                appendExplainContent(
-                  `\n\n[${fallbackApiError.errorCode || "E_FALLBACK"}] ${
-                    fallbackApiError.message || "Fallback error"
-                  }`
-                );
-                setExplainCard((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        isStreaming: false,
-                      }
-                    : prev
+                setExplainFailure(
+                  fallbackApiError.errorCode || "E_NETWORK",
+                  fallbackApiError.message || t(uiStrings.explainCard.errorGeneric)
                 );
               } finally {
                 setStreaming(false, null);
@@ -1398,19 +1514,23 @@ export function useChatSession(notebookId: string) {
     [
       addMessageToSession,
       addToolStepInSession,
-      appendExplainContent,
+      appendIntermediateContentInSession,
       clearIntermediateVisualStateInSession,
-      clearConfirmationForMessage,
+      clearPermissionRequestForMessage,
       clearFinalTypewriterState,
       clearThinkingTimeout,
       currentSessionId,
       enqueueFinalTypewriterDelta,
       ensureSession,
+      flushExplainTypewriter,
       isFinalTypewriterPending,
       mutateSessionMessages,
       notebookId,
+      pushExplainTypewriterDelta,
       queryClient,
       requestFinalTypewriterDrain,
+      resetExplainTypewriter,
+      rotateIntermediateContentInSession,
       sessions,
       stopFinalTypewriterForMessage,
       updateThinkingStageInSession,
@@ -1420,49 +1540,93 @@ export function useChatSession(notebookId: string) {
       setStreaming,
       scheduleThinkingTimeout,
       stream,
-      trackPendingConfirmation,
+      trackPermissionRequestFromEvent,
       updateMessageInSession,
+      policy.policy,
       t,
     ]
   );
 
-  const resolveConfirmation = useCallback(
-    async (requestId: string, approved: boolean) => {
+  const resolvePermissionRequest = useCallback(
+    async (requestId: string, response: PermissionResponseChoice) => {
       const sessionId = currentSessionId;
       if (!sessionId) return;
 
-      const resolved = findMessageByConfirmationRequest(requestId);
-      if (!resolved?.message.pendingConfirmation) return;
+      const resolved = findMessageByPermissionRequest(requestId);
+      if (!resolved?.message.pendingPermissionRequest) return;
 
-      clearConfirmationTimer(requestId);
-      const resolvedStatus = approved ? "confirmed" : "rejected";
+      clearPermissionRequestTimer(requestId);
       updateMessageInSession(resolved.sessionId, resolved.message.id, {
-        pendingConfirmation: {
-          ...resolved.message.pendingConfirmation,
-          status: resolvedStatus,
+        pendingPermissionRequest: {
+          ...resolved.message.pendingPermissionRequest,
+          status: "resolving",
         },
       });
 
-      // Auto-collapse after 1.5s
-      window.setTimeout(() => {
-        const nextResolved = findMessageByConfirmationRequest(requestId);
-        if (nextResolved?.message.pendingConfirmation && nextResolved.message.pendingConfirmation.status !== "pending") {
-          updateMessageInSession(nextResolved.sessionId, nextResolved.message.id, {
-            pendingConfirmation: {
-              ...nextResolved.message.pendingConfirmation,
-              status: "collapsed",
-              resolvedFrom: nextResolved.message.pendingConfirmation.status as "confirmed" | "rejected" | "timeout",
-            },
+      try {
+        const result = await resolvePermissionRequestApi(sessionId, {
+          request_id: requestId,
+          response,
+        });
+        if (result.effective_policy) {
+          setPolicy(result.effective_policy);
+        } else if (response === "always_session" || response === "always_persist") {
+          const scope = response === "always_session" ? "session" : "notebook";
+          const nextPolicy = await updatePolicyPreference(notebookId, {
+            scope,
+            session_id: sessionId,
+            policy: "yolo",
           });
+          setPolicy(nextPolicy);
         }
-      }, 1500);
 
-      await confirmChatAction(sessionId, {
-        request_id: requestId,
-        approved,
-      });
+        const resolvedStatus = response === "reject" ? "rejected" : "confirmed";
+        updateMessageInSession(resolved.sessionId, resolved.message.id, {
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
+            status: resolvedStatus,
+          },
+        });
+
+        window.setTimeout(() => {
+          const nextResolved = findMessageByPermissionRequest(requestId);
+          if (
+            nextResolved?.message.pendingPermissionRequest &&
+            nextResolved.message.pendingPermissionRequest.status !== "pending"
+          ) {
+            updateMessageInSession(nextResolved.sessionId, nextResolved.message.id, {
+              pendingPermissionRequest: {
+                ...nextResolved.message.pendingPermissionRequest,
+                status: "collapsed",
+                resolvedFrom: nextResolved.message.pendingPermissionRequest.status as
+                  | "confirmed"
+                  | "rejected"
+                  | "timeout",
+              },
+            });
+          }
+        }, 1500);
+      } catch (error) {
+        updateMessageInSession(resolved.sessionId, resolved.message.id, {
+          pendingPermissionRequest: {
+            ...resolved.message.pendingPermissionRequest,
+            status: "error",
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : t(uiStrings.permissionRequest.submitFailed),
+          },
+        });
+      }
     },
-    [clearConfirmationTimer, currentSessionId, findMessageByConfirmationRequest, updateMessageInSession]
+    [
+      clearPermissionRequestTimer,
+      currentSessionId,
+      findMessageByPermissionRequest,
+      notebookId,
+      t,
+      updateMessageInSession,
+    ]
   );
 
   const cancelStream = useCallback(async () => {
@@ -1472,7 +1636,7 @@ export function useChatSession(notebookId: string) {
       const assistantLocalId = activeAssistantIdRef.current;
       const sessionId = activeStreamSessionIdRef.current;
       stopFinalTypewriterForMessage(sessionId, assistantLocalId);
-      clearConfirmationForMessage(sessionId, assistantLocalId);
+      clearPermissionRequestForMessage(sessionId, assistantLocalId);
       const activeAssistantMessage = (sessionMessagesRef.current[sessionId] ?? []).find((msg) => msg.id === assistantLocalId);
       updateThinkingStageInSession(sessionId, assistantLocalId, null);
       if (!activeAssistantMessage?.content?.trim()) {
@@ -1494,7 +1658,7 @@ export function useChatSession(notebookId: string) {
     }
     setStreaming(false, null);
   }, [
-    clearConfirmationForMessage,
+    clearPermissionRequestForMessage,
     clearThinkingTimeout,
     explainCard,
     removeMessageFromSession,
@@ -1532,21 +1696,37 @@ export function useChatSession(notebookId: string) {
     [deleteSessionMutation]
   );
 
+  const retryExplainCard = useCallback(async () => {
+    const request = lastExplainRequestRef.current;
+    if (!request) return;
+    clearExplainError();
+    await sendMessage(
+      request.message,
+      request.mode,
+      request.context,
+      request.sourceDocumentIds
+    );
+  }, [clearExplainError, sendMessage]);
+
   return {
     sessions,
     currentSessionId,
     messages,
     currentMode,
+    policy,
     isStreaming: stream.isStreaming || isFinalTypewriterActive,
     explainCard,
     setMode,
+    ensureSession,
     sendMessage,
+    retryExplainCard,
     cancelStream,
     switchSession,
     createSession: createNewSession,
     deleteSession: removeSession,
     closeExplainCard: () => setExplainCard(null),
-    resolveConfirmation,
+    resolvePermissionRequest,
+    updatePolicy,
     refreshSessions: () => queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(notebookId) }),
   };
 }

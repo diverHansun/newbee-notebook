@@ -1,33 +1,24 @@
-# RTX 50xx / Blackwell requires vLLM 0.11.x; MinerU 3.x aligns with the official 0.11.2 image.
-# DaoCloud mirror for China-region pull acceleration
-FROM docker.m.daocloud.io/vllm/vllm-openai:v0.11.2
+# Build the upstream MinerU base first from mineru/docker/china/Dockerfile or
+# mineru/docker/global/Dockerfile, tagging it as mineru:latest.
+FROM mineru:latest
 
-# Install libgl for opencv support & Noto fonts for Chinese characters
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        fonts-noto-core \
-        fonts-noto-cjk \
-        fontconfig \
-        libgl1 && \
-    fc-cache -fv && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Keep curl available for the compose healthcheck when upstream base changes.
+RUN if ! command -v curl >/dev/null 2>&1; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends curl && \
+        apt-get clean && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
 
-# Install MinerU (GPU runtime is provided by the vllm base image)
-# Use Aliyun PyPI mirror for faster installs in China
-RUN python3 -m pip install -U --no-cache-dir 'mineru[core]==3.1.4' \
-        -i https://mirrors.aliyun.com/pypi/simple \
-        --break-system-packages && \
-    python3 -m pip cache purge
+COPY patches/ /tmp/mineru-patches/
+RUN python3 /tmp/mineru-patches/apply_title_aided_runtime_patch.py && \
+    rm -rf /tmp/mineru-patches
 
 EXPOSE 8000
 
 # CRITICAL: Override vllm's ENTRYPOINT so CMD is executed directly.
-# Sets MINERU_MODEL_SOURCE=local if models are pre-baked, or modelscope/huggingface
-# for first-run download. The compose volume (mineru_cache:/root/.cache) ensures
-# downloaded models survive container recreations without re-downloading.
-ENTRYPOINT ["/bin/bash", "-c", "export MINERU_MODEL_SOURCE=${MINERU_MODEL_SOURCE:-modelscope} && exec \"$@\"", "--"]
+# The official MinerU Dockerfile pre-bakes local models; keep local as default.
+ENTRYPOINT ["/bin/bash", "-c", "export MINERU_MODEL_SOURCE=${MINERU_MODEL_SOURCE:-local} && exec \"$@\"", "--"]
 
 # Backend selection is kept request-driven (form field `backend`) to support
 # both `pipeline` (CPU-fallback) and `hybrid-auto-engine` (GPU) per request.

@@ -43,6 +43,7 @@ _BOOTSTRAP_ENV = {
         "LLM_TOP_P",
         "MINERU_MODE",
         "MINERU_LOCAL_ENABLED",
+        "MINERU_TITLE_AIDED_ENABLED",
         "ASR_PROVIDER",
         "ASR_MODEL",
     )
@@ -86,7 +87,9 @@ def _as_bool(value: Any, default: bool) -> bool:
 
 
 def _is_mineru_local_enabled() -> bool:
-    raw = os.getenv("MINERU_LOCAL_ENABLED")
+    raw = _BOOTSTRAP_ENV.get("MINERU_LOCAL_ENABLED")
+    if raw is None:
+        raw = os.getenv("MINERU_LOCAL_ENABLED")
     if raw is None:
         # Backward-compatible default for non-docker/local development.
         return True
@@ -230,15 +233,20 @@ _ASR_DEFAULTS: dict[str, Any] = {
 
 
 def _read_mineru_defaults() -> dict[str, Any]:
-    mode = str(os.getenv("MINERU_MODE", "cloud") or "cloud").strip().lower()
+    mode = str(_BOOTSTRAP_ENV.get("MINERU_MODE") or "cloud").strip().lower()
     if mode not in {"cloud", "local"}:
         mode = "cloud"
     local_enabled = _is_mineru_local_enabled()
     if mode == "local" and not local_enabled:
         mode = "cloud"
+    title_aided_enabled = _as_bool(
+        _BOOTSTRAP_ENV.get("MINERU_TITLE_AIDED_ENABLED"),
+        False,
+    )
     return {
         "mode": mode,
         "local_enabled": local_enabled,
+        "title_aided_enabled": title_aided_enabled,
     }
 
 
@@ -588,14 +596,27 @@ async def get_mineru_config_async(session: AsyncSession) -> dict[str, Any]:
     local_enabled = _is_mineru_local_enabled()
     mode = (
         db_values.get("mineru.mode")
-        or os.getenv("MINERU_MODE")
+        or _get_bootstrap_env("MINERU_MODE")
         or defaults["mode"]
     )
     mode = str(mode).strip().lower() or str(defaults["mode"])
     if mode not in {"cloud", "local"}:
         mode = str(defaults["mode"])
 
-    if source == "default" and os.getenv("MINERU_MODE"):
+    title_aided_raw = (
+        db_values["mineru.title_aided_enabled"]
+        if "mineru.title_aided_enabled" in db_values
+        else _get_bootstrap_env("MINERU_TITLE_AIDED_ENABLED")
+    )
+    title_aided_enabled = _as_bool(
+        title_aided_raw,
+        bool(defaults.get("title_aided_enabled", False)),
+    )
+
+    if source == "default" and (
+        _get_bootstrap_env("MINERU_MODE") is not None
+        or _get_bootstrap_env("MINERU_TITLE_AIDED_ENABLED") is not None
+    ):
         source = "env"
 
     if mode == "local" and not local_enabled:
@@ -605,6 +626,7 @@ async def get_mineru_config_async(session: AsyncSession) -> dict[str, Any]:
         "mode": mode,
         "source": source,
         "local_enabled": local_enabled,
+        "title_aided_enabled": title_aided_enabled,
     }
 
 
@@ -623,9 +645,13 @@ _NOT_APPLICABLE = "__not_applicable__"
 def resolve_llm_api_key(provider: str) -> str | None:
     normalized = str(provider or "").strip().lower()
     if normalized == "zhipu":
-        return os.getenv("ZHIPU_API_KEY")
+        return os.getenv("ZHIPU_API_KEY") or os.getenv("OPENAI_API_KEY")
     if normalized == "qwen":
-        return os.getenv("DASHSCOPE_API_KEY")
+        return (
+            os.getenv("DASHSCOPE_API_KEY")
+            or os.getenv("QWEN_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
     return None
 
 
@@ -691,6 +717,9 @@ def apply_mineru_runtime_env(config: dict[str, Any]) -> None:
     if mode not in {"cloud", "local"}:
         mode = "cloud"
     os.environ["MINERU_MODE"] = mode
+    os.environ["MINERU_TITLE_AIDED_ENABLED"] = (
+        "true" if _as_bool(config.get("title_aided_enabled"), False) else "false"
+    )
 
 
 async def sync_runtime_env_from_db(session: AsyncSession) -> None:

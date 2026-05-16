@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from newbee_notebook.core.policy import RiskLevel, ToolClass
+from newbee_notebook.core.sandbox import SandboxRequest, SandboxResult
+from newbee_notebook.core.shell import ShellEnvironment
 from newbee_notebook.core.tools.builtin_provider import BuiltinToolProvider
 from newbee_notebook.core.tools.contracts import ToolDefinition, ToolCallResult
 from newbee_notebook.core.tools.registry import ToolRegistry
@@ -14,6 +17,19 @@ def anyio_backend():
 
 async def _fake_tool_result(_: dict) -> ToolCallResult:
     return ToolCallResult(content="ok")
+
+
+FILESYSTEM_TOOL_NAMES = [
+    "read_file",
+    "glob_files",
+    "grep_files",
+    "edit_file",
+    "write_file",
+    "shell",
+    "shell_task_list",
+    "shell_task_output",
+    "shell_task_stop",
+]
 
 
 def _external_tool(name: str) -> ToolDefinition:
@@ -33,6 +49,16 @@ def test_builtin_tool_provider_returns_ask_tools(monkeypatch):
     tools = provider.get_tools("ask")
 
     assert [tool.name for tool in tools] == ["knowledge_base", "time"]
+    assert [tool.tool_class for tool in tools] == [ToolClass.READ, ToolClass.READ]
+    assert [tool.risk_level for tool in tools] == [RiskLevel.SAFE, RiskLevel.SAFE]
+
+
+def test_tool_definition_defaults_to_read_safe_metadata_for_backward_compatibility():
+    tool = _external_tool("legacy_tool")
+
+    assert tool.tool_class == ToolClass.READ
+    assert tool.risk_level == RiskLevel.SAFE
+    assert tool.sandbox_required is False
 
 
 def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_only(monkeypatch):
@@ -47,6 +73,24 @@ def test_builtin_tool_provider_returns_explain_and_conclude_as_knowledge_base_on
     assert [tool.name for tool in conclude_tools] == ["knowledge_base"]
 
 
+def test_builtin_tool_provider_can_disable_shell_tools(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    provider = BuiltinToolProvider(enable_shell_tool=False)
+
+    tools = provider.get_tools("agent")
+
+    assert [tool.name for tool in tools] == [
+        "knowledge_base",
+        "time",
+        "read_file",
+        "glob_files",
+        "grep_files",
+        "edit_file",
+        "write_file",
+    ]
+
+
 @pytest.mark.anyio
 async def test_tool_registry_merges_external_agent_tools_without_changing_contract(monkeypatch):
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
@@ -55,7 +99,12 @@ async def test_tool_registry_merges_external_agent_tools_without_changing_contra
 
     tools = await registry.get_tools("agent", external_tools=[_external_tool("mcp.search")])
 
-    assert [tool.name for tool in tools] == ["knowledge_base", "time", "mcp.search"]
+    assert [tool.name for tool in tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "mcp.search",
+    ]
     assert all(isinstance(tool, ToolDefinition) for tool in tools)
 
 
@@ -83,7 +132,12 @@ async def test_tool_registry_reads_cached_mcp_tools_for_agent_only(monkeypatch):
     agent_tools = await registry.get_tools("agent")
     ask_tools = await registry.get_tools("ask")
 
-    assert [tool.name for tool in agent_tools] == ["knowledge_base", "time", "weather_forecast"]
+    assert [tool.name for tool in agent_tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "weather_forecast",
+    ]
     assert [tool.name for tool in ask_tools] == ["knowledge_base", "time"]
 
 
@@ -105,6 +159,48 @@ async def test_tool_registry_awaits_async_mcp_supplier_for_agent_only(monkeypatc
     agent_tools = await registry.get_tools("agent")
     explain_tools = await registry.get_tools("explain")
 
-    assert [tool.name for tool in agent_tools] == ["knowledge_base", "time", "filesystem_read_file"]
+    assert [tool.name for tool in agent_tools] == [
+        "knowledge_base",
+        "time",
+        *FILESYSTEM_TOOL_NAMES,
+        "filesystem_read_file",
+    ]
     assert [tool.name for tool in explain_tools] == ["knowledge_base"]
     assert supplier_calls == ["agent"]
+
+
+@pytest.mark.anyio
+async def test_tool_registry_uses_runtime_filesystem_environment_for_shell(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+
+    class RecordingSandbox:
+        def __init__(self):
+            self.requests: list[SandboxRequest] = []
+
+        async def execute(self, request: SandboxRequest) -> SandboxResult:
+            self.requests.append(request)
+            return SandboxResult(exit_code=0, stdout="ok\n")
+
+    sandbox = RecordingSandbox()
+    provider = BuiltinToolProvider(sandbox_executor=sandbox)
+    registry = ToolRegistry(builtin_provider=provider)
+    runtime_environment = ShellEnvironment(
+        cwd=tmp_path,
+        workspace_roots=(tmp_path,),
+        run_dir=tmp_path / "notebook-work",
+    )
+
+    tools = await registry.get_tools(
+        "agent",
+        filesystem_environment=runtime_environment,
+    )
+    shell_tool = next(tool for tool in tools if tool.name == "shell")
+
+    result = await shell_tool.execute({"command": "echo ok"})
+
+    assert result.error is None
+    assert sandbox.requests[0].run_dir == (tmp_path / "notebook-work").resolve()

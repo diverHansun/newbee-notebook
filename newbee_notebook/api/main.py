@@ -18,6 +18,11 @@ from newbee_notebook.core.common.config_db import (
     is_model_switch_enabled,
     sync_runtime_env_from_db,
 )
+from newbee_notebook.api.dependencies import (
+    start_runtime_docker_session_reaper,
+    stop_runtime_docker_session_reaper,
+    stop_runtime_docker_sessions,
+)
 
 # Import routers
 from newbee_notebook.api.routers import config
@@ -31,13 +36,16 @@ from newbee_notebook.api.routers import (
     settings,
     health,
     chat,
+    chat_images,
     documents,
     admin,
     diagrams,
     generated_images,
+    policy,
     videos,
     bilibili_auth,
     export,
+    skills,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,9 +76,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Orphan detection skipped due to startup error: %s", exc)
+    start_runtime_docker_session_reaper()
     yield
     # Shutdown
     print("Shutting down Newbee Notebook API...")
+    await stop_runtime_docker_session_reaper()
+    await stop_runtime_docker_sessions()
 
 
 def create_app() -> FastAPI:
@@ -106,11 +117,14 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
     app.include_router(settings.router, prefix="/api/v1", tags=["Settings"])
     app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
+    app.include_router(chat_images.router, prefix="/api/v1", tags=["Chat Images"])
     app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
     app.include_router(diagrams.router, prefix="/api/v1", tags=["Diagrams"])
     app.include_router(generated_images.router, prefix="/api/v1", tags=["Generated Images"])
+    app.include_router(policy.router, prefix="/api/v1", tags=["Policy"])
     app.include_router(videos.router, prefix="/api/v1", tags=["Videos"])
     app.include_router(export.router, prefix="/api/v1", tags=["Export"])
+    app.include_router(skills.router, prefix="/api/v1", tags=["Skills"])
     app.include_router(bilibili_auth.router, prefix="/api/v1", tags=["Bilibili Auth"])
     app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
 

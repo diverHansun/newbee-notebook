@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS diagrams (
     notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     diagram_type TEXT NOT NULL,
-    format TEXT NOT NULL CHECK (format IN ('reactflow_json', 'mermaid')),
+    format TEXT NOT NULL,
+    CONSTRAINT ck_diagrams_format
+        CHECK (format IN ('reactflow_json', 'mermaid', 'echarts_option')),
     content_path TEXT NOT NULL,
     document_ids UUID[] NOT NULL DEFAULT '{}',
     node_positions JSONB,

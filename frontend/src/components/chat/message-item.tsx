@@ -1,9 +1,12 @@
 "use client";
 
-import { ConfirmationCard, ConfirmationInlineTag } from "@/components/chat/confirmation-card";
+import { PermissionRequestCard, PermissionStatusTag } from "@/components/chat/permission-request-card";
 import { ImageCardList } from "@/components/chat/image-card-list";
 import { MarkdownViewer } from "@/components/reader/markdown-viewer";
 import { DocumentReferencesCard } from "@/components/chat/sources-card";
+import { getChatImageDataUrl, getChatImageThumbnailUrl } from "@/lib/api/chat-images";
+import type { PermissionResponseChoice } from "@/lib/api/types";
+import { toolLabel } from "@/lib/chat/tool-presentation";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings, type LocalizedString } from "@/lib/i18n/strings";
 import { ChatMessage, ToolStep } from "@/stores/chat-store";
@@ -12,7 +15,15 @@ type MessageItemProps = {
   message: ChatMessage;
   roleTransition?: boolean;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
+  onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
+  /**
+   * Enable inline ECharts rendering for this message. Set to true only by the
+   * chat panel when the immediately preceding user message starts with
+   * `/diagram` (see goals-duty.md Design Goal #5).
+   */
+  enableInlineCharts?: boolean;
+  /** Notebook id required by InlineChartCard for the "save to Studio" action. */
+  notebookId?: string;
 };
 
 type TranslateFn = (text: LocalizedString) => string;
@@ -27,32 +38,18 @@ function thinkingStageLabel(t: TranslateFn, stage?: string | null): string {
 }
 
 function toolDisplayLabel(toolName: string, t: TranslateFn): string {
-  const known: Record<string, LocalizedString> = {
-    knowledge_base: uiStrings.tools.knowledgeBase,
-    image_generate: uiStrings.tools.imageGenerate,
-    tavily_search: uiStrings.tools.webSearch,
-    tavily_crawl: uiStrings.tools.webCrawl,
-    zhipu_web_search: uiStrings.tools.webSearch,
-    zhipu_web_crawl: uiStrings.tools.webCrawl,
-    time: uiStrings.tools.getTime,
-    list_notes: uiStrings.tools.listNotes,
-    read_note: uiStrings.tools.readNote,
-    create_note: uiStrings.tools.createNote,
-    update_note: uiStrings.tools.updateNote,
-    delete_note: uiStrings.tools.deleteNote,
-    list_marks: uiStrings.tools.listMarks,
-    associate_note_document: uiStrings.tools.associateDoc,
-    disassociate_note_document: uiStrings.tools.disassociateDoc,
-    list_diagrams: uiStrings.tools.listDiagrams,
-    read_diagram: uiStrings.tools.readDiagram,
-    confirm_diagram_type: uiStrings.tools.confirmDiagramType,
-    create_diagram: uiStrings.tools.createDiagram,
-    update_diagram: uiStrings.tools.updateDiagram,
-    delete_diagram: uiStrings.tools.deleteDiagram,
-    update_diagram_positions: uiStrings.tools.updateDiagramPositions,
-  };
-  if (known[toolName]) return t(known[toolName]);
-  return t(uiStrings.tools.generic);
+  return t(toolLabel(toolName));
+}
+
+function toolStepDisplayLabel(step: ToolStep, t: TranslateFn): string {
+  if (
+    step.toolName === "bash" &&
+    step.status === "warning" &&
+    step.errorCode === "nonzero_exit"
+  ) {
+    return `${t(uiStrings.tools.shellExited)} ${step.exitCode ?? "?"}`;
+  }
+  return `${toolDisplayLabel(step.toolName, t)}${step.status === "running" ? "..." : ""}`;
 }
 
 function messageStatusLabel(t: TranslateFn, status?: ChatMessage["status"]): string {
@@ -118,10 +115,35 @@ function ToolStepsIndicator({
       <div className={`tool-step tool-step--${latestStep.status}`}>
         <span className="tool-step-icon" aria-hidden="true" />
         <span className="tool-step-label">
-          {toolDisplayLabel(latestStep.toolName, t)}
-          {latestStep.status === "running" ? "..." : ""}
+          {toolStepDisplayLabel(latestStep, t)}
         </span>
       </div>
+    </div>
+  );
+}
+
+function UploadedImageList({ imageIds }: { imageIds: string[] }) {
+  const { t } = useLang();
+  if (imageIds.length === 0) return null;
+
+  return (
+    <div className="uploaded-message-image-list" data-testid="uploaded-message-image-list">
+      {imageIds.map((imageId) => (
+        <a
+          className="uploaded-message-image-link"
+          href={getChatImageDataUrl(imageId)}
+          target="_blank"
+          rel="noreferrer"
+          key={imageId}
+        >
+          <img
+            className="uploaded-message-image-thumb"
+            src={getChatImageThumbnailUrl(imageId)}
+            alt={t(uiStrings.chat.uploadedImageThumbnail)}
+            loading="lazy"
+          />
+        </a>
+      ))}
     </div>
   );
 }
@@ -130,10 +152,13 @@ export function MessageItem({
   message,
   roleTransition,
   onOpenDocument: _onOpenDocument,
-  onResolveConfirmation,
+  onResolvePermissionRequest,
+  enableInlineCharts = false,
+  notebookId,
 }: MessageItemProps) {
   const { t } = useLang();
   const isUser = message.role === "user";
+  const uploadedImageIds = message.imageIds || [];
   const sanitizedAssistantContent = !isUser
     ? sanitizeAssistantContent(message.content, Boolean(message.images && message.images.length > 0))
     : message.content;
@@ -152,10 +177,10 @@ export function MessageItem({
   const showExitingIntermediateBlock =
     !isUser &&
     message.status === "streaming" &&
-    !hasFinalPhaseStarted &&
     !!message.exitingIntermediateContent;
   const hasToolSteps =
     canShowProgressIndicators &&
+    !message.pendingPermissionRequest &&
     message.toolSteps &&
     message.toolSteps.length > 0;
   const isSynthesizing =
@@ -163,7 +188,7 @@ export function MessageItem({
     message.thinkingStage === "synthesizing";
   const showToolSteps = hasToolSteps && !isSynthesizing;
   const showThinkingIndicator =
-    canShowProgressIndicators && !showToolSteps;
+    canShowProgressIndicators && !showToolSteps && !message.pendingPermissionRequest;
   const hasRunningImageTool =
     !isUser &&
     message.status === "streaming" &&
@@ -218,6 +243,7 @@ export function MessageItem({
               color: "hsl(var(--user-bubble-fg))",
             }}
           >
+            <UploadedImageList imageIds={uploadedImageIds} />
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
               {message.content}
             </p>
@@ -245,7 +271,12 @@ export function MessageItem({
 
             {showFinalContent ? (
               <div className="assistant-message-body" data-testid="assistant-message-body">
-                <MarkdownViewer content={sanitizedAssistantContent} />
+                <UploadedImageList imageIds={uploadedImageIds} />
+                <MarkdownViewer
+                  content={sanitizedAssistantContent}
+                  enableInlineCharts={enableInlineCharts}
+                  inlineChartsNotebookId={notebookId}
+                />
               </div>
             ) : null}
 
@@ -272,14 +303,15 @@ export function MessageItem({
             <DocumentReferencesCard sources={message.sources} />
           </div>
         )}
-        {!isUser && message.pendingConfirmation ? (
-          message.pendingConfirmation.status === "collapsed" ? (
-            <ConfirmationInlineTag confirmation={message.pendingConfirmation} />
+        {!isUser && message.pendingPermissionRequest ? (
+          message.pendingPermissionRequest.status === "collapsed" ? (
+            <PermissionStatusTag request={message.pendingPermissionRequest} />
           ) : (
-            <ConfirmationCard
-              confirmation={message.pendingConfirmation}
-              onConfirm={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, true)}
-              onReject={() => onResolveConfirmation?.(message.pendingConfirmation!.requestId, false)}
+            <PermissionRequestCard
+              request={message.pendingPermissionRequest}
+              onResolve={(response) =>
+                onResolvePermissionRequest?.(message.pendingPermissionRequest!.requestId, response)
+              }
             />
           )
         ) : null}

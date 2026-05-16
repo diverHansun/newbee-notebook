@@ -69,6 +69,7 @@ function buildModelsConfig(overrides?: {
     source: string;
     local_enabled: boolean;
     api_key_set: boolean | null;
+    title_aided_enabled: boolean;
   }>;
   asr?: Partial<{
     provider: string;
@@ -104,6 +105,7 @@ function buildModelsConfig(overrides?: {
       source: "db",
       local_enabled: true,
       api_key_set: true,
+      title_aided_enabled: false,
       ...overrides?.mineru,
     },
     asr: {
@@ -432,6 +434,7 @@ describe("ModelConfigPanel", () => {
       source: "db",
       local_enabled: true,
       api_key_set: null,
+      title_aided_enabled: false,
     });
 
     renderPanel(<ModelConfigPanel />);
@@ -446,5 +449,63 @@ describe("ModelConfigPanel", () => {
       expect(apiMocks.updateMinerUConfig).toHaveBeenCalled();
     });
     expect(apiMocks.updateMinerUConfig.mock.calls[0][0]).toEqual({ mode: "local" });
+  });
+
+  it("updates the local mineru title aided switch without sending mode", async () => {
+    const user = userEvent.setup();
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        mineru: {
+          mode: "local",
+          api_key_set: null,
+          title_aided_enabled: false,
+        },
+      })
+    );
+    apiMocks.updateMinerUConfig.mockResolvedValue({
+      mode: "local",
+      source: "db",
+      local_enabled: true,
+      api_key_set: null,
+      title_aided_enabled: true,
+    });
+
+    renderPanel(<ModelConfigPanel />);
+
+    const mineruHeading = await screen.findByText("MinerU Configuration");
+    const mineruCard = mineruHeading.closest(".control-panel-card");
+    expect(mineruCard).not.toBeNull();
+
+    const titleAidedSwitch = within(mineruCard as HTMLElement).getByRole("switch", {
+      name: "Document title assisted recognition",
+    });
+    expect(titleAidedSwitch).toHaveAttribute("aria-checked", "false");
+
+    await user.click(titleAidedSwitch);
+
+    expect(titleAidedSwitch).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => {
+      expect(apiMocks.updateMinerUConfig).toHaveBeenCalled();
+    });
+    expect(apiMocks.updateMinerUConfig.mock.calls[0][0]).toEqual({ title_aided_enabled: true });
+  });
+
+  it("shows a llm key hint when local title aided is enabled without a chat llm key", async () => {
+    apiMocks.getModelsConfig.mockResolvedValue(
+      buildModelsConfig({
+        llm: {
+          api_key_set: false,
+        },
+        mineru: {
+          mode: "local",
+          api_key_set: null,
+          title_aided_enabled: true,
+        },
+      })
+    );
+
+    renderPanel(<ModelConfigPanel />);
+
+    expect(await screen.findByText("A chat LLM API key is required for this to take effect.")).toBeInTheDocument();
   });
 });

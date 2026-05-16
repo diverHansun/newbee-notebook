@@ -1,11 +1,14 @@
 ﻿from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from newbee_notebook.api.dependencies import get_db_session
 from newbee_notebook.api.main import create_app
 from newbee_notebook.api.routers import config as config_router
+
+pytestmark = pytest.mark.contract
 
 
 def _build_client(monkeypatch):
@@ -90,10 +93,13 @@ def _build_client(monkeypatch):
         mode = store.get("mineru.mode", "cloud")
         if mode == "local" and not local_enabled:
             mode = "cloud"
+        has_mineru_override = any(key.startswith("mineru.") for key in store)
         return {
             "mode": mode,
-            "source": "db" if "mineru.mode" in store else "default",
+            "source": "db" if has_mineru_override else "default",
             "local_enabled": local_enabled,
+            "title_aided_enabled": store.get("mineru.title_aided_enabled", "false").lower()
+            in {"1", "true", "yes", "on"},
         }
 
     async def _db_override():
@@ -161,6 +167,7 @@ def test_get_models_returns_effective_config(monkeypatch):
     assert payload["mineru"]["mode"] == "cloud"
     assert payload["mineru"]["local_enabled"] is True
     assert payload["mineru"]["api_key_set"] is True
+    assert payload["mineru"]["title_aided_enabled"] is False
     assert payload["asr"]["provider"] == "zhipu"
     assert payload["asr"]["api_key_set"] is True
 
@@ -213,14 +220,16 @@ def test_put_llm_updates_store_and_resets_singleton(monkeypatch):
     llm_reset.assert_called_once()
 
 
-def test_get_available_models_exposes_glm_5_preset(monkeypatch):
+def test_get_available_models_exposes_glm_5v_turbo_preset(monkeypatch):
     client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
 
     response = client.get("/api/v1/config/models/available")
 
     assert response.status_code == 200
     presets = response.json()["llm"]["presets"]
-    assert {preset["name"] for preset in presets} >= {"qwen3.5-plus", "glm-5"}
+    preset_names = {preset["name"] for preset in presets}
+    assert preset_names >= {"qwen3.5-plus", "glm-5v-turbo"}
+    assert "glm-5" not in preset_names
     assert response.json()["embedding"]["api_providers"] == ["qwen", "zhipu"]
     assert {
         preset["name"]
@@ -393,6 +402,34 @@ def test_put_mineru_updates_store(monkeypatch):
     assert response.status_code == 200
     assert store["mineru.mode"] == "local"
     assert response.json()["mode"] == "local"
+    assert response.json()["title_aided_enabled"] is False
+
+
+def test_put_mineru_updates_title_aided_without_llm_details(monkeypatch):
+    client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/mineru",
+        json={"title_aided_enabled": True},
+    )
+
+    assert response.status_code == 200
+    assert store["mineru.title_aided_enabled"] == "true"
+    assert "llm.provider" not in store
+    assert "llm.model" not in store
+    assert response.json()["mode"] == "cloud"
+    assert response.json()["title_aided_enabled"] is True
+
+
+def test_put_mineru_rejects_empty_payload(monkeypatch):
+    client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
+
+    response = client.put(
+        "/api/v1/config/mineru",
+        json={},
+    )
+
+    assert response.status_code == 400
 
 
 def test_put_mineru_rejects_local_when_disabled(monkeypatch):
@@ -410,11 +447,14 @@ def test_put_mineru_rejects_local_when_disabled(monkeypatch):
 def test_reset_mineru_clears_prefix(monkeypatch):
     client, store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
     store["mineru.mode"] = "local"
+    store["mineru.title_aided_enabled"] = "true"
 
     response = client.post("/api/v1/config/mineru/reset")
 
     assert response.status_code == 200
     assert "mineru.mode" not in store
+    assert "mineru.title_aided_enabled" not in store
+    assert response.json()["defaults"]["title_aided_enabled"] is False
 
 
 def test_reset_asr_clears_prefix(monkeypatch):

@@ -156,6 +156,53 @@ async def test_export_notebook_builds_manifest_and_zip_for_full_types():
 
 
 @pytest.mark.anyio
+async def test_export_notebook_writes_echarts_diagram_as_json():
+    (
+        service,
+        notebook_service,
+        notebook_document_service,
+        document_service,
+        note_service,
+        mark_service,
+        diagram_service,
+        video_service,
+    ) = _build_service()
+
+    notebook_service.get_or_raise.return_value = Notebook(
+        notebook_id="nb-1",
+        title="Notebook Export",
+        description="export charts",
+    )
+    document_service.get_document_content.return_value = None
+    notebook_document_service.list_documents.return_value = ([], 0)
+    note_service.list_by_notebook.return_value = []
+    mark_service.list_by_notebook.return_value = []
+    video_service.list_by_notebook.return_value = []
+    diagram_service.list_diagrams.return_value = [
+        Diagram(
+            diagram_id="diagram-echarts",
+            notebook_id="nb-1",
+            title="Sales Chart",
+            diagram_type="echarts",
+            format="echarts_option",
+            document_ids=[],
+        )
+    ]
+    diagram_service.get_diagram_content.return_value = '{"series":[{"type":"bar","data":[1]}]}'
+
+    buffer, _filename = await service.export_notebook("nb-1", {"diagrams"})
+
+    with zipfile.ZipFile(buffer, "r") as zipped:
+        names = set(zipped.namelist())
+        assert "diagrams/Sales Chart_diagram-echarts.json" in names
+        assert "diagrams/Sales Chart_diagram-echarts.mmd" not in names
+
+        manifest = json.loads(zipped.read("manifest.json").decode("utf-8"))
+        assert manifest["diagrams"][0]["format"] == "echarts_option"
+        assert manifest["diagrams"][0]["file"].endswith(".json")
+
+
+@pytest.mark.anyio
 async def test_export_notebook_skips_failed_entries_and_writes_error_report():
     (
         service,

@@ -2,34 +2,50 @@
 
 import { create } from "zustand";
 
-import { ChatImage, MessageMode, MessageRole } from "@/lib/api/types";
+import {
+  ChatImage,
+  MessageMode,
+  MessageRole,
+  PermissionResponseChoice,
+} from "@/lib/api/types";
 import { NormalizedSource } from "@/lib/utils/sources";
 
-export type ConfirmationActionType = "create" | "update" | "delete" | "confirm";
-export type ConfirmationTargetType = "note" | "diagram" | "document" | "video";
-export type PendingConfirmationStatus =
+export type PermissionRequestActionType = "create" | "update" | "delete" | "confirm";
+export type PermissionRequestTargetType = "note" | "diagram" | "document" | "video";
+export type PermissionRequestStatus =
   | "pending"
+  | "resolving"
   | "confirmed"
   | "rejected"
   | "timeout"
+  | "error"
   | "collapsed";
 
-export type PendingConfirmation = {
+export type PendingPermissionRequest = {
   requestId: string;
   toolName: string;
-  actionType: ConfirmationActionType;
-  targetType: ConfirmationTargetType;
+  actionType: PermissionRequestActionType | string;
+  targetType: PermissionRequestTargetType | string;
   argsSummary: Record<string, unknown>;
   description: string;
-  status: PendingConfirmationStatus;
+  status: PermissionRequestStatus;
   expiresAt: number;
+  capabilitySignature?: string;
+  riskLevel?: string;
+  skillName?: string | null;
+  contentHash?: string;
+  responseOptions?: PermissionResponseChoice[];
+  errorMessage?: string;
   resolvedFrom?: "confirmed" | "rejected" | "timeout";
 };
 
 export type ToolStep = {
   id: string;
   toolName: string;
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "warning" | "error";
+  errorCode?: string | null;
+  exitCode?: number | null;
+  contentPreview?: string;
 };
 
 export type ChatMessage = {
@@ -46,10 +62,17 @@ export type ChatMessage = {
   sources?: NormalizedSource[];
   sourcesType?: "document_retrieval" | "tool_results" | "none";
   images?: ChatImage[];
+  imageIds?: string[];
   status?: "streaming" | "done" | "cancelled" | "error";
   createdAt: string;
-  pendingConfirmation?: PendingConfirmation;
+  pendingPermissionRequest?: PendingPermissionRequest;
   toolSteps?: ToolStep[];
+};
+
+export type ExplainCardError = {
+  code: string;
+  message: string;
+  retryable: boolean;
 };
 
 export type ExplainCardState = {
@@ -58,7 +81,16 @@ export type ExplainCardState = {
   selectedText: string;
   content: string;
   isStreaming: boolean;
+  error: ExplainCardError | null;
+  lastInteractionKey: string;
 };
+
+export function buildExplainInteractionKey(
+  mode: "explain" | "conclude",
+  selectedText: string
+): string {
+  return `${mode}::${selectedText}`;
+}
 
 type ChatState = {
   currentSessionId: string | null;
@@ -75,7 +107,7 @@ type ChatState = {
   updateThinkingStage: (id: string, stage: string | null) => void;
   appendMessageContent: (id: string, delta: string) => void;
   addToolStep: (id: string, step: ToolStep) => void;
-  updateToolStep: (id: string, toolCallId: string, status: ToolStep["status"]) => void;
+  updateToolStep: (id: string, toolCallId: string, updates: Partial<ToolStep>) => void;
   setStreaming: (isStreaming: boolean, messageId?: number | null) => void;
   setMode: (mode: "agent" | "ask") => void;
   clearMessages: () => void;
@@ -83,6 +115,7 @@ type ChatState = {
     state: ExplainCardState | null | ((prev: ExplainCardState | null) => ExplainCardState | null)
   ) => void;
   appendExplainContent: (delta: string) => void;
+  clearExplainError: () => void;
 };
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -123,14 +156,14 @@ export const useChatStore = create<ChatState>((set) => ({
           : msg
       ),
     })),
-  updateToolStep: (id, toolCallId, status) =>
+  updateToolStep: (id, toolCallId, updates) =>
     set((state) => ({
       messages: state.messages.map((msg) =>
         msg.id === id
           ? {
               ...msg,
               toolSteps: (msg.toolSteps || []).map((s) =>
-                s.id === toolCallId ? { ...s, status } : s
+                s.id === toolCallId ? { ...s, ...updates } : s
               ),
             }
           : msg
@@ -155,6 +188,13 @@ export const useChatStore = create<ChatState>((set) => ({
           ...state.explainCard,
           content: `${state.explainCard.content}${delta}`,
         },
+      };
+    }),
+  clearExplainError: () =>
+    set((state) => {
+      if (!state.explainCard) return {};
+      return {
+        explainCard: { ...state.explainCard, error: null },
       };
     }),
 }));

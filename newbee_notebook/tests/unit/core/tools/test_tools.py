@@ -4,7 +4,12 @@ import pytest
 from unittest.mock import AsyncMock
 
 import newbee_notebook.core.tools as tools_module
+from newbee_notebook.core.policy import RiskLevel, ToolClass
 from newbee_notebook.core.tools import BuiltinToolProvider, ToolRegistry
+from newbee_notebook.core.tools.image_generation import (
+    ImageToolContext,
+    build_image_generation_tool,
+)
 from newbee_notebook.core.rag.retrieval.es_keyword import es_search
 
 
@@ -109,6 +114,31 @@ class TestRuntimeToolRegistry:
         tools = await registry.get_tools("ask")
 
         assert [tool.name for tool in tools] == ["knowledge_base", "time"]
+
+
+class _FakeStorage:
+    async def save_file(self, **kwargs):
+        return None
+
+
+async def _save_image_record(**kwargs):
+    return None
+
+
+def test_image_generation_tool_declares_write_risk_metadata():
+    tool = build_image_generation_tool(
+        ImageToolContext(
+            session_id="s1",
+            notebook_id="nb1",
+            provider="qwen",
+            api_key="key",
+            storage=_FakeStorage(),
+            save_record=_save_image_record,
+        )
+    )
+
+    assert tool.tool_class == ToolClass.WRITE
+    assert tool.risk_level == RiskLevel.MODERATE
 
 
 

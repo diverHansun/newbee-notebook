@@ -5,7 +5,7 @@ from __future__ import annotations
 from newbee_notebook.application.services.mark_service import MarkService
 from newbee_notebook.application.services.note_service import NoteService
 from newbee_notebook.core.skills import SkillContext, SkillManifest
-from newbee_notebook.core.skills.contracts import ConfirmationMeta
+from newbee_notebook.core.skills.contracts import PermissionMeta
 from newbee_notebook.skills.note.tools import (
     build_associate_note_document_tool,
     build_create_note_tool,
@@ -44,7 +44,7 @@ class NoteSkillProvider:
                 "Do not ask the user to confirm in plain text, and do not tell the user to perform note "
                 "changes manually when the tools can do it.\n"
                 "When the user requests an update, delete, or disassociation, call the corresponding tool "
-                "directly. The runtime confirmation flow will request approval for protected actions.\n"
+                "directly. The runtime permission request flow will request approval for protected actions.\n"
                 "\n"
                 "Document association guidelines:\n"
                 "- When creating a note, analyse the note content to determine which notebook documents "
@@ -69,13 +69,13 @@ class NoteSkillProvider:
                 build_associate_note_document_tool(note_service=self._note_service),
                 build_disassociate_note_document_tool(note_service=self._note_service),
             ],
-            confirmation_required=frozenset(
+            permission_required=frozenset(
                 {"update_note", "delete_note", "disassociate_note_document"}
             ),
-            confirmation_meta={
-                "update_note": ConfirmationMeta(action_type="update", target_type="note"),
-                "delete_note": ConfirmationMeta(action_type="delete", target_type="note"),
-                "disassociate_note_document": ConfirmationMeta(
+            permission_meta={
+                "update_note": PermissionMeta(action_type="update", target_type="note"),
+                "delete_note": PermissionMeta(action_type="delete", target_type="note"),
+                "disassociate_note_document": PermissionMeta(
                     action_type="delete", target_type="document"
                 ),
             },

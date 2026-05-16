@@ -10,7 +10,12 @@ import {
   buildSessionDisplayTitleMap,
   getSessionDisplayTitle,
 } from "@/lib/chat/session-labels";
-import type { Session } from "@/lib/api/types";
+import type {
+  EffectivePolicy,
+  PermissionResponseChoice,
+  PolicyPreferenceUpdate,
+  Session,
+} from "@/lib/api/types";
 import { useLang } from "@/lib/hooks/useLang";
 import { uiStrings } from "@/lib/i18n/strings";
 import type { ChatMessage } from "@/stores/chat-store";
@@ -24,14 +29,22 @@ type ChatPanelProps = {
   messages: ChatMessage[];
   mode: "agent" | "ask";
   isStreaming: boolean;
+  policy?: EffectivePolicy;
   onModeChange: (mode: "agent" | "ask") => void;
-  onSendMessage: (text: string, mode: "agent" | "ask", sourceDocIds?: string[] | null) => void;
+  onPolicyChange?: (update: PolicyPreferenceUpdate) => Promise<void> | void;
+  onEnsureSession: (titleHint?: string) => Promise<string | null>;
+  onSendMessage: (
+    text: string,
+    mode: "agent" | "ask",
+    sourceDocIds?: string[] | null,
+    imageIds?: string[]
+  ) => void;
   onCancel: () => void;
   onSwitchSession: (sessionId: string) => void;
   onCreateSession: (title?: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onOpenDocument: (documentId: string) => void;
-  onResolveConfirmation?: (requestId: string, approved: boolean) => void;
+  onResolvePermissionRequest?: (requestId: string, response: PermissionResponseChoice) => void;
 };
 
 export function ChatPanel({
@@ -41,14 +54,17 @@ export function ChatPanel({
   messages,
   mode,
   isStreaming,
+  policy,
   onModeChange,
+  onPolicyChange,
+  onEnsureSession,
   onSendMessage,
   onCancel,
   onSwitchSession,
   onCreateSession,
   onDeleteSession,
   onOpenDocument,
-  onResolveConfirmation,
+  onResolvePermissionRequest,
 }: ChatPanelProps) {
   const { t, ti } = useLang();
   const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null);
@@ -362,13 +378,20 @@ export function ChatPanel({
           messages.map((message, index) => {
             const prev = messages[index - 1];
             const roleTransition = prev !== undefined && prev.role !== message.role;
+            const enableInlineCharts =
+              message.role === "assistant" &&
+              prev !== undefined &&
+              prev.role === "user" &&
+              prev.content.trim().toLowerCase().startsWith("/diagram");
             return (
               <MessageItem
                 key={message.id}
                 message={message}
                 roleTransition={roleTransition}
                 onOpenDocument={onOpenDocument}
-                onResolveConfirmation={onResolveConfirmation}
+                onResolvePermissionRequest={onResolvePermissionRequest}
+                enableInlineCharts={enableInlineCharts}
+                notebookId={notebookId}
               />
             );
           })
@@ -388,15 +411,21 @@ export function ChatPanel({
       </div>
 
       {/* Chat input */}
-      <div style={{ flexShrink: 0, borderTop: "1px solid hsl(var(--border))" }}>
+      <div style={{ flexShrink: 0 }}>
         <ChatInput
           notebookId={notebookId}
+          currentSessionId={currentSessionId}
           mode={mode}
           isStreaming={isStreaming}
           sourceDocIds={sourceDocIds}
+          policy={policy}
           onSourceDocIdsChange={setSourceDocIds}
+          onPolicyChange={onPolicyChange}
           onModeChange={onModeChange}
-          onSend={(text, selectedMode) => onSendMessage(text, selectedMode, sourceDocIds)}
+          onEnsureSession={onEnsureSession}
+          onSend={(text, selectedMode, imageIds) =>
+            onSendMessage(text, selectedMode, sourceDocIds, imageIds)
+          }
           onCancel={onCancel}
         />
       </div>

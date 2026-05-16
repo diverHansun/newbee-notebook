@@ -36,6 +36,9 @@ from newbee_notebook.infrastructure.document_processing.cloud_batch_service impo
     MinerUCloudBatchService,
 )
 from newbee_notebook.infrastructure.document_processing.converters.base import ConversionResult
+from newbee_notebook.infrastructure.document_processing.mineru_title_aided import (
+    prepare_mineru_title_aided_runtime_from_session,
+)
 from newbee_notebook.infrastructure.document_processing.store import save_markdown_with_storage
 from newbee_notebook.infrastructure.elasticsearch import ElasticsearchConfig
 from newbee_notebook.infrastructure.persistence.database import get_database
@@ -395,7 +398,7 @@ async def _convert_document_async(document_id: str, force: bool = False) -> None
                 )
 
         await ctx.set_stage(ProcessingStage.CONVERTING)
-        await sync_mineru_runtime_env_from_db(ctx.session)
+        await _prepare_mineru_runtime_for_conversion(ctx.session)
         processor = DocumentProcessor()
         async with _materialize_document_source(ctx.document) as source_path:
             result, rel_content_path, content_size = await processor.process_and_save(
@@ -490,7 +493,7 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
 
         if not skip_conversion:
             await ctx.set_stage(ProcessingStage.CONVERTING)
-            await sync_mineru_runtime_env_from_db(ctx.session)
+            await _prepare_mineru_runtime_for_conversion(ctx.session)
             processor = DocumentProcessor()
             async with _materialize_document_source(ctx.document) as source_path:
                 result, rel_content_path, content_size = await processor.process_and_save(
@@ -551,6 +554,19 @@ async def _process_document_async(document_id: str, force: bool = False) -> None
     )
 
 
+async def _prepare_mineru_runtime_for_conversion(session) -> dict:
+    """Sync MinerU config and prepare local title-aided runtime before conversion."""
+    mineru_cfg = await sync_mineru_runtime_env_from_db(session)
+    try:
+        await prepare_mineru_title_aided_runtime_from_session(session, mineru_cfg)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "MinerU title aided runtime preparation failed; continuing with base conversion: %s",
+            exc,
+        )
+    return mineru_cfg
+
+
 async def _process_document_cloud_batch_async(document_ids: list[str]) -> None:
     """Run shared MinerU cloud batch conversion, then continue indexing per document."""
     if not document_ids:
@@ -563,7 +579,7 @@ async def _process_document_cloud_batch_async(document_ids: list[str]) -> None:
         if not claimed_documents:
             return
 
-        await sync_mineru_runtime_env_from_db(session)
+        await _prepare_mineru_runtime_for_conversion(session)
         processor = DocumentProcessor()
         cloud_converter = processor.get_mineru_cloud_converter()
 
