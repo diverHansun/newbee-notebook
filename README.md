@@ -23,11 +23,11 @@ Read, search, and interact with your documents through AI agents — self-hosted
 ## 产品预览
 
 <div align="center">
-  <a href="https://github.com/user-attachments/assets/ec24276f-4adf-4986-98fc-8fadb01867f5">
+  <a href="https://github.com/user-attachments/assets/bf1569f5-bdff-4c09-b9d0-f163506a8a85">
     <img src="assets/screenshots/markdown-viewer.png" alt="Newbee Notebook 演示视频" width="720">
   </a>
   <p><em>video</em></p>
-  <p><a href="https://github.com/user-attachments/assets/250fcf42-a863-4a92-8e30-2693cd2da6e3">观看演示视频</a></p>
+  <p><a href="https://github.com/user-attachments/assets/bf1569f5-bdff-4c09-b9d0-f163506a8a85">观看演示视频</a></p>
 </div>
 
 <div align="center">

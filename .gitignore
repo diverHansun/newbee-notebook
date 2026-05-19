@@ -98,6 +98,7 @@ docs/_build/
 
 # Temporary files
 tmp/
+.tmp/
 temp/
 
 # Python profiling
@@ -109,6 +110,7 @@ htmlcov/
 
 #docs
 coding_guide.md
+docs/mineru-2026/
 
 MinerU/
 !docker/mineru/
