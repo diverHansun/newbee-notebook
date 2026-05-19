@@ -1,10 +1,10 @@
 [project]
 name = "newbee-notebook"
-version = "0.1.0"
+version = "0.3.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
-license = "Apache-2.0"
+requires-python = ">=3.11"
+license = "AGPL-3.0"
 dependencies = [
     "av>=17.0.0",
     "asyncpg>=0.31.0",
