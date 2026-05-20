@@ -52,7 +52,8 @@ checkpoints/
 .env.*.local
 configs/mcp.json
 configs/bilibili/
-configs/skills/
+configs/skills/*
+!configs/skills/put_your_skills_here.txt
 
 # API keys and secrets (redundant but explicit)
 *_API_KEY
