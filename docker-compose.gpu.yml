@@ -58,6 +58,10 @@ services:
         condition: service_healthy
 
   # GPU MinerU PDF -> Markdown service.
+  # First build the upstream MinerU GPU base image and tag it as mineru:latest:
+  #   docker build -t mineru:latest -f mineru/docker/china/Dockerfile mineru
+  # or:
+  #   docker build -t mineru:latest -f mineru/docker/global/Dockerfile mineru
   # Use together with the base compose file:
   #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
   mineru-api:
