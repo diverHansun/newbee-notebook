@@ -4,8 +4,6 @@
 
 # 🐝Newbee Notebook
 
-Mac users can choose [API-only deployment](docs/macos-docker.md) or, on Apple Silicon, [native MinerU 4 and Embedding](docs/macos-local-inference.md). The application runs in Docker in both cases.
-
 **AI-Powered Interactive Document Reader**
 
 AI-driven interactive document reader. High-accuracy content parsing & retrieval, Agent notes & diagrams, Bilibili video summarization — self-hosted, your data stays yours.
@@ -141,6 +139,8 @@ MINERU_API_KEY=your_mineru_key
 ### 2. Choose a Startup Mode
 
 Choose the appropriate mode based on your hardware:
+
+macOS users can access models through APIs. Apple Silicon devices can also run document parsing and embedding services locally. See the [Mac configuration guide](quickstart.md#mac-推荐配置) for deployment options and recommended hardware.
 
 > You can use the app without a dedicated GPU — just choose the "Default Docker Mode".
 > "CPU-Only Full Local" specifically means running both MinerU and Embedding on the host CPU, which is different from the default Docker mode.

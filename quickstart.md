@@ -11,6 +11,7 @@ Mac 用户可以直接阅读 [仅 API 部署](docs/macos-docker.md)。需要在 
 ## 目录
 
 - [环境要求](#环境要求)
+- [Mac 推荐配置](#mac-推荐配置)
 - [安装依赖（本地开发）](#安装依赖本地开发)
 - [配置环境变量](#配置环境变量)
 - [启动服务（Docker）](#启动服务docker)
@@ -62,6 +63,31 @@ Mac 用户可以直接阅读 [仅 API 部署](docs/macos-docker.md)。需要在 
 > GPU 模式会为 `mineru-api` 容器分配 32GB 共享内存、为 `celery-worker` 容器分配 16GB 共享内存，请确保系统内存充裕。
 > 默认模式下首次启动会构建 `api` 与 `celery-worker` 镜像，并在构建阶段安装 Python 依赖。CPU 模式会安装 CPU 版 torch；后续重启容器不会再重复 `pip install`。如果你改了 `requirements.txt`，请重新执行 `docker compose up -d --build`。
 > 没有独立显卡并不意味着你必须走“纯 CPU 全本地”。对大多数无 GPU 设备，默认 Docker 模式就是正确选择。
+
+### Mac 推荐配置
+
+macOS 提供两种部署方式，应用和数据库均通过 Docker 运行：
+
+- **API 调用**：文档解析、Embedding 和聊天等模型能力使用云端 API，适合首次使用、Intel Mac 或不希望维护本地模型的用户。安装步骤见 [Mac 仅 API 部署](docs/macos-docker.md)。
+- **本地服务部署**：在 Apple Silicon Mac 上运行 MinerU 文档解析和 Qwen3 Embedding，聊天、语音等功能仍使用 API。需要另外准备本机 Python 环境和模型文件，安装步骤见 [Mac 本机推理指南](docs/macos-local-inference.md)。
+
+以下是本项目的配置建议，用于为应用、数据库和日常使用预留资源，不代表经过测试的最低要求：
+
+| 项目 | API 调用 | 本地服务部署 |
+| --- | --- | --- |
+| 处理器 | Apple Silicon 或 Intel | Apple Silicon（M 系列） |
+| 系统内存 | 建议 16 GB 或以上 | 建议 32 GB 统一内存或以上 |
+| Docker 内存 | 建议分配 8 GB | 建议分配 8 GB，其余内存留给 macOS 和本机模型服务 |
+| 可用磁盘空间 | 建议预留 30 GB | 建议预留 50 GB |
+| 软件环境 | Docker Desktop，Docker Compose 2.24.4 或以上 | 同左，另需 uv、Python 3.12（MinerU）和 Python 3.11（Embedding） |
+
+磁盘建议包含镜像、依赖和缓存的余量；文档与索引会继续占用空间，应按实际资料量增加。当前 MinerU 与 Qwen3 权重合计约 3.1 GiB，仍需另计 Python 环境和 Docker 镜像。
+
+MinerU 官方建议 Apple Silicon 至少配备 16 GB 统一内存并原生安装。本项目还同时运行数据库、Docker 应用和 Embedding 服务，因此给出 32 GB 的部署建议。目前实际验证设备为 M5 Pro / 48 GB，尚未验证 16 GB、32 GB 或 Intel Mac 的完整运行效果。参见 [MinerU 硬件说明](https://opendatalab.github.io/MinerU/usage/tiers/)。
+
+macOS 版本应在所安装 Docker Desktop 的[支持范围](https://docs.docker.com/desktop/setup/install/mac-install/)内。API 调用需要对应服务的密钥和网络连接；本地部署在首次安装时需要联网下载模型，聊天等 API 功能仍需要网络。
+
+版本说明：已发布的 `v0.3.1` 提供 Mac API 部署。本地 MinerU 4 和 Embedding 服务目前位于 `main` 分支，待 Windows 验收通过后再发布正式版本。
 
 ---
 

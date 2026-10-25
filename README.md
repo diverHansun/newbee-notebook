@@ -4,8 +4,6 @@
 
 # 🐝Newbee Notebook
 
-Mac 可选择 [仅 API 部署](docs/macos-docker.md)；Apple Silicon 也支持 [本机 MinerU 4 与 Embedding](docs/macos-local-inference.md)，应用仍运行在 Docker 中。
-
 **新蜂阅读器**
 
 AI 驱动的交互式文档阅读器。高精度内容解析与检索、Agent 笔记与图表、Bilibili 视频总结——自托管，数据完全由你掌控。
@@ -141,6 +139,8 @@ MINERU_API_KEY=your_mineru_key
 ### 2. 选择启动模式
 
 根据你的硬件选择合适的模式：
+
+macOS 用户可通过 API 调用模型；Apple Silicon 设备还可在本地部署文档解析和 Embedding 服务。部署方式与推荐配置请参阅 [Mac 配置指南](quickstart.md#mac-推荐配置)。
 
 > 没有独立显卡也可以直接使用，选择“默认 Docker 模式”即可。
 > 这里的“纯 CPU 全本地”特指 MinerU 和 Embedding 都在本机 CPU 上运行，不等于默认 Docker 模式。
