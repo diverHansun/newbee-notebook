@@ -102,6 +102,9 @@ docs/_build/
 tmp/
 .tmp/
 temp/
+# MinerU server defaults; the Mac launcher uses .tmp/mineru4-server instead.
+/blobs/
+/.mineru-service.lock
 
 # Python profiling
 *.prof

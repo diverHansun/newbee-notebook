@@ -20,7 +20,7 @@ def _load_compose(filename: str) -> dict:
     return yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
 
-def _load_merged_compose(override: str, *, profile: str | None = None) -> dict:
+def _load_merged_compose(override: str, *, profile: str | None = None, extra: str | None = None) -> dict:
     try:
         result = subprocess.run(
             [
@@ -30,6 +30,7 @@ def _load_merged_compose(override: str, *, profile: str | None = None) -> dict:
                 "docker-compose.yml",
                 "-f",
                 override,
+                *(["-f", extra] if extra else []),
                 *(["--profile", profile] if profile else []),
                 "config",
                 "--format",
@@ -106,6 +107,19 @@ def test_mac_monitor_has_isolated_image_and_internal_broker() -> None:
     assert services["flower"]["image"] != services["celery-worker"]["image"]
     assert services["flower"]["environment"]["CELERY_BROKER_URL"] == "redis://redis:6379/0"
     assert services["flower"]["build"]["args"]["INSTALL_FLOWER"] == "true"
+
+
+def test_mac_native_overlay_connects_both_callers_without_container_models() -> None:
+    services = _load_merged_compose("docker-compose.mac.yml", extra="docker-compose.mac-local.yml")["services"]
+    assert "mineru-api" not in services
+    for name in ("api", "celery-worker"):
+        env = services[name]["environment"]
+        assert env["NEWBEE_API_ONLY"] == "false"
+        assert env["FEATURE_MODEL_SWITCH"] == "true"
+        assert env["MINERU_LOCAL_API_VERSION"] == "v1"
+        assert env["MINERU_LOCAL_API_URL"] == "http://host.docker.internal:8001"
+        assert env["QWEN3_EMBEDDING_LOCAL_API_URL"] == "http://host.docker.internal:8002/v1"
+    assert any(v["target"] == "/app/models/Qwen3-Embedding-0.6B" and v["read_only"] for v in services["api"]["volumes"])
 
 
 def test_default_compose_fixes_non_gpu_runtime_defaults() -> None:

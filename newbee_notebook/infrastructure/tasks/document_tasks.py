@@ -17,6 +17,7 @@ from llama_index.readers.file import MarkdownReader
 
 from newbee_notebook.core.common.config import (
     get_documents_directory,
+    embedding_storage_names_for_cleanup,
     get_pgvector_config_for_provider,
     get_storage_config,
 )
@@ -1117,23 +1118,32 @@ async def _delete_document_nodes_async(document_id: str):
             table_name=pgvector_provider_cfg["table_name"],
             embedding_dimension=pgvector_provider_cfg["embedding_dimension"],
         )
-        try:
-            pg_index = await load_pgvector_index(embed_model, pg_config)
+        pg_configs = {pg_config.table_name: pg_config}
+        if os.getenv("QWEN3_EMBEDDING_LOCAL_API_URL", "").strip():
+            # Local Qwen nodes must also be removed after switching to another API provider.
+            qwen_cfg = get_pgvector_config_for_provider("qwen3-embedding")
+            for table_name in embedding_storage_names_for_cleanup(qwen_cfg["table_name"]):
+                pg_configs[table_name] = pg_config.model_copy(update={
+                    "table_name": table_name, "embedding_dimension": qwen_cfg["embedding_dimension"],
+                })
+        for delete_config in pg_configs.values():
             try:
-                filters = MetadataFilters(
-                    filters=[
-                        MetadataFilter(
-                            key="source_document_id",
-                            value=document_id,
-                            operator=FilterOperator.EQ,
-                        )
-                    ]
-                )
-                pg_index.vector_store.delete_nodes(filters=filters)
-            finally:
-                await _close_vector_index(pg_index)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Delete pgvector nodes failed for %s: %s", document_id, exc)
+                pg_index = await load_pgvector_index(embed_model, delete_config)
+                try:
+                    filters = MetadataFilters(
+                        filters=[
+                            MetadataFilter(
+                                key="source_document_id",
+                                value=document_id,
+                                operator=FilterOperator.EQ,
+                            )
+                        ]
+                    )
+                    pg_index.vector_store.delete_nodes(filters=filters)
+                finally:
+                    await _close_vector_index(pg_index)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Delete pgvector nodes failed for %s: %s", document_id, exc)
 
         es_cfg = storage_cfg.get("elasticsearch", {})
         es_config = ElasticsearchConfig(
@@ -1142,22 +1152,24 @@ async def _delete_document_nodes_async(document_id: str):
             api_key=es_cfg.get("api_key", None),
             cloud_id=es_cfg.get("cloud_id", None),
         )
-        try:
-            es_index = await load_es_index(embed_model, es_config)
+        for index_name in embedding_storage_names_for_cleanup(es_config.index_name):
             try:
-                filters = MetadataFilters(
-                    filters=[
-                        MetadataFilter(
-                            key="source_document_id",
-                            value=document_id,
-                            operator=FilterOperator.EQ,
-                        )
-                    ]
-                )
-                es_index.vector_store.delete_nodes(filters=filters)
-            finally:
-                await _close_vector_index(es_index)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
+                es_index = await load_es_index(embed_model, es_config.model_copy(update={"index_name": index_name}))
+                try:
+                    filters = MetadataFilters(
+                        filters=[
+                            MetadataFilter(
+                                key="source_document_id",
+                                value=document_id,
+                                operator=FilterOperator.EQ,
+                            )
+                        ]
+                    )
+                    es_index.vector_store.delete_nodes(filters=filters)
+                finally:
+                    await _close_vector_index(es_index)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Delete ES nodes failed for %s: %s", document_id, exc)
+
     except Exception as exc:  # noqa: BLE001
         logger.warning("delete_document_nodes_task failed for %s: %s", document_id, exc)

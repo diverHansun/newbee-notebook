@@ -11,6 +11,7 @@ import yaml
 
 # Base paths
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs"
+LOCAL_EMBEDDING_STORAGE_SUFFIX = "_qwen3_local"
 
 # Load environment variables from .env file
 load_dotenv()
@@ -208,6 +209,14 @@ def _resolve_env_var(value: str) -> str:
     return resolved
 
 
+def embedding_storage_names_for_cleanup(name: str) -> tuple[str, ...]:
+    """The native service keeps local vectors separate from existing API vectors."""
+    if not os.getenv("QWEN3_EMBEDDING_LOCAL_API_URL", "").strip():
+        return (name,)
+    base = name.removesuffix(LOCAL_EMBEDDING_STORAGE_SUFFIX)
+    return (base, base + LOCAL_EMBEDDING_STORAGE_SUFFIX)
+
+
 def get_storage_config():
     """Get storage configuration from YAML file or defaults.
 
@@ -253,6 +262,18 @@ def get_storage_config():
             es_config["api_key"] = os.getenv("ELASTICSEARCH_API_KEY", api_key)
             es_config["cloud_id"] = os.getenv("ELASTICSEARCH_CLOUD_ID", cloud_id)
 
+    if (
+        os.getenv("QWEN3_EMBEDDING_LOCAL_API_URL", "").strip()
+        and os.getenv("QWEN3_EMBEDDING_MODE", "api") == "local"
+        and not is_api_only_runtime()
+    ):
+        # Same dimensionality does not make local Qwen and cloud embeddings compatible.
+        qwen = config.get("pgvector", {}).get("tables", {}).get("qwen3-embedding", {})
+        if qwen:
+            qwen["table_name"] = qwen.get("table_name", "documents_qwen3_embedding") + LOCAL_EMBEDDING_STORAGE_SUFFIX
+        es = config.get("elasticsearch", {})
+        if es:
+            es["index_name"] = es.get("index_name", "newbee_notebook_docs") + LOCAL_EMBEDDING_STORAGE_SUFFIX
     return config
 
 

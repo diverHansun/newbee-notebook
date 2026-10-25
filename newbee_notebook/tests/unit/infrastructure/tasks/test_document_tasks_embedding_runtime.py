@@ -32,6 +32,7 @@ def test_index_pg_nodes_uses_db_synced_embedding_provider(monkeypatch):
 
 
 def test_delete_document_nodes_uses_db_synced_embedding_provider(monkeypatch):
+    monkeypatch.delenv("QWEN3_EMBEDDING_LOCAL_API_URL", raising=False)
     sync_mock = AsyncMock(return_value={"provider": "zhipu", "mode": None})
     load_pg_mock = AsyncMock(return_value=MagicMock())
     load_es_mock = AsyncMock(return_value=MagicMock())

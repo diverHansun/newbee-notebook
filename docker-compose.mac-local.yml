@@ -1,0 +1,20 @@
+# Add after docker-compose.mac.yml. Models run natively on macOS, outside Docker.
+# Start scripts/start_mac_models.sh first; existing saved API preferences are preserved.
+services:
+  api:
+    volumes:
+      # Discovery only; inference stays in the native embedding service.
+      - ./models/Qwen3-Embedding-0.6B:/app/models/Qwen3-Embedding-0.6B:ro
+    environment: &local-models
+      NEWBEE_API_ONLY: "false"
+      FEATURE_MODEL_SWITCH: "true"
+      MINERU_MODE: local
+      MINERU_LOCAL_ENABLED: "true"
+      MINERU_LOCAL_API_URL: http://host.docker.internal:8001
+      MINERU_LOCAL_API_VERSION: v1
+      MINERU_LOCAL_TIER: ${MINERU_LOCAL_TIER:-standard}
+      QWEN3_EMBEDDING_MODE: local
+      QWEN3_EMBEDDING_LOCAL_API_URL: http://host.docker.internal:8002/v1
+      QWEN3_EMBEDDING_BATCH_SIZE: "4"
+  celery-worker:
+    environment: *local-models

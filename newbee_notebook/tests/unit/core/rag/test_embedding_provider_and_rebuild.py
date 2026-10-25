@@ -22,8 +22,33 @@ def test_api_only_blocks_local_embedding_before_loading_weights(monkeypatch):
 
 def test_qwen3_resolve_torch_device_fallback_to_cpu(monkeypatch):
     monkeypatch.setattr(qwen3_embedding.torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(qwen3_embedding.torch.backends.mps, "is_available", lambda: False)
     assert qwen3_embedding._resolve_torch_device("cuda") == "cpu"
     assert qwen3_embedding._resolve_torch_device("auto") == "cpu"
+
+
+def test_qwen3_auto_uses_mps_on_apple_silicon(monkeypatch):
+    monkeypatch.setattr(qwen3_embedding.torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(qwen3_embedding.torch.backends.mps, "is_available", lambda: True)
+    assert qwen3_embedding._resolve_torch_device("auto") == "mps"
+
+
+def test_local_embedding_http_keeps_local_identity_and_cloud_credentials_private(monkeypatch):
+    captured = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
+    monkeypatch.setenv("QWEN3_EMBEDDING_LOCAL_API_URL", "http://host.docker.internal:8002/v1")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "must-not-go-to-local-service")
+    monkeypatch.setattr(qwen3_embedding, "Qwen3APIEmbedding", Client)
+    qwen3_embedding.build_qwen3_embedding(mode="local")
+    assert captured["api_key"] == "local"
+    assert captured["model"] == "Qwen3-Embedding-0.6B"
+    assert captured["model_name"] == "qwen3-embedding-1024d"
+    assert captured["api_base"] == "http://host.docker.internal:8002/v1"
 
 
 def test_qwen3_resolve_torch_device_auto_uses_cuda_when_available(monkeypatch):
@@ -32,6 +57,7 @@ def test_qwen3_resolve_torch_device_auto_uses_cuda_when_available(monkeypatch):
 
 
 def test_build_qwen3_embedding_local_uses_env_overrides(monkeypatch):
+    monkeypatch.delenv("QWEN3_EMBEDDING_LOCAL_API_URL", raising=False)
     captured_kwargs = {}
 
     class DummyLocalEmbedding:
@@ -61,6 +87,7 @@ def test_build_qwen3_embedding_local_uses_env_overrides(monkeypatch):
 
 
 def test_build_qwen3_embedding_local_resolves_main_repo_models_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("QWEN3_EMBEDDING_LOCAL_API_URL", raising=False)
     captured_kwargs = {}
 
     class DummyLocalEmbedding:
@@ -223,7 +250,8 @@ def test_rebuild_pgvector_uses_registry_builder(monkeypatch):
     rebuild_pgvector.load_document_nodes.assert_awaited_once_with(docs[0], chunk_size=512, chunk_overlap=50)
 
 
-def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
+@pytest.mark.parametrize("clear_only", [False, True])
+def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch, clear_only):
     call_args = {}
     docs = [
         Document(
@@ -271,7 +299,11 @@ def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
 
     sync_mock = AsyncMock(return_value={"provider": "qwen3-embedding", "mode": "local"})
     monkeypatch.setattr(rebuild_es, "build_embedding", lambda: DummyEmbed())
-    monkeypatch.setattr(rebuild_es, "get_storage_config", lambda: {"elasticsearch": {}})
+    def storage_after_mode_sync():
+        assert sync_mock.await_count == 1, "Index selection must follow the saved embedding mode"
+        return {"elasticsearch": {}}
+
+    monkeypatch.setattr(rebuild_es, "get_storage_config", storage_after_mode_sync)
     monkeypatch.setattr(rebuild_es, "get_database", AsyncMock(return_value=_DummyDb()))
     monkeypatch.setattr(rebuild_es, "sync_embedding_runtime_env_from_db", sync_mock)
     monkeypatch.setattr(rebuild_es, "ElasticsearchStore", lambda _config: DummyStore())
@@ -291,12 +323,15 @@ def test_rebuild_es_uses_runtime_docs_and_closes_store(monkeypatch):
         lambda *args, **kwargs: DummyIndex(),
     )
 
-    asyncio.run(rebuild_es.rebuild_es_index(clear_only=False))
+    asyncio.run(rebuild_es.rebuild_es_index(clear_only=clear_only))
 
     assert call_args["initialized"] is True
     sync_mock.assert_awaited_once()
     assert call_args["cleared"] is True
     assert call_args["closed"] is True
+    if clear_only:
+        assert "inserted_nodes" not in call_args
+        return
     assert call_args["inserted_nodes"] == [["node-es-1"]]
     rebuild_es.get_rebuildable_documents.assert_awaited_once()
     rebuild_es.load_document_nodes.assert_awaited_once_with(docs[0], chunk_size=512, chunk_overlap=50)

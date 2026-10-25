@@ -61,6 +61,8 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml stop
 
 ## 应用内 Shell / Bash
 
+需要本机模型推理时，见 [Mac 本地 MinerU 4 与 Embedding](macos-local-inference.md)。本文的默认 Compose 仍为全部模型能力走 API。
+
 Mac Compose 为 API 挂载 `/var/run/docker.sock`，API 镜像包含官方 Docker CLI。
 API 是可信的容器调度进程，持有 Docker 控制权限；因此服务继续只监听本机，不能作为无鉴权的公网服务部署。
 沙箱子容器不挂载 socket，不接收 API 密钥，以 UID 1000 执行命令，保留只读根文件系统、资源限制和现有独立网络限制。

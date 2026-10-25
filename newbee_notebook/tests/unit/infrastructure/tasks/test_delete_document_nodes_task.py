@@ -1,11 +1,17 @@
 import asyncio
+import pytest
 from unittest.mock import AsyncMock, MagicMock
 from llama_index.core.vector_stores import FilterOperator
 
 from newbee_notebook.infrastructure.tasks import document_tasks
 
 
-def test_delete_document_nodes_task_deletes_by_stable_source_document_id(monkeypatch):
+@pytest.mark.parametrize("native_service", [False, True])
+def test_delete_document_nodes_task_deletes_by_stable_source_document_id(monkeypatch, native_service):
+    if native_service:
+        monkeypatch.setenv("QWEN3_EMBEDDING_LOCAL_API_URL", "http://localhost:8002/v1")
+    else:
+        monkeypatch.delenv("QWEN3_EMBEDDING_LOCAL_API_URL", raising=False)
     mock_pg_store = MagicMock()
     mock_es_store = MagicMock()
     mock_pg = MagicMock(vector_store=mock_pg_store)
@@ -35,7 +41,7 @@ def test_delete_document_nodes_task_deletes_by_stable_source_document_id(monkeyp
     monkeypatch.setattr(
         document_tasks,
         "get_pgvector_config_for_provider",
-        lambda _provider: {"table_name": "documents_zhipu", "embedding_dimension": 1024},
+        lambda provider: {"table_name": "documents_" + provider.replace("-", "_"), "embedding_dimension": 1024},
     )
 
     asyncio.run(document_tasks._delete_document_nodes_async("doc-123"))
@@ -48,3 +54,11 @@ def test_delete_document_nodes_task_deletes_by_stable_source_document_id(monkeyp
     assert es_filters.filters[0].key == "source_document_id"
     assert es_filters.filters[0].operator == FilterOperator.EQ
     assert es_filters.filters[0].value == "doc-123"
+    tables = {call.args[1].table_name for call in document_tasks.load_pgvector_index.await_args_list}
+    indexes = {call.args[1].index_name for call in document_tasks.load_es_index.await_args_list}
+    if native_service:
+        assert tables == {"documents_zhipu", "documents_qwen3_embedding", "documents_qwen3_embedding_qwen3_local"}
+        assert indexes == {"newbee_notebook_docs", "newbee_notebook_docs_qwen3_local"}
+    else:
+        assert tables == {"documents_zhipu"}
+        assert indexes == {"newbee_notebook_docs"}

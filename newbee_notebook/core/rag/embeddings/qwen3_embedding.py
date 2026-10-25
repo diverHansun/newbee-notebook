@@ -2,11 +2,12 @@
 
 import logging
 import os
+from pathlib import Path
 from typing import List, Any, Optional, Dict
 
-import numpy as np
 import torch
 
+from newbee_notebook.core.local_embeddings import encode_qwen3, load_qwen3_model, resolve_torch_device as _resolve_torch_device
 from newbee_notebook.core.common.config import get_embeddings_config, is_api_only_runtime
 from newbee_notebook.core.common.project_paths import resolve_project_relative_path
 from newbee_notebook.core.rag.embeddings.base import BaseEmbeddingModel
@@ -25,37 +26,6 @@ ENV_QWEN3_DIM = "QWEN3_EMBEDDING_DIM"
 ENV_QWEN3_BATCH_SIZE = "QWEN3_EMBEDDING_BATCH_SIZE"
 ENV_QWEN3_API_MODEL = "QWEN3_EMBEDDING_API_MODEL"
 ENV_QWEN3_API_BASE = "QWEN3_EMBEDDING_API_BASE"
-
-
-def _resolve_torch_device(device: str) -> str:
-    """Resolve requested device with safe fallback.
-
-    Supports:
-    - auto/empty: CUDA if available, otherwise CPU
-    - cuda/cuda:0/...: fall back to CPU when CUDA is unavailable
-    - mps: fall back to CPU when MPS is unavailable
-    """
-    requested = (device or "").strip().lower()
-    if requested in {"", "auto"}:
-        return "cuda" if torch.cuda.is_available() else "cpu"
-
-    if requested.startswith("cuda") and not torch.cuda.is_available():
-        logger.warning(
-            "Qwen3 embedding configured to use '%s', but CUDA is unavailable; falling back to CPU.",
-            device,
-        )
-        return "cpu"
-
-    if requested == "mps":
-        mps_backend = getattr(torch.backends, "mps", None)
-        if mps_backend is None or not mps_backend.is_available():
-            logger.warning(
-                "Qwen3 embedding configured to use '%s', but MPS is unavailable; falling back to CPU.",
-                device,
-            )
-            return "cpu"
-
-    return requested
 
 
 class Qwen3LocalEmbedding(BaseEmbeddingModel):
@@ -79,54 +49,14 @@ class Qwen3LocalEmbedding(BaseEmbeddingModel):
         self._max_length = int(max_length)
         self._embed_batch_size = max(int(embed_batch_size), 1)
 
-        from sentence_transformers import SentenceTransformer
-
-        try:
-            self._model = SentenceTransformer(
-                model_path,
-                device=self._device,
-                trust_remote_code=True,
-                local_files_only=True,
-            )
-        except Exception:
-            # Fallback for model IDs or partially cached paths.
-            self._model = SentenceTransformer(
-                model_path,
-                device=self._device,
-                trust_remote_code=True,
-            )
-        # Cap max sequence length at runtime.
-        self._model.max_seq_length = self._max_length
+        self._model = load_qwen3_model(model_path, self._device, self._max_length)
 
     @property
     def dimensions(self) -> int:
         return self._dim
 
     def _encode(self, texts: List[str]) -> List[List[float]]:
-        embeddings = self._model.encode(
-            texts,
-            batch_size=self._embed_batch_size,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-        )
-
-        if embeddings.ndim == 1:
-            embeddings = embeddings.reshape(1, -1)
-
-        if embeddings.shape[1] < self._dim:
-            raise ValueError(
-                f"Qwen3 embedding output dim {embeddings.shape[1]} is less than configured "
-                f"target dim {self._dim}."
-            )
-
-        if embeddings.shape[1] > self._dim:
-            # For smaller target dimensions, truncate and re-normalize.
-            embeddings = embeddings[:, : self._dim]
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            embeddings = embeddings / np.clip(norms, 1e-10, None)
-
-        return embeddings.tolist()
+        return encode_qwen3(self._model, texts, batch_size=self._embed_batch_size, dim=self._dim)
 
     def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
         return self._encode(texts)
@@ -148,9 +78,10 @@ class Qwen3APIEmbedding(BaseEmbeddingModel):
         api_key: Optional[str] = None,
         api_base: str = DEFAULT_DASHSCOPE_BASE,
         embed_batch_size: int = 32,
+        model_name: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model_name=f"qwen3-api-{model}-{int(dim)}d", **kwargs)
+        super().__init__(model_name=model_name or f"qwen3-api-{model}-{int(dim)}d", **kwargs)
         self._model_name_str = model
         self._dim = int(dim)
         self._embed_batch_size = max(int(embed_batch_size), 1)
@@ -246,6 +177,18 @@ def build_qwen3_embedding(
         os.getenv(ENV_QWEN3_MODEL_PATH, cfg.get("model_path", "models/Qwen3-Embedding-0.6B")),
         source_path=source_path,
     )
+    local_api_url = os.getenv("QWEN3_EMBEDDING_LOCAL_API_URL", "").strip()
+    if local_api_url:
+        if is_api_only_runtime():
+            raise ValueError("NEWBEE_API_ONLY forbids local embeddings; use API mode.")
+        return Qwen3APIEmbedding(
+            model=Path(model_path).name,
+            model_name=f"qwen3-embedding-{dim}d",
+            dim=dim,
+            api_key="local",  # Never forward cloud credentials to the native service.
+            api_base=local_api_url,
+            embed_batch_size=embed_batch_size,
+        )
     return Qwen3LocalEmbedding(
         model_path=model_path,
         dim=dim,

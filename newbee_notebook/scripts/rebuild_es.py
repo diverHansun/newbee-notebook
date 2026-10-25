@@ -36,6 +36,10 @@ async def rebuild_es_index(
     print("Rebuild Elasticsearch Index")
     print("=" * 60)
 
+    # Resolve the saved mode before choosing an index, including --clear-only.
+    db = await get_database()
+    async with db.session() as session:
+        embedding_cfg = await sync_embedding_runtime_env_from_db(session)
     storage_config = get_storage_config()
     es_config = storage_config.get("elasticsearch", {})
     config = ElasticsearchConfig(
@@ -63,9 +67,6 @@ async def rebuild_es_index(
             return
 
         print("\n[2/4] Initializing embedding model...")
-        db = await get_database()
-        async with db.session() as session:
-            embedding_cfg = await sync_embedding_runtime_env_from_db(session)
         print(
             "Embedding runtime config: "
             f"provider={embedding_cfg['provider']} source={embedding_cfg.get('source', 'unknown')}"

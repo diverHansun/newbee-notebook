@@ -31,4 +31,6 @@ data
 models
 tmp
 temp
+blobs
+.mineru-service.lock
 *.log
