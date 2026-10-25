@@ -4,6 +4,8 @@
 
 # 🐝Newbee Notebook
 
+macOS（Apple Silicon / Intel）Docker 部署请参阅 [Mac 仅 API 部署指南](docs/macos-docker.md)：不升级 MinerU，不在本机运行模型。
+
 **新蜂阅读器**
 
 AI 驱动的交互式文档阅读器。高精度内容解析与检索、Agent 笔记与图表、Bilibili 视频总结——自托管，数据完全由你掌控。

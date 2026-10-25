@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from newbee_notebook.core.common.config import get_embeddings_config, get_llm_config
+from newbee_notebook.core.common.config import get_embeddings_config, get_llm_config, is_api_only_runtime
 from newbee_notebook.core.common.project_paths import resolve_project_relative_path
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,8 @@ def _as_bool(value: Any, default: bool) -> bool:
 
 
 def _is_mineru_local_enabled() -> bool:
+    if is_api_only_runtime():
+        return False
     raw = _BOOTSTRAP_ENV.get("MINERU_LOCAL_ENABLED")
     if raw is None:
         raw = os.getenv("MINERU_LOCAL_ENABLED")
@@ -409,6 +411,10 @@ async def get_embedding_config_async(session: AsyncSession) -> dict[str, Any]:
     )
     mode = str(mode).strip().lower()
     if mode not in {"local", "api"}:
+        mode = "api"
+    # Deployment capability wins over preferences migrated from a GPU host.
+    # Keep the saved preference intact for deployments that still support it.
+    if is_api_only_runtime():
         mode = "api"
 
     has_explicit_api_provider = "embedding.api_provider" in db_values

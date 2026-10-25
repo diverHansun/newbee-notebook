@@ -1,5 +1,10 @@
 .git
 .gitignore
+.env
+.env.*
+!.env.example
+configs/mcp.json
+configs/bilibili
 __pycache__
 **/__pycache__
 *.py[cod]

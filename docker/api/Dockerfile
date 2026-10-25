@@ -28,6 +28,15 @@ RUN grep -Ev '^torch([[:space:]]|[<>=!~]|$)' requirements.txt > /tmp/requirement
     python -m pip install --no-cache-dir -r /tmp/requirements.txt && \
     rm -f /tmp/requirements.txt
 
+# Token counting is local text processing, not model inference. Cache its
+# vocabulary at build time so a fresh container never downloads it on chat.
+ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
+RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+
+# Only the optional monitor image needs Flower; keep API/worker dependencies intact.
+ARG INSTALL_FLOWER=false
+RUN if [ "$INSTALL_FLOWER" = "true" ]; then python -m pip install --no-cache-dir "flower==2.0.1"; fi
+
 COPY . .
 
 EXPOSE 8000

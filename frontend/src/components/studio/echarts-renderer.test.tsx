@@ -114,7 +114,9 @@ describe("EChartsRenderer", () => {
     const fileSaver = await import("file-saver");
     const ref = { current: null as null | { exportImage: (n: string) => Promise<void> } };
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["png-bytes"]))));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("png-bytes", {
+      headers: { "Content-Type": "image/png" },
+    })));
 
     render(
       <EChartsRenderer

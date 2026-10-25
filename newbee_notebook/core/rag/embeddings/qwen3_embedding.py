@@ -7,7 +7,7 @@ from typing import List, Any, Optional, Dict
 import numpy as np
 import torch
 
-from newbee_notebook.core.common.config import get_embeddings_config
+from newbee_notebook.core.common.config import get_embeddings_config, is_api_only_runtime
 from newbee_notebook.core.common.project_paths import resolve_project_relative_path
 from newbee_notebook.core.rag.embeddings.base import BaseEmbeddingModel
 from newbee_notebook.core.rag.embeddings.registry import register_embedding
@@ -70,6 +70,8 @@ class Qwen3LocalEmbedding(BaseEmbeddingModel):
         embed_batch_size: int = 32,
         **kwargs: Any,
     ) -> None:
+        if is_api_only_runtime():
+            raise ValueError("NEWBEE_API_ONLY forbids local embeddings; use API mode.")
         super().__init__(model_name=f"qwen3-embedding-{int(dim)}d", **kwargs)
         self._model_path = model_path
         self._dim = int(dim)

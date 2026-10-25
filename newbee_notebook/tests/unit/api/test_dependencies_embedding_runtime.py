@@ -25,7 +25,8 @@ async def test_get_runtime_session_manager_dep_syncs_embedding_runtime(monkeypat
         llm_client=object(),
         tool_registry=object(),
         mcp_manager=object(),
-        confirmation_gateway=object(),
+        permission_request_gateway=object(),
+        permission_gateway=object(),
         session=object(),
     )
 
@@ -40,6 +41,7 @@ async def test_get_chat_service_defers_pgvector_loading(monkeypatch):
     pg_index = object()
     load_pg_index_mock = AsyncMock(return_value=pg_index)
     monkeypatch.setattr(dependencies, "get_pg_index_singleton", load_pg_index_mock)
+    monkeypatch.setattr(dependencies, "get_storage", lambda: object())
 
     service = await dependencies.get_chat_service(
         session_repo=AsyncMock(),
@@ -50,7 +52,7 @@ async def test_get_chat_service_defers_pgvector_loading(monkeypatch):
         message_repo=AsyncMock(),
         session_manager=object(),
         skill_registry=object(),
-        confirmation_gateway=object(),
+        permission_request_gateway=object(),
     )
 
     load_pg_index_mock.assert_not_awaited()

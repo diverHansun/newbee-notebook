@@ -57,7 +57,8 @@ describe("notebooks api client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/notebooks/nb-1/export?types=notes%2Cmarks");
     expect(result.filename).toBe("Notebook A-export-2026-04-15.zip");
-    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.blob.type).toBe("application/zip");
+    expect(await result.blob.text()).toBe("zip-bytes");
   });
 
   it("throws ApiError when notebook export fails", async () => {

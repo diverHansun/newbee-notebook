@@ -11,6 +11,7 @@ from newbee_notebook.api.dependencies import (
     reset_llm_singleton,
 )
 from newbee_notebook.application.services.app_settings_service import AppSettingsService
+from newbee_notebook.core.common.config import is_api_only_runtime
 from newbee_notebook.core.common.config_db import (
     _NOT_APPLICABLE,
     SYSTEM_DEFAULTS,
@@ -242,7 +243,7 @@ async def get_available_models(session=Depends(get_db_session)):
             custom_input=True,
         ),
         embedding=EmbeddingAvailable(
-            modes=["local", "api"],
+            modes=["api"] if is_api_only_runtime() else ["local", "api"],
             api_providers=["qwen", "zhipu"],
             api_models_by_provider={
                 "qwen": [
@@ -252,7 +253,7 @@ async def get_available_models(session=Depends(get_db_session)):
                     PresetModel(name="embedding-3", label="Embedding-3 (Zhipu)")
                 ],
             },
-            local_models=_scan_local_embedding_models(),
+            local_models=[] if is_api_only_runtime() else _scan_local_embedding_models(),
         ),
         mineru=MinerUAvailable(
             modes=mineru_modes,
@@ -337,6 +338,8 @@ async def update_embedding_config(
     mode = (req.mode or current.get("mode") or "api").strip().lower()
     if mode not in {"local", "api"}:
         raise HTTPException(status_code=400, detail="mode must be 'local' or 'api'")
+    if mode == "local" and is_api_only_runtime():
+        raise HTTPException(status_code=400, detail="NEWBEE_API_ONLY forbids local embeddings")
 
     local_models = _scan_local_embedding_models()
     if mode == "local" and not local_models:

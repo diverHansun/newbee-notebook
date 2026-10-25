@@ -16,6 +16,11 @@ CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs"
 load_dotenv()
 
 
+def is_api_only_runtime() -> bool:
+    """Whether this deployment forbids local model inference."""
+    return os.getenv("NEWBEE_API_ONLY", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def load_yaml_config(config_path: str) -> dict:
     """Load configuration from a YAML file.
 

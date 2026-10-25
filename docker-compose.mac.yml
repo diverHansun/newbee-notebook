@@ -1,0 +1,42 @@
+# docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d --build
+# Requires Docker Compose >= 2.24.4 (!override). Native ARM64 / Intel, no models.
+services:
+  minio:
+    image: newbee-notebook/minio:RELEASE.2025-09-07T16-13-09Z
+    build:
+      context: ./docker/minio
+    ports: !override
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+  redis:
+    ports: !override ["127.0.0.1:6379:6379"]
+  postgres:
+    ports: !override ["127.0.0.1:5432:5432"]
+  elasticsearch:
+    ports: !override ["127.0.0.1:9200:9200"]
+  api:
+    environment:
+      NEWBEE_API_ONLY: "true"
+      WORKER_CUDA_EMPTY_CACHE: "false"
+    volumes:
+      - ./data:/app/data
+      - ./configs:/app/configs
+    ports: !override ["127.0.0.1:8000:8000"]
+  celery-worker:
+    environment:
+      NEWBEE_API_ONLY: "true"
+      WORKER_CUDA_EMPTY_CACHE: "false"
+  frontend:
+    ports: !override ["127.0.0.1:3000:3000"]
+  flower:
+    image: newbee-notebook/flower:mac
+    build:
+      args:
+        INSTALL_FLOWER: "true"
+    environment:
+      NEWBEE_API_ONLY: "true"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    ports: !override ["127.0.0.1:${FLOWER_PORT:-5555}:${FLOWER_PORT:-5555}"]
+  kibana:
+    ports: !override ["127.0.0.1:5601:5601"]

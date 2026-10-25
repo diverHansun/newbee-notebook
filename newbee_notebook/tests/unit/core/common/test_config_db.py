@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -36,6 +37,34 @@ class _FakeSettingsService:
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_api_only_overrides_saved_local_embedding_without_rewriting_preference(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    values = {"embedding.mode": "local", "embedding.api_provider": "qwen",
+              "embedding.api_model": "text-embedding-v4"}
+    settings = _FakeSettingsService(values)
+    monkeypatch.setattr(config_db, "_get_app_settings_service", lambda _: settings)
+    monkeypatch.setenv("NEWBEE_API_ONLY", "true")
+    payload = await config_db.get_embedding_config_async(object())
+    assert payload["mode"] == "api"
+    assert payload["model_path"] is None
+    assert values["embedding.mode"] == "local"
+
+
+@pytest.mark.anyio
+async def test_api_only_disables_local_mineru_even_if_enabled(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    monkeypatch.setattr(config_db, "_get_app_settings_service",
+                        lambda _: _FakeSettingsService({"mineru.mode": "local"}))
+    monkeypatch.setenv("MINERU_LOCAL_ENABLED", "true")
+    monkeypatch.setenv("NEWBEE_API_ONLY", "true")
+    payload = await config_db.get_mineru_config_async(object())
+    assert payload["mode"] == "cloud"
+    assert payload["local_enabled"] is False
 
 
 @pytest.mark.anyio
@@ -110,6 +139,7 @@ async def test_get_embedding_config_async_defaults_to_api_mode(monkeypatch):
 
 @pytest.mark.anyio
 async def test_get_embedding_config_async_prefers_bootstrap_env_over_mutated_runtime_env(monkeypatch):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
     from newbee_notebook.core.common import config_db
 
     monkeypatch.setattr(
@@ -136,7 +166,7 @@ async def test_get_embedding_config_async_prefers_bootstrap_env_over_mutated_run
     assert payload["provider"] == "qwen3-embedding"
     assert payload["mode"] == "local"
     assert payload["model"] == "Qwen3-Embedding-0.6B"
-    assert str(payload["model_path"]).endswith("models\\Qwen3-Embedding-0.6B")
+    assert Path(payload["model_path"]).parts[-2:] == ("models", "Qwen3-Embedding-0.6B")
 
 
 @pytest.mark.anyio
@@ -232,6 +262,7 @@ async def test_get_embedding_config_async_repairs_mismatched_standard_model_with
 
 @pytest.mark.anyio
 async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monkeypatch):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
     from newbee_notebook.core.common import config_db
 
     values = {"mineru.mode": "local", "mineru.title_aided_enabled": "true"}
@@ -254,6 +285,7 @@ async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monke
 
 @pytest.mark.anyio
 async def test_get_mineru_config_async_uses_bootstrap_env_for_title_aided(monkeypatch):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
     from newbee_notebook.core.common import config_db
 
     monkeypatch.setattr(

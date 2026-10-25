@@ -11,6 +11,17 @@ from newbee_notebook.api.routers import config as config_router
 pytestmark = pytest.mark.contract
 
 
+def test_api_only_hides_and_rejects_local_embedding(monkeypatch):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "true")
+    client, store, *_ = _build_client(monkeypatch)
+    monkeypatch.setattr(config_router, "_scan_local_embedding_models", lambda: ["Qwen3-Embedding-0.6B"])
+    response = client.get("/api/v1/config/models/available")
+    assert response.json()["embedding"]["modes"] == ["api"]
+    response = client.put("/api/v1/config/embedding", json={"mode": "local"})
+    assert response.status_code == 400
+    assert "embedding.mode" not in store
+
+
 def _build_client(monkeypatch):
     app = FastAPI()
     app.include_router(config_router.router, prefix="/api/v1")
@@ -258,6 +269,7 @@ def test_get_available_models_limits_mineru_to_cloud_when_local_disabled(monkeyp
 
 
 def test_get_available_models_reads_local_models_from_repo_models_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
     client, _store, _llm_reset, _embedding_reset = _build_client(monkeypatch)
     models_dir = tmp_path / "models"
     model_dir = models_dir / "Qwen3-Embedding-0.6B"
@@ -473,10 +485,10 @@ def test_reset_asr_clears_prefix(monkeypatch):
 def test_create_app_respects_feature_model_switch_flag(monkeypatch):
     monkeypatch.setenv("FEATURE_MODEL_SWITCH", "false")
     app = create_app()
-    disabled_paths = {route.path for route in app.routes}
+    disabled_paths = set(app.openapi()["paths"])
     assert "/api/v1/config/models" not in disabled_paths
 
     monkeypatch.setenv("FEATURE_MODEL_SWITCH", "true")
     app = create_app()
-    enabled_paths = {route.path for route in app.routes}
+    enabled_paths = set(app.openapi()["paths"])
     assert "/api/v1/config/models" in enabled_paths

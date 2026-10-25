@@ -85,7 +85,8 @@ describe("notes api client", () => {
     const result = await exportNoteMarkdown("note-1");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/notes/note-1/export");
-    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.blob.type).toContain("text/markdown");
+    expect(await result.blob.text()).toBe("# note");
     expect(result.filename).toBe("读书_note-1.md");
   });
 

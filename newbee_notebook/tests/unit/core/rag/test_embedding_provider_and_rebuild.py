@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
+import pytest
 
 from newbee_notebook.core.rag.embeddings import qwen3_embedding
 from newbee_notebook.domain.entities.document import Document
@@ -8,6 +9,15 @@ from newbee_notebook.domain.value_objects.document_status import DocumentStatus
 from newbee_notebook.domain.value_objects.document_type import DocumentType
 from newbee_notebook.scripts import rebuild_es
 from newbee_notebook.scripts import rebuild_pgvector
+
+
+def test_api_only_blocks_local_embedding_before_loading_weights(monkeypatch):
+    monkeypatch.setenv("NEWBEE_API_ONLY", "true")
+    def forbid_local_runtime(_device):
+        raise AssertionError("Local model initialization reached")
+    monkeypatch.setattr(qwen3_embedding, "_resolve_torch_device", forbid_local_runtime)
+    with pytest.raises(ValueError, match="NEWBEE_API_ONLY"):
+        qwen3_embedding.Qwen3LocalEmbedding(model_path="must-not-download-a-model")
 
 
 def test_qwen3_resolve_torch_device_fallback_to_cpu(monkeypatch):

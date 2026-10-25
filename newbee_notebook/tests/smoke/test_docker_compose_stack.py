@@ -62,6 +62,38 @@ def test_default_compose_starts_full_non_gpu_stack() -> None:
     assert "profiles" not in services["minio"]
 
 
+def test_mac_compose_uses_api_only_and_loopback_ports() -> None:
+    result = subprocess.run(
+        ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mac.yml",
+         "config", "--format", "json"],
+        cwd=_repo_root(), text=True, capture_output=True, check=True,
+    )
+    services = json.loads(result.stdout)["services"]
+    assert "mineru-api" not in services
+    for name in ("api", "celery-worker"):
+        env = services[name]["environment"]
+        assert env["NEWBEE_API_ONLY"] == "true"
+        assert env["MINERU_MODE"] == "cloud"
+        assert env["QWEN3_EMBEDDING_MODE"] == "api"
+    for service in services.values():
+        for port in service.get("ports", []):
+            assert port["host_ip"] == "127.0.0.1"
+        assert not service.get("gpus")
+    assert services["minio"]["build"]["context"].endswith("docker/minio")
+
+
+def test_mac_monitor_has_isolated_image_and_internal_broker() -> None:
+    result = subprocess.run(
+        ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mac.yml",
+         "--profile", "monitor", "config", "--format", "json"],
+        cwd=_repo_root(), text=True, capture_output=True, check=True,
+    )
+    services = json.loads(result.stdout)["services"]
+    assert services["flower"]["image"] != services["celery-worker"]["image"]
+    assert services["flower"]["environment"]["CELERY_BROKER_URL"] == "redis://redis:6379/0"
+    assert services["flower"]["build"]["args"]["INSTALL_FLOWER"] == "true"
+
+
 def test_default_compose_fixes_non_gpu_runtime_defaults() -> None:
     compose = _load_compose("docker-compose.yml")
     services = compose["services"]
