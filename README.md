@@ -4,7 +4,7 @@
 
 # 🐝Newbee Notebook
 
-macOS（Apple Silicon / Intel）Docker 部署请参阅 [Mac 仅 API 部署指南](docs/macos-docker.md)：不升级 MinerU，不在本机运行模型。
+Mac 可选择 [仅 API 部署](docs/macos-docker.md)；Apple Silicon 也支持 [本机 MinerU 4 与 Embedding](docs/macos-local-inference.md)，应用仍运行在 Docker 中。
 
 **新蜂阅读器**
 
@@ -147,8 +147,9 @@ MINERU_API_KEY=your_mineru_key
 
 | 常见设备 | 推荐模式 | 命令 |
 |---|---|---|
-| Windows / macOS / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | `docker compose up -d` |
-| Apple Silicon Mac / Intel Mac | **默认 Docker 模式** | `docker compose up -d` |
+| Windows / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | `docker compose up -d` |
+| Apple Silicon Mac / Intel Mac，只使用 API | **Mac 仅 API 模式** | `docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d --build` |
+| Apple Silicon Mac，需要本机解析和 Embedding | **Mac 本机推理** | 先准备本机模型服务，再叠加 `docker-compose.mac-local.yml`，见[部署步骤](docs/macos-local-inference.md) |
 | AMD / Intel GPU 设备 | **默认 Docker 模式** | `docker compose up -d` |
 | NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | **GPU 本地增强模式** | 首次先构建 `mineru:latest`，再执行 `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
 
@@ -156,6 +157,7 @@ MINERU_API_KEY=your_mineru_key
 |---|---|---|
 | **默认 Docker 模式**（推荐） | 无特殊要求 | `docker compose up -d` |
 | **GPU 本地增强模式** | NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | 首次先构建 `mineru:latest`，再执行 GPU compose 启动命令 |
+| **Mac 本机推理** | Apple Silicon；已在 M5 Pro / 48 GB 验证 | 本机运行模型，Docker 运行应用，见[部署步骤](docs/macos-local-inference.md) |
 | **纯 CPU 全本地**（不推荐） | 无独立显卡，内存 ≥ 32GB | 当前不提供官方一键 Compose，需自行扩展 |
 
 **默认 Docker 模式**（最简单，开箱即用）：
@@ -166,13 +168,13 @@ docker compose up -d
 
 首次启动会自动构建前端、API、Celery Worker 镜像，并在构建阶段安装 Python 依赖，请耐心等待。默认 Docker 模式会给 API / Worker 安装 CPU 版 torch，这样后续重启 `celery-worker` 时不会再重复执行 `pip install`。这个模式下默认使用 `MinIO + 云端 MinerU + API Embedding`，不会启动本地 `mineru-api` 容器。
 
-这个模式适合大多数设备，包括 Windows / macOS / Linux 的无 GPU 机器、只有集显的机器、Apple Silicon，以及当前没有官方 GPU 覆盖配置的 AMD / Intel GPU 设备。
+这个模式适合不在本机运行模型的设备。Mac 请使用上表中带 `docker-compose.mac.yml` 的命令，包含 Mac 所需的镜像和端口配置。
 
 如果你需要调整默认 Docker 模式里的 CPU 版 torch 版本，可在 `.env` 中设置 `PYTHON_RUNTIME_TORCH_VERSION`，然后重新执行 `docker compose up -d --build`。Docker 构建会把 `requirements.txt` 里的 `torch` 行过滤出来单独安装；普通部署不要为了换 CPU/GPU 运行时直接改 `requirements.txt`。
 
 如果你有 NVIDIA GPU（显存 ≥ 8GB，系统内存 ≥ 32GB），可以切换到 GPU 本地增强模式，让 MinerU 和 worker 侧 Embedding 都在本地 GPU 上运行。首次使用前需要先构建 `mineru:latest` 基础镜像并下载 Embedding 模型，详见 [quickstart.md — 本地 GPU 模式](quickstart.md#模式二gpu-本地增强模式nvidia-显存--8gb系统内存--32gb)。
 
-如果你使用的是 Apple Silicon、AMD GPU 或 Intel GPU，目前仓库没有提供对应的 Metal / ROCm / oneAPI 本地加速覆盖配置，建议继续使用默认 Docker 模式。
+Apple Silicon 可以在本机运行 MinerU 4 和 Qwen3 Embedding。权重保存在本机 `models/` 下，应用通过 HTTP 调用本机服务；详见 [Mac 本机部署说明](docs/macos-local-inference.md)。AMD / Intel GPU 暂未提供 ROCm / oneAPI 加速配置，可继续使用 API 模式。
 
 如果你使用的是 NVIDIA GPU，不建议单独改 `requirements.txt` 里的 `torch==x.y.z`；应在 `.env` 中设置 `CELERY_WORKER_BASE_IMAGE` 为与你驱动匹配的 `pytorch/pytorch` 镜像 tag，再执行 GPU 模式的 `--build` 启动命令。
 

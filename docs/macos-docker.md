@@ -1,6 +1,10 @@
 # macOS Docker 部署（仅 API 模型）
 
-支持 Apple Silicon 和 Intel Mac，使用 Docker Desktop Linux 容器。保留 requirements.txt、pyproject.toml 和 MinerU Dockerfile 的既有版本。镜像仍安装原 requirements 的 CPU Torch 等依赖，但不运行本地模型。
+本页介绍不在 Mac 上运行模型的部署方式，支持 Apple Silicon 和 Intel Mac。应用运行在 Docker Desktop 中，模型功能调用云端 API，不需要下载 MinerU 或 Embedding 权重。
+
+Apple Silicon 也可以使用 [Mac 本机 MinerU 4 与 Embedding](macos-local-inference.md)：应用继续放在 Docker 里，模型在 macOS 上运行，权重保存在本机 `models/` 下。两种部署方式的区别和目录用途见该说明。
+
+仅 API 部署保留 `requirements.txt`、`pyproject.toml` 和原 MinerU Dockerfile 的版本。应用镜像仍安装原有的 CPU Torch 等依赖，但不加载本地模型。
 
 ## 启动
 
@@ -39,7 +43,7 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml ps
 
 ## 仅 API 约束
 
-Mac 配置设置 `NEWBEE_API_ONLY=true`。数据库继承 Windows/GPU 机器的本地 Embedding/MinerU 偏好时，实际运行选择 API/cloud，不改写原偏好。Windows/GPU 配置不启用此约束。不会启动 `mineru-api` 或下载模型权重；不要在 Mac 手动调用模型下载脚本。
+本页使用的 Mac 配置设置 `NEWBEE_API_ONLY=true`。如果数据库保留了 Windows/GPU 部署的本地模型偏好，应用实际仍选择 API/cloud，同时保留原偏好。Windows/GPU 配置不启用这个限制。仅 API 部署不会启动 `mineru-api`，也不需要下载权重。要使用 Mac 本机模型，请按本机部署说明增加 `docker-compose.mac-local.yml`。
 
 MarkItDown 默认的 Magika 文件类型识别也使用本地模型，Mac 模式改为按扩展名调用其格式转换器。TXT/Markdown、HTML、CSV、PDF 文本提取、DOCX、XLS/XLSX、PPTX、EPUB 解析不需要模型；旧 `.doc`/`.ppt` 依赖 MinerU 云解析；本地无模型兜底不支持时需先转为 DOCX/PPTX。OCR 与语义理解仍通过云端 API。
 
@@ -60,8 +64,6 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml stop
 `health/ready` 当前只检查 PostgreSQL，不代表模型 API、Redis 或 Elasticsearch 已验证。完整验收还需上传 PDF 验证 MinerU、Embedding 入库，再执行检索和聊天。停止时保留卷，不使用 `down -v` 或全局 Docker 清理命令。
 
 ## 应用内 Shell / Bash
-
-需要本机模型推理时，见 [Mac 本地 MinerU 4 与 Embedding](macos-local-inference.md)。本文的默认 Compose 仍为全部模型能力走 API。
 
 Mac Compose 为 API 挂载 `/var/run/docker.sock`，API 镜像包含官方 Docker CLI。
 API 是可信的容器调度进程，持有 Docker 控制权限；因此服务继续只监听本机，不能作为无鉴权的公网服务部署。

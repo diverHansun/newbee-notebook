@@ -58,6 +58,8 @@ services:
         condition: service_healthy
 
   # GPU MinerU PDF -> Markdown service.
+  # 现有 Windows/NVIDIA 部署沿用旧版接口及镜像内预置的权重。
+  # 不读取 Mac 的 models/mineru4/weights/；不要用 MinerU 4 直接覆盖旧基础镜像。
   # First build the upstream MinerU GPU base image and tag it as mineru:latest:
   #   docker build -t mineru:latest -f mineru/docker/china/Dockerfile mineru
   # or:

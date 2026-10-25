@@ -1,22 +1,53 @@
 # Mac 本机 MinerU 4 与 Embedding
 
-## 版本、硬件与改动边界
+这套部署让应用继续运行在 Docker 中，让 MinerU 和 Qwen3 Embedding 在 Mac 上使用 Apple GPU。聊天、语音等功能仍调用原来的云端 API。
 
-核查日期：2026-10-25。官方 GitHub 和 PyPI 的稳定版均为 **MinerU 4.0.12**（不是 0.4.x）。本机为 Apple M5 Pro / 48 GB / macOS 27.0.1 / ARM64，约 495 GiB 可用磁盘。MPS 可用且实际张量计算通过。
+本文适用于 Apple Silicon Mac。Intel Mac 或暂时不想下载模型的用户，可以使用 [Mac 仅 API 部署](macos-docker.md)。
 
-- [官方版本](https://github.com/opendatalab/MinerU/releases/tag/mineru-4.0.12-released)
-- [平台与运行时](https://opendatalab.github.io/MinerU/usage/tiers/)
-- [3.x → 4.x 迁移](https://opendatalab.github.io/MinerU/reference/migration_4/)
+## 服务在哪运行，权重放在哪里
 
-Docker Desktop 的 Linux 容器不能直接使用 Apple MPS/Metal。应用、数据库和队列继续运行在 Docker；MinerU 和 Qwen3-Embedding 原生运行在 Mac，只监听 `127.0.0.1`。容器通过 `host.docker.internal` 调用它们。
+“模型权重”就是推理时要读取的大文件。程序在容器里运行，并不代表这些文件必须打进镜像；也可以保存在主机目录，再挂载给容器读取。
 
-MinerU 4 要求 Transformers >=5.10.1，而现有 Embedding 使用 4.57.1，所以保留两个独立 Python 环境。`requirements.txt`、主应用锁文件和 Windows 现有 Torch/Transformers 版本不变；新解析服务固定为下方安装命令中的 4.0.12。Embedding 服务与 Windows 本地路径共用模型加载、归一化、维度截取实现。
+本项目目前采用以下安排：
 
-新 V1 协议显式启用；默认仍为旧协议，旧 Windows/GPU Compose 与云 API 不变。没有引入服务注册、自动下载代理或额外调度框架。
+| 部署方式 | MinerU 在哪里运行 | MinerU 权重在哪里 |
+| --- | --- | --- |
+| 现有 Windows / NVIDIA GPU 部署 | `mineru-api` 容器 | 沿用 `mineru:latest` 基础镜像预置的权重；缓存使用 `mineru_cache` 卷 |
+| Mac 本机推理 | Mac 上独立的 Python 环境 | 本机项目目录 `models/mineru4/weights/` |
+| Mac 仅 API 部署 | MinerU 云端服务 | 本机不需要 MinerU 权重 |
+
+Windows 的 NVIDIA GPU 可以通过 WSL 2 提供给 Linux 容器使用。Mac 的普通 Docker Linux 容器不能用同一套方式直接调用 Apple MPS/Metal，所以这里让模型直接在 macOS 上运行。Docker 的 GPU 直通说明见[官方文档](https://docs.docker.com/desktop/features/gpu/)；MinerU 也[建议 Apple Silicon 使用 macOS 原生安装](https://opendatalab.github.io/MinerU/usage/tiers/)。Docker Model Runner 是另一套推理服务，本项目没有接入它。
+
+Mac 上的 API 和 Celery worker 把解析请求发给 `host.docker.internal:8001`，把 Embedding 请求发给 `host.docker.internal:8002/v1`。这两个服务都在本机运行，只监听 `127.0.0.1`。请求没有因为使用 HTTP 就变成云端调用。
+
+## 项目目录怎么分工
+
+以下路径都相对于项目根目录：
+
+| 路径 | 用途 | 清理建议 |
+| --- | --- | --- |
+| `models/mineru4/weights/` | MinerU 4 的正式权重，当前约 2.0 GiB | 使用本机 MinerU 时保留 |
+| `models/Qwen3-Embedding-0.6B/` | Qwen3 Embedding 的正式权重，当前约 1.1 GiB | 使用本机 Embedding 时保留 |
+| `.venv/mineru/`、`.venv/embedding/` | 两个模型服务各自的 Python 依赖 | 保留，避免重复安装 |
+| `.tmp/mineru4-server/` | MinerU 收到的文件和解析过程数据 | 停止本机服务后可清理 |
+
+`models/` 用来集中存放下载的模型，当前目录安排可以继续使用。`models/mineru4/weights/` 是正在使用的权重，不能当作测试文件删除。启动脚本按这个路径离线加载模型，删掉后，下次加载模型或重启服务就会失败，需要重新下载。
+
+这些模型和环境已被 `.gitignore`、`.dockerignore` 排除，保存在项目目录里不会让它们进入 Git 提交或应用镜像。Mac 的应用容器无需额外挂载 MinerU 权重。API 对 Qwen3 目录的只读挂载用于在设置页发现模型，实际 Embedding 推理由 Mac 服务完成。
+
+以后如果要把模型放到其他磁盘，可以移动完整目录，但要同时更新下面的下载路径和 `scripts/start_mac_models.sh` 中的路径。只调整目录位置，不需要改动 Windows 部署。
+
+## 版本与硬件
+
+核查日期为 2026-10-25。本次安装固定使用 [MinerU 4.0.12](https://github.com/opendatalab/MinerU/releases/tag/mineru-4.0.12-released)。本机是 Apple M5 Pro、48 GB 内存、macOS 27.0.1，已验证 MPS 可用，并完成实际解析和 Embedding 推理。其他配置的 Mac 仍需根据内存和文档大小验证。
+
+MinerU 4 要求 Transformers >=5.10.1，现有 Embedding 使用 4.57.1，因此它们各用一个 Python 环境，避免依赖冲突。主应用的 `requirements.txt`、锁文件和 Windows 现有 Torch/Transformers 版本保持不变。
+
+Mac 新服务使用 V1 接口。Windows 现有服务继续使用旧接口，云端 API 也保留。接口变化可参考 [MinerU 4 迁移说明](https://opendatalab.github.io/MinerU/reference/migration_4/)。
 
 ## 安装与模型准备
 
-在项目根目录执行（首次下载模型需要网络）：
+已有完整环境和权重时，直接跳到“启动与切换”。首次安装时，在 Mac 终端进入项目根目录，再执行以下命令；模型下载需要网络。这些命令不在容器里执行。
 
 ```sh
 uv venv --python 3.12 .venv/mineru
@@ -33,7 +64,7 @@ export MINERU_MODEL_BASE_DIR="$MINERU_HOME/weights"
 .venv/embedding/bin/python -c 'from huggingface_hub import snapshot_download; snapshot_download("Qwen/Qwen3-Embedding-0.6B", local_dir="models/Qwen3-Embedding-0.6B", ignore_patterns=["onnx/*", "*.gguf"])'
 ```
 
-本机下载结果：MinerU 权重约 2.0 GiB，Qwen3-Embedding-0.6B 约 1.1 GiB，另有环境和下载缓存占用。模型与虚拟环境不提交、不打入应用镜像。不要用旧 MinerU 3 模型目录代替 4.x 权重。
+`MINERU_HOME` 是本机 MinerU 的工作目录，`MINERU_MODEL_BASE_DIR` 指向其中的权重目录。下载命令和启动脚本使用相同路径。这两个变量由本机终端或脚本设置；修改项目 `.env` 不会改变当前启动脚本里的路径。MinerU 4 需要对应版本的权重，不能直接拿旧版权重目录替代。
 
 ## 启动与切换
 
@@ -43,7 +74,7 @@ export MINERU_MODEL_BASE_DIR="$MINERU_HOME/weights"
 bash scripts/start_mac_models.sh
 ```
 
-脚本离线加载已下载的模型：MinerU Standard 使用 Torch/MPS 小模型及 llama.cpp VLM；Embedding 使用 MPS，推理 batch 为 4。Ctrl-C 仅停止脚本启动的两个服务，不停止 Docker 或其他进程。
+脚本会从上述目录离线加载模型：MinerU Standard 使用 Torch/MPS 和 llama.cpp；Embedding 使用 MPS，每批处理 4 条文本。保持这个终端运行。按 Ctrl-C 会停止这两个服务，Docker 应用仍然运行。Mac 重启后，需要重新运行脚本。
 
 另一个终端启动应用：
 
@@ -53,7 +84,7 @@ curl -f http://127.0.0.1:8001/v1/health
 curl -f http://127.0.0.1:8002/health
 ```
 
-这个可选 Compose 覆盖文件会启用模型设置页面。应用保留数据库中已保存的偏好。在模型设置中分别切换 MinerU、Embedding 到 Local；也可以分别切回 Cloud/API。LLM、ASR 等原有 API 不受影响。API 对模型目录的只读挂载用于模型发现，Embedding 计算由原生服务完成。
+最后一个 Compose 文件负责把 Docker 应用连接到本机模型服务，并启用模型设置页面。它不会在容器中启动 MinerU，也不会下载权重。已有的模型偏好会保留；如有需要，在设置中分别把 MinerU、Embedding 切到“本地”，也可以切回“云端”或“API”。LLM、ASR 等继续使用原来的 API。
 
 云端 text-embedding-v4 与本地 Qwen3-Embedding-0.6B 即使同为 1024 维，也不能混用向量。新增原生服务的 Local 模式使用带 `_qwen3_local` 后缀的 PostgreSQL 表和 Elasticsearch 索引；API 模式继续使用原索引。首次切换需重新为需要检索的已有文档建立本地索引；不会自动重建、覆盖或删除用户已有索引。本地服务配置启用时，删除文档会清理两个命名空间中的节点。
 

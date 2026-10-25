@@ -4,6 +4,8 @@
 
 这里是完整版，涵盖本地开发、Docker 部署、GPU 模式、存储后端等所有配置选项。
 
+Mac 用户可以直接阅读 [仅 API 部署](docs/macos-docker.md)。需要在 Apple Silicon 上运行 MinerU 4 和 Embedding 时，使用 [Mac 本机推理指南](docs/macos-local-inference.md)，其中说明了模型下载、权重位置和启动步骤。
+
 ---
 
 ## 目录
@@ -43,8 +45,9 @@
 
 | 你的设备 | 推荐启动方式 | 是否支持官方本地 GPU 加速 | 说明 |
 |---|---|---|---|
-| Windows / macOS / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | 否 | 最推荐，直接用云端 MinerU + API Embedding |
-| Apple Silicon Mac / Intel Mac | **默认 Docker 模式** | 否 | 当前仓库没有提供 Metal 本地加速覆盖配置 |
+| Windows / Linux 普通笔记本或台式机（无独显、仅集显） | **默认 Docker 模式** | 否 | 使用云端 MinerU + API Embedding |
+| Apple Silicon Mac / Intel Mac，只使用 API | **Mac 仅 API 模式** | 不运行本地模型 | 使用 `docker-compose.mac.yml`，见 [Mac 部署指南](docs/macos-docker.md) |
+| Apple Silicon Mac，需要本机解析和 Embedding | **Mac 本机推理** | 是，在 macOS 上运行 | 权重保存在本机 `models/`，应用在 Docker 中调用本机服务，见[部署步骤](docs/macos-local-inference.md) |
 | AMD / Intel GPU 设备 | **默认 Docker 模式** | 否 | 当前仓库没有提供 ROCm / oneAPI 本地加速覆盖配置 |
 | NVIDIA GPU，显存 ≥ 8GB，内存 ≥ 32GB | **GPU 本地增强模式** | 是 | 可使用本地 MinerU + 本地 Embedding；首次需先构建 `mineru:latest` |
 | 无 GPU，但希望 MinerU 和 Embedding 全部本地运行 | **手工扩展 CPU 全本地** | 否 | 当前无官方一键 Compose，不推荐 |
@@ -53,6 +56,7 @@
 |---|---|---|---|
 | **默认 Docker 模式**（推荐） | 无要求 | 8GB+ | `docker compose up -d`，默认使用云端 MinerU、API Embedding、MinIO |
 | **GPU 本地增强模式** | NVIDIA，≥ 8GB 显存 | ≥ 32GB | 首次先构建 `mineru:latest`，再执行 `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
+| **Mac 本机推理** | Apple GPU，使用统一内存 | 已在 M5 Pro / 48 GB 验证 | 使用两个本机 Python 环境，安装和启动命令见 [Mac 本机推理指南](docs/macos-local-inference.md) |
 | **纯 CPU 全本地**（不推荐） | 无独立显卡 | ≥ 32GB | 如需同时本地跑 MinerU 和本地 Embedding，需要额外手工扩展 CPU 版服务，仓库当前不提供官方一键 Compose |
 
 > GPU 模式会为 `mineru-api` 容器分配 32GB 共享内存、为 `celery-worker` 容器分配 16GB 共享内存，请确保系统内存充裕。
@@ -63,7 +67,7 @@
 
 ## 安装依赖（本地开发）
 
-> 如果你只使用 Docker 部署，可以跳过这一节。
+> 如果所有模型都使用 API，可以跳过这一节。Mac 本机推理需要另外安装两个模型环境，请按 Mac 本机推理指南操作。
 
 ### 1. 安装 uv（推荐的 Python 包管理器）
 
@@ -160,8 +164,10 @@ POSTGRES_PASSWORD=your_password
 
 | 层级 | 参数 | 可选值 | 说明 |
 | --- | --- | --- | --- |
-| 项目接入模式 | `MINERU_MODE` | `cloud` / `local` | 决定走云端 API 还是本地 `mineru-api` |
-| 本地链路选择 | `MINERU_BACKEND` | `pipeline` / `vlm-*` / `hybrid-*` | 仅在 `MINERU_MODE=local` 时生效 |
+| 项目接入模式 | `MINERU_MODE` | `cloud` / `local` | 决定调用云端 API 还是本地服务；本地服务可以在容器中，也可以在 Mac 本机 |
+| 本地接口版本 | `MINERU_LOCAL_API_VERSION` | `legacy` / `v1` | 默认 `legacy` 保留现有 Windows 部署；Mac MinerU 4 使用 `v1` |
+| 旧版本地后端 | `MINERU_BACKEND` | `pipeline` / `vlm-*` / `hybrid-*` | 仅旧版本地接口使用 |
+| MinerU 4 解析档位 | `MINERU_LOCAL_TIER` | `flash` / `basic` / `standard` / `advanced` | V1 接口使用；Mac 部署默认 `standard`，Office 文件使用 `flash` |
 | 云端模型版本 | `model_version` | `pipeline` / `vlm` / `MinerU-HTML` | 仅在 `MINERU_MODE=cloud` 时生效 |
 
 **默认 Docker 模式（推荐，开箱即用）：**
@@ -178,7 +184,8 @@ MINERU_API_KEY=your_key_here
 - 默认云端链路会复用官方批量上传接口 `/api/v4/file-urls/batch`，同一次笔记本添加操作中的多份受支持文档会尽量合并到同一个 MinerU batch。
 - `HTML` 会自动走 `model_version=MinerU-HTML`，其它文档继续使用常规 `pipeline / vlm` 路由。
 - 官方云端限制当前为单文件 `200MB`、PDF `200 页`、单次申请上传链接最多 `50` 个文件；超限文档会回退到现有 fallback 链路。
-- 只有 GPU 覆盖栈才内置了本地 `mineru-api` 容器与 `MINERU_LOCAL_ENABLED=true`，可在设置面板中切换 `cloud/local`。
+- NVIDIA GPU 覆盖栈内置了本地 `mineru-api` 容器，并设置 `MINERU_LOCAL_ENABLED=true`，可在设置面板中切换 `cloud/local`。
+- Mac 本机部署也启用 `MINERU_LOCAL_ENABLED=true`，调用 macOS 上的 MinerU 4 服务，不启动 `mineru-api` 容器。本机权重放在 `models/mineru4/weights/`，不需要复制进容器。
 - 纯 CPU 机器如果想本地跑 MinerU，需要自行准备 CPU 版 `mineru-api` 服务；这条路径至少建议 32GB 内存，且不推荐。
 - 如果开启 Clash Verge 或系统代理后，`cdn-mineru.openxlab.org.cn` 报 `UNEXPECTED_EOF_WHILE_READING` / `curl: (35) TLS connect error`，说明问题已经发生在 OpenXLab CDN 的 TLS 握手阶段，单纯给 Docker 容器补 `HTTP_PROXY` 不一定能修复。优先在 Clash 中给 `cdn-mineru.openxlab.org.cn`、`openxlab.org.cn` 配置 DIRECT 规则；只有在你已经准备好可访问的本地 `mineru-api` 服务时，才建议切到 `MINERU_MODE=local`。仅修改这个变量并不会自动绕过 CDN；如果本地 MinerU 不可用，PDF 最终仍可能回退到 MarkItDown。
 
@@ -212,7 +219,8 @@ MINERU_LOCAL_TIMEOUT=0
 
 - 默认 Docker 模式：通常不需要手动修改。若你确实要更换 CPU 版 torch，可在 `.env` 中设置 `PYTHON_RUNTIME_TORCH_VERSION=2.9.0`，然后重新执行 `docker compose up -d --build`。
 - NVIDIA GPU 模式：不要单独修改 `requirements.txt` 里的 `torch==x.y.z`。请在 `.env` 中设置 `CELERY_WORKER_BASE_IMAGE=pytorch/pytorch:<torch+cuda-tag>`，例如 `pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime`，再执行 `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`。
-- Apple Silicon、AMD GPU、Intel GPU：当前仓库没有官方本地 GPU 加速覆盖配置，建议继续使用默认 Docker 模式。
+- Apple Silicon：本机模型服务使用独立 Python 环境里的 Torch/MPS，不需要更换应用的 Docker 基础镜像，具体版本见 [Mac 本机推理指南](docs/macos-local-inference.md)。
+- AMD GPU、Intel GPU：当前没有 ROCm / oneAPI 本地加速配置，可以使用 API 模式。
 
 选择原则：
 - 你关心 CPU 模式能不能跑：通常不用改 torch 版本，直接用默认 Docker 模式。
@@ -243,7 +251,7 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 | 文件类型 | 处理链路 |
 |---|---|
 | Cloud：PDF / DOC / DOCX / PPT / PPTX / HTML / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=cloud` 时优先走 MinerU cloud，超限或失败时走 fallback |
-| Local（当前 GPU 适配范围）：PDF / DOCX / PPTX / XLSX / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=local` 时优先走本地 MinerU；`DOC / PPT / HTML` 不走本地 MinerU，建议使用 cloud 模式 |
+| Local（Windows 旧接口及 Mac V1）：PDF / DOCX / PPTX / XLSX / 图片（PNG / JPG / JPEG / BMP / WEBP / GIF / JP2 / TIFF） | `MINERU_MODE=local` 时优先走本地 MinerU；`DOC / PPT / HTML` 不走本地 MinerU，建议使用 cloud 模式 |
 | TXT / MD / CSV / XLS / XLSX / EPUB 等 | MarkItDown → Markdown |
 
 默认 Docker 部署和宿主机 FastAPI 调试都会把处理后的文件存储在 MinIO 的 `documents` bucket 中；只有离线脚本 / 测试显式切到 `STORAGE_BACKEND=local` 时，才会写入 `data/documents/{document_id}/`。
@@ -254,7 +262,7 @@ MINIO_SECRET_KEY=minioadmin123   # 生产环境请务必修改
 
 ### 模式一：默认 Docker 模式（推荐，无特殊硬件要求）
 
-这是当前仓库的默认一键启动方式。MinerU 使用官方 `v4` 精准解析 API，Embedding 默认使用通义千问 API，存储使用 MinIO。需要配置 `MINERU_API_KEY` 和 `DASHSCOPE_API_KEY`。
+这是当前仓库的默认一键启动方式。MinerU 使用官方 `v4` 精准解析 API，Embedding 默认使用通义千问 API，存储使用 MinIO。需要配置 `MINERU_API_KEY` 和 `DASHSCOPE_API_KEY`。Mac 请改用 [Mac 部署指南](docs/macos-docker.md)中带 `docker-compose.mac.yml` 的启动命令。
 
 ```bash
 docker compose up -d
@@ -294,7 +302,7 @@ docker compose logs -f
 
 这个模式在默认 Docker 栈上叠加 GPU 覆盖配置：MinerU 与 worker 侧 Embedding 可以走本地 GPU，也都可以在设置面板里切回云端/API。
 
-适用范围说明：当前官方 GPU 覆盖只支持 NVIDIA CUDA。Apple Silicon、AMD GPU、Intel GPU 不在这一套覆盖配置内。
+这一节的 GPU 容器配置只用于 NVIDIA CUDA，并沿用 MinerU 2/3 的旧接口。已有部署继续使用匹配旧接口的基础镜像；首次构建也要使用对应旧版本的上游 Dockerfile，不要直接用 MinerU 4 覆盖 `mineru:latest`。Mac 使用单独的[本机部署方式](docs/macos-local-inference.md)。
 
 前置条件：
 
@@ -311,7 +319,7 @@ docker build -t mineru:latest -f mineru/docker/china/Dockerfile mineru
 docker build -t mineru:latest -f mineru/docker/global/Dockerfile mineru
 ```
 
-这个基础镜像会预下载 MinerU 本地模型，首次构建耗时和镜像体积都比较大。只要 `mineru:latest` 已存在，后续一般不需要重复构建；只有在升级 MinerU 基础 Dockerfile、vLLM/MinerU 版本或需要刷新预置模型时才重新构建。
+这个基础镜像会预下载 MinerU 本地模型，首次构建耗时和镜像体积都比较大。Windows 这套部署沿用镜像内的权重，缓存放在 `mineru_cache` 卷中，不读取 Mac 的 `models/mineru4/weights/`。只要匹配旧接口的 `mineru:latest` 已存在，后续一般不需要重复构建；升级版本时应一起检查服务接口、补丁和模型是否兼容。
 
 建议在 `.env` 中设置：
 
@@ -558,14 +566,16 @@ python -m newbee_notebook.scripts.rebuild_es
 |---|---|
 | 端口冲突 | 修改 `docker-compose.yml` 中的端口映射 |
 | 依赖安装失败 | 尝试 `uv sync --reinstall` |
-| Docker 服务启动慢 | 首次构建镜像需要时间；GPU 模式下本地 MinerU 首次启动还需下载模型 |
+| Docker 服务启动慢 | 首次构建镜像需要时间；Windows GPU 基础镜像在构建时预置权重，Mac 本机部署需要先下载权重 |
 | GPU 不可用 | 确保安装了 [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)，或改用默认 Docker 模式 |
-| Apple Silicon / AMD / Intel GPU 该选哪种模式 | 使用默认 Docker 模式；当前官方 GPU 覆盖只支持 NVIDIA CUDA |
+| Apple Silicon 该选哪种模式 | 可以使用 [Mac 仅 API 模式](docs/macos-docker.md)，也可以使用 [Mac 本机推理](docs/macos-local-inference.md) |
+| AMD / Intel GPU 该选哪种模式 | 使用 API 模式；当前没有 ROCm / oneAPI 本地加速配置 |
+| Mac 的 `models/mineru4/weights/` 能否删除 | 本机 MinerU 要读取这里的权重，使用本机模式时保留；它已被 Git 和镜像构建忽略 |
 | 没有独立显卡是不是要选“纯 CPU 全本地” | 不需要；大多数无 GPU 设备直接使用默认 Docker 模式即可 |
 | 用户应该在哪里改 torch 版本 | 默认 Docker 模式改 `.env` 中的 `PYTHON_RUNTIME_TORCH_VERSION`；NVIDIA GPU 模式改 `.env` 中的 `CELERY_WORKER_BASE_IMAGE` |
 | 本地模式仍走云端或 PDF 仍回退到 MarkItDown | 检查 `.env` 中 `MINERU_MODE` 是否为 `local`，并确认本地 `mineru-api` 服务真实可达；仅修改这个变量不会自动启用本地 MinerU |
 | Cloud 模式无法处理 PDF | 检查 `.env` 中 `MINERU_API_KEY` 是否已填写 |
-| 默认模式下没有 `mineru-api` 容器 | 这是正常现象；默认模式使用云端 MinerU，只有 GPU 覆盖栈才会启动本地 `mineru-api` |
+| 没有 `mineru-api` 容器 | API 模式调用云端；Mac 本机模式调用 macOS 上的服务。只有 NVIDIA GPU 覆盖栈启动该容器 |
 | `docker compose down -v` 后文档丢失 | 默认 Docker 模式的文档在 MinIO volume 中，执行该命令会一并删除 |
 | Windows curl 上传文件名乱码 | 使用 `python scripts/upload_documents.py` 代替 curl |
 

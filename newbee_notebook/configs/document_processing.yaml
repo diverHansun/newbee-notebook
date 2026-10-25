@@ -26,7 +26,8 @@ document_processing:
     is_ocr: ${MINERU_CLOUD_IS_OCR:}
     language: ${MINERU_CLOUD_LANGUAGE:ch}
 
-  # MinerU local docker API settings.
+  # 本地 MinerU 服务地址：Windows GPU 部署调用容器，Mac 本机部署调用宿主服务。
+  # 这里只配置 HTTP 连接；权重路径由运行 MinerU 的服务设置。
   mineru_local:
     api_url: ${MINERU_LOCAL_API_URL:http://mineru-api:8000}
     # legacy: existing MinerU 2/3 service; v1: MinerU 4 service.

@@ -4,6 +4,8 @@
 
 # 🐝Newbee Notebook
 
+Mac users can choose [API-only deployment](docs/macos-docker.md) or, on Apple Silicon, [native MinerU 4 and Embedding](docs/macos-local-inference.md). The application runs in Docker in both cases.
+
 **AI-Powered Interactive Document Reader**
 
 AI-driven interactive document reader. High-accuracy content parsing & retrieval, Agent notes & diagrams, Bilibili video summarization — self-hosted, your data stays yours.
@@ -145,8 +147,9 @@ Choose the appropriate mode based on your hardware:
 
 | Common Device | Recommended Mode | Command |
 |---|---|---|
-| Windows / macOS / Linux laptop or desktop (no dedicated GPU, integrated GPU only) | **Default Docker Mode** | `docker compose up -d` |
-| Apple Silicon Mac / Intel Mac | **Default Docker Mode** | `docker compose up -d` |
+| Windows / Linux laptop or desktop (no dedicated GPU, integrated GPU only) | **Default Docker Mode** | `docker compose up -d` |
+| Apple Silicon Mac / Intel Mac, using APIs | **Mac API-Only Mode** | `docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d --build` |
+| Apple Silicon Mac, using local models | **Mac Native Inference** | Start the native model services, then add `docker-compose.mac-local.yml`; see the [setup guide](docs/macos-local-inference.md) |
 | AMD / Intel GPU devices | **Default Docker Mode** | `docker compose up -d` |
 | NVIDIA GPU, VRAM ≥ 8GB, RAM ≥ 32GB | **GPU Local Enhanced Mode** | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
 
@@ -154,6 +157,7 @@ Choose the appropriate mode based on your hardware:
 |---|---|---|
 | **Default Docker Mode** (recommended) | No special requirements | `docker compose up -d` |
 | **GPU Local Enhanced Mode** | NVIDIA GPU, VRAM ≥ 8GB, RAM ≥ 32GB | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` |
+| **Mac Native Inference** | Apple Silicon; tested on M5 Pro / 48 GB | Native model services with the Docker application; see the [setup guide](docs/macos-local-inference.md) |
 | **CPU-Only Full Local** (not recommended) | No dedicated GPU, RAM ≥ 32GB | No official one-click Compose provided; extend manually |
 
 **Default Docker Mode** (simplest, works out of the box):
@@ -164,13 +168,13 @@ docker compose up -d
 
 The first launch will automatically build the frontend, API, and Celery Worker images and install Python dependencies during the build phase — please be patient. Default Docker Mode installs the CPU version of torch for the API / Worker so that subsequent restarts of `celery-worker` don't repeat `pip install`. This mode uses `MinIO + cloud MinerU + API Embedding` by default and does not start a local `mineru-api` container.
 
-This mode works for most devices, including Windows / macOS / Linux machines without a GPU, machines with integrated graphics only, Apple Silicon, and AMD / Intel GPU devices that currently lack an official GPU override config.
+This mode works for devices that use cloud model APIs. On Mac, use the command with `docker-compose.mac.yml` shown above for the required image and port settings.
 
 If you need to adjust the CPU torch version in Default Docker Mode, set `PYTHON_RUNTIME_TORCH_VERSION` in `.env` and re-run `docker compose up -d --build`.
 
 If you have an NVIDIA GPU (VRAM ≥ 8GB, system RAM ≥ 32GB), you can switch to GPU Local Enhanced Mode to run both MinerU and Embedding on the local GPU. You'll need to download the Embedding model first — see [quickstart.md — GPU Local Mode](quickstart.md#mode-2-gpu-local-enhanced-mode-nvidia-vram--8gb-system-ram--32gb).
 
-If you're using Apple Silicon, an AMD GPU, or an Intel GPU, the repository currently doesn't provide Metal / ROCm / oneAPI local acceleration override configs — continue using Default Docker Mode.
+Apple Silicon can run MinerU 4 and Qwen3 Embedding natively. Weights stay in the host's `models/` directory, and the Docker application calls the native services over HTTP. See the [Mac setup guide](docs/macos-local-inference.md). AMD / Intel GPU acceleration through ROCm / oneAPI is not configured; use API mode on those devices.
 
 If you're using an NVIDIA GPU, avoid changing `torch==x.y.z` directly; instead set `CELERY_WORKER_BASE_IMAGE` in `.env` to a `pytorch/pytorch` image tag that matches your driver, then run the GPU mode `--build` startup command.
 

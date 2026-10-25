@@ -1,9 +1,12 @@
-# Add after docker-compose.mac.yml. Models run natively on macOS, outside Docker.
-# Start scripts/start_mac_models.sh first; existing saved API preferences are preserved.
+# 叠加在 docker-compose.mac.yml 后使用，仅用于 Apple Silicon Mac 本机推理。
+# 先在 Mac 终端运行 bash scripts/start_mac_models.sh，再启动这里的 Docker 应用。
+# MinerU 权重保存在本机 models/mineru4/weights/，由本机服务读取。
+# 此文件只配置调用地址，不启动 MinerU 容器，也不向镜像复制权重。
+# 已保存的模型偏好会保留。完整步骤见 docs/macos-local-inference.md。
 services:
   api:
     volumes:
-      # Discovery only; inference stays in the native embedding service.
+      # 设置页用这个只读目录发现模型；Embedding 计算仍在 Mac 本机完成。
       - ./models/Qwen3-Embedding-0.6B:/app/models/Qwen3-Embedding-0.6B:ro
     environment: &local-models
       NEWBEE_API_ONLY: "false"
