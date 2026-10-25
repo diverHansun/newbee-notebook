@@ -628,11 +628,14 @@ async def get_mineru_config_async(session: AsyncSession) -> dict[str, Any]:
     if mode == "local" and not local_enabled:
         mode = "cloud"
 
+    # The old llm-aided-config patch is not part of the MinerU 4 protocol.
+    title_aided_available = os.getenv("MINERU_LOCAL_API_VERSION", "legacy") != "v1"
     return {
         "mode": mode,
         "source": source,
         "local_enabled": local_enabled,
-        "title_aided_enabled": title_aided_enabled,
+        "title_aided_available": title_aided_available,
+        "title_aided_enabled": title_aided_enabled and title_aided_available,
     }
 
 

@@ -68,6 +68,22 @@ async def test_api_only_disables_local_mineru_even_if_enabled(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_mineru_v1_disables_legacy_title_assistance_without_rewriting_preferences(monkeypatch):
+    from newbee_notebook.core.common import config_db
+
+    values = {"mineru.mode": "local", "mineru.title_aided_enabled": "true"}
+    monkeypatch.setattr(config_db, "_get_app_settings_service", lambda _: _FakeSettingsService(values))
+    monkeypatch.setenv("NEWBEE_API_ONLY", "false")
+    monkeypatch.setenv("MINERU_LOCAL_ENABLED", "true")
+    monkeypatch.setenv("MINERU_LOCAL_API_VERSION", "v1")
+    payload = await config_db.get_mineru_config_async(object())
+    assert payload["mode"] == "local"
+    assert payload["title_aided_available"] is False
+    assert payload["title_aided_enabled"] is False
+    assert values["mineru.title_aided_enabled"] == "true"
+
+
+@pytest.mark.anyio
 async def test_get_asr_config_async_prefers_db_values(monkeypatch):
     from newbee_notebook.core.common import config_db
 
@@ -263,6 +279,7 @@ async def test_get_embedding_config_async_repairs_mismatched_standard_model_with
 @pytest.mark.anyio
 async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monkeypatch):
     monkeypatch.setenv("NEWBEE_API_ONLY", "false")
+    monkeypatch.setenv("MINERU_LOCAL_API_VERSION", "legacy")
     from newbee_notebook.core.common import config_db
 
     values = {"mineru.mode": "local", "mineru.title_aided_enabled": "true"}
@@ -280,12 +297,14 @@ async def test_get_mineru_config_async_respects_db_mode_when_local_enabled(monke
         "source": "db",
         "local_enabled": True,
         "title_aided_enabled": True,
+        "title_aided_available": True,
     }
 
 
 @pytest.mark.anyio
 async def test_get_mineru_config_async_uses_bootstrap_env_for_title_aided(monkeypatch):
     monkeypatch.setenv("NEWBEE_API_ONLY", "false")
+    monkeypatch.setenv("MINERU_LOCAL_API_VERSION", "legacy")
     from newbee_notebook.core.common import config_db
 
     monkeypatch.setattr(
@@ -312,6 +331,7 @@ async def test_get_mineru_config_async_uses_bootstrap_env_for_title_aided(monkey
         "source": "env",
         "local_enabled": True,
         "title_aided_enabled": True,
+        "title_aided_available": True,
     }
 
 
@@ -319,6 +339,8 @@ async def test_get_mineru_config_async_uses_bootstrap_env_for_title_aided(monkey
 async def test_get_mineru_config_async_forces_cloud_when_local_disabled(monkeypatch):
     from newbee_notebook.core.common import config_db
 
+    monkeypatch.setenv("MINERU_LOCAL_API_VERSION", "legacy")
+    monkeypatch.setattr(config_db, "_BOOTSTRAP_ENV", {"MINERU_LOCAL_ENABLED": "false"})
     values = {"mineru.mode": "local"}
     monkeypatch.setattr(
         config_db,
@@ -334,6 +356,7 @@ async def test_get_mineru_config_async_forces_cloud_when_local_disabled(monkeypa
         "source": "db",
         "local_enabled": False,
         "title_aided_enabled": False,
+        "title_aided_available": True,
     }
 
 

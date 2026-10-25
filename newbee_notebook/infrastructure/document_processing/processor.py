@@ -144,6 +144,8 @@ class DocumentProcessor:
                 local_cfg = dp_cfg.get("mineru_local", {}) or {}
                 converters.append(
                     MinerULocalConverter(
+                        api_version=str(local_cfg.get("api_version", "legacy")),
+                        tier=str(local_cfg.get("tier", "standard")),
                         base_url=str(local_cfg.get("api_url", "http://mineru-api:8000")),
                         timeout_seconds=_parse_int(local_cfg.get("timeout_seconds"), 0),
                         backend=str(local_cfg.get("backend", "pipeline")),

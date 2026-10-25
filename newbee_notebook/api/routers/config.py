@@ -72,6 +72,7 @@ class MinerUConfigResponse(BaseModel):
     source: str
     local_enabled: bool
     title_aided_enabled: bool = False
+    title_aided_available: bool = True
     api_key_set: bool | None = None
 
 
@@ -213,6 +214,7 @@ async def get_models_config(session=Depends(get_db_session)):
             source=mineru["source"],
             local_enabled=bool(mineru.get("local_enabled", False)),
             title_aided_enabled=bool(mineru.get("title_aided_enabled", False)),
+            title_aided_available=bool(mineru.get("title_aided_available", True)),
             api_key_set=mineru_api_key_set,
         ),
         asr=ASRConfigResponse(
@@ -454,6 +456,8 @@ async def update_mineru_config(req: UpdateMinerURequest, session=Depends(get_db_
         )
 
     current = await get_mineru_config_async(session)
+    if req.title_aided_enabled and not current.get("title_aided_available", True):
+        raise HTTPException(status_code=400, detail="Legacy title assistance is unavailable with MinerU 4")
     mode = str(req.mode or current["mode"]).strip().lower()
     if mode not in {"cloud", "local"}:
         raise HTTPException(status_code=400, detail="mode must be 'cloud' or 'local'")

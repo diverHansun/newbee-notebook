@@ -55,6 +55,7 @@ type MinerUDraft = {
   local_enabled: boolean;
   api_key_set: boolean | null;
   title_aided_enabled: boolean;
+  title_aided_available: boolean;
 };
 
 function formatFloat(value: number): string {
@@ -133,6 +134,7 @@ function toMinerUDraft(config: MinerUConfig): MinerUDraft {
     local_enabled: config.local_enabled,
     api_key_set: config.api_key_set,
     title_aided_enabled: Boolean(config.title_aided_enabled),
+    title_aided_available: config.title_aided_available !== false,
   };
 }
 
@@ -813,7 +815,7 @@ export function ModelConfigPanel() {
             <div className="control-panel-warning">{t(uiStrings.controlPanel.mineruLocalDisabledHint)}</div>
           )}
 
-          {mineruDraft.local_enabled && mineruDraft.mode === "local" ? (
+          {mineruDraft.local_enabled && mineruDraft.mode === "local" && mineruDraft.title_aided_available ? (
             <div className="control-panel-switch-field">
               <div className="control-panel-switch-copy">
                 <div id="mineru-title-aided-label" className="control-panel-field-label">

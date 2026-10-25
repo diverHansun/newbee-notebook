@@ -29,6 +29,9 @@ document_processing:
   # MinerU local docker API settings.
   mineru_local:
     api_url: ${MINERU_LOCAL_API_URL:http://mineru-api:8000}
+    # legacy: existing MinerU 2/3 service; v1: MinerU 4 service.
+    api_version: ${MINERU_LOCAL_API_VERSION:legacy}
+    tier: ${MINERU_LOCAL_TIER:standard}
     backend: ${MINERU_BACKEND:pipeline}
     lang_list: ${MINERU_LANG_LIST:ch,en}
     timeout_seconds: ${MINERU_LOCAL_TIMEOUT:0}

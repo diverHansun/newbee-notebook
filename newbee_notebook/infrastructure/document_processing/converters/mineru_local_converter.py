@@ -4,7 +4,9 @@ import io
 import json
 import logging
 import mimetypes
+import re
 import tempfile
+import time
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Optional
@@ -13,6 +15,7 @@ import requests
 from pypdf import PdfReader
 
 from .base import Converter, ConversionResult
+from ..store import _rewrite_markdown_image_links
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,8 @@ class MinerULocalConverter(Converter):
         parse_method: str = "auto",
         formula_enable: bool = True,
         table_enable: bool = True,
+        api_version: str = "legacy",
+        tier: str = "standard",
     ) -> None:
         self._base_url = (base_url or "http://mineru-api:8000").rstrip("/")
         self._timeout = timeout_seconds
@@ -93,6 +98,12 @@ class MinerULocalConverter(Converter):
         self._parse_method = (parse_method or "auto").strip() or "auto"
         self._formula_enable = bool(formula_enable)
         self._table_enable = bool(table_enable)
+        if api_version not in {"legacy", "v1"}:
+            raise ValueError("MinerU local api_version must be legacy or v1")
+        if tier not in {"flash", "basic", "standard", "advanced"}:
+            raise ValueError("Unsupported MinerU parsing tier")
+        self._api_version = api_version
+        self._tier = tier
 
     @staticmethod
     def _normalize_lang_list(value: object) -> list[str]:
@@ -127,6 +138,11 @@ class MinerULocalConverter(Converter):
         start_page: int | None = None,
         end_page: int | None = None,
     ) -> list[tuple[str, str]]:
+        if self._api_version == "v1":
+            params = [("tier", self._tier), ("ocr_mode", self._parse_method)]
+            if start_page is not None and end_page is not None:
+                params.append(("page_range", f"{start_page + 1}-{end_page + 1}"))
+            return params
         form_data: list[tuple[str, str]] = [
             ("backend", self._backend),
             ("return_md", "true"),
@@ -205,14 +221,17 @@ class MinerULocalConverter(Converter):
                 end_page=batch_end,
             )
 
-            all_markdown.append(result.markdown)
             accumulated_page_count += result.page_count
 
             # Merge image assets with batch-prefixed keys to avoid collisions.
+            renamed_images: dict[str, str] = {}
             if result.image_assets:
                 for key, data in result.image_assets.items():
                     prefixed_key = f"batch{batch_num}/{key}" if key in all_images else key
                     all_images[prefixed_key] = data
+                    if prefixed_key != key:
+                        renamed_images[key] = prefixed_key
+            all_markdown.append(_rewrite_markdown_image_links(result.markdown, renamed_images))
 
             if result.metadata_assets:
                 for key, data in result.metadata_assets.items():
@@ -317,7 +336,48 @@ class MinerULocalConverter(Converter):
 
     async def _convert_non_pdf(self, path: Path) -> ConversionResult:
         form_data = self._build_form_data()
+        if self._api_version == "v1" and path.suffix.lower() in {".docx", ".pptx", ".xlsx"}:
+            form_data = [(key, "flash" if key == "tier" else value) for key, value in form_data]
         return await self._convert_request(path, form_data=form_data, fallback_page_count=1)
+
+    def _post_v1_and_wait(self, files, params) -> requests.Response:
+        """Use the V1 wrapper, then poll the same task if parsing outlives its wait."""
+        budget = self._timeout if self._timeout > 0 else 1800
+        deadline = time.monotonic() + budget
+        response = requests.post(
+            f"{self._base_url}/v1/file_parse", files=files,
+            params=[*params, ("response_format", "zip"), ("wait_timeout", str(min(30, budget)))],
+            timeout=(5.0, budget + 5), stream=True,
+        )
+        if response.status_code != 202:
+            return response
+        try:
+            task_id = response.json().get("task_id", "")
+        finally:
+            response.close()
+        if not isinstance(task_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", task_id):
+            raise RuntimeError("MinerU V1 returned an invalid task ID")
+        # Construct URLs from our configured service, not from response URLs.
+        # Once accepted, never resubmit a failed poll as another parsing job.
+        while time.monotonic() < deadline:
+            time.sleep(min(1, max(0, deadline - time.monotonic())))
+            try:
+                response = requests.get(
+                    f"{self._base_url}/v1/tasks/{task_id}/result",
+                    params={"response_format": "zip"},
+                    timeout=(5.0, max(1, deadline - time.monotonic())), stream=True,
+                )
+            except requests.RequestException as exc:
+                raise RuntimeError(f"MinerU V1 polling failed for task {task_id}") from exc
+            if response.status_code != 202:
+                try:
+                    response.raise_for_status()
+                except requests.RequestException as exc:
+                    response.close()
+                    raise RuntimeError(f"MinerU V1 task {task_id} failed") from exc
+                return response
+            response.close()
+        raise TimeoutError(f"MinerU V1 task {task_id} exceeded {budget}s; task may still be running")
 
     async def _convert_range(
         self,
@@ -350,13 +410,12 @@ class MinerULocalConverter(Converter):
             zip_path = ""
             with path.open("rb") as file:
                 files = {"files": (path.name, file, file_mime)}
-                with requests.post(
-                    url,
-                    files=files,
-                    data=form_data,
-                    timeout=(5.0, read_timeout),
-                    stream=True,
-                ) as resp:
+                response = (
+                    self._post_v1_and_wait(files, form_data)
+                    if self._api_version == "v1"
+                    else requests.post(url, files=files, data=form_data, timeout=(5.0, read_timeout), stream=True)
+                )
+                with response as resp:
                     resp.raise_for_status()
                     content_type = (resp.headers.get("content-type") or "").lower()
                     if "application/zip" not in content_type:
@@ -367,11 +426,18 @@ class MinerULocalConverter(Converter):
                             detail = (resp.text or "")[:500]
                         raise RuntimeError(f"MinerU local API did not return zip results: {detail}")
 
-                    with tempfile.NamedTemporaryFile(prefix="mineru_local_", suffix=".zip", delete=False) as tmp:
-                        zip_path = tmp.name
-                        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                            if chunk:
-                                tmp.write(chunk)
+                    try:
+                        with tempfile.NamedTemporaryFile(prefix="mineru_local_", suffix=".zip", delete=False) as tmp:
+                            zip_path = tmp.name
+                            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                                if chunk:
+                                    tmp.write(chunk)
+                    except Exception as exc:
+                        if zip_path:
+                            Path(zip_path).unlink(missing_ok=True)
+                        if self._api_version == "v1":
+                            raise RuntimeError("MinerU V1 result download failed; parsing was already submitted") from exc
+                        raise
                     return content_type, zip_path
 
         _, zip_path = await asyncio.to_thread(_sync_upload)
@@ -442,6 +508,10 @@ def _extract_page_count(metadata_assets: dict[str, bytes]) -> int:
 
         if lower_name.endswith("content_list_v2.json") and isinstance(payload, list):
             return len(payload)
+        if lower_name in {"middle_json.json", "layout.json"} and isinstance(payload, dict):
+            pages = payload.get("pages")
+            if isinstance(pages, list):
+                return len(pages)
         if lower_name.endswith("layout.json") and isinstance(payload, dict):
             pdf_info = payload.get("pdf_info")
             if isinstance(pdf_info, list):

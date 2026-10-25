@@ -34,6 +34,7 @@ export interface MinerUConfig {
   local_enabled: boolean;
   api_key_set: boolean | null;
   title_aided_enabled?: boolean;
+  title_aided_available?: boolean;
 }
 
 export interface ModelsConfig {

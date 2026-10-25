@@ -70,6 +70,7 @@ function buildModelsConfig(overrides?: {
     local_enabled: boolean;
     api_key_set: boolean | null;
     title_aided_enabled: boolean;
+    title_aided_available: boolean;
   }>;
   asr?: Partial<{
     provider: string;
@@ -449,6 +450,16 @@ describe("ModelConfigPanel", () => {
       expect(apiMocks.updateMinerUConfig).toHaveBeenCalled();
     });
     expect(apiMocks.updateMinerUConfig.mock.calls[0][0]).toEqual({ mode: "local" });
+  });
+
+  it("hides legacy title assistance when the local service does not support it", async () => {
+    apiMocks.getModelsConfig.mockResolvedValue(buildModelsConfig({
+      mineru: { mode: "local", title_aided_available: false },
+    }));
+    renderPanel(<ModelConfigPanel />);
+    const heading = await screen.findByText("MinerU Configuration");
+    const card = heading.closest(".control-panel-card") as HTMLElement;
+    expect(within(card).queryByRole("switch", { name: "Document title assisted recognition" })).toBeNull();
   });
 
   it("updates the local mineru title aided switch without sending mode", async () => {
