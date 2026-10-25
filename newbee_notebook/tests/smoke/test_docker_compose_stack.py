@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -19,7 +20,7 @@ def _load_compose(filename: str) -> dict:
     return yaml.safe_load(compose_path.read_text(encoding="utf-8"))
 
 
-def _load_merged_gpu_compose() -> dict:
+def _load_merged_compose(override: str, *, profile: str | None = None) -> dict:
     try:
         result = subprocess.run(
             [
@@ -28,12 +29,15 @@ def _load_merged_gpu_compose() -> dict:
                 "-f",
                 "docker-compose.yml",
                 "-f",
-                "docker-compose.gpu.yml",
+                override,
+                *(["--profile", profile] if profile else []),
                 "config",
                 "--format",
                 "json",
             ],
             cwd=_repo_root(),
+            # PowerShell does not export PWD; do not depend on the caller's cwd.
+            env={**os.environ, "NEWBEE_SANDBOX_HOST_PROJECT_ROOT": str(_repo_root())},
             text=True,
             capture_output=True,
             check=True,
@@ -62,13 +66,19 @@ def test_default_compose_starts_full_non_gpu_stack() -> None:
     assert "profiles" not in services["minio"]
 
 
+def test_default_api_loads_runtime_configs_from_host() -> None:
+    api = _load_compose("docker-compose.yml")["services"]["api"]
+    assert "./configs:/app/configs" in api.get("volumes", [])
+
+
+def test_runtime_credentials_are_excluded_from_build_context() -> None:
+    patterns = (_repo_root() / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert "configs/mcp/mcp.json" in patterns
+    assert "configs/bilibili" in patterns
+
+
 def test_mac_compose_uses_api_only_and_loopback_ports() -> None:
-    result = subprocess.run(
-        ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mac.yml",
-         "config", "--format", "json"],
-        cwd=_repo_root(), text=True, capture_output=True, check=True,
-    )
-    services = json.loads(result.stdout)["services"]
+    services = _load_merged_compose("docker-compose.mac.yml")["services"]
     assert "mineru-api" not in services
     for name in ("api", "celery-worker"):
         env = services[name]["environment"]
@@ -79,7 +89,7 @@ def test_mac_compose_uses_api_only_and_loopback_ports() -> None:
         for port in service.get("ports", []):
             assert port["host_ip"] == "127.0.0.1"
         assert not service.get("gpus")
-    assert services["minio"]["build"]["context"].endswith("docker/minio")
+    assert Path(services["minio"]["build"]["context"]).parts[-2:] == ("docker", "minio")
     api = services["api"]
     assert api["environment"]["NEWBEE_SANDBOX_HOST_PROJECT_ROOT"] == str(_repo_root())
     assert api["environment"]["NEWBEE_SANDBOX_WORK_ROOT"].startswith("/app/data/")
@@ -92,12 +102,7 @@ def test_mac_compose_uses_api_only_and_loopback_ports() -> None:
 
 
 def test_mac_monitor_has_isolated_image_and_internal_broker() -> None:
-    result = subprocess.run(
-        ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mac.yml",
-         "--profile", "monitor", "config", "--format", "json"],
-        cwd=_repo_root(), text=True, capture_output=True, check=True,
-    )
-    services = json.loads(result.stdout)["services"]
+    services = _load_merged_compose("docker-compose.mac.yml", profile="monitor")["services"]
     assert services["flower"]["image"] != services["celery-worker"]["image"]
     assert services["flower"]["environment"]["CELERY_BROKER_URL"] == "redis://redis:6379/0"
     assert services["flower"]["build"]["args"]["INSTALL_FLOWER"] == "true"
@@ -109,6 +114,10 @@ def test_default_compose_fixes_non_gpu_runtime_defaults() -> None:
 
     worker_env = services["celery-worker"]["environment"]
     api_env = services["api"]["environment"]
+
+    for env in (worker_env, api_env):
+        assert "NEWBEE_API_ONLY" not in env
+        assert "NEWBEE_SANDBOX_HOST_PROJECT_ROOT" not in env
 
     assert worker_env["STORAGE_BACKEND"] == "minio"
     assert worker_env["MINIO_ENDPOINT"] == "${MINIO_INTERNAL_ENDPOINT:-minio:9000}"
@@ -223,7 +232,7 @@ def test_mineru_gpu_patch_files_are_not_gitignored() -> None:
 
 
 def test_gpu_merged_compose_preserves_base_worker_mounts_and_adds_title_runtime() -> None:
-    compose = _load_merged_gpu_compose()
+    compose = _load_merged_compose("docker-compose.gpu.yml")
     services = compose["services"]
 
     worker = services["celery-worker"]
@@ -237,6 +246,7 @@ def test_gpu_merged_compose_preserves_base_worker_mounts_and_adds_title_runtime(
     assert ("/app", False) in worker_volumes
     assert ("/app/data/mineru", False) in worker_volumes
     assert ("/app/models", True) in api_volumes
+    assert ("/app/configs", False) in api_volumes
     assert ("/app/data/mineru", False) in api_volumes
     assert ("/root/mineru-runtime", True) in mineru_volumes
     assert worker["environment"]["MINERU_TITLE_AIDED_CONFIG_PATH"] == "/app/data/mineru/mineru-runtime.json"

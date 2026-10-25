@@ -93,3 +93,17 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml --profile monitor
 - 后端 unit + contract：883 passed（5 条已有依赖警告）；Compose smoke：12 passed；本轮基线前端 59 文件 / 251 passed，TypeScript 通过，未改前端生产代码。
 - 约束：API、worker 和数据库仍应使用一致的服务器时区。跨时区迁移旧的无时区数据库记录时，需要按原服务器时区单独转换，本次不猜测或改写历史数据。
 - 临时验收笔记本、会话、沙箱容器及其工作目录在验收后清理；本机应用保持运行。
+
+## 2026-10-25 Windows 兼容性复查
+
+复查范围：`2cc0831..e6539d6` 的三次 Mac 适配提交及本次补丁。
+
+- 修复基础 API 缺少 `configs` 挂载的问题，默认/GPU Docker 部署也能读取宿主配置。Bilibili 已在数据库保存的凭据不受影响；补丁恢复尚未迁移的旧凭据文件的可见性。
+- MCP 实际路径是 `configs/mcp/mcp.json`；补齐 Docker/Git 排除规则。此前 Shell 记录中的 `configs/mcp.json` 是旧路径。本次用合成文件构建镜像，验证实际 MCP 路径、Bilibili 凭据和 `.env` 被排除，示例和技能文件保留；临时镜像和文件已清理。
+- 沙箱新增测试不再硬编码 Mac 宿主路径；容器目标固定 `/app`，宿主路径使用平台原生 `Path`，包含中文和空格。Compose 测试显式设置项目目录，不再依赖 PowerShell 中不存在的环境变量 `PWD`，也不再假设路径分隔符。
+- Windows 的 asyncio 子进程 fallback 未修改；未设置宿主路径映射时仍走原有沙箱路径。默认/GPU 配置不强制 API-only，本轮未更改沙箱执行策略。
+- 时间运行逻辑无需再改；新增本机时区测试，不依赖 Windows 缺失的 `time.tzset`，覆盖冬夏日期的墙钟值和时间戳一致性。旧数据库跨时区迁移仍需按上方约束处理。
+
+验证：默认模式和 API-only 模式的后端 unit + contract **各 885 passed**（各 5 条已有警告）；Compose **14 passed**，清除 `PWD` 后同样通过；macOS 原生沙箱命令构造与时间测试 **12 passed**；API 镜像构建及凭据排除探针通过。
+
+没有 Windows 真机或 GPU 实测；结论来自代码差异复查、兼容性回归与 Mac/Linux 容器验证，不等同于 Windows 端到端验收。补丁只修配置和测试，未引入新运行时抽象。

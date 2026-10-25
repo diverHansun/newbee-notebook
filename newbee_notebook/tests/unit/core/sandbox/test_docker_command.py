@@ -129,12 +129,13 @@ def test_docker_command_allows_run_dir_inside_additional_run_root(tmp_path: Path
 @pytest.mark.parametrize("warm", [False, True])
 def test_container_backend_mounts_only_skills_and_work_from_docker_host(tmp_path, warm):
     project = tmp_path / "app"
+    host_project = tmp_path / "Docker host" / "项目"
     (project / "configs" / "skills").mkdir(parents=True)
     run_dir = project / "data" / "sandbox" / "nb1"
     config = DockerRunConfig(
         project_root=project,
-        host_project_root="/Users/test/My Project",
-        workspace_target=str(project),
+        host_project_root=host_project,
+        workspace_target="/app",
         run_root=project / "data" / "sandbox",
     )
     builder = DockerCommandBuilder(config)
@@ -145,8 +146,8 @@ def test_container_backend_mounts_only_skills_and_work_from_docker_host(tmp_path
     )
     mounts = [command.argv[i + 1] for i, v in enumerate(command.argv) if v == "--mount"]
     assert mounts == [
-        f"type=bind,source=/Users/test/My Project/configs/skills,target={project}/configs/skills,readonly",
-        "type=bind,source=/Users/test/My Project/data/sandbox/nb1,target=/work",
+        f"type=bind,source={host_project / 'configs' / 'skills'},target=/app/configs/skills,readonly",
+        f"type=bind,source={host_project / 'data' / 'sandbox' / 'nb1'},target=/work",
     ]
     assert "docker.sock" not in " ".join(command.argv)
     assert "--read-only" in command.argv
@@ -157,7 +158,7 @@ def test_container_backend_rejects_work_mount_outside_project(tmp_path):
     project = tmp_path / "app"
     project.mkdir()
     config = DockerRunConfig(
-        project_root=project, host_project_root="/Users/test/project",
+        project_root=project, host_project_root=tmp_path / "host",
         run_root=tmp_path / "outside",
     )
     with pytest.raises(SandboxExecutionError, match="project"):

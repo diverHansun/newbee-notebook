@@ -281,7 +281,7 @@ class DockerCommandBuilder:
             if workspace_dir != self._config.project_root:
                 raise SandboxExecutionError("container workspace must be the project root")
             # Use the image's read-only code, not a host repository mount that
-            # would expose .env, configs/mcp.json and other notebooks' data.
+            # would expose .env, configs/mcp/mcp.json and other notebooks' data.
             workspace_source = workspace_dir / "configs" / "skills"
             workspace_target += "/configs/skills"
         argv.extend([

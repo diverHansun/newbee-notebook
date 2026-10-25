@@ -9,6 +9,21 @@ from newbee_notebook.api.models.responses import NotebookResponse
 from newbee_notebook.api.models.note_models import NoteResponse
 
 
+@pytest.mark.parametrize("value", [datetime(2026, 1, 15, 12), datetime(2026, 7, 15, 12)])
+def test_local_timestamps_preserve_wall_time_and_instant(value):
+    # Runs on Windows too, where time.tzset is unavailable.
+    notebook = NotebookResponse(
+        notebook_id="nb", title="Test", description=None,
+        session_count=0, document_count=0, created_at=value, updated_at=value,
+    )
+    for name in ("created_at", "updated_at"):
+        parsed = datetime.fromisoformat(notebook.model_dump(mode="json")[name])
+        assert parsed.utcoffset() is not None
+        assert parsed.replace(tzinfo=None) == value
+        assert parsed.timestamp() == value.timestamp()
+    assert value.tzinfo is None
+
+
 @pytest.mark.parametrize("server_tz,offset", [("UTC", 0), ("Asia/Taipei", 8)])
 def test_database_timestamps_preserve_instant_across_browser_timezones(monkeypatch, server_tz, offset):
     if not hasattr(time, "tzset"):

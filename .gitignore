@@ -51,6 +51,7 @@ checkpoints/
 .env.local
 .env.*.local
 configs/mcp.json
+configs/mcp/mcp.json
 configs/bilibili/
 configs/skills/*
 !configs/skills/put_your_skills_here.txt

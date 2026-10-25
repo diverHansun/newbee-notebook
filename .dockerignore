@@ -4,6 +4,7 @@
 .env.*
 !.env.example
 configs/mcp.json
+configs/mcp/mcp.json
 configs/bilibili
 __pycache__
 **/__pycache__

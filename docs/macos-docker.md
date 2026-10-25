@@ -70,6 +70,8 @@ API 是可信的容器调度进程，持有 Docker 控制权限；因此服务�
 不会把宿主整个项目（包括 `.env`）或其他 Notebook 数据挂进去。代码修改仍需重建镜像；技能文件无需重建。
 原生 Windows/Linux 后端不设置此变量，继续使用原有路径和执行方式。
 
+基础 Compose 为 API 挂载 `./configs:/app/configs`，Mac 与 Windows/GPU 部署均从宿主读取运行配置。MCP 配置 `configs/mcp/mcp.json` 和旧 Bilibili 凭据不打入镜像；请在宿主配置目录保存。
+
 这是 Docker 部署的路径要求：bind mount 的源由 daemon 所在主机解析，而不是由调用 CLI 的容器解析，见 [Docker bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)。
 Docker socket 的控制权限边界见 [Docker daemon attack surface](https://docs.docker.com/engine/security/#docker-daemon-attack-surface)。
 

@@ -24,7 +24,6 @@ services:
       NEWBEE_SANDBOX_WORK_ROOT: /app/data/sandbox/work
     volumes:
       - ./data:/app/data
-      - ./configs:/app/configs
       # Only the trusted API orchestrator gets the socket, never child sandboxes.
       - /var/run/docker.sock:/var/run/docker.sock
     ports: !override ["127.0.0.1:8000:8000"]
