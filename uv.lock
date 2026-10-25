@@ -2301,7 +2301,7 @@ wheels = [
 
 [[package]]
 name = "newbee-notebook"
-version = "0.3.0"
+version = "0.3.1"
 source = { virtual = "." }
 dependencies = [
     { name = "asyncpg" },

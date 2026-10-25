@@ -6,7 +6,7 @@
 
 Mac Docker 主应用与 PDF 知识库问答链路已完成适配并通过实测。不能将此结论扩大为所有外部平台、模型或可选功能均可用。Intel Mac 未在真实硬件上验收；配置没有强制 amd64 模拟。
 
-`requirements.txt`、`pyproject.toml`、MinerU CPU/GPU Dockerfile 中的版本均未修改。运行服务启用 `NEWBEE_API_ONLY=true`，不运行本地模型。安装 CPU Torch 依赖不等于执行本地推理。MarkItDown 的本地 Magika 分类模型也已绕开。
+`requirements.txt`、`pyproject.toml`、MinerU CPU/GPU Dockerfile 中的依赖版本均未修改。运行服务启用 `NEWBEE_API_ONLY=true`，不运行本地模型。安装 CPU Torch 依赖不等于执行本地推理。MarkItDown 的本地 Magika 分类模型也已绕开。
 
 ## 自动化验证
 
@@ -107,3 +107,9 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml --profile monitor
 验证：默认模式和 API-only 模式的后端 unit + contract **各 885 passed**（各 5 条已有警告）；Compose **14 passed**，清除 `PWD` 后同样通过；macOS 原生沙箱命令构造与时间测试 **12 passed**；API 镜像构建及凭据排除探针通过。
 
 没有 Windows 真机或 GPU 实测；结论来自代码差异复查、兼容性回归与 Mac/Linux 容器验证，不等同于 Windows 端到端验收。补丁只修配置和测试，未引入新运行时抽象。
+
+## v0.3.1 版本边界
+
+`v0.3.1` 标记 Mac Docker 全部模型能力走 API 的版本，包含沙箱连接、时间显示及 Windows 兼容性复查修复。项目自身版本与锁文件中的项目版本同步为 `0.3.1`，没有调整任何第三方依赖。
+
+下一阶段先升级 MinerU 依赖，再适配 Mac 本机 MinerU 解析和 Embedding 模型推理。这些能力不属于 `v0.3.1` 的已支持范围。
