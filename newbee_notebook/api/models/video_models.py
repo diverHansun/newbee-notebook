@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field
@@ -45,8 +45,8 @@ class VideoSummaryResponse(BaseModel):
     stats: dict | None = None
     transcript_source: str = ""
     transcript_path: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class VideoSummaryListItemResponse(BaseModel):
@@ -60,8 +60,8 @@ class VideoSummaryListItemResponse(BaseModel):
     uploader_name: str
     status: str
     metadata_ready: bool = True
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class VideoSummaryListResponse(BaseModel):

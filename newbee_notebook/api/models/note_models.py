@@ -1,6 +1,6 @@
 """Pydantic models for note APIs."""
 
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -39,8 +39,8 @@ class NoteResponse(BaseModel):
     content: str
     document_ids: list[str]
     mark_ids: list[str]
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class NoteListItemResponse(BaseModel):
@@ -51,8 +51,8 @@ class NoteListItemResponse(BaseModel):
     title: str
     document_ids: list[str]
     mark_count: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class NoteListResponse(BaseModel):

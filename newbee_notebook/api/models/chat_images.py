@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -19,7 +19,7 @@ class ChatImageResponse(BaseModel):
     sha256: str
     preview_url: str
     thumbnail_url: str
-    created_at: datetime
+    created_at: ApiTimestamp
 
 
 class ChatImageFailureResponse(BaseModel):

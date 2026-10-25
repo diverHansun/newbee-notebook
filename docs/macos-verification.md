@@ -84,3 +84,12 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml --profile monitor
 - 真实 ShellExecutor 执行 `printf` 成功；`/work` 写入、读回成功；命令以 UID 1000 运行，无法看到 socket、`.env`、`configs/mcp.json` 和应用数据目录。
 - Chrome 原生电脑操控：Agent 发起 Shell 请求 → 点击“允许本次” → 返回 `MAC_SHELL_FIXED_4827`。没有使用 Playwright。
 - Compose smoke：12 passed。沙箱现有测试及新增的冷/热启动挂载、越界拒绝测试通过。
+
+## 2026-10-25 时间显示修复
+
+- 原因：持久化层使用 `datetime.now()` 和无时区列，API 输出未带偏移，UTC 容器的时间被浏览器误认为本地时间。
+- 在响应模型边界通过共用 `ApiTimestamp` 为无时区值补上服务器本地偏移；已有时区值保持不变。覆盖笔记本、文档、会话、消息、笔记、书签、图表、视频及图片响应，不改数据库结构或依赖。
+- UTC、Asia/Taipei 以及已有 `+08:00` 的回归测试通过；Chrome 实测新建笔记本显示“更新于 刚刚”，不再显示“8 小时前”。
+- 后端 unit + contract：883 passed（5 条已有依赖警告）；Compose smoke：12 passed；本轮基线前端 59 文件 / 251 passed，TypeScript 通过，未改前端生产代码。
+- 约束：API、worker 和数据库仍应使用一致的服务器时区。跨时区迁移旧的无时区数据库记录时，需要按原服务器时区单独转换，本次不猜测或改写历史数据。
+- 临时验收笔记本、会话、沙箱容器及其工作目录在验收后清理；本机应用保持运行。

@@ -1,6 +1,6 @@
 """Pydantic models for mark APIs."""
 
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -24,8 +24,8 @@ class MarkResponse(BaseModel):
     anchor_text: str
     char_offset: int
     context_text: Optional[str]
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class MarkListResponse(BaseModel):

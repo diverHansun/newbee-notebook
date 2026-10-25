@@ -4,7 +4,7 @@ Newbee Notebook - API Response Models
 
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 
 
 class PaginationInfo(BaseModel):
@@ -31,8 +31,8 @@ class LibraryResponse(BaseModel):
     """Response model for library info."""
     library_id: str
     document_count: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 # =============================================================================
@@ -46,8 +46,8 @@ class NotebookResponse(BaseModel):
     description: Optional[str]
     session_count: int
     document_count: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class NotebookListResponse(BaseModel):
@@ -67,8 +67,8 @@ class SessionResponse(BaseModel):
     title: Optional[str]
     message_count: int
     include_ec_context: bool = False
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class SessionListResponse(BaseModel):
@@ -100,7 +100,7 @@ class MessageResponse(BaseModel):
     content: str
     image_ids: List[str] = Field(default_factory=list)
     images: List[MessageImageResponse] = Field(default_factory=list)
-    created_at: datetime
+    created_at: ApiTimestamp
 
 
 class MessageListResponse(BaseModel):
@@ -126,8 +126,8 @@ class GeneratedImageResponse(BaseModel):
     height: Optional[int] = None
     storage_key: str
     file_size: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class GeneratedImageListResponse(BaseModel):
@@ -156,10 +156,10 @@ class DocumentResponse(BaseModel):
     content_size: Optional[int] = None
     error_message: Optional[str] = None
     processing_stage: Optional[str] = None
-    stage_updated_at: Optional[datetime] = None
+    stage_updated_at: Optional[ApiTimestamp] = None
     processing_meta: Optional[dict[str, Any]] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class DocumentListResponse(BaseModel):
@@ -230,10 +230,10 @@ class NotebookDocumentListItemResponse(BaseModel):
     page_count: int = 0
     chunk_count: int = 0
     processing_stage: Optional[str] = None
-    stage_updated_at: Optional[datetime] = None
+    stage_updated_at: Optional[ApiTimestamp] = None
     processing_meta: Optional[dict[str, Any]] = None
-    created_at: datetime
-    added_at: Optional[datetime] = None
+    created_at: ApiTimestamp
+    added_at: Optional[ApiTimestamp] = None
 
 
 class NotebookDocumentListResponse(BaseModel):
@@ -253,7 +253,7 @@ class NotebookDocumentRefResponse(BaseModel):
     notebook_id: str
     document_id: str
     document_title: Optional[str] = None
-    created_at: datetime
+    created_at: ApiTimestamp
 
 
 class MCPServerStatusResponse(BaseModel):

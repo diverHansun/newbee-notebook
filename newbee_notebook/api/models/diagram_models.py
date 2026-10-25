@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from newbee_notebook.api.models.timestamps import ApiTimestamp
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,8 +18,8 @@ class DiagramResponse(BaseModel):
     format: str
     document_ids: list[str]
     node_positions: Optional[dict[str, dict[str, float]]] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: ApiTimestamp
+    updated_at: ApiTimestamp
 
 
 class CreateDiagramRequest(BaseModel):
