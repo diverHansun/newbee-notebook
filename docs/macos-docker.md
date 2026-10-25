@@ -59,7 +59,19 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml stop
 
 `health/ready` 当前只检查 PostgreSQL，不代表模型 API、Redis 或 Elasticsearch 已验证。完整验收还需上传 PDF 验证 MinerU、Embedding 入库，再执行检索和聊天。停止时保留卷，不使用 `down -v` 或全局 Docker 清理命令。
 
-应用内 Shell 工具需要额外的 Docker sandbox 能力。默认 API 镜像不挂载宿主 Docker socket，该工具不可用；普通聊天、资料管理和 API 模型链路不需要此权限。
+## 应用内 Shell / Bash
+
+Mac Compose 为 API 挂载 `/var/run/docker.sock`，API 镜像包含官方 Docker CLI。
+API 是可信的容器调度进程，持有 Docker 控制权限；因此服务继续只监听本机，不能作为无鉴权的公网服务部署。
+沙箱子容器不挂载 socket，不接收 API 密钥，以 UID 1000 执行命令，保留只读根文件系统、资源限制和现有独立网络限制。
+
+请在项目根目录执行 Compose 命令。`NEWBEE_SANDBOX_HOST_PROJECT_ROOT` 默认取 `$PWD`，用于把 API 内部 `/app/data/sandbox/...` 映射到 Mac 上的真实目录；若从其他目录启动，必须显式设置该变量为项目绝对路径。
+子容器使用镜像内的代码，只读挂载 `configs/skills`，仅本 Notebook 的工作目录挂载为可写 `/work`。
+不会把宿主整个项目（包括 `.env`）或其他 Notebook 数据挂进去。代码修改仍需重建镜像；技能文件无需重建。
+原生 Windows/Linux 后端不设置此变量，继续使用原有路径和执行方式。
+
+这是 Docker 部署的路径要求：bind mount 的源由 daemon 所在主机解析，而不是由调用 CLI 的容器解析，见 [Docker bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)。
+Docker socket 的控制权限边界见 [Docker daemon attack surface](https://docs.docker.com/engine/security/#docker-daemon-attack-surface)。
 
 可选监控：`docker compose -f docker-compose.yml -f docker-compose.mac.yml --profile monitor up -d --build flower`，访问 http://localhost:5555。Flower 使用独立镜像，默认不启动。
 

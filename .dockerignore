@@ -25,6 +25,7 @@ build
 dist
 logs
 .cache
+.tmp
 data
 models
 tmp

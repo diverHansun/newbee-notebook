@@ -124,3 +124,44 @@ def test_docker_command_allows_run_dir_inside_additional_run_root(tmp_path: Path
     )
 
     assert command.run_dir == run_dir.resolve()
+
+
+@pytest.mark.parametrize("warm", [False, True])
+def test_container_backend_mounts_only_skills_and_work_from_docker_host(tmp_path, warm):
+    project = tmp_path / "app"
+    (project / "configs" / "skills").mkdir(parents=True)
+    run_dir = project / "data" / "sandbox" / "nb1"
+    config = DockerRunConfig(
+        project_root=project,
+        host_project_root="/Users/test/My Project",
+        workspace_target=str(project),
+        run_root=project / "data" / "sandbox",
+    )
+    builder = DockerCommandBuilder(config)
+    build = builder.build_session_start if warm else builder.build
+    command = build(
+        SandboxRequest(argv=("bash", "-lc", "printf ok"), cwd=project),
+        container_name="sandbox-test", run_dir=run_dir,
+    )
+    mounts = [command.argv[i + 1] for i, v in enumerate(command.argv) if v == "--mount"]
+    assert mounts == [
+        f"type=bind,source=/Users/test/My Project/configs/skills,target={project}/configs/skills,readonly",
+        "type=bind,source=/Users/test/My Project/data/sandbox/nb1,target=/work",
+    ]
+    assert "docker.sock" not in " ".join(command.argv)
+    assert "--read-only" in command.argv
+    assert command.workspace_dir == project
+
+
+def test_container_backend_rejects_work_mount_outside_project(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    config = DockerRunConfig(
+        project_root=project, host_project_root="/Users/test/project",
+        run_root=tmp_path / "outside",
+    )
+    with pytest.raises(SandboxExecutionError, match="project"):
+        DockerCommandBuilder(config).build(
+            SandboxRequest(argv=("true",), cwd=project),
+            container_name="sandbox-test", run_dir=tmp_path / "outside" / "run",
+        )

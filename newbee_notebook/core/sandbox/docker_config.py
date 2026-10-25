@@ -53,6 +53,10 @@ class DockerRunConfig:
 
     image: str = "newbee-notebook/api:latest"
     docker_bin: str = "docker"
+    project_root: Path | str = Path(".")
+    # Set only when the backend itself runs in Docker. The daemon resolves bind
+    # sources on the host, while Python sees paths inside the API container.
+    host_project_root: Path | str | None = None
     run_root: Path | str = Path(".tmp/sandbox-runs")
     additional_run_roots: tuple[Path | str, ...] = ()
     container_prefix: str = "newbee-sandbox"
@@ -92,6 +96,12 @@ class DockerRunConfig:
 
         object.__setattr__(self, "image", image)
         object.__setattr__(self, "docker_bin", docker_bin)
+        object.__setattr__(self, "project_root", _resolve_path(self.project_root))
+        if self.host_project_root is not None:
+            host_root = Path(self.host_project_root)
+            if not host_root.is_absolute():
+                raise ValueError("host_project_root must be absolute")
+            object.__setattr__(self, "host_project_root", host_root)
         object.__setattr__(self, "run_root", _resolve_path(self.run_root))
         object.__setattr__(
             self,
@@ -112,9 +122,13 @@ def build_docker_run_config_from_env(
 
     root = _resolve_path(base_dir or Path.cwd())
     run_root = os.getenv("NEWBEE_SANDBOX_RUN_ROOT")
+    host_root = os.getenv("NEWBEE_SANDBOX_HOST_PROJECT_ROOT") or None
     return DockerRunConfig(
         image=_env_str("NEWBEE_SANDBOX_IMAGE", "newbee-notebook/api:latest"),
         docker_bin=_env_str("NEWBEE_SANDBOX_DOCKER_BIN", "docker"),
+        project_root=root,
+        host_project_root=host_root,
+        workspace_target=str(root) if host_root else "/workspace",
         run_root=_resolve_path(run_root) if run_root else root / ".tmp" / "sandbox-runs",
         container_prefix=_env_str("NEWBEE_SANDBOX_CONTAINER_PREFIX", "newbee-sandbox"),
         network_name=_env_str("NEWBEE_SANDBOX_NETWORK_NAME", "newbee_skill_net"),

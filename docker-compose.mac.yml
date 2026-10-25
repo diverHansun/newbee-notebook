@@ -18,9 +18,15 @@ services:
     environment:
       NEWBEE_API_ONLY: "true"
       WORKER_CUDA_EMPTY_CACHE: "false"
+      DOCKER_HOST: unix:///var/run/docker.sock
+      NEWBEE_SANDBOX_HOST_PROJECT_ROOT: ${NEWBEE_SANDBOX_HOST_PROJECT_ROOT:-${PWD}}
+      NEWBEE_SANDBOX_RUN_ROOT: /app/data/sandbox/runs
+      NEWBEE_SANDBOX_WORK_ROOT: /app/data/sandbox/work
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs
+      # Only the trusted API orchestrator gets the socket, never child sandboxes.
+      - /var/run/docker.sock:/var/run/docker.sock
     ports: !override ["127.0.0.1:8000:8000"]
   celery-worker:
     environment:

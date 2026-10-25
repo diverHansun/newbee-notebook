@@ -80,6 +80,15 @@ def test_mac_compose_uses_api_only_and_loopback_ports() -> None:
             assert port["host_ip"] == "127.0.0.1"
         assert not service.get("gpus")
     assert services["minio"]["build"]["context"].endswith("docker/minio")
+    api = services["api"]
+    assert api["environment"]["NEWBEE_SANDBOX_HOST_PROJECT_ROOT"] == str(_repo_root())
+    assert api["environment"]["NEWBEE_SANDBOX_WORK_ROOT"].startswith("/app/data/")
+    assert api["environment"]["DOCKER_HOST"] == "unix:///var/run/docker.sock"
+    socket_services = [
+        name for name, service in services.items()
+        if any(v.get("target") == "/var/run/docker.sock" for v in service.get("volumes", []))
+    ]
+    assert socket_services == ["api"]
 
 
 def test_mac_monitor_has_isolated_image_and_internal_broker() -> None:

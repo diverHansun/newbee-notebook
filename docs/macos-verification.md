@@ -54,7 +54,7 @@ Mac Docker 主应用与 PDF 知识库问答链路已完成适配并通过实测�
 
 ## 剩余限制
 
-- **应用内 Shell / Bash 沙箱不可用**：API 容器没有 Docker CLI，也未挂载宿主 Docker socket。没有为使测试通过而给予应用宿主 Docker 控制权限。依赖 Shell 的 agent 操作不能算完成验收。
+- **Shell / Bash 后续已修复**：见下方补充验收。API 现在作为可信调度服务访问 Docker socket；子容器仍与 socket、密钥和其他 Notebook 的数据隔离。
 - **B 站 HTTP 412**：当前网络/账号条件下访问受限。需要在应用中完成正常登录并按实际视频重测；不能承诺登录后一定解除风控。
 - **完整视频流程**：YouTube 下载、B 站字幕及受限资源、长视频、平台 cookie 状态尚未完成端到端验收。与音频转码/ASR 适配器成功是不同层次的结论。
 - **硬件覆盖**：只验证本机 ARM64，不代表 Intel Mac、Windows GPU 或不同 Docker Desktop 资源配置也已实测。
@@ -76,3 +76,11 @@ docker compose -f docker-compose.yml -f docker-compose.mac.yml --profile monitor
 ```
 
 构建和日常运行见 [Mac Docker 部署指南](macos-docker.md)。
+
+## 2026-10-25 Shell 补充验收
+
+- 历史提交 `8f07402` 修复的是 Windows selector event loop 不支持 asyncio 子进程的问题，该 fallback 仍保留。本次是容器部署缺少 Docker CLI/socket 和宿主 bind 路径映射。
+- 补齐 CLI/socket，仅 API 持有 socket；容器部署时使用镜像内工作区、只读技能目录及独立可写工作目录，不挂整个宿主项目。
+- 真实 ShellExecutor 执行 `printf` 成功；`/work` 写入、读回成功；命令以 UID 1000 运行，无法看到 socket、`.env`、`configs/mcp.json` 和应用数据目录。
+- Chrome 原生电脑操控：Agent 发起 Shell 请求 → 点击“允许本次” → 返回 `MAC_SHELL_FIXED_4827`。没有使用 Playwright。
+- Compose smoke：12 passed。沙箱现有测试及新增的冷/热启动挂载、越界拒绝测试通过。

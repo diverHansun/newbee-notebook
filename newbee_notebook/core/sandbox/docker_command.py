@@ -274,6 +274,16 @@ class DockerCommandBuilder:
             argv.extend(["--cap-add", "SETUID"])
             argv.extend(["--cap-add", "SETGID"])
             argv.extend(["--cap-add", "SETPCAP"])
+
+        workspace_source = workspace_dir
+        workspace_target = self._config.workspace_target
+        if self._config.host_project_root is not None:
+            if workspace_dir != self._config.project_root:
+                raise SandboxExecutionError("container workspace must be the project root")
+            # Use the image's read-only code, not a host repository mount that
+            # would expose .env, configs/mcp.json and other notebooks' data.
+            workspace_source = workspace_dir / "configs" / "skills"
+            workspace_target += "/configs/skills"
         argv.extend([
             "--pids-limit",
             str(self._config.pids_limit),
@@ -287,13 +297,13 @@ class DockerCommandBuilder:
             self._config.tmpfs,
             "--mount",
             _mount_arg(
-                source=workspace_dir,
-                target=self._config.workspace_target,
+                source=self._host_path(workspace_source),
+                target=workspace_target,
                 readonly=True,
             ),
             "--mount",
             _mount_arg(
-                source=run_dir,
+                source=self._host_path(run_dir),
                 target=self._config.work_target,
                 readonly=False,
             ),
@@ -305,6 +315,15 @@ class DockerCommandBuilder:
         if not request.network_enabled:
             argv.extend(["--user", self._config.user])
         return argv
+
+    def _host_path(self, path: Path) -> Path:
+        if self._config.host_project_root is None:
+            return path
+        try:
+            relative = path.resolve(strict=False).relative_to(self._config.project_root)
+        except ValueError as exc:
+            raise SandboxExecutionError("bind source must be inside the project root") from exc
+        return self._config.host_project_root / relative
 
     def _ensure_run_dir_is_allowed(self, run_dir: Path) -> None:
         allowed_roots = (

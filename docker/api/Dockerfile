@@ -1,4 +1,6 @@
 ARG BASE_IMAGE=python:3.11-slim
+ARG DOCKER_CLI_IMAGE=docker:29-cli
+FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,6 +38,8 @@ RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 # Only the optional monitor image needs Flower; keep API/worker dependencies intact.
 ARG INSTALL_FLOWER=false
 RUN if [ "$INSTALL_FLOWER" = "true" ]; then python -m pip install --no-cache-dir "flower==2.0.1"; fi
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 COPY . .
 
